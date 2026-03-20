@@ -1,0 +1,385 @@
+/**
+ * Tests for ESAstronomy port modules.
+ * 
+ * Verifies: es-time.ts, es-sidereal.ts, es-coordinates.ts, es-astro.ts, es-riseset.ts.
+ * Cross-referenced with known astronomical data and the original C implementation.
+ */
+import { describe, test, expect } from 'vitest';
+import {
+    ECMeeusDeltaT,
+    espenakDeltaT,
+    julianDateForDate,
+    julianCenturiesSince2000EpochForDateInterval,
+    priorUTMidnightForDateInterval,
+    dateToDateInterval,
+    dateIntervalToDate,
+} from '../es-time';
+import {
+    convertUTToGSTP03,
+    convertGSTtoLST,
+    convertLSTtoGST,
+    convertGSTtoUT,
+    convertGSTtoUTclosest,
+} from '../es-sidereal';
+import {
+    raAndDeclO,
+    generalObliquity,
+    generalPrecessionSinceJ2000,
+    convertJ2000ToOfDate,
+    refineConvertToJ2000FromOfDate,
+    sunRAandDecl,
+    moonRAAndDecl,
+} from '../es-coordinates';
+import {
+    sunAltitude,
+    sunAzimuth,
+    moonAltitude,
+    moonAge,
+    EOTSeconds,
+    localSiderealTime,
+} from '../es-astro';
+import {
+    sunriseForDay,
+    sunsetForDay,
+    suntransitForDay,
+    civilTwilightMorning,
+    civilTwilightEvening,
+} from '../es-riseset';
+import { AstroCache, AstroCachePool, CacheSlot, initializeCachePool } from '../astro-cache';
+
+// Helper: convert Date to Apple epoch seconds
+function appleEpoch(date: Date): number {
+    return date.getTime() / 1000 - 978307200;
+}
+
+// Helper: radians to degrees
+function toDeg(rad: number): number {
+    return rad * 180 / Math.PI;
+}
+
+// Helper: degrees to radians  
+function toRad(deg: number): number {
+    return deg * Math.PI / 180;
+}
+
+describe('es-time', () => {
+    test('dateToDateInterval round-trips with dateIntervalToDate', () => {
+        const d = new Date('2024-06-15T12:00:00Z');
+        const interval = dateToDateInterval(d);
+        const roundTripped = dateIntervalToDate(interval);
+        expect(roundTripped.getTime()).toBe(d.getTime());
+    });
+
+    test('appleEpoch matches dateToDateInterval', () => {
+        const d = new Date('2024-06-15T12:00:00Z');
+        expect(dateToDateInterval(d)).toBe(appleEpoch(d));
+    });
+
+    test('Julian date of J2000.0 epoch', () => {
+        // J2000.0 = 2000 Jan 1.5 TT = 2000-01-01 12:00:00 TT
+        // Apple epoch = 2001-01-01 00:00:00 UTC
+        // J2000.0 is about 365.5 days before Apple epoch
+        const j2000AppleSeconds = appleEpoch(new Date('2000-01-01T12:00:00Z'));
+        const jd = julianDateForDate(j2000AppleSeconds);
+        // J2000.0 is defined at 12h TT, not UT. UT is ~64s earlier → ~0.00074 JD diff
+        // julianDateForDate converts UT directly, so we expect the UT JD to be close.
+        // The UT noon JD should be 2451545.0 ± ~0.001 JD (the Delta T offset)
+        expect(jd).toBeCloseTo(2451545.0, 2);
+    });
+
+    test('Delta T values are reasonable for year 2000', () => {
+        // Both methods should give ~64 seconds for year 2000
+        const meeus = ECMeeusDeltaT(2000);
+        const espenak = espenakDeltaT(2000);
+        expect(meeus).toBeCloseTo(63.8, 0);
+        expect(espenak).toBeCloseTo(63.8, 0);
+    });
+
+    test('Delta T values reasonable for year 1900', () => {
+        const meeus = ECMeeusDeltaT(1900);
+        expect(meeus).toBeCloseTo(-2.8, 0);
+    });
+
+    test('priorUTMidnightForDateInterval returns midnight', () => {
+        const afternoon = appleEpoch(new Date('2024-06-15T15:30:00Z'));
+        const midnight = priorUTMidnightForDateInterval(afternoon, null);
+        const expectedMidnight = appleEpoch(new Date('2024-06-15T00:00:00Z'));
+        expect(midnight).toBe(expectedMidnight);
+    });
+
+    test('julianCenturiesSince2000Epoch for J2000.0 is near zero', () => {
+        const j2000 = appleEpoch(new Date('2000-01-01T12:00:00Z'));
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(j2000, null);
+        // Should be close to 0 (within Delta T offset)
+        expect(Math.abs(julianCenturiesSince2000Epoch)).toBeLessThan(0.0001);
+    });
+
+    test('julianCenturiesSince2000Epoch for J2100.0 is near 1.0', () => {
+        const j2100 = appleEpoch(new Date('2100-01-01T12:00:00Z'));
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(j2100, null);
+        expect(Math.abs(julianCenturiesSince2000Epoch - 1.0)).toBeLessThan(0.001);
+    });
+});
+
+describe('es-sidereal', () => {
+    test('GST is reasonable for J2000.0', () => {
+        // At J2000.0 (2000-01-01 12:00 UT), GST should be about 18h 41m = 4.894 rad
+        const j2000 = appleEpoch(new Date('2000-01-01T12:00:00Z'));
+        const gst = convertUTToGSTP03(j2000, null);
+        const gstHours = toDeg(gst) / 15;
+        expect(gstHours).toBeCloseTo(18.7, 0); // Within about half an hour
+    });
+
+    test('LST = GST + longitude', () => {
+        const gst = toRad(90); // 6 hours
+        const lon = toRad(10); // 10° east
+        const lst = convertGSTtoLST(gst, lon);
+        expect(lst).toBeCloseTo(gst + lon, 10);
+    });
+
+    test('convertLSTtoGST inverts convertGSTtoLST', () => {
+        const gst = toRad(90);
+        const lon = toRad(30);
+        const lst = convertGSTtoLST(gst, lon);
+        const { gst: gstBack } = convertLSTtoGST(lst, lon);
+        expect(gstBack).toBeCloseTo(gst, 10);
+    });
+
+    test('convertGSTtoUTclosest returns time near target', () => {
+        const target = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const gst = convertUTToGSTP03(target, null);
+        const recovered = convertGSTtoUTclosest(gst, target, null);
+        // Should recover roughly the same time (within seconds)
+        expect(Math.abs(recovered - target)).toBeLessThan(5);
+    });
+});
+
+describe('es-coordinates', () => {
+    test('obliquity at J2000.0 is about 23.44°', () => {
+        const obliquity = generalObliquity(0); // t=0 is J2000.0
+        expect(toDeg(obliquity)).toBeCloseTo(23.44, 1);
+    });
+
+    test('precession at J2000.0 is zero', () => {
+        const prec = generalPrecessionSinceJ2000(0);
+        expect(prec).toBeCloseTo(0, 10);
+    });
+
+    test('precession after 1 century is about 1.4°', () => {
+        const prec = generalPrecessionSinceJ2000(1);
+        expect(toDeg(prec)).toBeCloseTo(1.4, 0);
+    });
+
+    test('raAndDeclO for zero ecliptic lat/long gives RA~0, Decl~0', () => {
+        const obliquity = generalObliquity(0);
+        const { rightAscension, declination } = raAndDeclO(0, 0, obliquity);
+        expect(rightAscension).toBeCloseTo(0, 5);
+        expect(declination).toBeCloseTo(0, 5);
+    });
+
+    test('J2000 to of-date round-trip is accurate', () => {
+        const t = 0.5; // Halfway through century
+        const raJ2000 = toRad(120);
+        const declJ2000 = toRad(25);
+        const { raOfDate, declOfDate } = convertJ2000ToOfDate(t, raJ2000, declJ2000);
+        const { raJ2000: raBack, declJ2000: declBack } = refineConvertToJ2000FromOfDate(t, raOfDate, declOfDate);
+        // refineConvertToJ2000FromOfDate uses Meeus approximation, not exact P03 inverse
+        // so we get ~arcsecond accuracy (~5 decimal places in radians)
+        expect(raBack).toBeCloseTo(raJ2000, 5);
+        expect(declBack).toBeCloseTo(declJ2000, 5);
+    });
+
+    test('Sun RA/Decl are in reasonable ranges', () => {
+        const summerSolstice = appleEpoch(new Date('2024-06-21T12:00:00Z'));
+        const { rightAscension, declination } = sunRAandDecl(summerSolstice, null);
+        // RA should be about 6h = π/2 radians
+        expect(toDeg(rightAscension) / 15).toBeCloseTo(6, 0);
+        // Declination should be about +23.4°
+        expect(toDeg(declination)).toBeCloseTo(23.4, 0.5);
+    });
+
+    test('Moon RA/Decl return valid results', () => {
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const result = moonRAAndDecl(date, null);
+        // RA should be in [0, 2π)
+        expect(result.rightAscension).toBeGreaterThanOrEqual(0);
+        expect(result.rightAscension).toBeLessThan(Math.PI * 2);
+        // Declination should be in [-π/2, π/2]
+        expect(Math.abs(result.declination)).toBeLessThanOrEqual(Math.PI / 2);
+    });
+});
+
+describe('es-astro', () => {
+    // Haleakala, Maui: lat 20.7167°N, lon -156.15°W
+    const haleakalaLat = toRad(20.7167);
+    const haleakalaLon = toRad(-156.15);
+
+    test('Sun altitude at solar noon is positive and reasonable', () => {
+        // At noon UT (which is roughly morning in Hawaii), Sun may or may not be up
+        // Let's pick Hawaiian noon ≈ 22:00 UT
+        const hawaiiNoon = appleEpoch(new Date('2024-06-15T22:00:00Z'));
+        const alt = sunAltitude(hawaiiNoon, haleakalaLat, haleakalaLon, null);
+        // Sun should be very high near Hawaiian solstice noon
+        expect(toDeg(alt)).toBeGreaterThan(60);
+        expect(toDeg(alt)).toBeLessThan(93); // Can't be more than ~90°
+    });
+
+    test('Sun altitude at midnight is negative', () => {
+        // Hawaii midnight ≈ 10:00 UT
+        const hawaiiMidnight = appleEpoch(new Date('2024-06-16T10:00:00Z'));
+        const alt = sunAltitude(hawaiiMidnight, haleakalaLat, haleakalaLon, null);
+        expect(toDeg(alt)).toBeLessThan(0);
+    });
+
+    test('Sun azimuth is in valid range', () => {
+        const date = appleEpoch(new Date('2024-06-15T22:00:00Z'));
+        const az = sunAzimuth(date, haleakalaLat, haleakalaLon, null);
+        expect(az).toBeGreaterThanOrEqual(-Math.PI);
+        expect(az).toBeLessThanOrEqual(Math.PI);
+    });
+
+    test('Moon altitude is in valid range', () => {
+        const date = appleEpoch(new Date('2024-06-15T22:00:00Z'));
+        const alt = moonAltitude(date, haleakalaLat, haleakalaLon, null);
+        expect(toDeg(alt)).toBeGreaterThan(-90);
+        expect(toDeg(alt)).toBeLessThan(90);
+    });
+
+    test('Moon age is in [0, 2π)', () => {
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const { age, phase } = moonAge(date, null);
+        expect(age).toBeGreaterThanOrEqual(0);
+        expect(age).toBeLessThan(Math.PI * 2);
+        expect(phase).toBeGreaterThanOrEqual(0);
+        expect(phase).toBeLessThanOrEqual(1);
+    });
+
+    test('EOT is within reasonable range (±20 minutes)', () => {
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const eot = EOTSeconds(date, null);
+        expect(Math.abs(eot)).toBeLessThan(20 * 60); // less than 20 minutes
+    });
+
+    test('LST differs from GST by observer longitude', () => {
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const lst = localSiderealTime(date, toRad(45), null);
+        const gst = convertUTToGSTP03(date, null);
+        // LST - GST should equal longitude (modulo 2π)
+        let diff = lst - gst;
+        if (diff < 0) diff += Math.PI * 2;
+        if (diff > Math.PI * 2) diff -= Math.PI * 2;
+        expect(diff).toBeCloseTo(toRad(45), 5);
+    });
+});
+
+describe('es-riseset', () => {
+    // Haleakala location
+    const lat = toRad(20.7167);
+    const lon = toRad(-156.15);
+
+    function makeCachePool(dateInterval: number, latitude: number, longitude: number): AstroCachePool {
+        const pool = new AstroCachePool();
+        initializeCachePool(pool, dateInterval, latitude, longitude);
+        return pool;
+    }
+
+    test('Sunrise and sunset bracket solar noon (London)', () => {
+        // Use London (lat 51.5°N, lon 0°) where UT noon = local noon,
+        // so sunrise & sunset found from UT noon are both on the same local day.
+        const londonLat = toRad(51.5);
+        const londonLon = toRad(0);
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const pool = makeCachePool(date, londonLat, londonLon);
+
+        const sunrise = sunriseForDay(date, londonLat, londonLon, pool);
+        const sunset = sunsetForDay(date, londonLat, londonLon, pool);
+
+        // Sunrise should be before sunset on a normal day
+        expect(sunrise).toBeLessThan(sunset);
+
+        // Day length in London in June: about 16-17 hours
+        const dayLengthHours = (sunset - sunrise) / 3600;
+        expect(dayLengthHours).toBeGreaterThan(15);
+        expect(dayLengthHours).toBeLessThan(18);
+    });
+
+    test('Solar transit is between sunrise and sunset (London)', () => {
+        const londonLat = toRad(51.5);
+        const londonLon = toRad(0);
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const pool = makeCachePool(date, londonLat, londonLon);
+
+        const sunrise = sunriseForDay(date, londonLat, londonLon, pool);
+        const sunset = sunsetForDay(date, londonLat, londonLon, pool);
+        const transit = suntransitForDay(date, londonLat, londonLon, pool);
+
+        expect(transit).toBeGreaterThan(sunrise);
+        expect(transit).toBeLessThan(sunset);
+    });
+
+    test('Sunrise at Haleakala on June 15 2024 is approximately 5:50 AM HST', () => {
+        // HST = UTC-10. Sunrise ~5:50 AM HST = 15:50 UTC
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const pool = makeCachePool(date, lat, lon);
+
+        const sunrise = sunriseForDay(date, lat, lon, pool);
+        const sunriseDate = dateIntervalToDate(sunrise);
+        const sunriseHST_hours = sunriseDate.getUTCHours() - 10; // Convert UTC to HST
+        const adjustedHours = sunriseHST_hours < 0 ? sunriseHST_hours + 24 : sunriseHST_hours;
+        const sunriseDecimal = adjustedHours + sunriseDate.getUTCMinutes() / 60;
+
+        // Expected: approximately 5:50 AM = 5.83
+        expect(sunriseDecimal).toBeCloseTo(5.83, 0);
+    });
+
+    test('Civil twilight starts before sunrise', () => {
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const pool = makeCachePool(date, lat, lon);
+
+        const sunrise = sunriseForDay(date, lat, lon, pool);
+        const civilDawn = civilTwilightMorning(date, lat, lon, pool);
+
+        // Civil twilight should be about 20-30 minutes before sunrise
+        expect(civilDawn).toBeLessThan(sunrise);
+        const diffMinutes = (sunrise - civilDawn) / 60;
+        expect(diffMinutes).toBeGreaterThan(15);
+        expect(diffMinutes).toBeLessThan(45);
+    });
+
+    test('Civil twilight ends after sunset', () => {
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const pool = makeCachePool(date, lat, lon);
+
+        const sunset = sunsetForDay(date, lat, lon, pool);
+        const civilDusk = civilTwilightEvening(date, lat, lon, pool);
+
+        // Civil twilight should be about 20-30 minutes after sunset
+        expect(civilDusk).toBeGreaterThan(sunset);
+        const diffMinutes = (civilDusk - sunset) / 60;
+        expect(diffMinutes).toBeGreaterThan(15);
+        expect(diffMinutes).toBeLessThan(45);
+    });
+});
+
+describe('AstroCache', () => {
+    test('cache stores and retrieves values', () => {
+        const cache = new AstroCache();
+        cache.set(CacheSlot.sunRA, 1.234);
+        expect(cache.isValid(CacheSlot.sunRA)).toBe(true);
+        expect(cache.get(CacheSlot.sunRA)).toBe(1.234);
+    });
+
+    test('cache invalidation clears all values', () => {
+        const cache = new AstroCache();
+        cache.set(CacheSlot.sunRA, 1.234);
+        cache.invalidate();
+        expect(cache.isValid(CacheSlot.sunRA)).toBe(false);
+    });
+
+    test('AstroCachePool initialization works', () => {
+        const pool = new AstroCachePool();
+        const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        initializeCachePool(pool, date, toRad(20), toRad(-156));
+        expect(pool.currentCache).toBeTruthy();
+    });
+});
