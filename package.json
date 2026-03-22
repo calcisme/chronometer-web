@@ -4,12 +4,15 @@
   "description": "Web port of the Emerald Chronometer watch app",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild src/standalone.ts --bundle --loader:.xml=text --outfile=dist/chronometer.js --format=iife --target=es2020 && cp src/standalone.html dist/index.html",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.1",
+    "esbuild": "^0.27.4",
     "jsdom": "^29.0.1",
     "typescript": "^5.7.0",
     "vite": "^7.3.1",
