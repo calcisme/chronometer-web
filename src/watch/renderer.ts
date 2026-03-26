@@ -136,7 +136,7 @@ function drawQDial(
     env: Environment,
 ): void {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const radius = evalAttr(part.radius, env);
     if (radius <= 0) return;
 
@@ -233,7 +233,9 @@ function drawQDial(
 
             if (orientation === 'upright') {
                 // Draw text upright at each position around the circle
-                const textR = radius - fontSize * 0.7;
+                // Use larger offset for upright text since horizontal bounding box
+                // extends radially outward at diagonal positions (e.g., "11")
+                const textR = radius - fontSize * 1.2;
                 const tx = textR * Math.cos(th);
                 const ty = textR * Math.sin(th);
                 ctx.save();
@@ -242,7 +244,7 @@ function drawQDial(
                 ctx.restore();
             } else if (orientation === 'demi') {
                 // Demi-radial: text follows the curve, upside-down in bottom half
-                const textR = radius - fontSize * 0.7;
+                const textR = radius - fontSize * 0.85;
                 const demiTweak = evalAttr(part.demiTweak, env);
                 const tx = textR * Math.cos(th);
                 const ty = textR * Math.sin(th);
@@ -261,7 +263,7 @@ function drawQDial(
                 ctx.restore();
             } else {
                 // Default: radial text
-                const textR = radius - fontSize * 0.7;
+                const textR = radius - fontSize * 0.85;
                 const tx = textR * Math.cos(th);
                 const ty = textR * Math.sin(th);
                 ctx.save();
@@ -295,17 +297,21 @@ function drawQHand(
     env: Environment,
 ): void {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const angle = evalAttr(part.angle, env);
     const length = evalAttr(part.length, env);
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);
-    const handType = part.handType || 'tri';
-    const strokeColor = evalColor(part.strokeColor, env);
-    const fillColor = evalColor(part.fillColor, env);
-    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
+
 
     if (length <= 0) return;
+
+    const handType = part.handType || 'tri';
+    // Default hand color to black when not specified (XML hands often omit color)
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
+    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : 'rgba(0,0,0,1)';
+    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
+
 
     ctx.save();
     ctx.translate(x, y);
@@ -387,7 +393,7 @@ function drawWheel(
     env: Environment,
 ): void {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const radius = evalAttr(part.radius, env);
     const angle = evalAttr(part.angle, env);
     if (radius <= 0) return;
@@ -480,7 +486,7 @@ function drawQText(
     env: Environment,
 ): void {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const text = part.text || '';
     if (!text) return;
 
@@ -508,7 +514,7 @@ function drawQRect(
     env: Environment,
 ): void {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     if (w <= 0 || h <= 0) return;
@@ -555,7 +561,7 @@ function drawWindow(
     env: Environment,
 ): void {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     const border = evalAttr(part.border, env);

@@ -1280,7 +1280,7 @@ Rise/set (Moon)
   }
   function drawQDial(ctx, part, env) {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);
     const radius = evalAttr(part.radius, env);
     if (radius <= 0) return;
     const bgColor = evalColor(part.bgColor, env);
@@ -1356,7 +1356,7 @@ Rise/set (Moon)
         if (!label) continue;
         const th = i / n * 2 * Math.PI - Math.PI / 2;
         if (orientation === "upright") {
-          const textR = radius - fontSize * 0.7;
+          const textR = radius - fontSize * 1.2;
           const tx = textR * Math.cos(th);
           const ty = textR * Math.sin(th);
           ctx.save();
@@ -1364,7 +1364,7 @@ Rise/set (Moon)
           ctx.fillText(label, 0, 0);
           ctx.restore();
         } else if (orientation === "demi") {
-          const textR = radius - fontSize * 0.7;
+          const textR = radius - fontSize * 0.85;
           const demiTweak = evalAttr(part.demiTweak, env);
           const tx = textR * Math.cos(th);
           const ty = textR * Math.sin(th);
@@ -1381,7 +1381,7 @@ Rise/set (Moon)
           ctx.fillText(label, 0, 0);
           ctx.restore();
         } else {
-          const textR = radius - fontSize * 0.7;
+          const textR = radius - fontSize * 0.85;
           const tx = textR * Math.cos(th);
           const ty = textR * Math.sin(th);
           ctx.save();
@@ -1403,16 +1403,16 @@ Rise/set (Moon)
   }
   function drawQHand(ctx, part, env) {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);
     const angle = evalAttr(part.angle, env);
     const length = evalAttr(part.length, env);
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);
-    const handType = part.handType || "tri";
-    const strokeColor = evalColor(part.strokeColor, env);
-    const fillColor = evalColor(part.fillColor, env);
-    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
     if (length <= 0) return;
+    const handType = part.handType || "tri";
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
+    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
+    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
@@ -1460,7 +1460,7 @@ Rise/set (Moon)
   }
   function drawWheel(ctx, part, env) {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);
     const radius = evalAttr(part.radius, env);
     const angle = evalAttr(part.angle, env);
     if (radius <= 0) return;
@@ -1528,7 +1528,7 @@ Rise/set (Moon)
   }
   function drawQText(ctx, part, env) {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);
     const text = part.text || "";
     if (!text) return;
     const fontSize = evalAttr(part.fontSize, env) || 12;
@@ -1545,7 +1545,7 @@ Rise/set (Moon)
   }
   function drawQRect(ctx, part, env) {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     if (w <= 0 || h <= 0) return;
@@ -1575,7 +1575,7 @@ Rise/set (Moon)
   }
   function drawWindow(ctx, part, env) {
     const x = evalAttr(part.x, env);
-    const y = evalAttr(part.y, env);
+    const y = -evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     const border = evalAttr(part.border, env);
