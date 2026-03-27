@@ -1440,64 +1440,71 @@ Rise/set (Moon)
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
-    const oTailForBody = evalAttr(part.oTail, env);
-    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTailForBody);
+    const oTail = evalAttr(part.oTail, env);
+    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail);
     const oLength = evalAttr(part.oLength, env);
     if (oLength > 0) {
       const oWidth = evalAttr(part.oWidth, env);
-      const oTail = evalAttr(part.oTail, env);
       const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
       const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
       const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-      const baseY = -(length - oLineWidth * 3);
-      const tipY = -(length - oLineWidth * 3 + oLength);
-      const innerY = -(length - oTail);
-      ctx.beginPath();
-      ctx.lineWidth = oLineWidth;
-      ctx.strokeStyle = oStrokeColor;
-      ctx.fillStyle = oFillColor;
-      ctx.moveTo(0, tipY);
-      ctx.lineTo(oWidth / 2, baseY);
-      ctx.lineTo(0, innerY);
-      ctx.lineTo(-oWidth / 2, baseY);
-      ctx.closePath();
-      if (oFillColor !== "rgba(0,0,0,0)") ctx.fill();
-      if (oStrokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-      if (oLineWidth > 0) {
-        const extraTipY = -(length + oLength);
-        const extraBaseY = -(length + oLength - oLineWidth * 3);
-        ctx.beginPath();
-        ctx.lineWidth = 0;
-        ctx.fillStyle = oStrokeColor;
-        ctx.moveTo(oLineWidth / 2, extraBaseY);
-        ctx.lineTo(0, extraTipY);
-        ctx.lineTo(-oLineWidth / 2, extraBaseY);
-        ctx.closePath();
-        ctx.fill();
-      }
+      drawHandOrnament(ctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor);
     }
     const oRadius = evalAttr(part.oRadius, env);
     if (oRadius > 0) {
-      const tLineWidth = evalAttr(part.lineWidth, env) || 0.5;
       const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
       const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-      ctx.lineWidth = tLineWidth;
-      ctx.strokeStyle = oStrokeColor;
-      ctx.fillStyle = oFillColor;
-      ctx.beginPath();
-      ctx.arc(0, tail + 2 * oRadius, oRadius, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.stroke();
+      drawTailCircle(ctx, tail, oRadius, lineWidth, oStrokeColor, oFillColor);
     }
     const oCenter = evalAttr(part.oCenter, env);
     if (oCenter > 0) {
       const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-      ctx.fillStyle = osc;
-      ctx.beginPath();
-      ctx.arc(0, 0, oCenter, 0, 2 * Math.PI);
-      ctx.fill();
+      drawCenterDot(ctx, oCenter, osc);
     }
     ctx.restore();
+  }
+  function drawHandOrnament(ctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor) {
+    const baseY = -(length - oLineWidth * 3);
+    const tipY = -(length - oLineWidth * 3 + oLength);
+    const innerY = -(length - oTail);
+    ctx.beginPath();
+    ctx.lineWidth = oLineWidth;
+    ctx.strokeStyle = oStrokeColor;
+    ctx.fillStyle = oFillColor;
+    ctx.moveTo(0, tipY);
+    ctx.lineTo(oWidth / 2, baseY);
+    ctx.lineTo(0, innerY);
+    ctx.lineTo(-oWidth / 2, baseY);
+    ctx.closePath();
+    if (oFillColor !== "rgba(0,0,0,0)") ctx.fill();
+    if (oStrokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    if (oLineWidth > 0) {
+      const extraTipY = -(length + oLength);
+      const extraBaseY = -(length + oLength - oLineWidth * 3);
+      ctx.beginPath();
+      ctx.lineWidth = 0;
+      ctx.fillStyle = oStrokeColor;
+      ctx.moveTo(oLineWidth / 2, extraBaseY);
+      ctx.lineTo(0, extraTipY);
+      ctx.lineTo(-oLineWidth / 2, extraBaseY);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  function drawTailCircle(ctx, tail, oRadius, lineWidth, strokeColor, fillColor) {
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.arc(0, tail + 2 * oRadius, oRadius, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawCenterDot(ctx, radius, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+    ctx.fill();
   }
   function drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail = 0) {
     ctx.beginPath();
