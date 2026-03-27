@@ -1213,25 +1213,90 @@ Rise/set (Moon)
   }
 
   // src/watch/renderer.ts
+  function buildStaticCache(watch, env, canvasWidth, canvasHeight, scale) {
+    const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
+    const ctx = cache.getContext("2d");
+    ctx.translate(canvasWidth / 2, canvasHeight / 2);
+    ctx.scale(scale, scale);
+    renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale);
+    return cache;
+  }
   function renderWatch(ctx, watch, env, scale) {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const cache = buildStaticCache(watch, env, w, h, scale);
+    ctx.drawImage(cache, 0, 0);
     ctx.save();
-    ctx.translate(ctx.canvas.width / 2, ctx.canvas.height / 2);
+    ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
     for (const part of watch.parts) {
-      drawPart(ctx, part, env);
+      drawDynamicParts(ctx, part, env);
     }
     ctx.restore();
   }
-  function drawPart(ctx, part, env) {
+  function renderPartsWithWindows(ctx, parts, env, canvasWidth, canvasHeight, scale) {
+    const pendingWindows = [];
+    for (const part of parts) {
+      if (part.type === "Window") {
+        pendingWindows.push(part);
+        continue;
+      }
+      if (part.type === "QHand" || part.type === "Button") {
+        continue;
+      }
+      if (pendingWindows.length > 0) {
+        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+        pendingWindows.length = 0;
+      } else {
+        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+      }
+    }
+  }
+  function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale) {
+    const temp = new OffscreenCanvas(canvasWidth, canvasHeight);
+    const tctx = temp.getContext("2d");
+    tctx.translate(canvasWidth / 2, canvasHeight / 2);
+    tctx.scale(scale, scale);
+    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale);
+    for (const win of windows) {
+      cutWindowHole(tctx, win, env);
+    }
+    ctx.save();
+    ctx.resetTransform();
+    ctx.drawImage(temp, 0, 0);
+    ctx.restore();
+    for (const win of windows) {
+      drawWindowBorder(ctx, win, env);
+    }
+  }
+  function cutWindowHole(ctx, win, env) {
+    const xCorner = evalAttr(win.x, env);
+    const yCorner = evalAttr(win.y, env);
+    const w = evalAttr(win.w, env);
+    const h = evalAttr(win.h, env);
+    const isPorthole = win.windowType === "porthole";
+    const cx = xCorner + w / 2;
+    const cy = -(yCorner + h / 2);
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0,0,0,1)";
+    if (isPorthole) {
+      const r = Math.min(w, h) / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+      ctx.fill();
+    } else {
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    }
+    ctx.restore();
+  }
+  function drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale) {
     switch (part.type) {
       case "Static":
-        drawStatic(ctx, part, env);
+        drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale);
         break;
       case "QDial":
         drawQDial(ctx, part, env);
-        break;
-      case "QHand":
-        drawQHand(ctx, part, env);
         break;
       case "Wheel":
         drawWheel(ctx, part, env);
@@ -1245,16 +1310,21 @@ Rise/set (Moon)
         drawQRect(ctx, part, env);
         break;
       case "Window":
-        drawWindow(ctx, part, env);
-        break;
-      case "Button":
+        drawWindowBorder(ctx, part, env);
         break;
     }
   }
-  function drawStatic(ctx, part, env) {
-    for (const child of part.children) {
-      drawPart(ctx, child, env);
+  function drawDynamicParts(ctx, part, env) {
+    if (part.type === "QHand") {
+      drawQHand(ctx, part, env);
+    } else if (part.type === "Static") {
+      for (const child of part.children) {
+        drawDynamicParts(ctx, child, env);
+      }
     }
+  }
+  function drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale) {
+    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale);
   }
   var MARKS_NONE = 0;
   var MARKS_OUTER = 1 << 0;
@@ -1544,57 +1614,64 @@ Rise/set (Moon)
     const orientation = part.orientation || "twelve";
     ctx.save();
     ctx.translate(x, y);
-    const wedgeAngle = 2 * Math.PI / n;
-    const baseRotation = orientationAngle(orientation);
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    let maxW = 0, maxH = fontSize;
+    for (const lab of labels) {
+      const m = ctx.measureText(lab.trim());
+      maxW = Math.max(maxW, m.width);
+    }
+    const angle1 = 0;
+    const angle2 = 2 * Math.PI;
+    const arcSpan = angle2 - angle1;
+    const step = arcSpan / n;
+    const tradius = radius;
+    if (bgColor !== "rgba(0,0,0,0)") {
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius + 2, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.rotate(-angle + angle1);
     for (let i = 0; i < n; i++) {
       const label = labels[i].trim();
-      const wedgeCenter = -angle + i * wedgeAngle;
-      ctx.save();
-      ctx.rotate(wedgeCenter + baseRotation);
-      if (bgColor !== "rgba(0,0,0,0)") {
-        ctx.fillStyle = bgColor;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.arc(0, 0, radius, -wedgeAngle / 2, wedgeAngle / 2);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, radius, -wedgeAngle / 2, wedgeAngle / 2);
-      ctx.closePath();
-      ctx.stroke();
       if (label) {
         ctx.fillStyle = strokeColor;
         ctx.save();
-        const textR = radius * 0.6;
-        ctx.translate(textR, 0);
-        ctx.rotate(-wedgeCenter - baseRotation);
+        switch (orientation.toLowerCase()) {
+          case "three":
+            ctx.translate(tradius - maxW / 2, 0);
+            ctx.rotate(angle - angle1 - i * step);
+            break;
+          case "six":
+            ctx.translate(0, -(tradius - maxH / 2));
+            ctx.rotate(angle - angle1 - i * step);
+            break;
+          case "twelve":
+            ctx.translate(0, tradius - maxH / 2);
+            ctx.rotate(angle - angle1 - i * step);
+            break;
+          case "nine":
+            ctx.translate(-(tradius - maxW / 2), 0);
+            ctx.rotate(angle - angle1 - i * step);
+            break;
+        }
         ctx.fillText(label, 0, 0);
         ctx.restore();
       }
-      ctx.restore();
+      ctx.rotate(step);
     }
     ctx.restore();
-  }
-  function orientationAngle(orientation) {
-    switch (orientation.toLowerCase()) {
-      case "twelve":
-        return -Math.PI / 2;
-      case "three":
-        return 0;
-      case "six":
-        return Math.PI / 2;
-      case "nine":
-        return Math.PI;
-      default:
-        return -Math.PI / 2;
+    if (bgColor !== "rgba(0,0,0,0)") {
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+      ctx.stroke();
     }
+    ctx.restore();
   }
   function drawQText(ctx, part, env) {
     const x = evalAttr(part.x, env);
@@ -1645,7 +1722,7 @@ Rise/set (Moon)
     }
     ctx.restore();
   }
-  function drawWindow(ctx, part, env) {
+  function drawWindowBorder(ctx, part, env) {
     const xCorner = evalAttr(part.x, env);
     const yCorner = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);

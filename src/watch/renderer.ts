@@ -1,8 +1,18 @@
 /**
  * Canvas 2D renderer for Chronometer watch parts.
  *
- * Draws all part types from the parsed watch model onto an HTML canvas.
- * Ported from the Cocoa drawing code in ECQView.m.
+ * Two-phase architecture for 60fps animation:
+ *   1. buildStaticCache() — renders all static parts (dials, text, ticks,
+ *      images, QRects, windows) to an OffscreenCanvas. Runs once per
+ *      mode/date change.
+ *   2. renderFrame() — blits the cached static layer, then draws dynamic
+ *      parts (hands) on top. Runs every frame via requestAnimationFrame.
+ *
+ * Window cutouts use Canvas 2D compositing (destination-out) to punch
+ * transparent holes through the part that follows them, matching the
+ * original iOS rendering pipeline.
+ *
+ * Parts are always rendered in XML document order — no sorting or z-index.
  */
 
 import type { Environment } from '../expr/evaluator.js';
@@ -21,17 +31,69 @@ import type {
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
 
+/** Shared context type — works for both on-screen and offscreen canvases. */
+type RenderContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
 // ============================================================================
 // Public API
 // ============================================================================
 
 /**
- * Render a watch to a canvas context.
+ * Build an OffscreenCanvas containing all static parts (everything except
+ * QHands and Buttons). Window cutouts are applied via compositing.
  *
- * @param ctx   Canvas 2D context (must already be sized)
- * @param watch Parsed watch model
- * @param env   Expression environment (with init blocks already evaluated)
- * @param scale Scale factor from XML units to canvas pixels
+ * Call this once on init, and again when mode/date/timezone changes.
+ */
+export function buildStaticCache(
+    watch: Watch,
+    env: Environment,
+    canvasWidth: number,
+    canvasHeight: number,
+    scale: number,
+): OffscreenCanvas {
+    const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
+    const ctx = cache.getContext('2d')!;
+
+    // Set up coordinate system: origin at center, scale XML units → pixels
+    ctx.translate(canvasWidth / 2, canvasHeight / 2);
+    ctx.scale(scale, scale);
+
+    // Render static parts with window accumulation
+    renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale);
+
+    return cache;
+}
+
+/**
+ * Render a single frame: blit the static cache, then draw dynamic hands.
+ */
+export function renderFrame(
+    ctx: CanvasRenderingContext2D,
+    staticCache: OffscreenCanvas,
+    watch: Watch,
+    env: Environment,
+    scale: number,
+): void {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+
+    // Clear and draw cached static layer
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(staticCache, 0, 0);
+
+    // Draw dynamic parts (hands) on top
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(scale, scale);
+    for (const part of watch.parts) {
+        drawDynamicParts(ctx, part, env);
+    }
+    ctx.restore();
+}
+
+/**
+ * Legacy single-call API — builds cache and renders in one step.
+ * Kept for backward compatibility during transition.
  */
 export function renderWatch(
     ctx: CanvasRenderingContext2D,
@@ -39,38 +101,155 @@ export function renderWatch(
     env: Environment,
     scale: number,
 ): void {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const cache = buildStaticCache(watch, env, w, h, scale);
+    ctx.drawImage(cache, 0, 0);
+
+    // Draw hands on top
     ctx.save();
-
-    // Set up coordinate system: origin at center, scale XML units → pixels
-    ctx.translate(ctx.canvas.width / 2, ctx.canvas.height / 2);
+    ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
-
-    // Draw all parts in document order
     for (const part of watch.parts) {
-        drawPart(ctx, part, env);
+        drawDynamicParts(ctx, part, env);
+    }
+    ctx.restore();
+}
+
+// ============================================================================
+// Window accumulation + compositing
+// ============================================================================
+
+/**
+ * Render a list of parts in document order, accumulating windows and
+ * applying cutouts to the next drawable part.
+ */
+function renderPartsWithWindows(
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+    parts: WatchPart[],
+    env: Environment,
+    canvasWidth: number,
+    canvasHeight: number,
+    scale: number,
+): void {
+    const pendingWindows: WindowPart[] = [];
+
+    for (const part of parts) {
+        if (part.type === 'Window') {
+            pendingWindows.push(part);
+            continue;
+        }
+
+        // Skip dynamic parts in static cache
+        if (part.type === 'QHand' || part.type === 'Button') {
+            continue;
+        }
+
+        if (pendingWindows.length > 0) {
+            // This part has windows — render to temp canvas, cut holes, composite
+            renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+            pendingWindows.length = 0;
+        } else {
+            // No pending windows — draw directly
+            drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+        }
+    }
+}
+
+/**
+ * Render a part to a temporary OffscreenCanvas, cut window holes,
+ * then composite the result onto the main context.
+ */
+function renderWithWindowCutouts(
+    ctx: RenderContext,
+    part: WatchPart,
+    windows: WindowPart[],
+    env: Environment,
+    canvasWidth: number,
+    canvasHeight: number,
+    scale: number,
+): void {
+    // Create temp canvas for compositing
+    const temp = new OffscreenCanvas(canvasWidth, canvasHeight);
+    const tctx = temp.getContext('2d')!;
+
+    // Set up same coordinate system as main context
+    tctx.translate(canvasWidth / 2, canvasHeight / 2);
+    tctx.scale(scale, scale);
+
+    // Draw the part onto the temp canvas
+    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale);
+
+    // Cut window holes using destination-out
+    for (const win of windows) {
+        cutWindowHole(tctx, win, env);
+    }
+
+    // Composite temp canvas onto main context (reset transform first)
+    ctx.save();
+    ctx.resetTransform();
+    ctx.drawImage(temp, 0, 0);
+    ctx.restore();
+
+    // Draw window borders on main context (on top of composited result)
+    for (const win of windows) {
+        drawWindowBorder(ctx, win, env);
+    }
+}
+
+/**
+ * Cut a transparent hole in the given context using destination-out.
+ */
+function cutWindowHole(
+    ctx: RenderContext,
+    win: WindowPart,
+    env: Environment,
+): void {
+    const xCorner = evalAttr(win.x, env);
+    const yCorner = evalAttr(win.y, env);
+    const w = evalAttr(win.w, env);
+    const h = evalAttr(win.h, env);
+    const isPorthole = win.windowType === 'porthole';
+
+    // Center from corner (same as drawWindow/drawQRect)
+    const cx = xCorner + w / 2;
+    const cy = -(yCorner + h / 2);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+
+    if (isPorthole) {
+        const r = Math.min(w, h) / 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+        ctx.fill();
+    } else {
+        ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
     }
 
     ctx.restore();
 }
 
 // ============================================================================
-// Part dispatch
+// Part dispatch — static vs. dynamic
 // ============================================================================
 
-function drawPart(
-    ctx: CanvasRenderingContext2D,
+/** Draw a static part (everything except QHand/Button). */
+function drawStaticPart(
+    ctx: RenderContext,
     part: WatchPart,
     env: Environment,
+    canvasWidth: number,
+    canvasHeight: number,
+    scale: number,
 ): void {
     switch (part.type) {
         case 'Static':
-            drawStatic(ctx, part, env);
+            drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale);
             break;
         case 'QDial':
             drawQDial(ctx, part, env);
-            break;
-        case 'QHand':
-            drawQHand(ctx, part, env);
             break;
         case 'Wheel':
             drawWheel(ctx, part, env);
@@ -79,32 +258,47 @@ function drawPart(
             drawQText(ctx, part, env);
             break;
         case 'Image':
-            // Images skipped for Phase 3
+            // Images skipped for now
             break;
         case 'QRect':
             drawQRect(ctx, part, env);
             break;
         case 'Window':
-            drawWindow(ctx, part, env);
-            break;
-        case 'Button':
-            // Buttons not drawn (interaction is Phase 6)
+            // Standalone window (no following part to clip) — just draw border
+            drawWindowBorder(ctx, part, env);
             break;
     }
 }
 
+/** Walk dynamic parts tree, drawing only QHands. */
+function drawDynamicParts(
+    ctx: CanvasRenderingContext2D,
+    part: WatchPart,
+    env: Environment,
+): void {
+    if (part.type === 'QHand') {
+        drawQHand(ctx, part, env);
+    } else if (part.type === 'Static') {
+        for (const child of part.children) {
+            drawDynamicParts(ctx, child, env);
+        }
+    }
+}
+
 // ============================================================================
-// Static container
+// Static container — handles inner windows via recursive renderPartsWithWindows
 // ============================================================================
 
 function drawStatic(
-    ctx: CanvasRenderingContext2D,
+    ctx: RenderContext,
     part: StaticPart,
     env: Environment,
+    canvasWidth: number,
+    canvasHeight: number,
+    scale: number,
 ): void {
-    for (const child of part.children) {
-        drawPart(ctx, child, env);
-    }
+    // Static containers can have windows inside them
+    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale);
 }
 
 // ============================================================================
@@ -131,7 +325,7 @@ function parseMarksType(marks: string | undefined): number {
 }
 
 function drawQDial(
-    ctx: CanvasRenderingContext2D,
+    ctx: RenderContext,
     part: QDialPart,
     env: Environment,
 ): void {
@@ -513,7 +707,7 @@ function drawHandShape(
 // ============================================================================
 
 function drawWheel(
-    ctx: CanvasRenderingContext2D,
+    ctx: RenderContext,
     part: WheelPart,
     env: Environment,
 ): void {
@@ -536,56 +730,97 @@ function drawWheel(
     ctx.save();
     ctx.translate(x, y);
 
-    // Compute the angular span per label (wedge)
-    const wedgeAngle = 2 * Math.PI / n;
-    // Compute the visible label index based on the current angle
-    // For the wheel, the angle expression gives the rotation of the wheel
-    const baseRotation = orientationAngle(orientation);
-
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Draw each wedge
+    // Compute max label dimensions for consistent positioning
+    let maxW = 0, maxH = fontSize;
+    for (const lab of labels) {
+        const m = ctx.measureText(lab.trim());
+        maxW = Math.max(maxW, m.width);
+    }
+
+    // angle1/angle2 define the arc range (default: full circle)
+    const angle1 = 0;
+    const angle2 = 2 * Math.PI;
+    const arcSpan = angle2 - angle1;
+    const step = arcSpan / n;
+
+    // tradius = text radius (same as radius if not specified)
+    const tradius = radius;
+
+    // Draw background arc ring
+    if (bgColor !== 'rgba(0,0,0,0)') {
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + 2, 0, 2 * Math.PI);
+        ctx.fill();
+    }
+
+    // Draw labels around the circle
+    // The `angle` expression gives the current rotation of the wheel.
+    // In the original iOS code:
+    //   - The context starts rotated by angle1 (0 for full-circle wheels)
+    //   - Each label is drawn at a fixed position determined by orientation
+    //   - Then the context rotates by (angle2-angle1)/n between each label
+    //   - The wheel's current angle offsets all labels
+    //
+    // The wheel angle from the XML rotates CCW in math coords, but since
+    // canvas Y is down, a positive angle rotates CW visually.
+    // The original iOS negates the angle when setting the hand/wheel position.
+
+    ctx.save();
+    ctx.rotate(-angle + angle1);
+
     for (let i = 0; i < n; i++) {
         const label = labels[i].trim();
-        const wedgeCenter = -angle + i * wedgeAngle;
 
-        ctx.save();
-        ctx.rotate(wedgeCenter + baseRotation);
-
-        // Background wedge
-        if (bgColor !== 'rgba(0,0,0,0)') {
-            ctx.fillStyle = bgColor;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.arc(0, 0, radius, -wedgeAngle / 2, wedgeAngle / 2);
-            ctx.closePath();
-            ctx.fill();
-        }
-
-        // Wedge border
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.arc(0, 0, radius, -wedgeAngle / 2, wedgeAngle / 2);
-        ctx.closePath();
-        ctx.stroke();
-
-        // Text in wedge
         if (label) {
             ctx.fillStyle = strokeColor;
             ctx.save();
-            // Orient text based on wheel orientation
-            const textR = radius * 0.6;
-            ctx.translate(textR, 0);
-            ctx.rotate(-wedgeCenter - baseRotation);  // keep text upright
+
+            // Position text based on orientation
+            // Each orientation places text at a specific edge of the wheel
+            switch (orientation.toLowerCase()) {
+                case 'three':
+                    // Text to the right, reading left-to-right
+                    ctx.translate(tradius - maxW / 2, 0);
+                    ctx.rotate(angle - angle1 - i * step);  // keep text upright
+                    break;
+                case 'six':
+                    // Text above center (in iOS Y-up; in canvas Y-down this means negative Y)
+                    ctx.translate(0, -(tradius - maxH / 2));
+                    ctx.rotate(angle - angle1 - i * step);
+                    break;
+                case 'twelve':
+                    // Text below center
+                    ctx.translate(0, tradius - maxH / 2);
+                    ctx.rotate(angle - angle1 - i * step);
+                    break;
+                case 'nine':
+                    // Text to the left
+                    ctx.translate(-(tradius - maxW / 2), 0);
+                    ctx.rotate(angle - angle1 - i * step);
+                    break;
+            }
+
             ctx.fillText(label, 0, 0);
             ctx.restore();
         }
 
-        ctx.restore();
+        ctx.rotate(step);
+    }
+
+    ctx.restore();
+
+    // Border stroke
+    if (bgColor !== 'rgba(0,0,0,0)') {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.stroke();
     }
 
     ctx.restore();
@@ -606,7 +841,7 @@ function orientationAngle(orientation: string): number {
 // ============================================================================
 
 function drawQText(
-    ctx: CanvasRenderingContext2D,
+    ctx: RenderContext,
     part: QTextPart,
     env: Environment,
 ): void {
@@ -634,7 +869,7 @@ function drawQText(
 // ============================================================================
 
 function drawQRect(
-    ctx: CanvasRenderingContext2D,
+    ctx: RenderContext,
     part: QRectPart,
     env: Environment,
 ): void {
@@ -684,8 +919,8 @@ function drawQRect(
 // Window — clipping region with border
 // ============================================================================
 
-function drawWindow(
-    ctx: CanvasRenderingContext2D,
+function drawWindowBorder(
+    ctx: RenderContext,
     part: WindowPart,
     env: Environment,
 ): void {
