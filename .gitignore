@@ -1,4 +1,5 @@
 .esastro-ref
+.chronometer-ref
 node_modules
 package-lock.json
 .DS_Store
