@@ -367,18 +367,65 @@ function drawQHand(
     ctx.rotate(angle);
 
     // Draw the main hand body
-    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth);
+    // Pass oTail so rect body stops short of ornament (original: height = length+tail-oTail)
+    const oTailForBody = evalAttr(part.oTail, env);
+    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTailForBody);
 
-    // Draw arrow overlay if present
+    // Draw ornaments (arrowhead overlay) — matches original iOS drawOrnaments
     const oLength = evalAttr(part.oLength, env);
     if (oLength > 0) {
         const oWidth = evalAttr(part.oWidth, env);
         const oTail = evalAttr(part.oTail, env);
         const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
-        const oStrokeColor = evalColor(part.oStrokeColor, env);
-        const oFillColor = evalColor(part.oFillColor, env);
+        const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+        const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
 
-        drawHandShape(ctx, handType, oLength, oWidth, oTail, oStrokeColor, oFillColor, oLineWidth);
+        // Diamond/kite-shaped arrowhead
+        // Original iOS coords (Y-up) → Canvas (Y-down, hands point in -Y)
+        const baseY = -(length - oLineWidth * 3);  // widest point
+        const tipY = -(length - oLineWidth * 3 + oLength);  // tip (further from center)
+        const innerY = -(length - oTail);  // inner point (closer to center)
+
+        ctx.beginPath();
+        ctx.lineWidth = oLineWidth;
+        ctx.strokeStyle = oStrokeColor;
+        ctx.fillStyle = oFillColor;
+        ctx.moveTo(0, tipY);                // tip
+        ctx.lineTo(oWidth / 2, baseY);      // right
+        ctx.lineTo(0, innerY);              // inner
+        ctx.lineTo(-oWidth / 2, baseY);     // left
+        ctx.closePath();
+        if (oFillColor !== 'rgba(0,0,0,0)') ctx.fill();
+        if (oStrokeColor !== 'rgba(0,0,0,0)') ctx.stroke();
+
+        // Extra small triangle at the very tip for a sharp point
+        if (oLineWidth > 0) {
+            const extraTipY = -(length + oLength);
+            const extraBaseY = -(length + oLength - oLineWidth * 3);
+            ctx.beginPath();
+            ctx.lineWidth = 0;
+            ctx.fillStyle = oStrokeColor;
+            ctx.moveTo(oLineWidth / 2, extraBaseY);
+            ctx.lineTo(0, extraTipY);
+            ctx.lineTo(-oLineWidth / 2, extraBaseY);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
+    // Tail circle (oRadius)
+    const oRadius = evalAttr(part.oRadius, env);
+    if (oRadius > 0) {
+        const tLineWidth = evalAttr(part.lineWidth, env) || 0.5;
+        const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+        const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
+        ctx.lineWidth = tLineWidth;
+        ctx.strokeStyle = oStrokeColor;
+        ctx.fillStyle = oFillColor;
+        ctx.beginPath();
+        ctx.arc(0, tail + 2 * oRadius, oRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
     }
 
     // Center dot
@@ -403,6 +450,7 @@ function drawHandShape(
     strokeColor: string,
     fillColor: string,
     lineWidth: number,
+    oTail: number = 0,
 ): void {
     ctx.beginPath();
     ctx.lineWidth = lineWidth;
@@ -410,9 +458,10 @@ function drawHandShape(
     ctx.fillStyle = fillColor;
 
     if (handType === 'rect') {
-        // Rectangle hand: -tail to +length, width centered
+        // Rectangle hand: tail to length-oTail, width centered
+        // Original: CGRectMake(-width/2, length2-tail, width, length+tail-oTail)
         const hw = width / 2;
-        ctx.rect(-hw, tail, width, -(length + tail));
+        ctx.rect(-hw, tail, width, -(length + tail - oTail));
     } else {
         // Triangle hand: pointed tip, wide base
         const hw = width / 2;
