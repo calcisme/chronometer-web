@@ -3604,16 +3604,18 @@ Rise/set (Moon)
   }
 
   // src/watch/watch-env.ts
-  var OBSERVER_LAT = 37.205 * Math.PI / 180;
-  var OBSERVER_LON = -121.954 * Math.PI / 180;
-  function createWatchEnvironment(watch) {
+  var DEFAULT_LAT_DEG = 37.205;
+  var DEFAULT_LON_DEG = -121.954;
+  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG) {
+    const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
+    const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
     env.variables.set("updateAtNextSunriseOrMidnight", 86400);
     env.variables.set("updateAtNextSunsetOrMidnight", 86400);
     env.variables.set("updateAtNextMoonriseOrMidnight", 86400);
     env.variables.set("updateAtNextMoonsetOrMidnight", 86400);
     env.variables.set("updateAtEnvChangeOnly", 86400);
-    registerTimeFunctions(env);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
     for (const expr of watch.initExprs) {
       evaluateInit(expr, env);
     }
@@ -3638,7 +3640,7 @@ Rise/set (Moon)
     const b = v & 255;
     return `rgba(${r},${g},${b},${a.toFixed(3)})`;
   }
-  function registerTimeFunctions(env) {
+  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON) {
     const { functions } = env;
     const now = /* @__PURE__ */ new Date();
     const dateInterval = dateToDateInterval(now);
@@ -4398,6 +4400,19 @@ Rise/set (Moon)
   }
 
   // src/standalone.ts
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => resolve(null),
+        // denied or error → fall back to default
+        { timeout: 5e3 }
+      );
+    });
+  }
   async function main() {
     const canvas = document.getElementById("watch");
     const ctx = canvas.getContext("2d");
@@ -4405,8 +4420,14 @@ Rise/set (Moon)
       console.error("Could not get canvas 2d context");
       return;
     }
+    const loc = await requestLocation();
+    if (loc) {
+      console.log(`Using browser location: ${loc.lat.toFixed(3)}\xB0N, ${loc.lon.toFixed(3)}\xB0`);
+    } else {
+      console.log("Geolocation unavailable \u2014 using default location");
+    }
     const watch = parseWatchXML(Haleakala_default, "front");
-    const env = createWatchEnvironment(watch);
+    const env = loc ? createWatchEnvironment(watch, loc.lat, loc.lon) : createWatchEnvironment(watch);
     const images = await loadWatchImages();
     const scale = canvas.width / 290;
     ctx.fillStyle = "#f0ead8";

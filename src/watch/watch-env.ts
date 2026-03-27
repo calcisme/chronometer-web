@@ -18,17 +18,26 @@ import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge } from '../
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
 
-// Hardcoded observer location: 37.205°N, 121.954°W
-const OBSERVER_LAT = 37.205 * Math.PI / 180;  // radians
-const OBSERVER_LON = -121.954 * Math.PI / 180; // radians (west is negative)
+// Default observer location (San Jose, CA): used if geolocation unavailable
+const DEFAULT_LAT_DEG = 37.205;    // degrees N
+const DEFAULT_LON_DEG = -121.954;  // degrees (west is negative)
 
 /**
  * Build the expression environment for a watch:
  *  1. Math builtins + color constants
  *  2. Evaluate all init blocks (populates watch variables)
  *  3. Register time/astronomy functions using real current time
+ *
+ * @param observerLatDeg - Observer latitude in degrees (positive = north). Defaults to San Jose, CA.
+ * @param observerLonDeg - Observer longitude in degrees (negative = west). Defaults to San Jose, CA.
  */
-export function createWatchEnvironment(watch: Watch): Environment {
+export function createWatchEnvironment(
+    watch: Watch,
+    observerLatDeg: number = DEFAULT_LAT_DEG,
+    observerLonDeg: number = DEFAULT_LON_DEG,
+): Environment {
+    const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
+    const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
 
     // Register update interval constants used in hand `update` attrs
@@ -39,7 +48,7 @@ export function createWatchEnvironment(watch: Watch): Environment {
     env.variables.set('updateAtEnvChangeOnly', 86400);
 
     // Register real time functions
-    registerTimeFunctions(env);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
@@ -89,7 +98,7 @@ function argbToCSS(argb: number): string {
 // Real time functions — computed once from Date.now()
 // ============================================================================
 
-function registerTimeFunctions(env: Environment): void {
+function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_LON: number): void {
     const { functions } = env;
 
     // Current time

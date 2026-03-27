@@ -10,6 +10,23 @@ import { createWatchEnvironment } from './watch/watch-env.js';
 import { renderWatch } from './watch/renderer.js';
 import { loadWatchImages } from './watch/image-loader.js';
 
+/**
+ * Request the user's location from the browser.
+ * Returns { lat, lon } in degrees, or null if unavailable/denied.
+ */
+function requestLocation(): Promise<{ lat: number; lon: number } | null> {
+    if (!navigator.geolocation) {
+        return Promise.resolve(null);
+    }
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+            () => resolve(null),   // denied or error → fall back to default
+            { timeout: 5000 },
+        );
+    });
+}
+
 async function main() {
     const canvas = document.getElementById('watch') as HTMLCanvasElement;
     const ctx = canvas.getContext('2d');
@@ -18,11 +35,21 @@ async function main() {
         return;
     }
 
+    // Request user location (falls back to default if unavailable)
+    const loc = await requestLocation();
+    if (loc) {
+        console.log(`Using browser location: ${loc.lat.toFixed(3)}°N, ${loc.lon.toFixed(3)}°`);
+    } else {
+        console.log('Geolocation unavailable — using default location');
+    }
+
     // Parse for front side only
     const watch = parseWatchXML(haleakalaXML, 'front');
 
-    // Create expression environment and evaluate init blocks
-    const env = createWatchEnvironment(watch);
+    // Create expression environment with observer location
+    const env = loc
+        ? createWatchEnvironment(watch, loc.lat, loc.lon)
+        : createWatchEnvironment(watch);
 
     // Load watch face images
     const images = await loadWatchImages();
