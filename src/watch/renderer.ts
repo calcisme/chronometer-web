@@ -325,13 +325,12 @@ function drawQDial(
         }
     }
 
-    // Center/outer mark circle stroke
+    // Center dot (matching original drawFilledArcRing centerRadius logic)
     if (marks & MARKS_CENTER) {
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = markWidth;
+        ctx.fillStyle = 'rgba(0,0,0,1)';
         ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-        ctx.stroke();
+        ctx.arc(0, 0, markWidth, 0, 2 * Math.PI);
+        ctx.fill();
     }
 
     ctx.restore();
