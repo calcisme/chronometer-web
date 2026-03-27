@@ -3668,21 +3668,8 @@ Rise/set (Moon)
     const pool = new AstroCachePool();
     initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
     const cache = pool.currentCache;
-    {
-      const { julianCenturiesSince2000Epoch: jc, deltaT } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-      console.log(`[Astro] Julian centuries TDT: ${jc.toFixed(10)}, deltaT: ${deltaT.toFixed(2)}s`);
-      const sunRD = sunRAandDecl(dateInterval, cache);
-      console.log(`[Astro] Sun RA: ${(sunRD.rightAscension * 180 / Math.PI).toFixed(4)}\xB0 (${(sunRD.rightAscension * 12 / Math.PI).toFixed(4)}h), Decl: ${(sunRD.declination * 180 / Math.PI).toFixed(4)}\xB0`);
-      const gst = convertUTToGSTP03(dateInterval, cache);
-      const lst = convertGSTtoLST(gst, OBSERVER_LON);
-      const ha = lst - sunRD.rightAscension;
-      console.log(`[Astro] GST: ${(gst * 12 / Math.PI).toFixed(4)}h, LST: ${(lst * 12 / Math.PI).toFixed(4)}h, HA: ${(ha * 180 / Math.PI).toFixed(4)}\xB0`);
-    }
     const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
     const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    console.log(`[Astro] Observer: ${(OBSERVER_LAT * 180 / Math.PI).toFixed(3)}\xB0N, ${(-OBSERVER_LON * 180 / Math.PI).toFixed(3)}\xB0W`);
-    console.log(`[Astro] Time: ${now.toISOString()} (dateInterval=${dateInterval.toFixed(1)}, tzOffset=${tzOffsetSeconds}s)`);
-    console.log(`[Astro] Sun altitude: ${(sunAlt * 180 / Math.PI).toFixed(2)}\xB0, azimuth: ${(sunAz * 180 / Math.PI).toFixed(2)}\xB0`);
     functions.set("sunAzimuth", () => sunAz);
     functions.set("sunAltitude", () => sunAlt);
     const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1e3 - 978307200;
@@ -3707,28 +3694,24 @@ Rise/set (Moon)
     );
     if (!isNoRiseSet(sunrise)) {
       const srDate = new Date((sunrise + 978307200) * 1e3);
-      console.log(`[Astro] Sunrise: ${srDate.toLocaleTimeString()} (${srDate.toISOString()})`);
       const srHour12 = srDate.getHours() % 12 + srDate.getMinutes() / 60 + srDate.getSeconds() / 3600;
       const srMinute = srDate.getMinutes() + srDate.getSeconds() / 60;
       functions.set("sunriseForDayValid", () => 1);
       functions.set("sunriseForDayHour12ValueAngle", () => srHour12 * 2 * Math.PI / 12);
       functions.set("sunriseForDayMinuteValueAngle", () => srMinute * 2 * Math.PI / 60);
     } else {
-      console.log(`[Astro] Sunrise: NO RISE (${sunrise})`);
       functions.set("sunriseForDayValid", () => 0);
       functions.set("sunriseForDayHour12ValueAngle", () => 0);
       functions.set("sunriseForDayMinuteValueAngle", () => 0);
     }
     if (!isNoRiseSet(sunset)) {
       const ssDate = new Date((sunset + 978307200) * 1e3);
-      console.log(`[Astro] Sunset: ${ssDate.toLocaleTimeString()} (${ssDate.toISOString()})`);
       const ssHour12 = ssDate.getHours() % 12 + ssDate.getMinutes() / 60 + ssDate.getSeconds() / 3600;
       const ssMinute = ssDate.getMinutes() + ssDate.getSeconds() / 60;
       functions.set("sunsetForDayValid", () => 1);
       functions.set("sunsetForDayHour12ValueAngle", () => ssHour12 * 2 * Math.PI / 12);
       functions.set("sunsetForDayMinuteValueAngle", () => ssMinute * 2 * Math.PI / 60);
     } else {
-      console.log(`[Astro] Sunset: NO SET (${sunset})`);
       functions.set("sunsetForDayValid", () => 0);
       functions.set("sunsetForDayHour12ValueAngle", () => 0);
       functions.set("sunsetForDayMinuteValueAngle", () => 0);
