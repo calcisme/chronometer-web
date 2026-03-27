@@ -213,57 +213,107 @@ function drawQDial(
     }
 
     // Text labels around the dial
+    // Constants from the original iOS source (ECConstants.h in ESAstro)
+    const EC_DIAL_RADIUS_FACTOR = 0.92;
+    const EC_DIAL_SMALL_RADIUS_CUTOFF = 45;
+    const EC_DIAL_SMALL_RADIUS_FACTOR = 0.11 / (EC_DIAL_SMALL_RADIUS_CUTOFF - 25);
+
     if (part.text) {
         const labels = part.text.split(',');
         const n = labels.length;
         const fontSize = evalAttr(part.fontSize, env) || 12;
         const fontName = part.fontName || 'Arial';
         const orientation = part.orientation || 'upright';
+        const hasTicks = marks !== MARKS_NONE;
 
         ctx.fillStyle = strokeColor;
         ctx.font = `${fontSize}px "${fontName}"`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        for (let i = 0; i < n; i++) {
-            const label = labels[i].trim();
-            if (!label) continue;
+        if (orientation === 'upright') {
+            // Original iOS: drawDialUpright
+            // radiusFactor increases for small dials (radius < 45)
+            const radiusFactor = radius < EC_DIAL_SMALL_RADIUS_CUTOFF
+                ? EC_DIAL_RADIUS_FACTOR + EC_DIAL_SMALL_RADIUS_FACTOR * (EC_DIAL_SMALL_RADIUS_CUTOFF - radius)
+                : EC_DIAL_RADIUS_FACTOR;
 
-            const th = (i / n) * 2 * Math.PI - Math.PI / 2;
+            for (let i = 0; i < n; i++) {
+                const label = labels[i].trim();
+                if (!label) continue;
+                // Original uses -(i/n)*2*PI + PI/2 in iOS coords (Y-up);
+                // Canvas Y-down, so angle = (i/n)*2*PI - PI/2
+                const th = (i / n) * 2 * Math.PI - Math.PI / 2;
 
-            if (orientation === 'upright') {
-                // Draw text upright at each position around the circle
-                // Use larger offset for upright text since horizontal bounding box
-                // extends radially outward at diagonal positions (e.g., "11")
-                const textR = radius - fontSize * 1.2;
+                // Measure actual text size for diagonal-aware offset
+                const measured = ctx.measureText(label);
+                const w = measured.width;
+                const h = fontSize;  // approximate text height
+                // Offset inward by half the diagonal of the bounding box
+                const textR = radius * radiusFactor - Math.sqrt(w * w + h * h) / 2;
                 const tx = textR * Math.cos(th);
                 const ty = textR * Math.sin(th);
                 ctx.save();
                 ctx.translate(tx, ty);
                 ctx.fillText(label, 0, 0);
                 ctx.restore();
-            } else if (orientation === 'demi') {
-                // Demi-radial: text follows the curve, upside-down in bottom half
-                const textR = radius - fontSize * 0.85;
-                const demiTweak = evalAttr(part.demiTweak, env);
-                const tx = textR * Math.cos(th);
-                const ty = textR * Math.sin(th);
+            }
+        } else if (orientation === 'demi') {
+            // Original iOS: drawDialDemiRadial
+            // Uses rotate-per-label approach; radial half at top, anti-radial at bottom
+            const demiTweak = evalAttr(part.demiTweak, env);
+            // QDial parts always have tick=ECDialTickNone (tick is a separate
+            // attribute from marks), so the original code uses: radius * 1 = radius
+            const baseR = radius;
+
+            for (let i = 0; i < n; i++) {
+                const label = labels[i].trim();
+                if (!label) continue;
+
+                // In iOS, labels are rotated clockwise from 12-o'clock.
+                // Compute which half this label is in:
+                //   i in [0..n/4] or [3n/4..n] => radial (top) half
+                //   i in (n/4..3n/4) => anti-radial (bottom) half
+                const th = (i / n) * 2 * Math.PI - Math.PI / 2;
+
+                // Measure text for height-based offset
+                const measured = ctx.measureText(label);
+                const textH = fontSize;
+
                 ctx.save();
-                ctx.translate(tx, ty);
-                const angle = th + Math.PI / 2;
-                // Flip text in the bottom half
-                if (angle > Math.PI / 2 && angle < 3 * Math.PI / 2) {
-                    ctx.rotate(angle + Math.PI);
-                    ctx.translate(0, demiTweak);
+                if (i > n / 4 && i < 3 * n / 4) {
+                    // Anti-radial half: text flipped 180°
+                    // iOS: r = baseR + demiTweak, rect at y = -r (text top at -r)
+                    // Center of text at -(baseR + demiTweak) + textH/2
+                    const r = baseR + demiTweak;
+                    const textR = r - textH / 2;
+                    const tx = textR * Math.cos(th);
+                    const ty = textR * Math.sin(th);
+                    ctx.translate(tx, ty);
+                    ctx.rotate(th + Math.PI / 2 + Math.PI);  // rotated + flipped
+                    ctx.fillText(label, 0, 0);
                 } else {
-                    ctx.rotate(angle);
-                    ctx.translate(0, -demiTweak);
+                    // Radial half: text upright along radius
+                    // iOS: rect at y = r - s.height → center at r - textH/2
+                    const textR = baseR - textH / 2;
+                    const tx = textR * Math.cos(th);
+                    const ty = textR * Math.sin(th);
+                    ctx.translate(tx, ty);
+                    ctx.rotate(th + Math.PI / 2);
+                    ctx.fillText(label, 0, 0);
                 }
-                ctx.fillText(label, 0, 0);
                 ctx.restore();
-            } else {
-                // Default: radial text
-                const textR = radius - fontSize * 0.85;
+            }
+        } else {
+            // Default: radial text
+            // Original iOS: drawDialRadial
+            // rect at y = radius * 0.92 - s.height → center at radius * 0.92 - textH/2
+            for (let i = 0; i < n; i++) {
+                const label = labels[i].trim();
+                if (!label) continue;
+                const th = (i / n) * 2 * Math.PI - Math.PI / 2;
+                const textH = fontSize;
+                const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
                 const tx = textR * Math.cos(th);
                 const ty = textR * Math.sin(th);
                 ctx.save();
