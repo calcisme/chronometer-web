@@ -16,3 +16,10 @@ The original iOS app has two variants:
 * The app actually used by customers, called Chronometer, which reads the artifacts created by Henry and renders them using OpenGL 1.x
     * It reads the texture atlas files and keeps them in memory
     * It reads the "archive" binary file and uses that to know where, when, and how to update the hands
+
+## Rendering Order
+
+Parts must be rendered in exactly the order they appear in the XML file. This order is critical for correct visual layering:
+* Hands that overlap other hands must appear later in the XML than the hands they overlap.
+* "Windows" (cutout borders) must appear after the parts that show through them but before any hands that overlap them.
+* The renderer must not sort, reorder, or apply z-index logic — it must use pure document order.
