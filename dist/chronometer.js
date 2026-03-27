@@ -1122,7 +1122,2530 @@ Rise/set (Moon)
     return evaluateExpression(source, env);
   }
 
+  // src/astronomy/astro-constants.ts
+  var kECAUInKilometers = 149597870691e-3;
+  var kECJulianDateOf1990Epoch = 24478915e-1;
+  var kEC1990Epoch = -347241600;
+  var kECJulianDateOf2000Epoch = 2451545;
+  var kECJulianDaysPerCentury = 36525;
+  var kECLunarCycleInSeconds = 29.530589 * 24 * 3600;
+  var kECUTUnitsPerGSTUnit = 0.9972695663;
+  var kECRefractionAtHorizonX = 34 / 60 * Math.PI / 180;
+  var kECCivilTwilightAltitude = -6 * Math.PI / 180;
+  var kECNauticalTwilightAltitude = -12 * Math.PI / 180;
+  var kECAstroTwilightAltitude = -18 * Math.PI / 180;
+  var kECGoldenHourAltitude = 6 * Math.PI / 180;
+  var kECLimitingAzimuthLatitude = 89 * Math.PI / 180;
+  var ALWAYS_ABOVE_HORIZON = 1e18;
+  var ALWAYS_BELOW_HORIZON = -1e18;
+  function isAlwaysAbove(value) {
+    return value === ALWAYS_ABOVE_HORIZON;
+  }
+  function isAlwaysBelow(value) {
+    return value === ALWAYS_BELOW_HORIZON;
+  }
+  function isNoRiseSet(value) {
+    return isAlwaysAbove(value) || isAlwaysBelow(value);
+  }
+  function fmod(x, y) {
+    let result = x % y;
+    if (result < 0) {
+      result += y;
+    }
+    return result;
+  }
+  var planetRadiiInAU = [
+    695500 / kECAUInKilometers,
+    // Sun
+    1737.1 / kECAUInKilometers,
+    // Moon
+    2439.7 / kECAUInKilometers,
+    // Mercury
+    6051.8 / kECAUInKilometers,
+    // Venus
+    6371 / kECAUInKilometers,
+    // Earth
+    3389.5 / kECAUInKilometers,
+    // Mars
+    69911 / kECAUInKilometers,
+    // Jupiter
+    58232 / kECAUInKilometers,
+    // Saturn
+    25362 / kECAUInKilometers,
+    // Uranus
+    24622 / kECAUInKilometers,
+    // Neptune
+    1195 / kECAUInKilometers
+    // Pluto
+  ];
+
+  // src/astronomy/astro-cache.ts
+  var ASTRO_SLOP_RAW = 0.5;
+  var AstroCache = class {
+    constructor(numSlots = 451 /* NUM_SLOTS */) {
+      this.cacheSlots = new Float64Array(numSlots);
+      this.cacheSlotValidFlag = new Uint32Array(numSlots);
+      this.currentFlag = 1;
+      this.globalValidFlag = 0;
+      this.dateInterval = NaN;
+      this.astroSlop = ASTRO_SLOP_RAW;
+    }
+    /** Check whether a given slot contains a valid cached value. */
+    isValid(slotIndex) {
+      return this.cacheSlotValidFlag[slotIndex] === this.currentFlag;
+    }
+    /** Retrieve the cached value for a slot (caller must check isValid first). */
+    get(slotIndex) {
+      return this.cacheSlots[slotIndex];
+    }
+    /** Store a value into a cache slot and mark it as valid. */
+    set(slotIndex, value) {
+      this.cacheSlots[slotIndex] = value;
+      this.cacheSlotValidFlag[slotIndex] = this.currentFlag;
+    }
+    /** Invalidate all cached values by bumping the flag. */
+    invalidate() {
+      if (this.currentFlag === 4294967295) {
+        this.currentFlag = 1;
+        this.cacheSlotValidFlag.fill(0);
+      } else {
+        this.currentFlag++;
+      }
+    }
+  };
+  var AstroCachePool = class {
+    constructor() {
+      this.observerLatitude = 0;
+      this.observerLongitude = 0;
+      this.runningBackward = false;
+      this.tzOffsetSeconds = 0;
+      this.currentGlobalCacheFlag = 1;
+      /** The main cache, used for the "current" time. */
+      this.finalCache = new AstroCache();
+      /** Temporary cache for intermediate calculations. */
+      this.tempCache = new AstroCache();
+      /** Cache used during rise/set refinement iterations. */
+      this.refinementCache = new AstroCache();
+      /** Cache for UT midnight calculations. */
+      this.midnightCache = new AstroCache();
+      /** The currently active cache in this pool. */
+      this.currentCache = null;
+    }
+  };
+  function bumpValidFlagsForLocationIndependentSlots(cache, oldGlobalFlag) {
+    for (let i = 0; i < 138 /* firstLocationDependent */; i++) {
+      if (cache.cacheSlotValidFlag[i] === oldGlobalFlag) {
+        cache.cacheSlotValidFlag[i]++;
+      }
+    }
+  }
+  function initializeCachePool(pool, dateInterval, observerLatitude, observerLongitude, runningBackward = false, tzOffsetSeconds = 0) {
+    if (runningBackward !== pool.runningBackward) {
+      pool.runningBackward = runningBackward;
+      pool.currentGlobalCacheFlag++;
+    } else if (tzOffsetSeconds !== pool.tzOffsetSeconds || observerLatitude !== pool.observerLatitude || observerLongitude !== pool.observerLongitude) {
+      pool.observerLatitude = observerLatitude;
+      pool.observerLongitude = observerLongitude;
+      pool.tzOffsetSeconds = tzOffsetSeconds;
+      const oldGlobalFlag = pool.currentGlobalCacheFlag++;
+      bumpValidFlagsForLocationIndependentSlots(pool.finalCache, oldGlobalFlag);
+      bumpValidFlagsForLocationIndependentSlots(pool.midnightCache, oldGlobalFlag);
+    }
+    pushECAstroCacheInPool(pool, pool.finalCache, dateInterval);
+  }
+  function pushECAstroCacheWithSlopInPool(pool, valueCache, dateInterval, slop) {
+    const oldCache = pool.currentCache;
+    pool.currentCache = valueCache;
+    valueCache.astroSlop = slop;
+    if (valueCache.currentFlag === 0) {
+      valueCache.currentFlag = 1;
+    }
+    let needsInvalidation = false;
+    if (valueCache.globalValidFlag !== pool.currentGlobalCacheFlag) {
+      valueCache.globalValidFlag = pool.currentGlobalCacheFlag;
+      needsInvalidation = true;
+    } else if (isNaN(dateInterval)) {
+      if (!isNaN(valueCache.dateInterval)) {
+        needsInvalidation = true;
+      }
+    } else if (isNaN(valueCache.dateInterval)) {
+      needsInvalidation = true;
+    } else if (Math.abs(dateInterval - valueCache.dateInterval) > slop) {
+      needsInvalidation = true;
+    }
+    if (needsInvalidation) {
+      valueCache.invalidate();
+      valueCache.dateInterval = dateInterval;
+    }
+    return oldCache;
+  }
+  function pushECAstroCacheInPool(pool, valueCache, dateInterval) {
+    return pushECAstroCacheWithSlopInPool(pool, valueCache, dateInterval, ASTRO_SLOP_RAW);
+  }
+  function popECAstroCacheToInPool(pool, previousCache) {
+    pool.currentCache = previousCache;
+  }
+  function releaseCachePool(pool) {
+    pool.currentCache = null;
+  }
+
+  // src/astronomy/es-time.ts
+  function espenakDeltaT(yearValue) {
+    if (yearValue >= 2005 && yearValue <= 2050) {
+      const t = yearValue - 2e3;
+      return 62.92 + 0.32217 * t + 5589e-6 * t * t;
+    } else if (yearValue < -500 || yearValue >= 2150) {
+      const u = (yearValue - 1820) / 100;
+      return -20 + 32 * u * u;
+    } else if (yearValue < 500) {
+      const u = yearValue / 100;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      const u4 = u2 * u2;
+      const u5 = u3 * u2;
+      const u6 = u3 * u3;
+      return 10583.6 - 1014.41 * u + 33.78311 * u2 - 5.952053 * u3 - 0.1798452 * u4 + 0.022174192 * u5 + 0.0090316521 * u6;
+    } else if (yearValue < 1600) {
+      const u = (yearValue - 1e3) / 100;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      const u4 = u2 * u2;
+      const u5 = u3 * u2;
+      const u6 = u3 * u3;
+      return 1574.2 - 556.01 * u + 71.23472 * u2 + 0.319781 * u3 - 0.8503463 * u4 - 5050998e-9 * u5 + 0.0083572073 * u6;
+    } else if (yearValue < 1700) {
+      const t = yearValue - 1600;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return 120 - 0.9808 * t - 0.01532 * t2 + t3 / 7129;
+    } else if (yearValue < 1800) {
+      const t = yearValue - 1700;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const t4 = t2 * t2;
+      return 8.83 + 0.1603 * t - 59285e-7 * t2 + 13336e-8 * t3 - t4 / 1174e3;
+    } else if (yearValue < 1860) {
+      const t = yearValue - 1800;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const t4 = t2 * t2;
+      const t5 = t3 * t2;
+      const t6 = t3 * t3;
+      const t7 = t4 * t3;
+      return 13.72 - 0.332447 * t + 68612e-7 * t2 + 41116e-7 * t3 - 37436e-8 * t4 + 121272e-10 * t5 - 1699e-10 * t6 + 875e-12 * t7;
+    } else if (yearValue < 1900) {
+      const t = yearValue - 1860;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const t4 = t2 * t2;
+      const t5 = t3 * t2;
+      return 7.62 + 0.5737 * t - 0.251754 * t2 + 0.01680668 * t3 - 4473624e-10 * t4 + t5 / 233174;
+    } else if (yearValue < 1920) {
+      const t = yearValue - 1900;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const t4 = t2 * t2;
+      return -2.79 + 1.494119 * t - 0.0598939 * t2 + 61966e-7 * t3 - 197e-6 * t4;
+    } else if (yearValue < 1941) {
+      const t = yearValue - 1920;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return 21.2 + 0.84493 * t - 0.0761 * t2 + 20936e-7 * t3;
+    } else if (yearValue < 1961) {
+      const t = yearValue - 1950;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return 29.07 + 0.407 * t - t2 / 233 + t3 / 2547;
+    } else if (yearValue < 1986) {
+      const t = yearValue - 1975;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      return 45.45 + 1.067 * t - t2 / 260 - t3 / 718;
+    } else if (yearValue < 2005) {
+      const t = yearValue - 2e3;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const t4 = t2 * t2;
+      const t5 = t3 * t2;
+      return 63.86 + 0.3345 * t - 0.060374 * t2 + 17275e-7 * t3 + 651814e-9 * t4 + 2373599e-11 * t5;
+    } else {
+      const t1 = (yearValue - 1820) / 100;
+      return -20 + 32 * t1 * t1 - 0.5628 * (2150 - yearValue);
+    }
+  }
+  function convertUTtoET(ut, yearValue) {
+    return ut + espenakDeltaT(yearValue);
+  }
+  function julianDateForDate(dateInterval) {
+    const secondsSince1990Epoch = dateInterval - kEC1990Epoch;
+    return kECJulianDateOf1990Epoch + secondsSince1990Epoch / (24 * 3600);
+  }
+  function priorUTMidnightForDateRaw(dateInterval) {
+    const unixMs = (dateInterval + 978307200) * 1e3;
+    const d = new Date(unixMs);
+    d.setUTCHours(0, 0, 0, 0);
+    return d.getTime() / 1e3 - 978307200;
+  }
+  var _lastCalculatedMidnight = 0;
+  function priorUTMidnightForDateInterval(dateInterval, cache) {
+    if (cache && cache.isValid(0 /* priorUTMidnight */)) {
+      return cache.get(0 /* priorUTMidnight */);
+    }
+    let val;
+    if (dateInterval > _lastCalculatedMidnight && dateInterval < _lastCalculatedMidnight + 24 * 3600) {
+      val = _lastCalculatedMidnight;
+    } else {
+      val = priorUTMidnightForDateRaw(dateInterval);
+      _lastCalculatedMidnight = val;
+    }
+    if (cache) {
+      cache.set(0 /* priorUTMidnight */, val);
+    }
+    return val;
+  }
+  var _lastCalculatedFirstInterval = 0;
+  var _lastYearValue = 0;
+  function julianCenturiesSince2000EpochForDateInterval(dateInterval, cache) {
+    if (cache && cache.isValid(45 /* tdtCenturies */)) {
+      return {
+        julianCenturiesSince2000Epoch: cache.get(45 /* tdtCenturies */),
+        deltaT: cache.get(46 /* tdtCenturiesDeltaT */)
+      };
+    }
+    const utSeconds = dateInterval;
+    let firstOfThisYearInterval;
+    if (utSeconds > _lastCalculatedFirstInterval && utSeconds < _lastCalculatedFirstInterval + 24 * 3600 * 330) {
+      firstOfThisYearInterval = _lastCalculatedFirstInterval;
+    } else {
+      const unixMs = (utSeconds + 978307200) * 1e3;
+      const d = new Date(unixMs);
+      const year = d.getUTCFullYear();
+      const jan1 = Date.UTC(year, 0, 1, 0, 0, 0, 0);
+      firstOfThisYearInterval = jan1 / 1e3 - 978307200;
+      _lastCalculatedFirstInterval = firstOfThisYearInterval;
+      _lastYearValue = year;
+    }
+    const yearValue = _lastYearValue + (utSeconds - firstOfThisYearInterval) / (365.25 * 24 * 3600);
+    const etSeconds = convertUTtoET(utSeconds, yearValue);
+    const deltaT = etSeconds - utSeconds;
+    const julianDaysSince2000Epoch = julianDateForDate(etSeconds) - kECJulianDateOf2000Epoch;
+    const julianCenturiesSince2000Epoch = julianDaysSince2000Epoch / kECJulianDaysPerCentury;
+    if (cache) {
+      cache.set(45 /* tdtCenturies */, julianCenturiesSince2000Epoch);
+      cache.set(46 /* tdtCenturiesDeltaT */, deltaT);
+      cache.set(47 /* tdtHundredCenturies */, julianCenturiesSince2000Epoch / 100);
+    }
+    return { julianCenturiesSince2000Epoch, deltaT };
+  }
+  function dateToDateInterval(date) {
+    return date.getTime() / 1e3 - 978307200;
+  }
+
+  // src/astronomy/es-sidereal.ts
+  var TWO_PI = Math.PI * 2;
+  function convertLSTtoGST(lst, observerLongitude) {
+    let gst = lst - observerLongitude;
+    let dayOffset = 0;
+    if (gst < 0) {
+      gst += TWO_PI;
+      dayOffset = -1;
+    } else if (gst > TWO_PI) {
+      gst -= TWO_PI;
+      dayOffset = 1;
+    }
+    return { gst, dayOffset };
+  }
+  function convertGSTtoLST(gst, observerLongitude) {
+    let lst = gst + observerLongitude;
+    if (lst < 0) {
+      lst += TWO_PI;
+    } else if (lst > TWO_PI) {
+      lst -= TWO_PI;
+    }
+    return lst;
+  }
+  function convertUTToGSTP03x(centuriesSinceEpochTDT, deltaTSeconds, utSinceMidnightRadians, _priorUTMidnight) {
+    const t = centuriesSinceEpochTDT;
+    const tu = t - deltaTSeconds / (24 * 3600 * 36525);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const t4 = t2 * t2;
+    const t5 = t3 * t2;
+    let gmst = 24110.5493771 + 864018479447825e-8 * tu + 307.4771013 * (t - tu) + 0.09277211 * t2 - 2926e-10 * t3 - 199708e-11 * t4 - 2454e-12 * t5;
+    gmst *= Math.PI / (12 * 3600);
+    gmst += utSinceMidnightRadians;
+    gmst = fmod(gmst, TWO_PI);
+    if (gmst < 0) {
+      gmst += TWO_PI;
+    }
+    return gmst;
+  }
+  function convertUTToGSTP03(calculationDate, cache) {
+    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(calculationDate, cache);
+    const priorUTMidnightD = priorUTMidnightForDateInterval(calculationDate, cache);
+    const utRadiansSinceMidnight = (calculationDate - priorUTMidnightD) * Math.PI / (12 * 3600);
+    return convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, utRadiansSinceMidnight, priorUTMidnightD);
+  }
+  function convertGSTtoUT(gst, priorUTMidnight, cachePool) {
+    let priorCache = null;
+    if (cachePool) {
+      priorCache = pushECAstroCacheInPool(cachePool, cachePool.midnightCache, priorUTMidnight);
+    }
+    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(
+      priorUTMidnight,
+      cachePool ? cachePool.currentCache : null
+    );
+    const T0 = convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, 0, priorUTMidnight);
+    if (cachePool && priorCache !== void 0) {
+      popECAstroCacheToInPool(cachePool, priorCache);
+    }
+    let ut = gst - T0;
+    if (ut < 0) {
+      ut += TWO_PI;
+    } else if (ut > TWO_PI) {
+      ut -= TWO_PI;
+    }
+    ut *= kECUTUnitsPerGSTUnit;
+    let ut2 = ut + kECUTUnitsPerGSTUnit * TWO_PI;
+    if (ut2 > TWO_PI) {
+      ut2 = -1;
+    }
+    return { ut, ut2 };
+  }
+  function convertGSTtoUTclosest(gst, closestToThisDate, cachePool) {
+    let priorUTMidnightD = priorUTMidnightForDateInterval(
+      closestToThisDate,
+      cachePool ? cachePool.currentCache : null
+    );
+    let { ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool);
+    let utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+    let utD = priorUTMidnightD + utSecondsSinceMidnight;
+    if (utD < closestToThisDate - 12 * 3600 * kECUTUnitsPerGSTUnit) {
+      if (ut0_2 > 0) {
+        ut0 = ut0_2;
+        utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+        utD = priorUTMidnightD + utSecondsSinceMidnight;
+      } else {
+        priorUTMidnightD += 24 * 3600;
+        ({ ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool));
+        utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+        utD = priorUTMidnightD + utSecondsSinceMidnight;
+      }
+    } else if (utD > closestToThisDate + 12 * 3600 * kECUTUnitsPerGSTUnit) {
+      priorUTMidnightD -= 24 * 3600;
+      ({ ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool));
+      if (ut0_2 > 0) {
+        ut0 = ut0_2;
+      }
+      utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+      utD = priorUTMidnightD + utSecondsSinceMidnight;
+    }
+    return utD;
+  }
+
+  // src/astronomy/planet-tables.ts
+  var sunData = [
+    { li: 403406, ri: 4.721964, ali: 1.621043, bli: 0 },
+    { li: 195207, ri: 5.937458, ali: 62830.348067, bli: -97597 },
+    { li: 119433, ri: 1.115589, ali: 62830.821524, bli: -59715 },
+    { li: 112392, ri: 5.781616, ali: 62829.634302, bli: -56188 },
+    { li: 3891, ri: 5.5474, ali: 125660.5691, bli: -1556 },
+    { li: 2819, ri: 1.512, ali: 125660.9845, bli: -1126 },
+    { li: 1721, ri: 4.1897, ali: 62832.4766, bli: -861 },
+    { li: 0, ri: 1.163, ali: 0.813, bli: 941 },
+    { li: 660, ri: 5.415, ali: 125659.31, bli: -264 },
+    { li: 350, ri: 4.315, ali: 57533.85, bli: -163 },
+    { li: 334, ri: 4.553, ali: -33.931, bli: 0 },
+    { li: 314, ri: 5.198, ali: 777137.715, bli: 309 },
+    { li: 268, ri: 5.989, ali: 78604.191, bli: -158 },
+    { li: 242, ri: 2.911, ali: 5.412, bli: 0 },
+    { li: 234, ri: 1.423, ali: 39302.098, bli: -54 },
+    { li: 158, ri: 0.061, ali: -34.861, bli: 0 },
+    { li: 132, ri: 2.317, ali: 115067.698, bli: -93 },
+    { li: 129, ri: 3.193, ali: 15774.337, bli: -20 },
+    { li: 114, ri: 2.828, ali: 5296.67, bli: 0 },
+    { li: 99, ri: 0.52, ali: 58849.27, bli: -47 },
+    { li: 93, ri: 4.65, ali: 5296.11, bli: 0 },
+    { li: 86, ri: 4.35, ali: -3980.7, bli: 0 },
+    { li: 78, ri: 2.75, ali: 52237.69, bli: -33 },
+    { li: 72, ri: 4.5, ali: 55076.47, bli: -32 },
+    { li: 68, ri: 3.23, ali: 261.08, bli: 0 },
+    { li: 64, ri: 1.22, ali: 15773.85, bli: -10 },
+    { li: 46, ri: 0.14, ali: 188491.03, bli: -16 },
+    { li: 38, ri: 3.44, ali: -7756.55, bli: 0 },
+    { li: 37, ri: 4.37, ali: 264.89, bli: 0 },
+    { li: 32, ri: 1.14, ali: 117906.27, bli: -24 },
+    { li: 29, ri: 2.84, ali: 55075.75, bli: -13 },
+    { li: 28, ri: 5.96, ali: -7961.39, bli: 0 },
+    { li: 27, ri: 5.09, ali: 188489.81, bli: -9 },
+    { li: 27, ri: 1.72, ali: 2132.19, bli: 0 },
+    { li: 25, ri: 2.56, ali: 109771.03, bli: -17 },
+    { li: 24, ri: 1.92, ali: 54868.56, bli: -11 },
+    { li: 21, ri: 0.09, ali: 25443.93, bli: 0 },
+    { li: 21, ri: 5.98, ali: -55731.43, bli: 31 },
+    { li: 20, ri: 4.03, ali: 60697.74, bli: -10 },
+    { li: 18, ri: 4.27, ali: 2132.79, bli: 0 },
+    { li: 17, ri: 0.79, ali: 109771.63, bli: -12 },
+    { li: 14, ri: 4.24, ali: -7752.82, bli: 0 },
+    { li: 13, ri: 2.01, ali: 188491.91, bli: -5 },
+    { li: 13, ri: 2.65, ali: 207.81, bli: 0 },
+    { li: 13, ri: 4.98, ali: 29424.63, bli: 0 },
+    { li: 12, ri: 0.93, ali: -7.99, bli: 0 },
+    { li: 10, ri: 2.21, ali: 46941.14, bli: 0 },
+    { li: 10, ri: 3.59, ali: -68.29, bli: 0 },
+    { li: 10, ri: 1.5, ali: 21463.25, bli: 0 },
+    { li: 10, ri: 2.55, ali: 157208.4, bli: -9 }
+  ];
+  var numSunData = sunData.length;
+
+  // src/astronomy/wb-sun.ts
+  function WB_sunLongitudeRaw(U, cache) {
+    if (cache && cache.isValid(73 /* SunLongitude */)) {
+      return cache.get(73 /* SunLongitude */);
+    }
+    let longitude = 0;
+    for (let i = 0; i < numSunData; i++) {
+      const d = sunData[i];
+      longitude += d.li * Math.sin(d.ali + d.bli * U);
+    }
+    longitude = 1e-7 * longitude + 4.9353929 + 62833.196168 * U;
+    longitude = fmod(longitude, Math.PI * 2);
+    if (cache) cache.set(73 /* SunLongitude */, longitude);
+    return longitude;
+  }
+  function WB_sunRadius(U, cache) {
+    if (cache && cache.isValid(75 /* SunRadius */)) {
+      return cache.get(75 /* SunRadius */);
+    }
+    let radius = 0;
+    for (let i = 0; i < numSunData; i++) {
+      const d = sunData[i];
+      radius += d.ri * Math.cos(d.ali + d.bli * U);
+    }
+    radius = 1e-7 * radius + 1.0001026;
+    if (cache) cache.set(75 /* SunRadius */, radius);
+    return radius;
+  }
+  function WB_sunLongitudeAberration(U) {
+    return 1e-7 * (-993 + 17 * Math.cos(3.1 + 62830.14 * U));
+  }
+  function WB_nutationObliquity(U, cache) {
+    if (cache && cache.isValid(76 /* Nutation */)) {
+      return {
+        nutation: cache.get(76 /* Nutation */),
+        obliquity: cache.get(77 /* Obliquity */)
+      };
+    }
+    const U_2 = U * U;
+    const A1 = 2.18 - 3375.7 * U + 0.36 * U_2;
+    const A2 = 3.51 + 125666.39 * U + 0.1 * U_2;
+    const nutation = 1e-7 * (-834 * Math.sin(A1) - 64 * Math.sin(A2));
+    const U_3 = U * U_2;
+    const U_4 = U_2 * U_2;
+    const U_5 = U * U_4;
+    const obliquity = 0.4090928 + 1e-7 * (-226938 * U - 75 * U_2 + 96926 * U_3 - 2491 * U_4 - 12104 * U_5 + 446 * Math.cos(A1) + 28 * Math.cos(A2));
+    if (cache) {
+      cache.set(76 /* Nutation */, nutation);
+      cache.set(77 /* Obliquity */, obliquity);
+    }
+    return { nutation, obliquity };
+  }
+  function WB_sunRAAndDecl(U, cache) {
+    const longitude = WB_sunLongitudeRaw(U, cache);
+    const aberration = WB_sunLongitudeAberration(U);
+    const { nutation, obliquity } = WB_nutationObliquity(U, cache);
+    let apparentLongitude = longitude + aberration + nutation;
+    apparentLongitude = fmod(apparentLongitude, Math.PI * 2);
+    if (apparentLongitude < 0) apparentLongitude += Math.PI * 2;
+    const declination = Math.asin(Math.sin(obliquity) * Math.sin(apparentLongitude));
+    let rightAscension = Math.atan2(
+      Math.cos(obliquity) * Math.sin(apparentLongitude),
+      Math.cos(apparentLongitude)
+    );
+    if (rightAscension < 0) rightAscension += Math.PI * 2;
+    return { rightAscension, declination, apparentLongitude };
+  }
+  function WB_sunLongitudeApparent(U, cache) {
+    if (cache && cache.isValid(74 /* SunLongitudeApparent */)) {
+      return cache.get(74 /* SunLongitudeApparent */);
+    }
+    const longitude = WB_sunLongitudeRaw(U, cache);
+    const aberration = WB_sunLongitudeAberration(U);
+    const { nutation } = WB_nutationObliquity(U, cache);
+    let apparentLongitude = longitude + aberration + nutation;
+    apparentLongitude = fmod(apparentLongitude, Math.PI * 2);
+    if (apparentLongitude < 0) apparentLongitude += Math.PI * 2;
+    if (cache) cache.set(74 /* SunLongitudeApparent */, apparentLongitude);
+    return apparentLongitude;
+  }
+
+  // src/astronomy/lunar-tables.ts
+  var Sv = [
+    { vn: 6.28877383, an0: 134.9634114, an1: 477198.8676313, an2: 89.97, an3: 14.348, an4: -6.797 },
+    { vn: 1.27401064, an0: 100.736997, an1: 413335.3554022, an2: -122.571, an3: -10.684, an4: 5.028 },
+    { vn: 0.65830943, an0: 235.7004084, an1: 890534.2230335, an2: -32.601, an3: 3.664, an4: -1.769 },
+    { vn: 0.21361825, an0: 269.9268228, an1: 954397.7352627, an2: 179.941, an3: 28.695, an4: -13.594 },
+    { vn: -0.18511586, an0: 357.5291092, an1: 35999.0502909, an2: -1.536, an3: 0.041, an4: 0 },
+    { vn: -0.11433213, an0: 186.5441986, an1: 966404.0350546, an2: -68.058, an3: -0.567, an4: 0.232 },
+    { vn: 0.05879321, an0: 325.7735856, an1: -63863.5122292, an2: -212.541, an3: -25.031, an4: 11.826 },
+    { vn: 0.05706551, an0: 103.2078878, an1: 377336.3051112, an2: -121.035, an3: -10.724, an4: 5.028 },
+    { vn: 0.05332117, an0: 10.6638198, an1: 13677330906648e-7, an2: 57.37, an3: 18.011, an4: -8.566 },
+    { vn: 0.04575792, an0: 238.1712992, an1: 854535.1727426, an2: -31.065, an3: 3.623, an4: -1.769 },
+    { vn: -0.04092258, an0: 222.5656978, an1: -441199.8173404, an2: -91.506, an3: -14.307, an4: 6.797 },
+    { vn: -0.03471892, an0: 297.8502042, an1: 445267.1115168, an2: -16.3, an3: 1.832, an4: -0.884 },
+    { vn: -0.03038341, an0: 132.4925206, an1: 513197.9179223, an2: 88.434, an3: 14.388, an4: -6.797 },
+    { vn: 0.01532696, an0: 49.1562098, an1: -75869.8120211, an2: 35.458, an3: 4.231, an4: -2.001 },
+    { vn: -0.01252767, an0: 321.50761, an1: 14436029026859e-7, an2: 21.912, an3: 13.78, an4: -6.566 },
+    { vn: 0.01098147, an0: 308.4192127, an1: -489205.1674233, an2: 158.029, an3: 14.915, an4: -7.029 },
+    { vn: 0.01067495, an0: 336.4374054, an1: 13038695784357e-7, an2: -155.171, an3: -7.02, an4: 3.259 },
+    { vn: 0.01003439, an0: 44.8902341, an1: 1431596602894e-6, an2: 269.911, an3: 43.043, an4: -20.392 },
+    { vn: 854794e-8, an0: 201.473994, an1: 826670.7108043, an2: -245.142, an3: -21.367, an4: 10.057 },
+    { vn: -788808e-8, an0: 98.2661062, an1: 449334.4056931, an2: -124.107, an3: -10.643, an4: 5.028 },
+    { vn: -676617e-8, an0: 233.2295176, an1: 926533.2733244, an2: -34.136, an3: 3.705, an4: -1.769 },
+    { vn: -516242e-8, an0: 162.8867928, an1: -31931.7561146, an2: -106.271, an3: -12.516, an4: 5.913 },
+    { vn: 498735e-8, an0: 295.3793134, an1: 481266.1618077, an2: -17.836, an3: 1.873, an4: -0.884 },
+    { vn: 403619e-8, an0: 13.1347106, an1: 13317340403739e-7, an2: 58.906, an3: 17.971, an4: -8.566 },
+    { vn: 399436e-8, an0: 145.6272312, an1: 18449319582962e-7, an2: 147.34, an3: 32.359, an4: -15.363 },
+    { vn: 386085e-8, an0: 111.4008168, an1: 1781068446067e-6, an2: -65.201, an3: 7.328, an4: -3.538 },
+    { vn: 366502e-8, an0: 190.8101743, an1: -541062.3798605, an2: -302.511, an3: -39.379, an4: 18.623 },
+    { vn: -268863e-8, an0: 87.6022864, an1: -918398.6849717, an2: -181.476, an3: -28.654, an4: 13.594 },
+    { vn: -260163e-8, an0: 287.2811957, an1: 13797393904568e-7, an2: -190.629, an3: -11.251, an4: 5.26 },
+    { vn: 239043e-8, an0: 328.2444765, an1: -99862.5625201, an2: -211.005, an3: -25.072, an4: 11.826 },
+    { vn: -234808e-8, an0: 72.8136156, an1: 922465.9791481, an2: 73.67, an3: 16.179, an4: -7.682 },
+    { vn: 223616e-8, an0: 240.64219, an1: 818536.1224516, an2: -29.529, an3: 3.582, an4: -1.769 },
+    { vn: -211949e-8, an0: 267.4559319, an1: 990396.7855536, an2: 178.405, an3: 28.736, an4: -13.594 },
+    { vn: -206875e-8, an0: 355.0582184, an1: 71998.1005819, an2: -3.072, an3: 0.082, an4: 0 },
+    { vn: 204755e-8, an0: 105.6787787, an1: 341337.2548203, an2: -119.499, an3: -10.765, an4: 5.028 },
+    { vn: -17731e-7, an0: 184.1196211, an1: 401329.0556102, an2: 125.428, an3: 18.579, an4: -8.798 },
+    { vn: -159489e-8, an0: 62.244607, an1: 18569382580881e-7, an2: -100.659, an3: 3.097, an4: -1.537 },
+    { vn: 1215e-6, an0: 338.9082962, an1: 12678705281447e-7, an2: -153.636, an3: -7.061, an4: 3.259 },
+    { vn: -111045e-8, an0: 96.4710214, an1: 19208017703173e-7, an2: 111.882, an3: 28.128, an4: -13.363 },
+    { vn: -89158e-8, an0: 38.5872012, an1: 858602.4669189, an2: -138.871, an3: -8.852, an4: 4.144 },
+    { vn: -80959e-8, an0: 8.192929, an1: 14037321409558e-7, an2: 55.834, an3: 18.052, an4: -8.566 },
+    { vn: 75886e-8, an0: 203.9448849, an1: 790671.6605134, an2: -243.606, an3: -21.408, an4: 10.057 },
+    { vn: -71332e-8, an0: 220.094807, an1: -405200.7670494, an2: -93.042, an3: -14.266, an4: 6.797 },
+    { vn: -70033e-8, an0: 95.7952154, an1: 485333.4559841, an2: -125.643, an3: -10.602, an4: 5.028 },
+    { vn: 69136e-8, an0: 323.3026948, an1: -27864.4619382, an2: -214.077, an3: -24.99, an4: 11.826 },
+    { vn: 59613e-8, an0: 51.6271006, an1: -111868.8623121, an2: 36.994, an3: 4.19, an4: -2.001 },
+    { vn: 54937e-8, an0: 246.3642282, an1: 22582673136983e-7, an2: 24.769, an3: 21.675, an4: -10.335 },
+    { vn: 53713e-8, an0: 179.8536455, an1: 19087954705253e-7, an2: 359.881, an3: 57.39, an4: -27.189 },
+    { vn: 51966e-8, an0: 113.8717076, an1: 17450693957761e-7, an2: -63.665, an3: 7.287, an4: -3.538 },
+    { vn: -48694e-8, an0: 27.9233814, an1: -509130.6237459, an2: -196.241, an3: -26.863, an4: 12.71 },
+    { vn: -39921e-8, an0: 46.6853189, an1: -39870.7617302, an2: 33.922, an3: 4.272, an4: -2.001 },
+    { vn: -38127e-8, an0: 83.3826241, an1: -12006.2997919, an2: 247.999, an3: 29.262, an4: -13.826 },
+    { vn: 35051e-8, an0: 70.3427248, an1: 958465.029439, an2: 72.134, an3: 16.22, an4: -7.682 },
+    { vn: -34003e-8, an0: 263.6237898, an1: 381403.5992876, an2: -228.841, an3: -23.199, an4: 10.941 },
+    { vn: 32968e-8, an0: 66.5105827, an1: 349471.843173, an2: -335.112, an3: -35.715, an4: 16.854 },
+    { vn: 32694e-8, an0: 148.098122, an1: 18089329080052e-7, an2: 148.876, an3: 32.318, an4: -15.363 },
+    { vn: -32269e-8, an0: 130.0216297, an1: 549196.9682132, an2: 86.899, an3: 14.429, an4: -6.797 },
+    { vn: 29936e-8, an0: 160.415902, an1: 4067.2941764, an2: -107.806, an3: -12.475, an4: 5.913 },
+    { vn: 29431e-8, an0: 280.5906425, an1: 23221308259275e-7, an2: 237.31, an3: 46.706, an4: -22.161 },
+    { vn: -27506e-8, an0: 197.2080184, an1: 23341371257194e-7, an2: -10.689, an3: 17.444, an4: -8.334 },
+    { vn: 26341e-8, an0: 55.8467629, an1: -10182612474918e-7, an2: -392.482, an3: -53.726, an4: 25.42 },
+    { vn: 2088e-7, an0: 15.6056014, an1: 12957349900829e-7, an2: 60.441, an3: 17.93, an4: -8.566 },
+    { vn: -18594e-8, an0: 312.6388751, an1: -13955975526031e-7, an2: -271.447, an3: -43.002, an4: 20.392 },
+    { vn: -17645e-8, an0: 333.9665146, an1: 13398686287266e-7, an2: -156.707, an3: -6.979, an4: 3.259 },
+    { vn: -16222e-8, an0: 207.777027, an1: 13996648467794e-7, an2: 163.64, an3: 30.527, an4: -14.479 },
+    { vn: -16203e-8, an0: 111.3060056, an1: -521136.9235379, an2: 51.758, an3: 2.399, an4: -1.116 },
+    { vn: 15877e-8, an0: 77.1744024, an1: 17172049338378e-7, an2: -277.742, an3: -17.703, an4: 8.288 },
+    { vn: -15573e-8, an0: 139.229387, an1: -10302675472838e-7, an2: -144.483, an3: -24.464, an4: 11.594 },
+    { vn: -1547e-7, an0: 300.321095, an1: 409268.0612258, an2: -14.764, an3: 1.791, an4: -0.884 },
+    { vn: -15164e-8, an0: 42.4193433, an1: 14675956531849e-7, an2: 268.375, an3: 43.083, an4: -20.392 },
+    { vn: -14881e-8, an0: 152.3177843, an1: 902540.5228254, an2: -280.599, an3: -25.598, an4: 12.057 },
+    { vn: 13289e-8, an0: 193.2810651, an1: -577061.4301514, an2: -300.976, an3: -39.419, an4: 18.623 },
+    { vn: -12605e-8, an0: 319.0830325, an1: 878527.9232416, an2: 215.398, an3: 32.926, an4: -15.595 },
+    { vn: -11839e-8, an0: 289.7520865, an1: 13437403401658e-7, an2: -189.093, an3: -11.292, an4: 5.26 },
+    { vn: 11676e-8, an0: 13.0883973, an1: 19328080701092e-7, an2: -136.117, an3: -1.134, an4: 0.463 },
+    { vn: 11483e-8, an0: 184.0733078, an1: 10024030853456e-7, an2: -69.594, an3: -0.526, an4: 0.232 },
+    { vn: 11229e-8, an0: 173.5506126, an1: 13358013345503e-7, an2: -48.901, an3: 5.496, an4: -2.653 },
+    { vn: 10959e-8, an0: 212.1378138, an1: 21944038014692e-7, an2: -187.772, an3: -3.356, an4: 1.491 },
+    { vn: -10615e-8, an0: 64.7154979, an1: 18209392077972e-7, an2: -99.123, an3: 3.056, an4: -1.537 },
+    { vn: -10403e-8, an0: 186.590512, an1: 365330.0053193, an2: 126.964, an3: 18.538, an4: -8.798 },
+    { vn: -9933e-8, an0: 199.0031032, an1: 862669.7610953, an2: -246.678, an3: -21.326, an4: 10.057 },
+    { vn: 9713e-8, an0: 25.4524906, an1: -473131.573455, an2: -197.777, an3: -26.822, an4: 12.71 },
+    { vn: 9439e-8, an0: 243.1130809, an1: 782537.0721607, an2: -27.993, an3: 3.541, an4: -1.769 },
+    { vn: -9129e-8, an0: 231.4344328, an1: 23980006379486e-7, an2: 201.853, an3: 42.475, an4: -20.16 },
+    { vn: 8576e-8, an0: 341.3791871, an1: 12318714778538e-7, an2: -152.1, an3: -7.101, an4: 3.259 },
+    { vn: 8376e-8, an0: 36.0214992, an1: -1407603852395e-6, an2: -23.448, an3: -13.739, an4: 6.566 },
+    { vn: 8357e-8, an0: 149.8932068, an1: 337465.5433811, an2: -87.113, an3: -6.453, an4: 3.028 },
+    { vn: 8172e-8, an0: 330.7153673, an1: -135861.6128111, an2: -209.469, an3: -25.113, an4: 11.826 },
+    { vn: 8126e-8, an0: 302.2109911, an1: 12400060662065e-7, an2: -367.713, an3: -32.051, an4: 15.085 },
+    { vn: -8062e-8, an0: 143.1563403, an1: 18809310085871e-7, an2: 145.804, an3: 32.4, an4: -15.363 },
+    { vn: -8031e-8, an0: 108.929926, an1: 18170674963579e-7, an2: -66.737, an3: 7.369, an4: -3.538 },
+    { vn: 7847e-8, an0: 248.835119, an1: 22222682634074e-7, an2: 26.305, an3: 21.634, an4: -10.335 },
+    { vn: 7604e-8, an0: 36.1163104, an1: 894601.5172099, an2: -140.407, an3: -8.811, an4: 4.144 },
+    { vn: 7316e-8, an0: 319.0367192, an1: 14796019529769e-7, an2: 20.376, an3: 13.821, an4: -6.566 },
+    { vn: 7064e-8, an0: 124.3944028, an1: 14116711465714e-7, an2: -84.359, an3: 1.265, an4: -0.653 },
+    { vn: -7029e-8, an0: 347.006414, an1: 369397.2994956, an2: 19.158, an3: 6.063, an4: -2.885 },
+    { vn: -6941e-8, an0: 320.831804, an1: 8134.5883527, an2: -215.613, an3: -24.949, an4: 11.826 },
+    { vn: 6859e-8, an0: 108.1496695, an1: 305338.2045293, an2: -117.963, an3: -10.806, an4: 5.028 },
+    { vn: -6428e-8, an0: 41.058092, an1: 822603.416628, an2: -137.335, an3: -8.893, an4: 4.144 },
+    { vn: 607e-7, an0: 21.3276396, an1: 27354661813297e-7, an2: 114.739, an3: 36.023, an4: -17.132 },
+    { vn: -5593e-8, an0: 162.9816041, an1: 22702736134903e-7, an2: -223.23, an3: -7.587, an4: 3.491 },
+    { vn: -5364e-8, an0: 85.1313956, an1: -882399.6346808, an2: -183.012, an3: -28.613, an4: 13.594 },
+    { vn: -516e-7, an0: 230.7586268, an1: 962532.3236154, an2: -35.672, an3: 3.746, an4: -1.769 },
+    { vn: 4973e-8, an0: 274.1927984, an1: -553068.6796524, an2: -54.513, an3: -10.116, an4: 4.797 },
+    { vn: 4895e-8, an0: 188.3392834, an1: -505063.3295696, an2: -304.047, an3: -39.338, an4: 18.623 },
+    { vn: -4716e-8, an0: 28.0181927, an1: 17930747458589e-7, an2: -313.2, an3: -21.934, an4: 10.288 },
+    { vn: 4383e-8, an0: 206.4157757, an1: 754672.6102224, an2: -242.07, an3: -21.449, an4: 10.057 },
+    { vn: 4229e-8, an0: 116.3425984, an1: 17090703454851e-7, an2: -62.129, an3: 7.246, an4: -3.538 },
+    { vn: 4164e-8, an0: 171.0797218, an1: 13718003848412e-7, an2: -50.437, an3: 5.537, an4: -2.653 },
+    { vn: -3788e-8, an0: 165.3576836, an1: -67930.8064055, an2: -104.735, an3: -12.556, an4: 5.913 },
+    { vn: -3559e-8, an0: 252.9599701, an1: -986329.4913773, an2: -286.211, an3: -41.211, an4: 19.507 },
+    { vn: 3504e-8, an0: 347.1012252, an1: 26716026691005e-7, an2: -97.802, an3: 10.992, an4: -5.307 },
+    { vn: -3441e-8, an0: 332.1714298, an1: 28113359933508e-7, an2: 79.282, an3: 31.792, an4: -15.132 },
+    { vn: -3354e-8, an0: 75.2845064, an1: 886466.9288571, an2: 75.206, an3: 16.139, an4: -7.682 },
+    { vn: 3083e-8, an0: 314.8170569, an1: 23859943381567e-7, an2: 449.851, an3: 71.738, an4: -33.986 },
+    { vn: -2815e-8, an0: 352.5873276, an1: 107997.1508728, an2: -4.608, an3: 0.123, an4: 0 },
+    { vn: 2773e-8, an0: 68.9814735, an1: 313472.7928821, an2: -333.576, an3: -35.756, an4: 16.854 },
+    { vn: 2589e-8, an0: 283.0615334, an1: 22861317756366e-7, an2: 238.846, an3: 46.666, an4: -22.161 },
+    { vn: 2557e-8, an0: 205.3061361, an1: 14356638970704e-7, an2: 162.104, an3: 30.568, an4: -14.479 },
+    { vn: -2543e-8, an0: 4.2659756, an1: -15074664149151e-7, an2: -234.453, an3: -38.811, an4: 18.391 },
+    { vn: 2526e-8, an0: 148.0518087, an1: 24100069377406e-7, an2: -46.146, an3: 13.213, an4: -6.334 },
+    { vn: 2509e-8, an0: 79.6452933, an1: 16812058835469e-7, an2: -276.206, an3: -17.744, an4: 8.288 },
+    { vn: -2361e-8, an0: 297.9450154, an1: 27474724811216e-7, an2: -133.259, an3: 6.761, an4: -3.306 },
+    { vn: 2353e-8, an0: 181.6487303, an1: 437328.1059012, an2: 123.892, an3: 18.619, an4: -8.798 },
+    { vn: -2309e-8, an0: 266.0946807, an1: 345404.5489966, an2: -227.306, an3: -23.24, an4: 10.941 },
+    { vn: -2301e-8, an0: 305.9483219, an1: -453206.1171323, an2: 156.493, an3: 14.956, an4: -7.029 },
+    { vn: -2236e-8, an0: 49.1098964, an1: 525204.2177142, an2: -159.564, an3: -14.874, an4: 7.029 },
+    { vn: -2228e-8, an0: 121.8750141, an1: -14556092024779e-7, an2: 226.087, an3: 15.482, an4: -7.261 },
+    { vn: 2157e-8, an0: 55.5540539, an1: 27993296935588e-7, an2: 327.281, an3: 61.054, an4: -28.958 },
+    { vn: -2088e-8, an0: 222.6120111, an1: -10422738470757e-7, an2: 103.516, an3: 4.798, an4: -2.232 },
+    { vn: 2084e-8, an0: 170.9849105, an1: -930404.9847637, an2: 66.523, an3: 0.608, an4: -0.232 },
+    { vn: -2048e-8, an0: 199.6789092, an1: 22981380754285e-7, an2: -9.153, an3: 17.403, an4: -8.334 },
+    { vn: 1984e-8, an0: 214.6087046, an1: 21584047511782e-7, an2: -186.236, an3: -3.397, an4: 1.491 },
+    { vn: 1903e-8, an0: 280.8833515, an1: -14954601151232e-7, an2: -482.452, an3: -68.074, an4: 32.217 },
+    { vn: 1873e-8, an0: 284.8103048, an1: 14157384407477e-7, an2: -192.165, an3: -11.21, an4: 5.26 },
+    { vn: -1834e-8, an0: 59.8200295, an1: 12918632786437e-7, an2: 92.828, an3: 22.243, an4: -10.567 },
+    { vn: 1817e-8, an0: 59.7737162, an1: 18929373083791e-7, an2: -102.195, an3: 3.138, an4: -1.537 },
+    { vn: -1809e-8, an0: 264.9850411, an1: 10263958358446e-7, an2: 176.869, an3: 28.777, an4: -13.594 },
+    { vn: 1808e-8, an0: 176.0215034, an1: 12998022842593e-7, an2: -47.365, an3: 5.455, an4: -2.653 },
+    { vn: 1789e-8, an0: 150.5690128, an1: 17729338577143e-7, an2: 150.412, an3: 32.277, an4: -15.363 },
+    { vn: 1754e-8, an0: 54.0979914, an1: -147867.912603, an2: 38.529, an3: 4.149, an4: -2.001 },
+    { vn: -1695e-8, an0: 276.6636892, an1: -589067.7299434, an2: -52.977, an3: -10.157, an4: 4.797 },
+    { vn: -159e-7, an0: 139.3241982, an1: 12719378223211e-7, an2: -261.442, an3: -19.535, an4: 9.172 },
+    { vn: -1579e-8, an0: 218.3460355, an1: 465192.5678394, an2: 337.969, an3: 43.61, an4: -20.623 },
+    { vn: 1435e-8, an0: 261.0580878, an1: -18848027200263e-7, an2: -113.418, an3: -28.087, an4: 13.363 },
+    { vn: -1428e-8, an0: 217.6239162, an1: -369201.7167585, an2: -94.578, an3: -14.225, an4: 6.797 },
+    { vn: -1408e-8, an0: 243.8933374, an1: 22942663639893e-7, an2: 23.233, an3: 21.716, an4: -10.335 },
+    { vn: -1306e-8, an0: 177.6754637, an1: -18727964202344e-7, an2: -361.417, an3: -57.349, an4: 27.189 },
+    { vn: 1236e-8, an0: 259.3578142, an1: 18888700142027e-7, an2: 5.612, an3: 15.612, an4: -7.45 },
+    { vn: -1234e-8, an0: 128.6603785, an1: -95795.2683438, an2: -318.812, an3: -37.547, an4: 17.738 },
+    { vn: 1205e-8, an0: 94.0001306, an1: 19568008206082e-7, an2: 110.346, an3: 28.169, an4: -13.363 },
+    { vn: 1196e-8, an0: 302.7919858, an1: 373269.0109349, an2: -13.229, an3: 1.75, an4: -0.884 },
+    { vn: -1164e-8, an0: 261.152899, an1: 417402.6495785, an2: -230.377, an3: -23.158, an4: 10.941 },
+    { vn: -1132e-8, an0: 342.7404383, an1: 18768637144108e-7, an2: 253.611, an3: 44.874, an4: -21.276 },
+    { vn: -1114e-8, an0: 246.2694169, an1: -43938.0559065, an2: 141.728, an3: 16.747, an4: -7.913 },
+    { vn: -1102e-8, an0: 292.9084226, an1: 517265.2120986, an2: -19.372, an3: 1.914, an4: -0.884 },
+    { vn: -1096e-8, an0: 177.3827547, an1: 19447945208163e-7, an2: 358.345, an3: 57.431, an4: -27.189 },
+    { vn: 1083e-8, an0: 304.6818819, an1: 12040070159156e-7, an2: -366.177, an3: -32.092, an4: 15.085 },
+    { vn: -996e-8, an0: 121.923512, an1: 14476701968623e-7, an2: -85.894, an3: 1.306, an4: -0.653 },
+    { vn: -976e-8, an0: 196.5322124, an1: 898668.8113862, an2: -248.213, an3: -21.286, an4: 10.057 },
+    { vn: -927e-8, an0: 94.0464439, an1: 13557267908729e-7, an2: 305.369, an3: 47.274, an4: -22.392 },
+    { vn: 917e-8, an0: 18.0764922, an1: 1259735939792e-6, an2: 61.977, an3: 17.889, an4: -8.566 },
+    { vn: 909e-8, an0: 23.7985304, an1: 26994671310387e-7, an2: 116.275, an3: 35.982, an4: -17.132 },
+    { vn: -828e-8, an0: 212.0430026, an1: -107801.5681357, an2: -70.813, an3: -8.284, an4: 3.912 },
+    { vn: 819e-8, an0: 58.3176537, an1: -10542602977828e-7, an2: -390.946, an3: -53.767, an4: 25.42 },
+    { vn: -802e-8, an0: 321.5539233, an1: 842528.8729506, an2: 216.934, an3: 32.885, an4: -15.595 },
+    { vn: -779e-8, an0: 141.7002778, an1: -10662665975747e-7, an2: -142.947, an3: -24.505, an4: 11.594 },
+    { vn: 745e-8, an0: 64.0396919, an1: 385470.8934639, an2: -336.648, an3: -35.674, an4: 16.854 },
+    { vn: 744e-8, an0: 80.9117333, an1: 23992.750499, an2: 246.463, an3: 29.303, an4: -13.826 },
+    { vn: -743e-8, an0: 278.1197517, an1: 23581298762184e-7, an2: 235.774, an3: 46.747, an4: -22.161 },
+    { vn: -723e-8, an0: 6.3978442, an1: 28751995055799e-7, an2: 291.823, an3: 56.823, an4: -26.957 },
+    { vn: 697e-8, an0: 349.572116, an1: 26356036188096e-7, an2: -96.266, an3: 10.951, an4: -5.307 },
+    { vn: 675e-8, an0: 274.1464851, an1: 48005.3500829, an2: -249.535, an3: -29.221, an4: 13.826 },
+    { vn: 67e-7, an0: 251.3060098, an1: 21862692131164e-7, an2: 27.841, an3: 21.594, an4: -10.335 },
+    { vn: -664e-8, an0: 284.8566182, an1: 814664.4110124, an2: 2.857, an3: 7.895, an4: -3.769 },
+    { vn: -661e-8, an0: 336.3425942, an1: -998335.7911692, an2: -38.212, an3: -11.948, an4: 5.681 },
+    { vn: -653e-8, an0: 44.2144281, an1: -3871.7114392, an2: 32.386, an3: 4.313, an4: -2.001 },
+    { vn: 638e-8, an0: 250.4890792, an1: -950330.4410863, an2: -287.747, an3: -41.17, an4: 19.507 },
+    { vn: 636e-8, an0: 152.3640976, an1: 301466.4930901, an2: -85.577, an3: -6.493, an4: 3.028 },
+    { vn: 635e-8, an0: 122.0646366, an1: 31488015367318e-7, an2: -7.831, an3: 25.339, an4: -12.104 },
+    { vn: -631e-8, an0: 165.4524949, an1: 22342745631993e-7, an2: -221.694, an3: -7.628, an4: 3.491 },
+    { vn: 623e-8, an0: 306.0431332, an1: 18489992524725e-7, an2: 39.534, an3: 19.884, an4: -9.451 },
+    { vn: -603e-8, an0: 331.4956238, an1: 13758676790176e-7, an2: -158.243, an3: -6.938, an4: 3.259 },
+    { vn: -599e-8, an0: 154.7886751, an1: 866541.4725345, an2: -279.064, an3: -25.639, an4: 12.057 },
+    { vn: 597e-8, an0: 156.2910509, an1: 3212665048961e-6, an2: 204.71, an3: 50.37, an4: -23.929 },
+    { vn: 554e-8, an0: 113.8253943, an1: 23461434255114e-7, an2: -258.688, an3: -11.818, an4: 5.492 },
+    { vn: -541e-8, an0: 349.4773048, an1: 333398.2492047, an2: 20.693, an3: 6.022, an4: -2.885 },
+    { vn: -521e-8, an0: 147.422316, an1: 373464.593672, an2: -88.649, an3: -6.412, an4: 3.028 },
+    { vn: 505e-8, an0: 53.3758721, an1: -982262.1972009, an2: -394.018, an3: -53.685, an4: 25.42 },
+    { vn: -504e-8, an0: 67.1863887, an1: 17849401575062e-7, an2: -97.587, an3: 3.015, an4: -1.537 },
+    { vn: -499e-8, an0: 127.5507389, an1: 585196.0185042, an2: 85.363, an3: 14.47, an4: -6.797 },
+    { vn: -495e-8, an0: 72.9084268, an1: 32246713487529e-7, an2: -43.289, an3: 21.108, an4: -10.103 },
+    { vn: 484e-8, an0: 343.8500779, an1: 11958724275628e-7, an2: -150.564, an3: -7.142, an4: 3.259 },
+    { vn: -468e-8, an0: 4.3607869, an1: 794738.9546898, an2: -351.412, an3: -33.883, an4: 15.969 },
+    { vn: -457e-8, an0: 189.0614028, an1: 329330.9550283, an2: 128.5, an3: 18.497, an4: -8.798 },
+    { vn: 446e-8, an0: 194.7371276, an1: 23701361760104e-7, an2: -12.224, an3: 17.485, an4: -8.334 },
+    { vn: 444e-8, an0: 349.4309915, an1: 934472.27894, an2: -174.329, an3: -13.083, an4: 6.144 },
+    { vn: 429e-8, an0: 195.7519559, an1: -613060.4804424, an2: -299.44, an3: -39.46, an4: 18.623 },
+    { vn: -428e-8, an0: 292.2229773, an1: 13077412898749e-7, an2: -187.558, an3: -11.333, an4: 5.26 },
+    { vn: -426e-8, an0: 30.4890835, an1: 1757075695568e-6, an2: -311.664, an3: -21.975, an4: 10.288 },
+    { vn: -421e-8, an0: 310.1679842, an1: -13595985023121e-7, an2: -272.983, an3: -42.961, an4: 20.392 },
+    { vn: -412e-8, an0: 210.2479178, an1: 13636657964885e-7, an2: 165.176, an3: 30.486, an4: -14.479 },
+    { vn: 382e-8, an0: 167.2475797, an1: 762807.1985752, an2: -457.683, an3: -46.398, an4: 21.882 },
+    { vn: 381e-8, an0: 248.7888057, an1: 28233422931427e-7, an2: -168.717, an3: 2.529, an4: -1.306 },
+    { vn: -375e-8, an0: 274.2876096, an1: 17491366899524e-7, an2: -171.472, an3: -5.188, an4: 2.375 },
+    { vn: -373e-8, an0: 5.7220381, an1: 14397311912467e-7, an2: 54.298, an3: 18.093, an4: -8.566 },
+    { vn: -37e-7, an0: 107.1348412, an1: 32885348609821e-7, an2: 169.252, an3: 46.139, an4: -21.929 },
+    { vn: 37e-7, an0: 245.5839717, an1: 746538.0218697, an2: -26.457, an3: 3.501, an4: -1.769 },
+    { vn: 36e-7, an0: 283.01522, an1: 28872058053719e-7, an2: 43.824, an3: 27.561, an4: -13.131 },
+    { vn: -356e-8, an0: 74.7035116, an1: 17532039841288e-7, an2: -279.278, an3: -17.663, an4: 8.288 },
+    { vn: -356e-8, an0: 113.7768964, an1: -557135.9738288, an2: 53.294, an3: 2.358, an4: -1.116 },
+    { vn: 338e-8, an0: 225.1313999, an1: 18250065019735e-7, an2: -206.929, an3: -9.419, an4: 4.376 },
+    { vn: -328e-8, an0: 43.5289829, an1: 786604.366337, an2: -135.799, an3: -8.933, an4: 4.144 },
+    { vn: -309e-8, an0: 300.4159063, an1: 27114734308307e-7, an2: -131.724, an3: 6.72, an4: -3.306 },
+    { vn: -299e-8, an0: 229.3025643, an1: -19846652825464e-7, an2: -324.423, an3: -53.159, an4: 25.188 },
+    { vn: -296e-8, an0: 209.666923, an1: 22304028517601e-7, an2: -189.308, an3: -3.315, an4: 1.491 },
+    { vn: -295e-8, an0: 121.9698253, an1: 846596.167127, an2: 109.128, an3: 20.411, an4: -9.682 },
+    { vn: -28e-7, an0: 334.6423206, an1: 27753369430598e-7, an2: 80.817, an3: 31.751, an4: -15.132 }
+  ];
+  var Sv1 = [
+    { vn: 3.95801, an0: 119.7524, an1: 131.8489 },
+    { vn: 1.96196, an0: 125.0455, an1: -1934.1362 },
+    { vn: -0.31752, an0: 233.0867, an1: 479264.2898 },
+    { vn: 0.25032, an0: 107.4411, an1: -20.1862 },
+    { vn: -0.22821, an0: 81.5232, an1: 22518.4428 },
+    { vn: 0.21892, an0: 344.7896, an1: -477067.0188 },
+    { vn: 0.20536, an0: 254.7188, an1: 477330.7165 },
+    { vn: -0.17881, an0: 345.2585, an1: 480890.6839 },
+    { vn: 0.17744, an0: 67.3439, an1: 32964.4672 },
+    { vn: 0.1565, an0: 276.7408, an1: -18.8294 },
+    { vn: 0.13703, an0: 260.0092, an1: 475264.7314 },
+    { vn: 0.1365, an0: 350.0824, an1: -479133.0038 },
+    { vn: 0.1237, an0: 208.6855, an1: 476229.3841 },
+    { vn: 0.10017, an0: 311.5895, an1: 964469.8989 },
+    { vn: -0.09543, an0: 152.5142, an1: 9037.5128 },
+    { vn: 0.09015, an0: 67.7377, an1: -2281.2258 },
+    { vn: 0.08376, an0: 163.2312, an1: 45036.8856 },
+    { vn: -0.08038, an0: 220.1798, an1: -1935.5332 },
+    { vn: 0.07856, an0: 73.6904, an1: -969.4835 },
+    { vn: 0.0681, an0: 98.0899, an1: 2065.4221 },
+    { vn: -0.06292, an0: 205.5247, an1: 150.6783 },
+    { vn: 0.05866, an0: 327.1213, an1: -380370.8882 },
+    { vn: 0.05401, an0: 209.8312, an1: 33718.147 },
+    { vn: -0.05127, an0: 132.666, an1: 65928.9344 },
+    { vn: 0.05071, an0: 357.251, an1: -411269.9333 },
+    { vn: 0.04864, an0: 55.0668, an1: 31555.9556 },
+    { vn: 0.04745, an0: 331.4784, an1: -477219.0538 },
+    { vn: 0.04745, an0: 241.4051, an1: 477178.6814 },
+    { vn: 0.04642, an0: 19.0127, an1: -413203.5065 },
+    { vn: 0.04583, an0: 192.2174, an1: -857569.7559 },
+    { vn: 0.04567, an0: 244.0516, an1: -890402.3742 },
+    { vn: 0.04563, an0: 332.7695, an1: 29929.5615 },
+    { vn: 0.04549, an0: 166.0821, an1: -40.7576 },
+    { vn: 0.04528, an0: 355.4532, an1: 890666.0719 },
+    { vn: 0.04469, an0: 62.6015, an1: -368298.4698 },
+    { vn: 0.04364, an0: 220.4891, an1: 413467.2043 },
+    { vn: -0.04264, an0: 306.5588, an1: -454680.4248 },
+    { vn: 0.03985, an0: 292.3874, an1: -444234.4005 },
+    { vn: 0.03881, an0: 209.3049, an1: 413315.1692 },
+    { vn: 0.03878, an0: 7.8292, an1: -413355.5416 },
+    { vn: 0.03776, an0: 263.7613, an1: 458372.241 },
+    { vn: 0.03731, an0: 287.6929, an1: -845497.3374 },
+    { vn: -0.03645, an0: 340.7607, an1: -390816.9126 },
+    { vn: -0.03534, an0: 216.4919, an1: 499717.3105 },
+    { vn: 0.03483, an0: 109.6971, an1: -409643.5392 },
+    { vn: 0.03054, an0: 202.1901, an1: 510163.3348 },
+    { vn: 0.02959, an0: 260.8658, an1: 1034.1282 },
+    { vn: 0.02914, an0: 317.9851, an1: 282.5272 },
+    { vn: 0.02885, an0: 217.3033, an1: -375.8005 },
+    { vn: -0.02756, an0: 205.7945, an1: -868015.7802 },
+    { vn: 0.02678, an0: 0.7459, an1: 888600.0868 },
+    { vn: -0.02644, an0: 333.0947, an1: -414304.8389 },
+    { vn: 0.02549, an0: 159.3389, an1: -4562.4516 },
+    { vn: 0.02503, an0: 343.8472, an1: 890514.0368 },
+    { vn: 0.02501, an0: 232.4432, an1: -890554.4092 },
+    { vn: -0.02475, an0: 32.354, an1: -347406.421 },
+    { vn: 0.02398, an0: 321.0478, an1: 3034.9057 },
+    { vn: -0.02336, an0: 257.4887, an1: -824605.2887 },
+    { vn: 0.02299, an0: 28.1371, an1: -4443.4172 },
+    { vn: -0.02288, an0: 66.8002, an1: 503409.1267 },
+    { vn: -0.0213, an0: 16.1068, an1: 476447.2666 },
+    { vn: 0.02, an0: 210.3553, an1: 3691.8162 },
+    { vn: -0.01906, an0: 8.0621, an1: 956463.1574 },
+    { vn: 0.01896, an0: 299.7687, an1: 477158.11 },
+    { vn: 0.01896, an0: 29.8392, an1: -477239.6253 },
+    { vn: -0.01864, an0: 4.6743, an1: 478231.5787 },
+    { vn: 0.01825, an0: 249.3451, an1: -892468.3592 },
+    { vn: 0.01809, an0: 352.2098, an1: 476823.0671 },
+    { vn: 0.01793, an0: 225.782, an1: 411401.2192 },
+    { vn: 0.01779, an0: 198.0425, an1: 474917.6418 },
+    { vn: -0.01769, an0: 179.1666, an1: 345.6927 },
+    { vn: 0.01756, an0: 287.94, an1: -479480.0934 },
+    { vn: -0.01735, an0: 355.1425, an1: 475263.3345 },
+    { vn: 0.01719, an0: 233.3895, an1: -404297.8426 },
+    { vn: -0.01715, an0: 85.2157, an1: -479134.4008 },
+    { vn: -0.01709, an0: 46.721, an1: 964468.5019 },
+    { vn: -0.01675, an0: 16.2933, an1: -468161.3548 },
+    { vn: -0.01652, an0: 241.0476, an1: -751.601 },
+    { vn: 0.01648, an0: 100.8137, an1: 413335.3554 },
+    { vn: 0.0164, an0: 108.1981, an1: -379617.2084 },
+    { vn: 0.01599, an0: 293.4239, an1: -410300.4497 },
+    { vn: 0.01565, an0: 28.4618, an1: -432161.982 },
+    { vn: -0.01539, an0: 286.0924, an1: 486236.3804 },
+    { vn: 0.01487, an0: 209.8262, an1: -954265.8864 },
+    { vn: 0.01465, an0: 131.2257, an1: 416370.2611 },
+    { vn: 0.01464, an0: 268.5523, an1: 723.0292 },
+    { vn: -0.01435, an0: 108.3144, an1: 62894.0287 },
+    { vn: 0.01419, an0: 167.4312, an1: 446299.8226 },
+    { vn: 0.01409, an0: 298.1469, an1: 522235.7533 },
+    { vn: 0.01399, an0: 176.6259, an1: 487271.0312 },
+    { vn: 0.01395, an0: 29.6822, an1: 954529.5841 },
+    { vn: 0.01378, an0: 24.3078, an1: -415269.4916 },
+    { vn: 0.01318, an0: 75.8891, an1: 73935.6758 },
+    { vn: 0.01296, an0: 289.7534, an1: 31436.9212 },
+    { vn: 0.01295, an0: 313.943, an1: -381779.3998 },
+    { vn: -0.01285, an0: 326.1242, an1: 90073.7713 },
+    { vn: 0.01281, an0: 332.9457, an1: -856816.076 },
+    { vn: 0.01269, an0: 237.0206, an1: -383405.7939 },
+    { vn: -0.01244, an0: 264.7626, an1: -13480.93 },
+    { vn: -0.01206, an0: 243.6398, an1: 67555.3285 },
+    { vn: -0.01189, an0: 242.202, an1: 478490.4237 },
+    { vn: -0.01189, an0: 308.1364, an1: -901.405 },
+    { vn: 0.01171, an0: 98.2408, an1: -881496.7102 },
+    { vn: 0.0117, an0: 74.6193, an1: -443480.7206 },
+    { vn: 0.01124, an0: 194.3722, an1: -474163.962 },
+    { vn: 0.01122, an0: 102.986, an1: 480233.7733 },
+    { vn: 0.01115, an0: 184.92, an1: 14577.8477 },
+    { vn: 0.01096, an0: 280.2841, an1: -445642.912 },
+    { vn: 0.01083, an0: 50.8219, an1: 34777.2591 },
+    { vn: -0.01077, an0: 68.2574, an1: -477048.1893 },
+    { vn: -0.01077, an0: 107.0457, an1: -413184.6771 },
+    { vn: -0.01076, an0: 338.1832, an1: 477349.5459 },
+    { vn: -0.01069, an0: 308.4809, an1: 413486.0337 },
+    { vn: 0.01066, an0: 86.5529, an1: 14416687665e-4 },
+    { vn: 0.0105, an0: 197.8017, an1: -447269.3061 },
+    { vn: -0.01044, an0: 148.3767, an1: 525927.5695 },
+    { vn: 0.01019, an0: 178.9306, an1: -858978.2674 },
+    { vn: -0.01011, an0: 250.0891, an1: -3868.2724 },
+    { vn: 987e-5, an0: 38.7138, an1: 935571.1087 },
+    { vn: 986e-5, an0: 172.2981, an1: 411054.1296 },
+    { vn: -969e-5, an0: 247.7974, an1: 883.4499 },
+    { vn: 965e-5, an0: 102.0911, an1: -860604.6615 },
+    { vn: 959e-5, an0: 74.3154, an1: 422372.8682 },
+    { vn: 945e-5, an0: 34.9726, an1: 952463.5991 },
+    { vn: -927e-5, an0: 267.6026, an1: 543127.802 },
+    { vn: 921e-5, an0: 322.413, an1: 476209.1979 },
+    { vn: 919e-5, an0: 153.7856, an1: -887499.3174 },
+    { vn: -918e-5, an0: 47.5953, an1: 112592.2141 },
+    { vn: 911e-5, an0: 215.119, an1: -956331.8714 },
+    { vn: 905e-5, an0: 345.1009, an1: 510917.0147 },
+    { vn: -901e-5, an0: 152.6384, an1: 119.0344 },
+    { vn: -899e-5, an0: 136.7609, an1: -4311.5684 },
+    { vn: 887e-5, an0: 329.7828, an1: -415616.5812 },
+    { vn: 882e-5, an0: 343.6647, an1: 953428.2517 },
+    { vn: 864e-5, an0: 302.2493, an1: 923498.6902 },
+    { vn: 864e-5, an0: 51.4327, an1: 477180.0382 },
+    { vn: 859e-5, an0: 141.5781, an1: -477217.6971 },
+    { vn: -842e-5, an0: 120.1832, an1: 958089.5515 },
+    { vn: -82e-4, an0: 237.7231, an1: 467409.7538 },
+    { vn: -812e-5, an0: 112.1146, an1: -916.7043 },
+    { vn: 809e-5, an0: 190.1237, an1: 508754.8232 },
+    { vn: 802e-5, an0: 108.2246, an1: 507128.4291 },
+    { vn: 791e-5, an0: 256.3206, an1: 893569.1287 },
+    { vn: -781e-5, an0: 306.2968, an1: 966535.8839 },
+    { vn: -781e-5, an0: 293.2084, an1: -966272.1862 },
+    { vn: -725e-5, an0: 127.5416, an1: 890.4929 },
+    { vn: 719e-5, an0: 108.3337, an1: 18075.0256 },
+    { vn: 706e-5, an0: 54.8679, an1: 1099.3725 },
+    { vn: 698e-5, an0: 269.2193, an1: -3559.9674 },
+    { vn: 698e-5, an0: 305.4979, an1: 888252.9972 },
+    { vn: -672e-5, an0: 331.4909, an1: -890383.5447 },
+    { vn: -665e-5, an0: 82.6978, an1: 890684.9013 },
+    { vn: 649e-5, an0: 229.6991, an1: 1032.7111 },
+    { vn: 643e-5, an0: 302.019, an1: 26894.6558 },
+    { vn: 639e-5, an0: 192.1289, an1: -892815.4488 },
+    { vn: 639e-5, an0: 131.2943, an1: 408891.9382 },
+    { vn: 638e-5, an0: 176.4029, an1: 4594.0955 },
+    { vn: 63e-4, an0: 319.7186, an1: 489928.1967 },
+    { vn: -629e-5, an0: 129.1018, an1: 135110.6569 },
+    { vn: -611e-5, an0: 317.2284, an1: 913052.6659 },
+    { vn: -603e-5, an0: 28.2471, an1: 899571.7358 },
+    { vn: -602e-5, an0: 292.7999, an1: 512228.7569 },
+    { vn: -588e-5, an0: 229.8628, an1: 548446.0123 },
+    { vn: 562e-5, an0: 187.4625, an1: -989.6698 },
+    { vn: 558e-5, an0: 265.0368, an1: 12296.6219 },
+    { vn: -558e-5, an0: 162.7825, an1: 480771.6495 },
+    { vn: 555e-5, an0: 109.0887, an1: -13676012418e-4 },
+    { vn: 541e-5, an0: 130.4185, an1: 13678649395e-4 },
+    { vn: 533e-5, an0: 288.753, an1: -417778.7726 },
+    { vn: -528e-5, an0: 130.2916, an1: 1222.1138 },
+    { vn: -52e-4, an0: 201.5485, an1: 482889.8735 },
+    { vn: -511e-5, an0: 232.3856, an1: -827640.1943 },
+    { vn: 505e-5, an0: 74.2115, an1: 443264.9169 },
+    { vn: -504e-5, an0: 7.4393, an1: -350441.3267 },
+    { vn: -503e-5, an0: 40.4796, an1: 2658.5624 },
+    { vn: -502e-5, an0: 176.6101, an1: -55.3705 },
+    { vn: 492e-5, an0: 292.204, an1: 472636.416 },
+    { vn: 476e-5, an0: 22.0617, an1: -481761.3192 },
+    { vn: -475e-5, an0: 358.0099, an1: 413335.7406 },
+    { vn: -475e-5, an0: 156.5359, an1: -413334.9702 },
+    { vn: -472e-5, an0: 15.8504, an1: 35999.3729 },
+    { vn: 471e-5, an0: 344.4315, an1: 35958.6152 },
+    { vn: 467e-5, an0: 107.1891, an1: 1291.5561 },
+    { vn: 465e-5, an0: 240.1422, an1: -6843.6774 },
+    { vn: -457e-5, an0: 15.2599, an1: -821570.383 },
+    { vn: 441e-5, an0: 76.7419, an1: 68963.84 },
+    { vn: 44e-4, an0: 235.8003, an1: 890534.223 },
+    { vn: -43e-4, an0: 210.5793, an1: 157629.0998 },
+    { vn: -427e-5, an0: 150.6765, an1: -344371.5154 },
+    { vn: 417e-5, an0: 11.6614, an1: -822978.8946 },
+    { vn: 416e-5, an0: 157.2343, an1: 472755.4504 },
+    { vn: -414e-5, an0: 298.5012, an1: -968338.1712 },
+    { vn: 413e-5, an0: 146.469, an1: -345780.0269 },
+    { vn: -408e-5, an0: 65.9504, an1: 507.6494 },
+    { vn: 405e-5, an0: 264.2128, an1: 58517.8157 },
+    { vn: 404e-5, an0: 57.4162, an1: -13347686235e-4 },
+    { vn: -404e-5, an0: 317.7457, an1: 50577.2206 },
+    { vn: 4e-3, an0: 140.3136, an1: -414086.9564 },
+    { vn: 398e-5, an0: 222.2885, an1: -888468.8009 },
+    { vn: 398e-5, an0: 187.605, an1: -381898.4342 },
+    { vn: 396e-5, an0: 93.8066, an1: -494.8349 },
+    { vn: 396e-5, an0: 265.8063, an1: 886090.8058 },
+    { vn: 395e-5, an0: 246.7109, an1: -481642.2849 },
+    { vn: 392e-5, an0: 10.4835, an1: 29155.6954 },
+    { vn: -391e-5, an0: 277.6611, an1: 413294.5978 },
+    { vn: -389e-5, an0: 76.2913, an1: -413376.113 },
+    { vn: -374e-5, an0: 104.8851, an1: -809497.9645 },
+    { vn: 365e-5, an0: 311.2549, an1: 447053.5024 },
+    { vn: 364e-5, an0: 184.0244, an1: 473194.4784 },
+    { vn: 361e-5, an0: 214.5674, an1: 482299.1954 },
+    { vn: -359e-5, an0: 182.1301, an1: 435853.7982 },
+    { vn: -358e-5, an0: 311.382, an1: 570964.4552 },
+    { vn: 357e-5, an0: 263.348, an1: 408772.9038 },
+    { vn: -347e-5, an0: 284.2064, an1: 658.3277 },
+    { vn: 343e-5, an0: 135.7094, an1: 13657989545e-4 },
+    { vn: -341e-5, an0: 333.8327, an1: 892599.6452 },
+    { vn: -338e-5, an0: 19.3837, an1: 467785.5543 },
+    { vn: 336e-5, an0: 310.3369, an1: -378558.0963 },
+    { vn: -334e-5, an0: 239.8963, an1: -332299.0969 },
+    { vn: -334e-5, an0: 148.1926, an1: 478985.2586 },
+    { vn: -333e-5, an0: 116.5731, an1: -413711.1559 },
+    { vn: -329e-5, an0: 156.8717, an1: -8005.3445 },
+    { vn: 323e-5, an0: 16.3707, an1: 954377.5491 },
+    { vn: 323e-5, an0: 196.5165, an1: -954417.9215 },
+    { vn: 317e-5, an0: 241.5814, an1: -854403.0013 },
+    { vn: -316e-5, an0: 177.8587, an1: 854666.699 },
+    { vn: 313e-5, an0: 228.7494, an1: 476704.0328 },
+    { vn: -313e-5, an0: 115.0271, an1: 252.6303 },
+    { vn: 311e-5, an0: 110.7851, an1: -36019.5591 },
+    { vn: 311e-5, an0: 152.8097, an1: -1322696205e-3 },
+    { vn: 305e-5, an0: 345.2793, an1: 10015.3961 },
+    { vn: 305e-5, an0: 52.2577, an1: -859097.3018 },
+    { vn: 304e-5, an0: 285.8675, an1: 33555.1453 },
+    { vn: -304e-5, an0: 44.2281, an1: -476853.175 },
+    { vn: -303e-5, an0: 289.2042, an1: 35979.1866 },
+    { vn: -303e-5, an0: 314.1579, an1: 477544.5603 },
+    { vn: 301e-5, an0: 84.82, an1: -398757.5077 },
+    { vn: -297e-5, an0: 292.0729, an1: 180147.5426 },
+    { vn: 297e-5, an0: 151.911, an1: -894977.6403 },
+    { vn: 292e-5, an0: 105.9171, an1: 16859.0735 },
+    { vn: -288e-5, an0: 108.7936, an1: 13697985128e-4 },
+    { vn: 284e-5, an0: 61.0203, an1: -417897.807 },
+    { vn: -283e-5, an0: 171.5956, an1: -931879.2924 },
+    { vn: -283e-5, an0: 346.5619, an1: -619.7521 }
+  ];
+  var Sv2 = [
+    { vn: 0.46578, an0: 357.529, an1: 35999.05 },
+    { vn: -0.14345, an0: 103.208, an1: 377336.305 },
+    { vn: -0.11495, an0: 238.171, an1: 854535.173 },
+    { vn: 0.1031, an0: 222.566, an1: -441199.817 },
+    { vn: 0.07656, an0: 132.493, an1: 513197.918 },
+    { vn: -0.07062, an0: 27.775, an1: 131.849 },
+    { vn: 0.01977, an0: 98.266, an1: 449334.406 },
+    { vn: 0.01702, an0: 233.23, an1: 926533.273 },
+    { vn: -0.01254, an0: 295.379, an1: 481266.162 },
+    { vn: -0.01124, an0: 240.642, an1: 818536.122 },
+    { vn: 0.01041, an0: 355.058, an1: 71998.101 },
+    { vn: -0.0103, an0: 105.679, an1: 341337.255 },
+    { vn: -0.01014, an0: 13.135, an1: 133173404e-2 },
+    { vn: 677e-5, an0: 87.602, an1: -918398.685 },
+    { vn: -601e-5, an0: 328.244, an1: -99862.563 },
+    { vn: 534e-5, an0: 267.456, an1: 990396.786 },
+    { vn: 401e-5, an0: 4.098, an1: -18.829 },
+    { vn: -392e-5, an0: 252.8, an1: -477067.019 },
+    { vn: -368e-5, an0: 162.969, an1: 477330.716 },
+    { vn: 359e-5, an0: 220.095, an1: -405200.767 },
+    { vn: 353e-5, an0: 95.795, an1: 485333.456 },
+    { vn: -305e-5, an0: 338.908, an1: 1267870528e-3 },
+    { vn: 298e-5, an0: 235.7, an1: 890534.223 },
+    { vn: 293e-5, an0: 183.729, an1: -20.186 },
+    { vn: 233e-5, an0: 100.737, an1: 413335.355 },
+    { vn: 204e-5, an0: 8.193, an1: 1403732141e-3 },
+    { vn: -191e-5, an0: 203.945, an1: 790671.661 },
+    { vn: -175e-5, an0: 323.303, an1: -27864.462 },
+    { vn: 163e-5, an0: 130.022, an1: 549196.968 },
+    { vn: -15e-4, an0: 51.627, an1: -111868.862 },
+    { vn: -13e-4, an0: 113.872, an1: 1745069396e-3 },
+    { vn: -105e-5, an0: 15.606, an1: 129573499e-2 },
+    { vn: 101e-5, an0: 46.685, an1: -39870.762 },
+    { vn: 98e-5, an0: 80.028, an1: 9037.513 },
+    { vn: -89e-5, an0: 63.057, an1: 150.678 },
+    { vn: -88e-5, an0: 70.343, an1: 958465.029 },
+    { vn: -83e-5, an0: 125.045, an1: -1934.136 },
+    { vn: -83e-5, an0: 287.032, an1: -413203.507 },
+    { vn: -82e-5, an0: 148.098, an1: 1808932908e-3 },
+    { vn: 81e-5, an0: 254.014, an1: -40.758 },
+    { vn: -81e-5, an0: 152.061, an1: -890402.374 },
+    { vn: -81e-5, an0: 263.49, an1: 890666.072 },
+    { vn: -78e-5, an0: 128.524, an1: 413467.204 },
+    { vn: -75e-5, an0: 160.416, an1: 4067.294 },
+    { vn: -71e-5, an0: 243.113, an1: 782537.072 },
+    { vn: -69e-5, an0: 319.858, an1: -1935.533 },
+    { vn: 68e-5, an0: 257.953, an1: 476229.384 },
+    { vn: 65e-5, an0: 167.245, an1: -2281.226 },
+    { vn: 56e-5, an0: 47.818, an1: -477219.054 },
+    { vn: 56e-5, an0: 317.745, an1: 477178.681 },
+    { vn: -52e-5, an0: 108.15, an1: 305338.205 },
+    { vn: 47e-5, an0: 312.639, an1: -1395597553e-3 },
+    { vn: 47e-5, an0: 284.319, an1: 413315.169 },
+    { vn: 46e-5, an0: 82.844, an1: -413355.542 },
+    { vn: 44e-5, an0: 333.967, an1: 1339868629e-3 },
+    { vn: 44e-5, an0: 162.159, an1: 31555.956 },
+    { vn: 44e-5, an0: 122.967, an1: -969.484 },
+    { vn: -43e-5, an0: 341.379, an1: 1231871478e-3 },
+    { vn: 43e-5, an0: 134.963, an1: 477198.868 },
+    { vn: -41e-5, an0: 330.715, an1: -135861.613 },
+    { vn: 4e-4, an0: 247.088, an1: -4562.452 },
+    { vn: -4e-4, an0: 213.092, an1: 890.493 },
+    { vn: 39e-5, an0: 300.321, an1: 409268.061 },
+    { vn: 38e-5, an0: 42.419, an1: 1467595653e-3 },
+    { vn: 36e-5, an0: 32.981, an1: 477158.11 },
+    { vn: 36e-5, an0: 123.055, an1: -477239.625 },
+    { vn: 36e-5, an0: 10.664, an1: 1367733091e-3 },
+    { vn: 35e-5, an0: 320.832, an1: 8134.588 },
+    { vn: 34e-5, an0: 160.404, an1: 883.45 },
+    { vn: -33e-5, an0: 193.281, an1: -577061.43 },
+    { vn: 33e-5, an0: 7.248, an1: 1034.128 },
+    { vn: 3e-4, an0: 74.973, an1: 29929.562 },
+    { vn: 3e-4, an0: 59.126, an1: 890514.037 },
+    { vn: 3e-4, an0: 289.752, an1: 134374034e-2 },
+    { vn: 3e-4, an0: 307.724, an1: -890554.409 },
+    { vn: -29e-5, an0: 184.073, an1: 1002403085e-3 },
+    { vn: 27e-5, an0: 85.131, an1: -882399.635 },
+    { vn: 27e-5, an0: 64.715, an1: 1820939208e-3 },
+    { vn: -27e-5, an0: 117.837, an1: -954265.886 },
+    { vn: 26e-5, an0: 230.759, an1: 962532.324 },
+    { vn: 26e-5, an0: 186.591, an1: 365330.005 },
+    { vn: 25e-5, an0: 199.003, an1: 862669.761 },
+    { vn: -25e-5, an0: 297.932, an1: 954529.584 },
+    { vn: -24e-5, an0: 25.452, an1: -473131.573 },
+    { vn: -22e-5, an0: 206.416, an1: 754672.61 },
+    { vn: 22e-5, an0: 228.08, an1: -477217.697 },
+    { vn: -22e-5, an0: 301.381, an1: 282.527 },
+    { vn: -21e-5, an0: 36.021, an1: -1407603852e-3 },
+    { vn: -21e-5, an0: 116.343, an1: 1709070345e-3 },
+    { vn: 21e-5, an0: 352.587, an1: 107997.151 },
+    { vn: 2e-4, an0: 108.93, an1: 1817067496e-3 },
+    { vn: 2e-4, an0: 143.156, an1: 1880931009e-3 },
+    { vn: -2e-4, an0: 248.835, an1: 2222268263e-3 },
+    { vn: 2e-4, an0: 231.465, an1: -901.405 },
+    { vn: -19e-5, an0: 36.116, an1: 894601.517 },
+    { vn: -18e-5, an0: 319.037, an1: 1479601953e-3 },
+    { vn: 18e-5, an0: 138.579, an1: 477180.038 },
+    { vn: 18e-5, an0: 8.6, an1: 3034.906 },
+    { vn: 17e-5, an0: 306.673, an1: -468161.355 },
+    { vn: 16e-5, an0: 287.969, an1: 474917.642 },
+    { vn: 16e-5, an0: 41.058, an1: 822603.417 },
+    { vn: 16e-5, an0: 321.163, an1: -375.801 },
+    { vn: -16e-5, an0: 44.565, an1: -99.177 },
+    { vn: 16e-5, an0: 17.745, an1: -479480.093 },
+    { vn: 15e-5, an0: 9.166, an1: 477349.546 },
+    { vn: 15e-5, an0: 99.182, an1: -477048.189 },
+    { vn: -15e-5, an0: 184.894, an1: -479134.401 },
+    { vn: -15e-5, an0: 94.821, an1: 475263.334 },
+    { vn: 15e-5, an0: 64.7, an1: 476209.198 },
+    { vn: -14e-5, an0: 146.402, an1: 964468.502 },
+    { vn: -14e-5, an0: 171.225, an1: -3559.967 },
+    { vn: -14e-5, an0: 22.598, an1: -414304.839 },
+    { vn: 14e-5, an0: 332.651, an1: -404297.843 },
+    { vn: 14e-5, an0: 214.319, an1: 966535.884 },
+    { vn: 14e-5, an0: 201.231, an1: -966272.186 },
+    { vn: 14e-5, an0: 45.575, an1: 476447.267 },
+    { vn: 14e-5, an0: 217.293, an1: 486236.38 },
+    { vn: -14e-5, an0: 166.528, an1: 413486.034 },
+    { vn: -14e-5, an0: 32.74, an1: -4443.417 },
+    { vn: -13e-5, an0: 325.703, an1: -413184.677 },
+    { vn: -13e-5, an0: 188.339, an1: -505063.33 },
+    { vn: 13e-5, an0: 326.794, an1: -6843.677 },
+    { vn: 12e-5, an0: 12.627, an1: 723.029 },
+    { vn: 12e-5, an0: 253.402, an1: -751.601 },
+    { vn: 11e-5, an0: 336.437, an1: 1303869578e-3 },
+    { vn: -11e-5, an0: 336.935, an1: 478490.424 },
+    { vn: 11e-5, an0: 217.624, an1: -369201.717 },
+    { vn: -11e-5, an0: 171.08, an1: 1371800385e-3 },
+    { vn: 11e-5, an0: 22.925, an1: -445642.912 },
+    { vn: 11e-5, an0: 93.089, an1: 476823.067 },
+    { vn: -1e-4, an0: 261.243, an1: 35958.615 },
+    { vn: 1e-4, an0: 335.121, an1: -383405.794 },
+    { vn: 1e-4, an0: 269.927, an1: 954397.735 },
+    { vn: -1e-4, an0: 17.111, an1: -1367601242e-3 },
+    { vn: -1e-4, an0: 38.439, an1: 136786494e-2 },
+    { vn: 1e-4, an0: 303.404, an1: -858978.267 },
+    { vn: 1e-4, an0: 268.33, an1: 411054.13 },
+    { vn: 1e-4, an0: 240.825, an1: -410300.45 },
+    { vn: 9e-5, an0: 165.358, an1: -67930.806 },
+    { vn: 9e-5, an0: 280.672, an1: -989.67 },
+    { vn: 9e-5, an0: 180.064, an1: 422372.868 },
+    { vn: 9e-5, an0: 264.985, an1: 1026395836e-3 },
+    { vn: 9e-5, an0: 316.645, an1: 3171.719 },
+    { vn: -9e-5, an0: 54.098, an1: -147867.913 },
+    { vn: -9e-5, an0: 150.569, an1: 1772933858e-3 },
+    { vn: 9e-5, an0: 195.62, an1: 413294.598 },
+    { vn: 9e-5, an0: 354.297, an1: -413376.113 },
+    { vn: 9e-5, an0: 82.788, an1: 416370.261 },
+    { vn: 9e-5, an0: 210.356, an1: -881496.71 },
+    { vn: -9e-5, an0: 325.774, an1: -63863.512 },
+    { vn: 9e-5, an0: 43.697, an1: -381779.4 },
+    { vn: 9e-5, an0: 276.828, an1: 14577.848 },
+    { vn: -9e-5, an0: 298.459, an1: 890684.901 },
+    { vn: 8e-5, an0: 75.285, an1: 886466.929 }
+  ];
+  var Sv3 = [
+    { vn: 13.53, an0: 357.5, an1: 35999.1 },
+    { vn: -4.17, an0: 103.2, an1: 377336.3 },
+    { vn: -3.33, an0: 238.2, an1: 854535.2 },
+    { vn: 3, an0: 222.6, an1: -441199.8 },
+    { vn: 2.22, an0: 132.5, an1: 513197.9 },
+    { vn: 0.58, an0: 98.3, an1: 449334.4 },
+    { vn: 0.5, an0: 233.2, an1: 926533.3 },
+    { vn: -0.36, an0: 295.4, an1: 481266.2 },
+    { vn: -0.33, an0: 240.6, an1: 818536.1 },
+    { vn: -0.31, an0: 13.1, an1: 1331734 },
+    { vn: -0.31, an0: 105.7, an1: 341337.3 },
+    { vn: 0.31, an0: 355.1, an1: 71998.1 },
+    { vn: 0.19, an0: 87.6, an1: -918398.7 },
+    { vn: -0.17, an0: 328.2, an1: -99862.6 },
+    { vn: 0.17, an0: 267.5, an1: 990396.8 },
+    { vn: 0.11, an0: 95.8, an1: 485333.5 },
+    { vn: 0.11, an0: 220.1, an1: -405200.8 },
+    { vn: -0.08, an0: 338.9, an1: 12678705e-1 },
+    { vn: 0.08, an0: 235.7, an1: 890534.2 },
+    { vn: -0.06, an0: 203.9, an1: 790671.7 },
+    { vn: -0.06, an0: 323.3, an1: -27864.5 },
+    { vn: -0.06, an0: 51.6, an1: -111868.9 },
+    { vn: 0.06, an0: 8.2, an1: 14037321e-1 },
+    { vn: 0.06, an0: 100.7, an1: 413335.4 },
+    { vn: 0.06, an0: 130, an1: 549197 }
+  ];
+  var Su = [
+    { un: 5.12812186, bn0: 93.2720993, bn1: 483202.0175273, bn2: -34.029, bn3: -0.284, bn4: 0.116 },
+    { un: 0.28060196, bn0: 228.2355107, bn1: 960400.8851586, bn2: 55.941, bn3: 14.064, bn4: -6.681 },
+    { un: 0.27769266, bn0: 41.6913121, bn1: -6003.149896, bn2: 123.999, bn3: 14.631, bn4: -6.913 },
+    { un: 0.17323679, bn0: 142.4283091, bn1: 407332.2055062, bn2: 1.429, bn3: 3.948, bn4: -1.885 },
+    { un: 0.05541215, bn0: 194.0090963, bn1: 896537.3729295, bn2: -156.6, bn3: -10.967, bn4: 5.144 },
+    { un: 0.04627058, bn0: 7.4648977, bn1: -69866.6621251, bn2: -88.542, bn3: -10.4, bn4: 4.913 },
+    { un: 0.03257241, bn0: 328.9725077, bn1: 13737362405608e-7, bn2: -66.63, bn3: 3.38, bn4: -1.653 },
+    { un: 0.01719776, bn0: 3.1989221, bn1: 143759975279e-5, bn2: 145.911, bn3: 28.411, bn4: -13.479 },
+    { un: 926589e-8, bn0: 277.3917205, bn1: 884531.0731375, bn2: 91.399, bn3: 18.295, bn4: -8.682 },
+    { un: 882213e-8, bn0: 176.6547234, bn1: 471195.7177354, bn2: 213.97, bn3: 28.979, bn4: -13.71 },
+    { un: 821572e-8, bn0: 144.8991999, bn1: 371333.1552153, bn2: 2.964, bn3: 3.907, bn4: -1.885 },
+    { un: 432396e-8, bn0: 232.5014863, bn1: -547065.5297565, bn2: -178.512, bn3: -24.748, bn4: 11.71 },
+    { un: 420043e-8, bn0: 103.9359191, bn1: 18509351081921e-7, bn2: 23.341, bn3: 17.728, bn4: -8.45 },
+    { un: -335948e-8, bn0: 139.9574183, bn1: 443331.2557971, bn2: -0.107, bn3: 3.988, bn4: -1.885 },
+    { un: 246337e-8, bn0: 196.4799872, bn1: 860538.3226385, bn2: -155.064, bn3: -11.008, bn4: 5.144 },
+    { un: 221071e-8, bn0: 331.4433985, bn1: 13377371902699e-7, bn2: -65.094, bn3: 3.339, bn4: -1.653 },
+    { un: 206515e-8, bn0: 9.9357885, bn1: -105865.7124161, bn2: -87.006, bn3: -10.441, bn4: 4.913 },
+    { un: -186984e-8, bn0: 129.2935985, bn1: -924401.8348677, bn2: -57.477, bn3: -14.023, bn4: 6.681 },
+    { un: 182766e-8, bn0: 243.1653061, bn1: 820667.5609084, bn2: -121.142, bn3: -6.736, bn4: 3.144 },
+    { un: -179446e-8, bn0: 90.8012085, bn1: 519201.0678183, bn2: -35.565, bn3: -0.243, bn4: 0.116 },
+    { un: -174902e-8, bn0: 279.816298, bn1: 14496060525819e-7, bn2: -102.088, bn3: -0.851, bn4: 0.348 },
+    { un: -156454e-8, bn0: 315.8377971, bn1: 42002.2001869, bn2: -125.535, bn3: -14.59, bn4: 6.913 },
+    { un: -149122e-8, bn0: 31.1223035, bn1: 928469.1290441, bn2: -50.329, bn3: 1.548, bn4: -0.769 },
+    { un: -147535e-8, bn0: 225.7646199, bn1: 996399.9354496, bn2: 54.405, bn3: 14.105, bn4: -6.681 },
+    { un: -140998e-8, bn0: 39.2204212, bn1: 29995.900395, bn2: 122.464, bn3: 14.672, bn4: -6.913 },
+    { un: -134434e-8, bn0: 264.2570099, bn1: -447202.9672364, bn2: 32.493, bn3: 0.324, bn4: -0.116 },
+    { un: -133493e-8, bn0: 204.5781049, bn1: -37934.9060106, bn2: 17.729, bn3: 2.116, bn4: -1 },
+    { un: 110668e-8, bn0: 138.1623335, bn1: 19147986204213e-7, bn2: 235.882, bn3: 42.759, bn4: -20.276 },
+    { un: 102068e-8, bn0: 18.1287175, bn1: 12978664285397e-7, bn2: -31.172, bn3: 7.611, bn4: -3.654 },
+    { un: 83291e-8, bn0: 69.7095047, bn1: 1787071595963e-6, bn2: -189.201, bn3: -7.303, bn4: 3.375 },
+    { un: 7774e-7, bn0: 215.1471134, bn1: -972407.1849506, bn2: 192.058, bn3: 15.198, bn4: -7.145 },
+    { un: 67052e-8, bn0: 294.7460934, bn1: 13098727283316e-7, bn2: -279.171, bn3: -21.651, bn4: 10.173 },
+    { un: 60731e-8, bn0: 315.8841104, bn1: -559071.8295484, bn2: 69.487, bn3: 4.515, bn4: -2.116 },
+    { un: 59616e-8, bn0: 52.3551318, bn1: 13617299407689e-7, bn2: 181.369, bn3: 32.643, bn4: -15.479 },
+    { un: 49055e-8, bn0: 279.8626113, bn1: 848532.0228466, bn2: 92.935, bn3: 18.254, bn4: -8.682 },
+    { un: -45123e-8, bn0: 59.045685, bn1: 419338.5052981, bn2: -246.57, bn3: -25.315, bn4: 11.941 },
+    { un: 43925e-8, bn0: 311.6181348, bn1: 948394.5853667, bn2: 303.94, bn3: 43.326, bn4: -20.507 },
+    { un: 42215e-8, bn0: 238.8993305, bn1: 23281339758235e-7, bn2: 113.311, bn3: 32.075, bn4: -15.248 },
+    { un: 42101e-8, bn0: 97.5380749, bn1: -10242643973878e-7, bn2: -268.482, bn3: -39.095, bn4: 18.507 },
+    { un: -36606e-8, bn0: 191.5382055, bn1: 932536.4232204, bn2: -158.136, bn3: -10.926, bn4: 5.144 },
+    { un: -35119e-8, bn0: 326.5016169, bn1: 14097352908518e-7, bn2: -68.166, bn3: 3.421, bn4: -1.653 },
+    { un: 33108e-8, bn0: 204.6729161, bn1: 22642704635943e-7, bn2: -99.23, bn3: 7.044, bn4: -3.422 },
+    { un: 31517e-8, bn0: 106.4068099, bn1: 18149360579012e-7, bn2: 24.876, bn3: 17.687, bn4: -8.45 },
+    { un: 30161e-8, bn0: 147.3700907, bn1: 335334.1049243, bn2: 4.5, bn3: 3.866, bn4: -1.885 },
+    { un: -28316e-8, bn0: 54.7797093, bn1: 19268049202133e-7, bn2: -12.117, bn3: 13.497, bn4: -6.45 },
+    { un: -22853e-8, bn0: 274.9208296, bn1: 920530.1234285, bn2: 89.863, bn3: 18.336, bn4: -8.682 },
+    { un: 22339e-8, bn0: 202.1072141, bn1: -1935.8557196, bn2: 16.193, bn3: 2.156, bn4: -1 },
+    { un: 22294e-8, bn0: 28.6514127, bn1: 964468.179335, bn2: -51.865, bn3: 1.589, bn4: -0.769 },
+    { un: -22033e-8, bn0: 354.3301871, bn1: -1401600702499e-6, bn2: -147.447, bn3: -28.371, bn4: 13.479 },
+    { un: -21973e-8, bn0: 4.9940069, bn1: -33867.6118342, bn2: -90.077, bn3: -10.359, bn4: 4.913 },
+    { un: -18539e-8, bn0: 166.0857149, bn1: 14056679966754e-7, bn2: 39.641, bn3: 15.896, bn4: -7.566 },
+    { un: 18062e-8, bn0: 234.9723771, bn1: -583064.5800474, bn2: -176.976, bn3: -24.788, bn4: 11.71 },
+    { un: -17745e-8, bn0: 0.7280313, bn1: 14735988030809e-7, bn2: 144.376, bn3: 28.452, bn4: -13.479 },
+    { un: 17603e-8, bn0: 108.2018947, bn1: 343468.693277, bn2: -211.113, bn3: -21.084, bn4: 9.941 },
+    { un: 16549e-8, bn0: 245.6361969, bn1: 784668.5106174, bn2: -119.606, bn3: -6.777, bn4: 3.144 },
+    { un: -16359e-8, bn0: 339.5415163, bn1: 439263.9616208, bn2: 107.699, bn3: 16.463, bn4: -7.797 },
+    { un: 13149e-8, bn0: 153.0921289, bn1: 1775065296171e-6, bn2: 58.798, bn3: 21.959, bn4: -10.451 },
+    { un: -11941e-8, bn0: 69.6146935, bn1: -515133.7736419, bn2: -72.241, bn3: -12.232, bn4: 5.797 },
+    { un: 11526e-8, bn0: 20.5996083, bn1: 12618673782488e-7, bn2: -29.636, bn3: 7.571, bn4: -3.654 },
+    { un: 10653e-8, bn0: 333.9142894, bn1: 13017381399789e-7, bn2: -63.558, bn3: 3.299, bn4: -1.653 },
+    { un: -9773e-8, bn0: 80.2785133, bn1: 852599.3170229, bn2: -14.872, bn3: 5.779, bn4: -2.769 },
+    { un: 9411e-8, bn0: 72.1803956, bn1: 1751072545672e-6, bn2: -187.665, bn3: -7.344, bn4: 3.375 },
+    { un: 9141e-8, bn0: 180.9206991, bn1: -10362706971798e-7, bn2: -20.483, bn3: -9.833, bn4: 4.681 },
+    { un: 8742e-8, bn0: 198.950878, bn1: 824539.2723476, bn2: -153.528, bn3: -11.049, bn4: 5.144 },
+    { un: -8692e-8, bn0: 174.1838326, bn1: 507194.7680263, bn2: 212.434, bn3: 29.019, bn4: -13.71 },
+    { un: -8477e-8, bn0: 305.3151019, bn1: 375400.4493916, bn2: -104.842, bn3: -8.568, bn4: 4.028 },
+    { un: -8369e-8, bn0: 180.8743857, bn1: -435196.6674444, bn2: -215.506, bn3: -28.938, bn4: 13.71 },
+    { un: -8088e-8, bn0: 90.8475218, bn1: -81872.9619171, bn2: 159.457, bn3: 18.862, bn4: -8.914 },
+    { un: 7462e-8, bn0: 12.4066793, bn1: -141864.762707, bn2: -85.47, bn3: -10.482, bn4: 4.913 },
+    { un: 7313e-8, bn0: 273.1257448, bn1: 23919974880526e-7, bn2: 325.852, bn3: 57.106, bn4: -27.073 },
+    { un: 7058e-8, bn0: 284.0822736, bn1: -57860.3623332, bn2: -336.541, bn3: -39.662, bn4: 18.739 },
+    { un: -6801e-8, bn0: 20.553295, bn1: 18629414079841e-7, bn2: -224.658, bn3: -11.534, bn4: 5.376 },
+    { un: -6584e-8, bn0: 101.4650283, bn1: 18869341584831e-7, bn2: 21.805, bn3: 17.769, bn4: -8.45 },
+    { un: 5938e-8, bn0: 297.2169842, bn1: 12738736780407e-7, bn2: -277.635, bn3: -21.692, bn4: 10.173 },
+    { un: 5905e-8, bn0: 339.6363275, bn1: 27414693312256e-7, bn2: -9.26, bn3: 21.392, bn4: -10.219 },
+    { un: -572e-7, bn0: 131.8593005, bn1: 13418044844462e-7, bn2: -172.9, bn3: -9.135, bn4: 4.26 },
+    { un: -4775e-8, bn0: 240.6944153, bn1: 856666.6111993, bn2: -122.678, bn3: -6.695, bn4: 3.144 },
+    { un: 4386e-8, bn0: 207.1438069, bn1: 22282714133034e-7, bn2: -97.694, bn3: 7.003, bn4: -3.422 },
+    { un: 4067e-8, bn0: 187.3185432, bn1: 18389288084002e-7, bn2: 271.339, bn3: 46.99, bn4: -22.276 },
+    { un: -4015e-8, bn0: 155.5167064, bn1: 23401402756154e-7, bn2: -134.688, bn3: 2.813, bn4: -1.421 },
+    { un: 3869e-8, bn0: 256.1588921, bn1: 451270.2614127, bn2: -140.3, bn3: -12.799, bn4: 6.029 },
+    { un: 3832e-8, bn0: 13.8627419, bn1: 28053328434548e-7, bn2: 203.281, bn3: 46.423, bn4: -22.045 },
+    { un: -3726e-8, bn0: 137.4865274, bn1: 479330.3060881, bn2: -1.643, bn3: 4.029, bn4: -1.885 },
+    { un: 3717e-8, bn0: 322.5746636, bn1: -15014632650191e-7, bn2: -358.453, bn3: -53.443, bn4: 25.304 },
+    { un: -3621e-8, bn0: 350.1105248, bn1: -495208.3173193, bn2: 282.028, bn3: 29.546, bn4: -13.942 },
+    { un: 3582e-8, bn0: 54.8260227, bn1: 13257308904779e-7, bn2: 182.905, bn3: 32.602, bn4: -15.479 },
+    { un: 3441e-8, bn0: 241.3702213, bn1: 22921349255325e-7, bn2: 114.847, bn3: 32.034, bn4: -15.248 },
+    { un: -3274e-8, bn0: 189.7431207, bn1: 24040037878446e-7, bn2: 77.853, bn3: 27.844, bn4: -13.247 },
+    { un: -3148e-8, bn0: 126.8227077, bn1: -888402.7845768, bn2: -59.013, bn3: -13.982, bn4: 6.681 },
+    { un: -3147e-8, bn0: 189.0673147, bn1: 968535.4735114, bn2: -159.672, bn3: -10.886, bn4: 5.144 },
+    { un: -3141e-8, bn0: 15.6578267, bn1: 13338654788306e-7, bn2: -32.708, bn3: 7.652, bn4: -3.654 },
+    { un: -3046e-8, bn0: 294.6512821, bn1: -992332.6412732, bn2: -162.212, bn3: -26.579, bn4: 12.594 },
+    { un: -2926e-8, bn0: 2.5231161, bn1: 2131.4384567, bn2: -91.613, bn3: -10.318, bn4: 4.913 },
+    { un: 2827e-8, bn0: 163.6148241, bn1: 14416670469663e-7, bn2: 38.105, bn3: 15.937, bn4: -7.566 },
+    { un: -2642e-8, bn0: 313.3669063, bn1: 78001.2504779, bn2: -127.071, bn3: -14.549, bn4: 6.913 },
+    { un: 2612e-8, bn0: 118.8657145, bn1: 17112017839419e-7, bn2: -153.743, bn3: -3.072, bn4: 1.375 },
+    { un: 2544e-8, bn0: 86.5815462, bn1: 1425593452998e-6, bn2: 393.91, bn3: 57.674, bn4: -27.305 },
+    { un: 2448e-8, bn0: 318.3550013, bn1: -595070.8798394, bn2: 71.023, bn3: 4.474, bn4: -2.116 },
+    { un: 2249e-8, bn0: 343.9023031, bn1: 12340029163105e-7, bn2: -243.713, bn3: -17.42, bn4: 8.172 },
+    { un: 2198e-8, bn0: 230.0305955, bn1: -511066.4794655, bn2: -180.048, bn3: -24.707, bn4: 11.71 },
+    { un: -2179e-8, bn0: 121.1954808, bn1: -25928.6062186, bn2: -230.27, bn3: -27.147, bn4: 12.826 },
+    { un: -2078e-8, bn0: 219.3667757, bn1: -18787995701304e-7, bn2: -237.418, bn3: -42.718, bn4: 20.276 },
+    { un: 1921e-8, bn0: 282.3335021, bn1: 812532.9725556, bn2: 94.471, bn3: 18.213, bn4: -8.682 },
+    { un: -1823e-8, bn0: 245.5898836, bn1: 13857425403528e-7, bn2: -314.629, bn3: -25.882, bn4: 12.173 },
+    { un: -1773e-8, bn0: 301.0491263, bn1: 18828668643067e-7, bn2: 129.611, bn3: 30.243, bn4: -14.363 },
+    { un: -1745e-8, bn0: 49.884241, bn1: 13977289910598e-7, bn2: 179.833, bn3: 32.683, bn4: -15.479 },
+    { un: 1738e-8, bn0: 191.5845188, bn1: 331462.3934851, bn2: 36.886, bn3: 8.179, bn4: -3.885 },
+    { un: -1724e-8, bn0: 61.5165758, bn1: 383339.4550072, bn2: -245.034, bn3: -25.356, bn4: 11.941 },
+    { un: -1718e-8, bn0: 36.7495304, bn1: 65994.9506859, bn2: 120.928, bn3: 14.713, bn4: -6.913 },
+    { un: -1716e-8, bn0: 135.6914426, bn1: 19507976707123e-7, bn2: 234.346, bn3: 42.8, bn4: -20.276 },
+    { un: 1656e-8, bn0: 170.4465018, bn1: 22004069513651e-7, bn2: -311.771, bn3: -17.987, bn4: 8.404 },
+    { un: 1624e-8, bn0: 108.8777007, bn1: 17789370076103e-7, bn2: 26.412, bn3: 17.646, bn4: -8.45 },
+    { un: -1591e-8, bn0: 88.3303177, bn1: 555200.1181092, bn2: -37.101, bn3: -0.202, bn4: 0.116 },
+    { un: 1579e-8, bn0: 155.5630197, bn1: 17390662458801e-7, bn2: 60.334, bn3: 21.918, bn4: -10.451 },
+    { un: -1553e-8, bn0: 253.6880013, bn1: 487269.3117037, bn2: -141.836, bn3: -12.758, bn4: 6.029 },
+    { un: -1529e-8, bn0: 223.2937291, bn1: 10323989857405e-7, bn2: 52.869, bn3: 14.146, bn4: -6.681 },
+    { un: 1528e-8, bn0: 100.0089658, bn1: -10602634476788e-7, bn2: -266.946, bn3: -39.136, bn4: 18.507 },
+    { un: -1516e-8, bn0: 313.4132196, bn1: -523072.7792575, bn2: 67.951, bn3: 4.556, bn4: -2.116 },
+    { un: 1508e-8, bn0: 56.5747941, bn1: 455337.5555891, bn2: -248.106, bn3: -25.274, bn4: 11.941 },
+    { un: 1459e-8, bn0: 110.6727855, bn1: 307469.6429861, bn2: -209.577, bn3: -21.124, bn4: 9.941 },
+    { un: -1416e-8, bn0: 67.2386139, bn1: 18230706462539e-7, bn2: -190.736, bn3: -7.263, bn4: 3.375 },
+    { un: -1348e-8, bn0: 356.8958892, bn1: 864605.6168149, bn2: -262.871, bn3: -23.483, bn4: 11.057 },
+    { un: 1343e-8, bn0: 288.0555402, bn1: 22522641638024e-7, bn2: 148.769, bn3: 36.306, bn4: -17.248 },
+    { un: 1171e-8, bn0: 305.4099131, bn1: 26776058189965e-7, bn2: -221.801, bn3: -3.639, bn4: 1.606 },
+    { un: -1095e-8, bn0: 170.3516905, bn1: -101798.4182397, bn2: -194.812, bn3: -22.916, bn4: 10.825 },
+    { un: 1021e-8, bn0: 253.8291259, bn1: 21884006515732e-7, bn2: -63.773, bn3: 11.275, bn4: -5.423 },
+    { un: 1013e-8, bn0: 149.8409815, bn1: 299335.0546334, bn2: 6.036, bn3: 3.825, bn4: -1.885 },
+    { un: -101e-7, bn0: 114.5049276, bn1: 916462.8292521, bn2: 197.669, bn3: 30.811, bn4: -14.595 },
+    { un: -1003e-8, bn0: 215.2419247, bn1: 13297981846543e-7, bn2: 75.099, bn3: 20.127, bn4: -9.566 },
+    { un: 963e-8, bn0: 337.0706254, bn1: 475263.0119117, bn2: 106.163, bn3: 16.504, bn4: -7.797 },
+    { un: 962e-8, bn0: 248.1070877, bn1: 748669.4603265, bn2: -118.071, bn3: -6.818, bn4: 3.144 },
+    { un: 954e-8, bn0: 77.8076225, bn1: 888598.3673139, bn2: -16.408, bn3: 5.82, bn4: -2.769 },
+    { un: -896e-8, bn0: 18.0339062, bn1: -10043389410652e-7, bn2: 85.787, bn3: 2.683, bn4: -1.232 },
+    { un: -873e-8, bn0: 236.4284397, bn1: 23641330261144e-7, bn2: 111.775, bn3: 32.116, bn4: -15.248 },
+    { un: 866e-8, bn0: 35.4830904, bn1: 17232080837338e-7, bn2: -401.742, bn3: -32.334, bn4: 15.201 },
+    { un: -844e-8, bn0: 290.4801177, bn1: 28173391432468e-7, bn2: -44.718, bn3: 17.161, bn4: -8.219 },
+    { un: 836e-8, bn0: 342.1072183, bn1: 27054702809347e-7, bn2: -7.724, bn3: 21.351, bn4: -10.219 },
+    { un: -821e-8, bn0: 292.2752025, bn1: 13458717786226e-7, bn2: -280.707, bn3: -21.61, bn4: 10.173 },
+    { un: 805e-8, bn0: 23.0704991, bn1: 12258683279578e-7, bn2: -28.1, bn3: 7.53, bn4: -3.654 },
+    { un: -789e-8, bn0: 266.8227119, bn1: 18190033520776e-7, bn2: -82.93, bn3: 5.212, bn4: -2.538 },
+    { un: 786e-8, bn0: 114.5997389, bn1: 3218668198857e-6, bn2: 80.71, bn3: 35.739, bn4: -17.016 },
+    { un: -714e-8, bn0: 82.7494041, bn1: 816600.266732, bn2: -13.336, bn3: 5.739, bn4: -2.769 },
+    { un: -708e-8, bn0: 202.2020253, bn1: 23002695138853e-7, bn2: -100.766, bn3: 7.085, bn4: -3.422 },
+    { un: 693e-8, bn0: 149.1188622, bn1: -535059.2299645, bn2: -426.511, bn3: -54.01, bn4: 25.536 },
+    { un: -672e-8, bn0: 309.147244, bn1: 984393.6356576, bn2: 302.404, bn3: 43.367, bn4: -20.507 },
+    { un: 661e-8, bn0: 74.6512864, bn1: 17150734953811e-7, bn2: -186.129, bn3: -7.385, bn4: 3.375 },
+    { un: -657e-8, bn0: 45.9109744, bn1: -912395.5350758, bn2: -305.476, bn3: -43.285, bn4: 20.507 },
+    { un: 635e-8, bn0: 237.443268, bn1: -619063.6303384, bn2: -175.44, bn3: -24.829, bn4: 11.71 },
+    { un: 604e-8, bn0: 159.782682, bn1: 832673.8607003, bn2: -369.141, bn3: -35.998, bn4: 16.97 },
+    { un: -584e-8, bn0: 307.7859927, bn1: 339401.3991007, bn2: -103.306, bn3: -8.609, bn4: 4.028 },
+    { un: 579e-8, bn0: 129.3884097, bn1: 13778035347372e-7, bn2: -174.436, bn3: -9.094, bn4: 4.26 },
+    { un: 568e-8, bn0: 45.9572877, bn1: -15134695648111e-7, bn2: -110.454, bn3: -24.18, bn4: 11.478 },
+    { un: -559e-8, bn0: 342.0124071, bn1: 403264.9113298, bn2: 109.235, bn3: 16.422, bn4: -7.797 },
+    { un: -508e-8, bn0: 33.5931943, bn1: 892470.0787531, bn2: -48.794, bn3: 1.508, bn4: -0.769 },
+    { un: 505e-8, bn0: 95.0671841, bn1: -988265.3470969, bn2: -270.018, bn3: -39.054, bn4: 18.507 },
+    { un: -5e-6, bn0: 261.786119, bn1: -411203.9169454, bn2: 30.958, bn3: 0.365, bn4: -0.116 },
+    { un: 491e-8, bn0: 48.0891562, bn1: 2869196355684e-6, bn2: 415.822, bn3: 71.454, bn4: -33.87 },
+    { un: -47e-7, bn0: 150.621238, bn1: 1811064346462e-6, bn2: 57.263, bn3: 22, bn4: -10.451 },
+    { un: 467e-8, bn0: 118.7245899, bn1: 10070.4440723, bn2: -231.806, bn3: -27.106, bn4: 12.826 },
+    { un: -464e-8, bn0: 93.3184126, bn1: -117872.012208, bn2: 160.993, bn3: 18.821, bn4: -8.914 },
+    { un: 445e-8, bn0: 336.3851802, bn1: 1265739089688e-6, bn2: -62.022, bn3: 3.258, bn4: -1.653 },
+    { un: 444e-8, bn0: 292.1803913, bn1: -956333.5909823, bn2: -163.748, bn3: -26.539, bn4: 12.594 },
+    { un: -436e-8, bn0: 351.8592963, bn1: -13656016522081e-7, bn2: -148.983, bn3: -28.33, bn4: 13.479 },
+    { un: 413e-8, bn0: 121.3366053, bn1: 16752027336509e-7, bn2: -152.207, bn3: -3.113, bn4: 1.375 },
+    { un: -412e-8, bn0: 324.0307261, bn1: 14457343411427e-7, bn2: -69.701, bn3: 3.462, bn4: -1.653 },
+    { un: 407e-8, bn0: 80.3733245, bn1: 31548046866278e-7, bn2: -131.831, bn3: 10.708, bn4: -5.191 },
+    { un: -377e-8, bn0: 134.3301914, bn1: 13058054341553e-7, bn2: -171.364, bn3: -9.176, bn4: 4.26 },
+    { un: 375e-8, bn0: 264.3518211, bn1: 18550024023685e-7, bn2: -84.466, bn3: 5.253, bn4: -2.538 },
+    { un: -374e-8, bn0: 207.0489957, bn1: -73933.9563015, bn2: 19.265, bn3: 2.075, bn4: -1 },
+    { un: 367e-8, bn0: 302.8442111, bn1: 411399.4996826, bn2: -106.378, bn3: -8.527, bn4: 4.028 },
+    { un: 353e-8, bn0: 209.6146978, bn1: 21922723630124e-7, bn2: -96.159, bn3: 6.962, bn4: -3.422 },
+    { un: -351e-8, bn0: 227.5597047, bn1: -475067.4291746, bn2: -181.584, bn3: -24.666, bn4: 11.71 },
+    { un: -349e-8, bn0: 159.6878707, bn1: -14695315089046e-7, bn2: -252.182, bn3: -40.927, bn4: 19.391 },
+    { un: 342e-8, bn0: 299.687875, bn1: 12378746277498e-7, bn2: -276.099, bn3: -21.733, bn4: 10.173 },
+    { un: 336e-8, bn0: 16.3336327, bn1: 27693337931639e-7, bn2: 204.817, bn3: 46.382, bn4: -22.045 },
+    { un: 329e-8, bn0: 148.8261532, bn1: 32825317110861e-7, bn2: 293.251, bn3: 60.77, bn4: -28.842 },
+    { un: -328e-8, bn0: 324.7065321, bn1: 28812026554759e-7, bn2: 167.823, bn3: 42.192, bn4: -20.044 },
+    { un: -327e-8, bn0: 23.0241858, bn1: 18269423576931e-7, bn2: -223.123, bn3: -11.575, bn4: 5.376 },
+    { un: 321e-8, bn0: 277.3454071, bn1: 14856051028729e-7, bn2: -103.623, bn3: -0.81, bn4: 0.348 },
+    { un: 313e-8, bn0: 187.6112522, bn1: -19786621326505e-7, bn2: -448.423, bn3: -67.79, bn4: 32.101 },
+    { un: 303e-8, bn0: 346.3731939, bn1: 11980038660196e-7, bn2: -242.177, bn3: -17.461, bn4: 8.172 },
+    { un: -291e-8, bn0: 181.0155103, bn1: 12659346724251e-7, bn2: -137.443, bn3: -4.904, bn4: 2.259 },
+    { un: 289e-8, bn0: 201.4217688, bn1: 788540.2220566, bn2: -151.993, bn3: -11.09, bn4: 5.144 },
+    { un: 287e-8, bn0: 183.3915899, bn1: -10722697474707e-7, bn2: -18.948, bn3: -9.874, bn4: 4.681 },
+    { un: 286e-8, bn0: 72.0855843, bn1: -551132.8239328, bn2: -70.706, bn3: -12.273, bn4: 5.797 },
+    { un: 285e-8, bn0: 322.2819546, bn1: 23161276760315e-7, bn2: 361.31, bn3: 61.338, bn4: -29.074 },
+    { un: 282e-8, bn0: 298.5782355, bn1: 19188659145977e-7, bn2: 128.075, bn3: 30.284, bn4: -14.363 },
+    { un: -28e-7, bn0: 253.7343146, bn1: -113804.7180317, bn2: 53.187, bn3: 6.347, bn4: -3.001 }
+  ];
+  var Su1 = [
+    { un: -2.23474, bn0: 218.3174, bn1: 481267.8813 },
+    { un: 0.4195, bn0: 314.9967, bn1: 481266.4844 },
+    { un: 0.1751, bn0: 213.0248, bn1: 483333.8664 },
+    { un: 0.17504, bn0: 26.4804, bn1: -483070.1687 },
+    { un: 0.12663, bn0: 83.354, bn1: 4069.0137 },
+    { un: -0.11548, bn0: 353.2808, bn1: 958466.749 },
+    { un: 0.09062, bn0: 31.7733, bn1: -485136.1537 },
+    { un: 0.08293, bn0: 342.617, bn1: -409266.3417 },
+    { un: -0.02319, bn0: 319.0544, bn1: 894603.2367 },
+    { un: 0.02234, bn0: 343.3612, bn1: 479333.7452 },
+    { un: -0.02154, bn0: 178.4856, bn1: 4067.6167 },
+    { un: 0.02037, bn0: 117.5804, bn1: 67932.5259 },
+    { un: 0.02013, bn0: 88.4122, bn1: 958465.352 },
+    { un: 0.01935, bn0: 251.5173, bn1: -960269.0363 },
+    { un: 0.01874, bn0: 347.9895, bn1: 960532.734 },
+    { un: 0.01851, bn0: 1.8346, bn1: 483925.0468 },
+    { un: -0.01451, bn0: 139.8144, bn1: -3937.7278 },
+    { un: -0.01408, bn0: 326.3604, bn1: 962466.3073 },
+    { un: -0.01379, bn0: 250.1212, bn1: 475196.673 },
+    { un: -0.01343, bn0: 77.7485, bn1: -409267.7387 },
+    { un: -0.01288, bn0: 94.0178, bn1: 13718021044e-4 },
+    { un: 0.01171, bn0: 27.0252, bn1: 474887.534 },
+    { un: 0.01105, bn0: 256.8101, bn1: -962335.0213 },
+    { un: -0.01079, bn0: 272.4669, bn1: 483547.7102 },
+    { un: -0.01031, bn0: 133.766, bn1: 485860.5799 },
+    { un: 967e-5, bn0: 148.1767, bn1: 484301.39 },
+    { un: -859e-5, bn0: 251.9923, bn1: -2311.3337 },
+    { un: 849e-5, bn0: 285.4666, bn1: -374367.7383 },
+    { un: 801e-5, bn0: 239.9516, bn1: 499341.5099 },
+    { un: -795e-5, bn0: 78.5308, bn1: 964092.7014 },
+    { un: -76e-4, bn0: 43.1678, bn1: 503784.9272 },
+    { un: 692e-5, bn0: 183.352, bn1: -483220.847 },
+    { un: 692e-5, bn0: 9.939, bn1: 483183.1881 },
+    { un: -668e-5, bn0: 128.2441, bn1: 14356656166e-4 },
+    { un: -655e-5, bn0: 108.5203, bn1: 497405.9768 },
+    { un: 652e-5, bn0: 250.5689, bn1: 407312.0193 },
+    { un: 652e-5, bn0: 325.7099, bn1: -407352.3917 },
+    { un: 626e-5, bn0: 20.9585, bn1: -362295.3199 },
+    { un: 609e-5, bn0: 274.6895, bn1: 473261.1399 },
+    { un: 606e-5, bn0: 337.3239, bn1: -407200.3566 },
+    { un: 605e-5, bn0: 262.1806, bn1: 407464.0544 },
+    { un: 559e-5, bn0: 301.9728, bn1: 959431.4016 },
+    { un: -558e-5, bn0: 299.0703, bn1: -384813.7627 },
+    { un: 554e-5, bn0: 305.4557, bn1: 452369.0911 },
+    { un: 533e-5, bn0: 115.4239, bn1: -6972.6334 },
+    { un: 485e-5, bn0: 308.3905, bn1: -473129.8539 },
+    { un: 457e-5, bn0: 207.6536, bn1: -886465.2093 },
+    { un: -455e-5, bn0: 232.0839, bn1: 478822.2568 },
+    { un: 418e-5, bn0: 54.1859, bn1: 894601.8398 },
+    { un: 391e-5, bn0: 208.9975, bn1: 440296.6727 },
+    { un: 391e-5, bn0: 285.742, bn1: -896405.5241 },
+    { un: 39e-4, bn0: 340.1461, bn1: -373267.2914 },
+    { un: -388e-5, bn0: 275.6916, bn1: 481225.7267 },
+    { un: -386e-5, bn0: 76.983, bn1: 454304.6243 },
+    { un: 379e-5, bn0: 313.7613, bn1: 896669.2218 },
+    { un: -375e-5, bn0: 124.6414, bn1: 526303.37 },
+    { un: -356e-5, bn0: 62.5822, bn1: 482488.5982 },
+    { un: -342e-5, bn0: 350.7216, bn1: -341403.2711 },
+    { un: 338e-5, bn0: 150.7798, bn1: -13736043917e-4 },
+    { un: -336e-5, bn0: 212.7119, bn1: 67931.129 },
+    { un: 335e-5, bn0: 88.7251, bn1: 13738680894e-4 },
+    { un: -308e-5, bn0: 161.5677, bn1: 481417.1627 },
+    { un: -283e-5, bn0: 158.2395, bn1: 476823.0671 },
+    { un: 279e-5, bn0: 267.4739, bn1: 405398.0693 }
+  ];
+  var Su2 = [
+    { un: -0.02064, bn0: 144.899, bn1: 371333.155 },
+    { un: 845e-5, bn0: 139.957, bn1: 443331.256 },
+    { un: -619e-5, bn0: 196.48, bn1: 860538.323 },
+    { un: -555e-5, bn0: 331.443, bn1: 133773719e-2 },
+    { un: -519e-5, bn0: 9.936, bn1: -105865.712 },
+    { un: 471e-5, bn0: 129.294, bn1: -924401.835 },
+    { un: 451e-5, bn0: 90.801, bn1: 519201.068 },
+    { un: 394e-5, bn0: 315.838, bn1: 42002.2 },
+    { un: 372e-5, bn0: 225.765, bn1: 996399.935 },
+    { un: 362e-5, bn0: 52.758, bn1: 481266.484 },
+    { un: 355e-5, bn0: 39.22, bn1: 29995.9 },
+    { un: 338e-5, bn0: 264.257, bn1: -447202.967 },
+    { un: -313e-5, bn0: 294.447, bn1: -483070.169 },
+    { un: -312e-5, bn0: 121.106, bn1: 483333.866 },
+    { un: -152e-5, bn0: 147.37, bn1: 335334.105 },
+    { un: -123e-5, bn0: 279.863, bn1: 848532.023 },
+    { un: 95e-5, bn0: 218.317, bn1: 481267.881 },
+    { un: 92e-5, bn0: 191.538, bn1: 932536.423 },
+    { un: 88e-5, bn0: 326.502, bn1: 1409735291e-3 },
+    { un: 82e-5, bn0: 142.428, bn1: 407332.206 },
+    { un: -79e-5, bn0: 106.407, bn1: 1814936058e-3 },
+    { un: 57e-5, bn0: 274.921, bn1: 920530.123 },
+    { un: -56e-5, bn0: 28.651, bn1: 964468.179 },
+    { un: -56e-5, bn0: 202.107, bn1: -1935.856 },
+    { un: 56e-5, bn0: 354.33, bn1: -1401600702e-3 },
+    { un: 55e-5, bn0: 4.994, bn1: -33867.612 },
+    { un: -54e-5, bn0: 333.914, bn1: 130173814e-2 },
+    { un: -46e-5, bn0: 234.972, bn1: -583064.58 },
+    { un: 45e-5, bn0: 0.728, bn1: 1473598803e-3 },
+    { un: -44e-5, bn0: 198.951, bn1: 824539.272 },
+    { un: -41e-5, bn0: 245.636, bn1: 784668.511 },
+    { un: -38e-5, bn0: 12.407, bn1: -141864.763 },
+    { un: -35e-5, bn0: 159.534, bn1: -960269.036 },
+    { un: -34e-5, bn0: 256.123, bn1: 960532.734 },
+    { un: -29e-5, bn0: 20.6, bn1: 1261867378e-3 },
+    { un: -24e-5, bn0: 72.18, bn1: 1751072546e-3 },
+    { un: 22e-5, bn0: 174.184, bn1: 507194.768 },
+    { un: 21e-5, bn0: 180.874, bn1: -435196.667 },
+    { un: 19e-5, bn0: 137.487, bn1: 479330.306 },
+    { un: -18e-5, bn0: 278.166, bn1: 4067.617 },
+    { un: 18e-5, bn0: 96.899, bn1: 483183.188 },
+    { un: 18e-5, bn0: 270.354, bn1: -483220.847 },
+    { un: 17e-5, bn0: 188.093, bn1: 958465.352 },
+    { un: 17e-5, bn0: 101.465, bn1: 1886934158e-3 },
+    { un: 16e-5, bn0: 189.067, bn1: 968535.474 },
+    { un: 16e-5, bn0: 105.132, bn1: 483925.047 },
+    { un: 16e-5, bn0: 126.823, bn1: -888402.785 },
+    { un: -15e-5, bn0: 297.217, bn1: 1273873678e-3 },
+    { un: 15e-5, bn0: 2.523, bn1: 2131.438 },
+    { un: 15e-5, bn0: 328.973, bn1: 1373736241e-3 },
+    { un: 13e-5, bn0: 313.367, bn1: 78001.25 },
+    { un: 12e-5, bn0: 240.694, bn1: 856666.611 },
+    { un: 11e-5, bn0: 62.211, bn1: -485709.902 },
+    { un: -11e-5, bn0: 177.429, bn1: -409267.739 },
+    { un: -11e-5, bn0: 207.144, bn1: 2228271413e-3 },
+    { un: -11e-5, bn0: 245.347, bn1: -407200.357 },
+    { un: -11e-5, bn0: 170.204, bn1: 407464.054 },
+    { un: 1e-4, bn0: 194.009, bn1: 896537.373 },
+    { un: 1e-4, bn0: 156.11, bn1: 499341.51 },
+    { un: -1e-4, bn0: 282.334, bn1: 812532.973 },
+    { un: -9e-5, bn0: 54.826, bn1: 132573089e-2 },
+    { un: 9e-5, bn0: 303.156, bn1: 475196.673 },
+    { un: -9e-5, bn0: 241.37, bn1: 2292134926e-3 },
+    { un: 9e-5, bn0: 36.75, bn1: 65994.951 }
+  ];
+  var Su3 = [
+    { un: -0.61, bn0: 144.9, bn1: 371333.2 },
+    { un: 0.25, bn0: 140, bn1: 443331.3 },
+    { un: -0.17, bn0: 331.4, bn1: 13377372e-1 },
+    { un: -0.17, bn0: 196.5, bn1: 860538.3 },
+    { un: -0.14, bn0: 9.9, bn1: -105865.7 },
+    { un: 0.14, bn0: 90.8, bn1: 519201.1 },
+    { un: 0.14, bn0: 129.3, bn1: -924401.8 },
+    { un: 0.11, bn0: 225.8, bn1: 996399.9 },
+    { un: 0.11, bn0: 39.2, bn1: 29995.9 },
+    { un: 0.11, bn0: 264.3, bn1: -447203 },
+    { un: 0.11, bn0: 315.8, bn1: 42002.2 },
+    { un: -0.06, bn0: 147.4, bn1: 335334.1 }
+  ];
+  var Sr = [
+    { rn: -20905.355, dn0: 134.9634114, dn1: 477198.8676313, dn2: 89.97, dn3: 14.348, dn4: -6.797 },
+    { rn: -3699.1109, dn0: 100.736997, dn1: 413335.3554022, dn2: -122.571, dn3: -10.684, dn4: 5.028 },
+    { rn: -2955.9676, dn0: 235.7004084, dn1: 890534.2230335, dn2: -32.601, dn3: 3.664, dn4: -1.769 },
+    { rn: -569.9251, dn0: 269.9268228, dn1: 954397.7352627, dn2: 179.941, dn3: 28.695, dn4: -13.594 },
+    { rn: 246.1585, dn0: 325.7735856, dn1: -63863.5122292, dn2: -212.541, dn3: -25.031, dn4: 11.826 },
+    { rn: -204.586, dn0: 238.1712992, dn1: 854535.1727426, dn2: -31.065, dn3: 3.623, dn4: -1.769 },
+    { rn: -170.7331, dn0: 10.6638198, dn1: 13677330906648e-7, dn2: 57.37, dn3: 18.011, dn4: -8.566 },
+    { rn: -152.1377, dn0: 103.2078878, dn1: 377336.3051112, dn2: -121.035, dn3: -10.724, dn4: 5.028 },
+    { rn: -129.6201, dn0: 222.5656978, dn1: -441199.8173404, dn2: -91.506, dn3: -14.307, dn4: 6.797 },
+    { rn: 108.7427, dn0: 297.8502042, dn1: 445267.1115168, dn2: -16.3, dn3: 1.832, dn4: -0.884 },
+    { rn: 104.7552, dn0: 132.4925206, dn1: 513197.9179223, dn2: 88.434, dn3: 14.388, dn4: -6.797 },
+    { rn: 79.6606, dn0: 308.4192127, dn1: -489205.1674233, dn2: 158.029, dn3: 14.915, dn4: -7.029 },
+    { rn: 48.8883, dn0: 357.5291092, dn1: 35999.0502909, dn2: -1.536, dn3: 0.041, dn4: 0 },
+    { rn: -34.7825, dn0: 336.4374054, dn1: 13038695784357e-7, dn2: -155.171, dn3: -7.02, dn4: 3.259 },
+    { rn: 30.8238, dn0: 233.2295176, dn1: 926533.2733244, dn2: -34.136, dn3: 3.705, dn4: -1.769 },
+    { rn: 24.2085, dn0: 98.2661062, dn1: 449334.4056931, dn2: -124.107, dn3: -10.643, dn4: 5.028 },
+    { rn: -23.2104, dn0: 44.8902341, dn1: 1431596602894e-6, dn2: 269.911, dn3: 43.043, dn4: -20.392 },
+    { rn: -21.6363, dn0: 201.473994, dn1: 826670.7108043, dn2: -245.142, dn3: -21.367, dn4: 10.057 },
+    { rn: -16.6747, dn0: 295.3793134, dn1: 481266.1618077, dn2: -17.836, dn3: 1.873, dn4: -0.884 },
+    { rn: 14.4027, dn0: 190.8101743, dn1: -541062.3798605, dn2: -302.511, dn3: -39.379, dn4: 18.623 },
+    { rn: -12.8314, dn0: 13.1347106, dn1: 13317340403739e-7, dn2: 58.906, dn3: 17.971, dn4: -8.566 },
+    { rn: -11.65, dn0: 111.4008168, dn1: 1781068446067e-6, dn2: -65.201, dn3: 7.328, dn4: -3.538 },
+    { rn: -10.4448, dn0: 145.6272312, dn1: 18449319582962e-7, dn2: 147.34, dn3: 32.359, dn4: -15.363 },
+    { rn: 10.3211, dn0: 49.1562098, dn1: -75869.8120211, dn2: 35.458, dn3: 4.231, dn4: -2.001 },
+    { rn: 10.0562, dn0: 328.2444765, dn1: -99862.5625201, dn2: -211.005, dn3: -25.072, dn4: 11.826 },
+    { rn: -9.8844, dn0: 240.64219, dn1: 818536.1224516, dn2: -29.529, dn3: 3.582, dn4: -1.769 },
+    { rn: 8.7516, dn0: 274.1927984, dn1: -553068.6796524, dn2: -54.513, dn3: -10.116, dn4: 4.797 },
+    { rn: -8.3791, dn0: 162.8867928, dn1: -31931.7561146, dn2: -106.271, dn3: -12.516, dn4: 5.913 },
+    { rn: -7.0027, dn0: 87.6022864, dn1: -918398.6849717, dn2: -181.476, dn3: -28.654, dn4: 13.594 },
+    { rn: 6.322, dn0: 72.8136156, dn1: 922465.9791481, dn2: 73.67, dn3: 16.179, dn4: -7.682 },
+    { rn: 5.7509, dn0: 267.4559319, dn1: 990396.7855536, dn2: 178.405, dn3: 28.736, dn4: -13.594 },
+    { rn: -4.9501, dn0: 105.6787787, dn1: 341337.2548203, dn2: -119.499, dn3: -10.765, dn4: 5.028 },
+    { rn: -4.4212, dn0: 83.3826241, dn1: -12006.2997919, dn2: 247.999, dn3: 29.262, dn4: -13.826 },
+    { rn: 4.1311, dn0: 184.1196211, dn1: 401329.0556102, dn2: 125.428, dn3: 18.579, dn4: -8.798 },
+    { rn: -3.958, dn0: 338.9082962, dn1: 12678705281447e-7, dn2: -153.636, dn3: -7.061, dn4: 3.259 },
+    { rn: 3.2582, dn0: 38.5872012, dn1: 858602.4669189, dn2: -138.871, dn3: -8.852, dn4: 4.144 },
+    { rn: -3.1483, dn0: 186.5441986, dn1: 966404.0350546, dn2: -68.058, dn3: -0.567, dn4: 0.232 },
+    { rn: 2.6164, dn0: 8.192929, dn1: 14037321409558e-7, dn2: 55.834, dn3: 18.052, dn4: -8.566 },
+    { rn: 2.3536, dn0: 95.7952154, dn1: 485333.4559841, dn2: -125.643, dn3: -10.602, dn4: 5.028 },
+    { rn: -2.1171, dn0: 220.094807, dn1: -405200.7670494, dn2: -93.042, dn3: -14.266, dn4: 6.797 },
+    { rn: -1.897, dn0: 203.9448849, dn1: 790671.6605134, dn2: -243.606, dn3: -21.408, dn4: 10.057 },
+    { rn: -1.7385, dn0: 27.9233814, dn1: -509130.6237459, dn2: -196.241, dn3: -26.863, dn4: 12.71 },
+    { rn: -1.5714, dn0: 113.8717076, dn1: 17450693957761e-7, dn2: -63.665, dn3: 7.287, dn4: -3.538 },
+    { rn: -1.4226, dn0: 246.3642282, dn1: 22582673136983e-7, dn2: 24.769, dn3: 21.675, dn4: -10.335 },
+    { rn: -1.4189, dn0: 173.5506126, dn1: 13358013345503e-7, dn2: -48.901, dn3: 5.496, dn4: -2.653 },
+    { rn: 1.1655, dn0: 130.0216297, dn1: 549196.9682132, dn2: 86.899, dn3: 14.429, dn4: -6.797 },
+    { rn: -1.1169, dn0: 179.8536455, dn1: 19087954705253e-7, dn2: 359.881, dn3: 57.39, dn4: -27.189 },
+    { rn: 1.0657, dn0: 355.0582184, dn1: 71998.1005819, dn2: -3.072, dn3: 0.082, dn4: 0 },
+    { rn: -0.9333, dn0: 70.3427248, dn1: 958465.029439, dn2: 72.134, dn3: 16.22, dn4: -7.682 },
+    { rn: 0.8624, dn0: 263.6237898, dn1: 381403.5992876, dn2: -228.841, dn3: -23.199, dn4: 10.941 },
+    { rn: 0.8512, dn0: 160.415902, dn1: 4067.2941764, dn2: -107.806, dn3: -12.475, dn4: 5.913 },
+    { rn: -0.8488, dn0: 148.098122, dn1: 18089329080052e-7, dn2: 148.876, dn3: 32.318, dn4: -15.363 },
+    { rn: -0.7956, dn0: 111.3060056, dn1: -521136.9235379, dn2: 51.758, dn3: 2.399, dn4: -1.116 },
+    { rn: 0.7785, dn0: 55.8467629, dn1: -10182612474918e-7, dn2: -392.482, dn3: -53.726, dn4: 25.42 },
+    { rn: 0.774, dn0: 152.3177843, dn1: 902540.5228254, dn2: -280.599, dn3: -25.598, dn4: 12.057 },
+    { rn: -0.6697, dn0: 280.5906425, dn1: 23221308259275e-7, dn2: 237.31, dn3: 46.706, dn4: -22.161 },
+    { rn: -0.6575, dn0: 15.6056014, dn1: 12957349900829e-7, dn2: 60.441, dn3: 17.93, dn4: -8.566 },
+    { rn: 0.6571, dn0: 51.6271006, dn1: -111868.8623121, dn2: 36.994, dn3: 4.19, dn4: -2.001 },
+    { rn: 0.5963, dn0: 287.2811957, dn1: 13797393904568e-7, dn2: -190.629, dn3: -11.251, dn4: 5.26 },
+    { rn: 0.5788, dn0: 333.9665146, dn1: 13398686287266e-7, dn2: -156.707, dn3: -6.979, dn4: 3.259 },
+    { rn: -0.5142, dn0: 66.5105827, dn1: 349471.843173, dn2: -335.112, dn3: -35.715, dn4: 16.854 },
+    { rn: -0.5079, dn0: 284.8566182, dn1: 814664.4110124, dn2: 2.857, dn3: 7.895, dn4: -3.769 },
+    { rn: 0.4976, dn0: 300.321095, dn1: 409268.0612258, dn2: -14.764, dn3: 1.791, dn4: -0.884 },
+    { rn: 0.495, dn0: 193.2810651, dn1: -577061.4301514, dn2: -300.976, dn3: -39.419, dn4: 18.623 },
+    { rn: 0.4726, dn0: 139.229387, dn1: -10302675472838e-7, dn2: -144.483, dn3: -24.464, dn4: 11.594 },
+    { rn: -0.4225, dn0: 77.1744024, dn1: 17172049338378e-7, dn2: -277.742, dn3: -17.703, dn4: 8.288 },
+    { rn: -0.4224, dn0: 312.6388751, dn1: -13955975526031e-7, dn2: -271.447, dn3: -43.002, dn4: 20.392 },
+    { rn: -0.4107, dn0: 243.1130809, dn1: 782537.0721607, dn2: -27.993, dn3: 3.541, dn4: -1.769 },
+    { rn: 0.3785, dn0: 207.777027, dn1: 13996648467794e-7, dn2: 163.64, dn3: 30.527, dn4: -14.479 },
+    { rn: 0.3551, dn0: 42.4193433, dn1: 14675956531849e-7, dn2: 268.375, dn3: 43.083, dn4: -20.392 },
+    { rn: 0.343, dn0: 330.7153673, dn1: -135861.6128111, dn2: -209.469, dn3: -25.113, dn4: 11.826 },
+    { rn: 0.3346, dn0: 49.1098964, dn1: 525204.2177142, dn2: -159.564, dn3: -14.874, dn4: 7.029 },
+    { rn: 0.3323, dn0: 25.4524906, dn1: -473131.573455, dn2: -197.777, dn3: -26.822, dn4: 12.71 },
+    { rn: 0.3233, dn0: 276.6636892, dn1: -589067.7299434, dn2: -52.977, dn3: -10.157, dn4: 4.797 },
+    { rn: -0.3218, dn0: 149.8932068, dn1: 337465.5433811, dn2: -87.113, dn3: -6.453, dn4: 3.028 },
+    { rn: -0.2866, dn0: 212.1378138, dn1: 21944038014692e-7, dn2: -187.772, dn3: -3.356, dn4: 1.491 },
+    { rn: 0.284, dn0: 319.0830325, dn1: 878527.9232416, dn2: 215.398, dn3: 32.926, dn4: -15.595 },
+    { rn: -0.279, dn0: 341.3791871, dn1: 12318714778538e-7, dn2: -152.1, dn3: -7.101, dn4: 3.259 },
+    { rn: 0.2556, dn0: 41.058092, dn1: 822603.416628, dn2: -137.335, dn3: -8.893, dn4: 4.144 },
+    { rn: -0.2481, dn0: 305.9483219, dn1: -453206.1171323, dn2: 156.493, dn3: 14.956, dn4: -7.029 },
+    { rn: 0.2445, dn0: 108.929926, dn1: 18170674963579e-7, dn2: -66.737, dn3: 7.369, dn4: -3.538 },
+    { rn: 0.237, dn0: 199.0031032, dn1: 862669.7610953, dn2: -246.678, dn3: -21.326, dn4: 10.057 },
+    { rn: -0.2126, dn0: 36.1163104, dn1: 894601.5172099, dn2: -140.407, dn3: -8.811, dn4: 4.144 },
+    { rn: 0.2125, dn0: 143.1563403, dn1: 18809310085871e-7, dn2: 145.804, dn3: 32.4, dn4: -15.363 },
+    { rn: 0.2094, dn0: 186.590512, dn1: 365330.0053193, dn2: 126.964, dn3: 18.538, dn4: -8.798 },
+    { rn: -0.2029, dn0: 248.835119, dn1: 22222682634074e-7, dn2: 26.305, dn3: 21.634, dn4: -10.335 },
+    { rn: 0.201, dn0: 347.006414, dn1: 369397.2994956, dn2: 19.158, dn3: 6.063, dn4: -2.885 },
+    { rn: -0.1857, dn0: 170.9849105, dn1: -930404.9847637, dn2: 66.523, dn3: 0.608, dn4: -0.232 },
+    { rn: -0.1832, dn0: 302.2109911, dn1: 12400060662065e-7, dn2: -367.713, dn3: -32.051, dn4: 15.085 },
+    { rn: 0.1686, dn0: 188.3392834, dn1: -505063.3295696, dn2: -304.047, dn3: -39.338, dn4: 18.623 },
+    { rn: -0.158, dn0: 184.0733078, dn1: 10024030853456e-7, dn2: -69.594, dn3: -0.526, dn4: 0.232 },
+    { rn: -0.1571, dn0: 176.0215034, dn1: 12998022842593e-7, dn2: -47.365, dn3: 5.455, dn4: -2.653 },
+    { rn: -0.1481, dn0: 108.1496695, dn1: 305338.2045293, dn2: -117.963, dn3: -10.806, dn4: 5.028 },
+    { rn: 0.1476, dn0: 230.7586268, dn1: 962532.3236154, dn2: -35.672, dn3: 3.746, dn4: -1.769 },
+    { rn: 0.1437, dn0: 323.3026948, dn1: -27864.4619382, dn2: -214.077, dn3: -24.99, dn4: 11.826 },
+    { rn: -0.1392, dn0: 21.3276396, dn1: 27354661813297e-7, dn2: 114.739, dn3: 36.023, dn4: -17.132 },
+    { rn: -0.1362, dn0: 85.1313956, dn1: -882399.6346808, dn2: -183.012, dn3: -28.613, dn4: 13.594 },
+    { rn: -0.1357, dn0: 46.6853189, dn1: -39870.7617302, dn2: 33.922, dn3: 4.272, dn4: -2.001 },
+    { rn: -0.1281, dn0: 116.3425984, dn1: 17090703454851e-7, dn2: -62.129, dn3: 7.246, dn4: -3.538 },
+    { rn: 0.1141, dn0: 165.3576836, dn1: -67930.8064055, dn2: -104.735, dn3: -12.556, dn4: 5.913 },
+    { rn: 0.11, dn0: 75.2845064, dn1: 886466.9288571, dn2: 75.206, dn3: 16.139, dn4: -7.682 },
+    { rn: -0.1089, dn0: 320.831804, dn1: 8134.5883527, dn2: -215.613, dn3: -24.949, dn4: 11.826 },
+    { rn: -0.1083, dn0: 206.4157757, dn1: 754672.6102224, dn2: -242.07, dn3: -21.449, dn4: 10.057 },
+    { rn: -0.1077, dn0: 171.0797218, dn1: 13718003848412e-7, dn2: -50.437, dn3: 5.537, dn4: -2.653 },
+    { rn: -0.1033, dn0: 321.50761, dn1: 14436029026859e-7, dn2: 21.912, dn3: 13.78, dn4: -6.566 },
+    { rn: -0.0994, dn0: 252.9599701, dn1: -986329.4913773, dn2: -286.211, dn3: -41.211, dn4: 19.507 },
+    { rn: -0.0859, dn0: 347.1012252, dn1: 26716026691005e-7, dn2: -97.802, dn3: 10.992, dn4: -5.307 },
+    { rn: -0.0798, dn0: 14.9297954, dn1: -139733.3242503, dn2: -177.083, dn3: -20.8, dn4: 9.825 },
+    { rn: -0.0668, dn0: 79.6452933, dn1: 16812058835469e-7, dn2: -276.206, dn3: -17.744, dn4: 8.288 },
+    { rn: -0.0654, dn0: 308.514024, dn1: 18130002021816e-7, dn2: 41.069, dn3: 19.843, dn4: -9.451 },
+    { rn: 0.0606, dn0: 246.2694169, dn1: -43938.0559065, dn2: 141.728, dn3: 16.747, dn4: -7.913 },
+    { rn: -0.059, dn0: 205.3061361, dn1: 14356638970704e-7, dn2: 162.104, dn3: 30.568, dn4: -14.479 },
+    { rn: -0.0589, dn0: 314.8170569, dn1: 23859943381567e-7, dn2: 449.851, dn3: 71.738, dn4: -33.986 },
+    { rn: -0.0585, dn0: 283.0615334, dn1: 22861317756366e-7, dn2: 238.846, dn3: 46.666, dn4: -22.161 },
+    { rn: -0.0579, dn0: 287.327509, dn1: 778665.3607214, dn2: 4.393, dn3: 7.854, dn4: -3.769 },
+    { rn: -0.0553, dn0: 181.6487303, dn1: 437328.1059012, dn2: 123.892, dn3: 18.619, dn4: -8.798 },
+    { rn: 0.0529, dn0: 266.0946807, dn1: 345404.5489966, dn2: -227.306, dn3: -23.24, dn4: 10.941 },
+    { rn: -0.0519, dn0: 214.6087046, dn1: 21584047511782e-7, dn2: -186.236, dn3: -3.397, dn4: 1.491 },
+    { rn: 0.0507, dn0: 264.9850411, dn1: 10263958358446e-7, dn2: 176.869, dn3: 28.777, dn4: -13.594 },
+    { rn: -0.0502, dn0: 274.1464851, dn1: 48005.3500829, dn2: -249.535, dn3: -29.221, dn4: 13.826 },
+    { rn: -0.0484, dn0: 128.6603785, dn1: -95795.2683438, dn2: -318.812, dn3: -37.547, dn4: 17.738 },
+    { rn: 0.0474, dn0: 280.8833515, dn1: -14954601151232e-7, dn2: -482.452, dn3: -68.074, dn4: 32.217 },
+    { rn: -0.0474, dn0: 271.7219076, dn1: -517069.6293615, dn2: -56.048, dn3: -10.076, dn4: 4.797 },
+    { rn: -0.0461, dn0: 150.5690128, dn1: 17729338577143e-7, dn2: 150.412, dn3: 32.277, dn4: -15.363 },
+    { rn: 0.0459, dn0: 139.3241982, dn1: 12719378223211e-7, dn2: -261.442, dn3: -19.535, dn4: 9.172 },
+    { rn: -0.0442, dn0: 55.5540539, dn1: 27993296935588e-7, dn2: 327.281, dn3: 61.054, dn4: -28.958 },
+    { rn: -0.0432, dn0: 68.9814735, dn1: 313472.7928821, dn2: -333.576, dn3: -35.756, dn4: 16.854 },
+    { rn: -0.0423, dn0: 336.3425942, dn1: -998335.7911692, dn2: -38.212, dn3: -11.948, dn4: 5.681 },
+    { rn: -0.0389, dn0: 217.6239162, dn1: -369201.7167585, dn2: -94.578, dn3: -14.225, dn4: 6.797 },
+    { rn: 0.0381, dn0: 261.152899, dn1: 417402.6495785, dn2: -230.377, dn3: -23.158, dn4: 10.941 },
+    { rn: 0.0373, dn0: 289.7520865, dn1: 13437403401658e-7, dn2: -189.093, dn3: -11.292, dn4: 5.26 },
+    { rn: 0.0373, dn0: 292.9084226, dn1: 517265.2120986, dn2: -19.372, dn3: 1.914, dn4: -0.884 },
+    { rn: 0.0368, dn0: 243.8933374, dn1: 22942663639893e-7, dn2: 23.233, dn3: 21.716, dn4: -10.335 },
+    { rn: 0.0338, dn0: 108.8351147, dn1: -485137.8732469, dn2: 50.222, dn3: 2.44, dn4: -1.116 },
+    { rn: 0.0327, dn0: 80.9117333, dn1: 23992.750499, dn2: 246.463, dn3: 29.303, dn4: -13.826 },
+    { rn: 0.0314, dn0: 62.244607, dn1: 18569382580881e-7, dn2: -100.659, dn3: 3.097, dn4: -1.537 },
+    { rn: 0.0302, dn0: 154.7886751, dn1: 866541.4725345, dn2: -279.064, dn3: -25.639, dn4: 12.057 },
+    { rn: -0.0295, dn0: 302.7919858, dn1: 373269.0109349, dn2: -13.229, dn3: 1.75, dn4: -0.884 },
+    { rn: -0.0294, dn0: 291.5471713, dn1: -127727.0244583, dn2: -425.082, dn3: -50.062, dn4: 23.651 },
+    { rn: 0.0291, dn0: 4.2659756, dn1: -15074664149151e-7, dn2: -234.453, dn3: -38.811, dn4: 18.391 },
+    { rn: -0.0286, dn0: 18.0764922, dn1: 1259735939792e-6, dn2: 61.977, dn3: 17.889, dn4: -8.566 },
+    { rn: 0.0284, dn0: 54.0979914, dn1: -147867.912603, dn2: 38.529, dn3: 4.149, dn4: -2.001 },
+    { rn: -0.027, dn0: 152.3640976, dn1: 301466.4930901, dn2: -85.577, dn3: -6.493, dn4: 3.028 },
+    { rn: -0.0267, dn0: 177.6754637, dn1: -18727964202344e-7, dn2: -361.417, dn3: -57.349, dn4: 27.189 },
+    { rn: 0.0266, dn0: 196.5322124, dn1: 898668.8113862, dn2: -248.213, dn3: -21.286, dn4: 10.057 },
+    { rn: -0.0247, dn0: 349.4309915, dn1: 934472.27894, dn2: -174.329, dn3: -13.083, dn4: 6.144 },
+    { rn: -0.0244, dn0: 304.6818819, dn1: 12040070159156e-7, dn2: -366.177, dn3: -32.092, dn4: 15.085 },
+    { rn: -0.024, dn0: 64.0396919, dn1: 385470.8934639, dn2: -336.648, dn3: -35.674, dn4: 16.854 },
+    { rn: 0.0237, dn0: 342.7404383, dn1: 18768637144108e-7, dn2: 253.611, dn3: 44.874, dn4: -21.276 },
+    { rn: 0.0233, dn0: 58.3176537, dn1: -10542602977828e-7, dn2: -390.946, dn3: -53.767, dn4: 25.42 },
+    { rn: 0.023, dn0: 177.3827547, dn1: 19447945208163e-7, dn2: 358.345, dn3: 57.431, dn4: -27.189 },
+    { rn: 0.0213, dn0: 352.5873276, dn1: 107997.1508728, dn2: -4.608, dn3: 0.123, dn4: 0 },
+    { rn: -0.0208, dn0: 23.7985304, dn1: 26994671310387e-7, dn2: 116.275, dn3: 35.982, dn4: -17.132 },
+    { rn: -0.0201, dn0: 17.3543729, dn1: 425341.6551941, dn2: -370.57, dn3: -39.946, dn4: 18.854 }
+  ];
+  var Sr1 = [
+    { rn: 1.0587, dn0: 233.0866, dn1: 479264.2898 },
+    { rn: 0.7278, dn0: 344.7895, dn1: -477067.0188 },
+    { rn: -0.6826, dn0: 254.719, dn1: 477330.7165 },
+    { rn: 0.5983, dn0: 345.2589, dn1: 480890.6839 },
+    { rn: -0.4565, dn0: 260.0092, dn1: 475264.7314 },
+    { rn: 0.4528, dn0: 350.0824, dn1: -479133.0038 },
+    { rn: -0.4101, dn0: 208.6847, dn1: 476229.3841 },
+    { rn: 0.205, dn0: 192.2132, dn1: -857569.7559 },
+    { rn: 0.2047, dn0: 244.0516, dn1: -890402.3742 },
+    { rn: -0.2037, dn0: 355.4532, dn1: 890666.0719 },
+    { rn: 0.1664, dn0: 287.6902, dn1: -845497.3374 },
+    { rn: -0.1578, dn0: 241.4058, dn1: 477178.6814 },
+    { rn: 0.1578, dn0: 331.4791, dn1: -477219.0538 },
+    { rn: 0.1575, dn0: 327.1237, dn1: -380370.8882 },
+    { rn: 0.1445, dn0: 357.2452, dn1: -411269.9333 },
+    { rn: -0.1381, dn0: 306.5599, dn1: -454680.4248 },
+    { rn: 0.1348, dn0: 19.0126, dn1: -413203.5065 },
+    { rn: -0.1267, dn0: 220.4892, dn1: 413467.2043 },
+    { rn: 0.1267, dn0: 292.3791, dn1: -444234.4005 },
+    { rn: -0.1236, dn0: 205.7982, dn1: -868015.7802 },
+    { rn: -0.1205, dn0: 263.7606, dn1: 458372.241 },
+    { rn: 0.12, dn0: 216.4928, dn1: 499717.3105 },
+    { rn: 0.1162, dn0: 62.6005, dn1: -368298.4698 },
+    { rn: -0.1126, dn0: 209.3053, dn1: 413315.1692 },
+    { rn: 0.1125, dn0: 7.8297, dn1: -413355.5416 },
+    { rn: -0.1123, dn0: 343.8467, dn1: 890514.0368 },
+    { rn: 0.1122, dn0: 232.4426, dn1: -890554.4092 },
+    { rn: -0.1069, dn0: 0.7459, dn1: 888600.0868 },
+    { rn: -0.105, dn0: 202.1456, dn1: 510163.3348 },
+    { rn: -0.105, dn0: 257.4688, dn1: -824605.2887 },
+    { rn: -0.1006, dn0: 340.7609, dn1: -390816.9126 },
+    { rn: 0.0993, dn0: 109.682, dn1: -409643.5392 },
+    { rn: 0.0955, dn0: 249.3451, dn1: -892468.3592 },
+    { rn: -0.0851, dn0: 176.626, dn1: 487271.0312 },
+    { rn: 0.0795, dn0: 66.7826, dn1: 503409.1267 },
+    { rn: -0.0773, dn0: 333.0802, dn1: -414304.8389 },
+    { rn: 0.0705, dn0: 16.1051, dn1: 476447.2666 },
+    { rn: -0.0631, dn0: 299.8407, dn1: 477158.11 },
+    { rn: 0.0631, dn0: 29.9119, dn1: -477239.6253 },
+    { rn: 0.0621, dn0: 4.6741, dn1: 478231.5787 },
+    { rn: -0.0609, dn0: 98.1213, dn1: 2065.4221 },
+    { rn: -0.0608, dn0: 32.3536, dn1: -347406.421 },
+    { rn: -0.0601, dn0: 352.2127, dn1: 476823.0671 },
+    { rn: -0.059, dn0: 198.0307, dn1: 474917.6418 },
+    { rn: 0.0586, dn0: 287.9045, dn1: -479480.0934 },
+    { rn: 0.0577, dn0: 355.1425, dn1: 475263.3345 },
+    { rn: 0.0572, dn0: 332.9419, dn1: -856816.076 },
+    { rn: -0.057, dn0: 85.2157, dn1: -479134.4008 },
+    { rn: -0.0551, dn0: 16.3088, dn1: -468161.3548 },
+    { rn: -0.0534, dn0: 225.782, dn1: 411401.2192 },
+    { rn: 0.0525, dn0: 98.2942, dn1: -881496.7102 },
+    { rn: 0.0516, dn0: 286.0818, dn1: 486236.3804 },
+    { rn: -0.0504, dn0: 100.8011, dn1: 413335.3554 },
+    { rn: -0.0492, dn0: 298.133, dn1: 522235.7533 },
+    { rn: 0.0492, dn0: 28.455, dn1: -432161.982 },
+    { rn: 0.0488, dn0: 233.4132, dn1: -404297.8426 },
+    { rn: 0.0461, dn0: 293.4551, dn1: -410300.4497 },
+    { rn: 0.0456, dn0: 178.9132, dn1: -858978.2674 },
+    { rn: 0.044, dn0: 108.2005, dn1: -379617.2084 },
+    { rn: -0.0437, dn0: 167.4024, dn1: 446299.8226 },
+    { rn: 0.0435, dn0: 8.056, dn1: 956463.1574 },
+    { rn: 0.0432, dn0: 102.0889, dn1: -860604.6615 },
+    { rn: -0.0428, dn0: 131.1841, dn1: 416370.2611 },
+    { rn: -0.0428, dn0: 67.3412, dn1: 32964.4672 },
+    { rn: -0.0427, dn0: 38.6974, dn1: 935571.1087 },
+    { rn: 0.0411, dn0: 153.9518, dn1: -887499.3174 },
+    { rn: 0.0397, dn0: 242.2038, dn1: 478490.4237 },
+    { rn: 0.0397, dn0: 209.8262, dn1: -954265.8864 },
+    { rn: -0.0388, dn0: 302.2798, dn1: 923498.6902 },
+    { rn: 0.0386, dn0: 24.3078, dn1: -415269.4916 },
+    { rn: 0.0376, dn0: 148.3721, dn1: 525927.5695 },
+    { rn: -0.0374, dn0: 102.8999, dn1: 480233.7733 },
+    { rn: 0.0374, dn0: 81.5574, dn1: 22518.4428 },
+    { rn: 0.0373, dn0: 74.6382, dn1: -443480.7206 },
+    { rn: -0.0372, dn0: 29.6822, dn1: 954529.5841 },
+    { rn: 0.0372, dn0: 194.3603, dn1: -474163.962 },
+    { rn: -0.0358, dn0: 68.2525, dn1: -477048.1893 },
+    { rn: 0.0357, dn0: 338.1715, dn1: 477349.5459 },
+    { rn: -0.0354, dn0: 256.2067, dn1: 893569.1287 },
+    { rn: 0.0349, dn0: 313.9481, dn1: -381779.3998 },
+    { rn: 0.0349, dn0: 280.3017, dn1: -445642.912 },
+    { rn: -0.0345, dn0: 210.3094, dn1: 3691.8162 },
+    { rn: 0.0343, dn0: 237.0396, dn1: -383405.7939 },
+    { rn: 0.0335, dn0: 197.8798, dn1: -447269.3061 },
+    { rn: 0.0328, dn0: 267.5876, dn1: 543127.802 },
+    { rn: -0.0313, dn0: 107.1223, dn1: -413184.6771 },
+    { rn: -0.0312, dn0: 305.5552, dn1: 888252.9972 },
+    { rn: -0.0312, dn0: 345.1736, dn1: 510917.0147 },
+    { rn: 0.031, dn0: 308.5586, dn1: 413486.0337 },
+    { rn: -0.0305, dn0: 322.4131, dn1: 476209.1979 },
+    { rn: -0.0301, dn0: 331.4188, dn1: -890383.5447 },
+    { rn: 0.0298, dn0: 82.6856, dn1: 890684.9013 },
+    { rn: -0.0287, dn0: 51.4328, dn1: 477180.0382 },
+    { rn: 0.0286, dn0: 192.1168, dn1: -892815.4488 },
+    { rn: 0.0285, dn0: 141.5781, dn1: -477217.6971 },
+    { rn: -0.0284, dn0: 172.3154, dn1: 411054.1296 },
+    { rn: -0.0283, dn0: 74.3152, dn1: 422372.8682 },
+    { rn: 0.0281, dn0: 125.0446, dn1: -1934.1362 },
+    { rn: -0.0278, dn0: 190.1819, dn1: 508754.8232 },
+    { rn: -0.0276, dn0: 108.1767, dn1: 507128.4291 },
+    { rn: 0.0275, dn0: 317.223, dn1: 913052.6659 },
+    { rn: 0.027, dn0: 28.2595, dn1: 899571.7358 },
+    { rn: 0.0267, dn0: 237.7031, dn1: 467409.7538 },
+    { rn: -0.0261, dn0: 163.2605, dn1: 45036.8856 },
+    { rn: 0.0259, dn0: 329.7457, dn1: -415616.5812 },
+    { rn: -0.0249, dn0: 34.9726, dn1: 952463.5991 },
+    { rn: 0.0247, dn0: 215.119, dn1: -956331.8714 },
+    { rn: -0.0246, dn0: 343.9612, dn1: 953428.2517 },
+    { rn: 0.0234, dn0: 73.7487, dn1: -969.4835 },
+    { rn: -0.0221, dn0: 232.3556, dn1: -827640.1943 },
+    { rn: 0.022, dn0: 229.8589, dn1: 548446.0123 },
+    { rn: 0.0214, dn0: 292.9869, dn1: 512228.7569 },
+    { rn: -0.0211, dn0: 319.7423, dn1: 489928.1967 },
+    { rn: -0.0201, dn0: 15.3412, dn1: -821570.383 }
+  ];
+  var Sr2 = [
+    { rn: 0.514, dn0: 238.171, dn1: 854535.173 },
+    { rn: 0.3825, dn0: 103.208, dn1: 377336.305 },
+    { rn: 0.3265, dn0: 222.566, dn1: -441199.817 },
+    { rn: -0.264, dn0: 132.493, dn1: 513197.918 },
+    { rn: -0.123, dn0: 357.529, dn1: 35999.05 },
+    { rn: -0.0775, dn0: 233.23, dn1: 926533.273 },
+    { rn: -0.0607, dn0: 98.266, dn1: 449334.406 },
+    { rn: 0.0497, dn0: 240.642, dn1: 818536.122 },
+    { rn: 0.0419, dn0: 295.379, dn1: 481266.162 },
+    { rn: 0.0322, dn0: 13.135, dn1: 133173404e-2 },
+    { rn: -0.0253, dn0: 328.244, dn1: -99862.563 },
+    { rn: 0.0249, dn0: 105.679, dn1: 341337.255 },
+    { rn: 0.0176, dn0: 87.602, dn1: -918398.685 },
+    { rn: -0.0145, dn0: 267.456, dn1: 990396.786 },
+    { rn: -0.0136, dn0: 237.517, dn1: 890534.223 },
+    { rn: -0.013, dn0: 252.8, dn1: -477067.019 },
+    { rn: 0.0123, dn0: 162.968, dn1: 477330.716 },
+    { rn: -0.0119, dn0: 95.795, dn1: 485333.456 },
+    { rn: 0.0107, dn0: 220.095, dn1: -405200.767 },
+    { rn: 99e-4, dn0: 338.908, dn1: 1267870528e-3 },
+    { rn: -66e-4, dn0: 8.193, dn1: 1403732141e-3 },
+    { rn: -63e-4, dn0: 100.737, dn1: 413335.355 },
+    { rn: -59e-4, dn0: 130.022, dn1: 549196.968 },
+    { rn: -54e-4, dn0: 355.058, dn1: 71998.101 },
+    { rn: 48e-4, dn0: 203.945, dn1: 790671.661 },
+    { rn: 39e-4, dn0: 113.872, dn1: 1745069396e-3 },
+    { rn: 36e-4, dn0: 263.476, dn1: 890666.072 },
+    { rn: -36e-4, dn0: 152.075, dn1: -890402.374 },
+    { rn: 33e-4, dn0: 15.606, dn1: 129573499e-2 },
+    { rn: 31e-4, dn0: 243.113, dn1: 782537.072 },
+    { rn: -25e-4, dn0: 134.963, dn1: 477198.868 },
+    { rn: -24e-4, dn0: 287.062, dn1: -413203.507 },
+    { rn: 24e-4, dn0: 70.343, dn1: 958465.029 },
+    { rn: 23e-4, dn0: 128.524, dn1: 413467.204 },
+    { rn: -23e-4, dn0: 257.953, dn1: 476229.384 },
+    { rn: -21e-4, dn0: 160.416, dn1: 4067.294 },
+    { rn: 21e-4, dn0: 148.098, dn1: 1808932908e-3 },
+    { rn: -18e-4, dn0: 317.715, dn1: 477178.681 },
+    { rn: 18e-4, dn0: 47.788, dn1: -477219.054 },
+    { rn: -17e-4, dn0: 330.715, dn1: -135861.613 },
+    { rn: -17e-4, dn0: 51.627, dn1: -111868.862 },
+    { rn: -15e-4, dn0: 333.967, dn1: 1339868629e-3 },
+    { rn: 14e-4, dn0: 341.379, dn1: 1231871478e-3 },
+    { rn: 13e-4, dn0: 307.724, dn1: -890554.409 },
+    { rn: -13e-4, dn0: 59.126, dn1: 890514.037 },
+    { rn: -13e-4, dn0: 284.325, dn1: 413315.169 },
+    { rn: 13e-4, dn0: 82.849, dn1: -413355.542 },
+    { rn: -13e-4, dn0: 300.321, dn1: 409268.061 },
+    { rn: -13e-4, dn0: 193.281, dn1: -577061.43 },
+    { rn: -12e-4, dn0: 32.361, dn1: 477158.11 },
+    { rn: 12e-4, dn0: 122.434, dn1: -477239.625 },
+    { rn: -11e-4, dn0: 10.664, dn1: 1367733091e-3 },
+    { rn: 11e-4, dn0: 108.15, dn1: 305338.205 },
+    { rn: 11e-4, dn0: 312.639, dn1: -1395597553e-3 },
+    { rn: -9e-4, dn0: 42.419, dn1: 1467595653e-3 },
+    { rn: -8e-4, dn0: 25.452, dn1: -473131.573 },
+    { rn: -8e-4, dn0: 49.11, dn1: 525204.218 },
+    { rn: -8e-4, dn0: 276.664, dn1: -589067.73 },
+    { rn: -7e-4, dn0: 230.759, dn1: 962532.324 },
+    { rn: 7e-4, dn0: 228.081, dn1: -477217.697 },
+    { rn: -7e-4, dn0: 117.737, dn1: -954265.886 },
+    { rn: 7e-4, dn0: 85.131, dn1: -882399.635 },
+    { rn: 7e-4, dn0: 297.821, dn1: 954529.584 },
+    { rn: 6e-4, dn0: 116.343, dn1: 1709070345e-3 },
+    { rn: -6e-4, dn0: 41.058, dn1: 822603.417 },
+    { rn: 6e-4, dn0: 305.948, dn1: -453206.117 },
+    { rn: -6e-4, dn0: 108.93, dn1: 1817067496e-3 },
+    { rn: -6e-4, dn0: 199.003, dn1: 862669.761 }
+  ];
+  var Sr3 = [
+    { rn: 14.9, dn0: 238.2, dn1: 854535.2 },
+    { rn: 11.1, dn0: 103.2, dn1: 377336.3 },
+    { rn: 9.5, dn0: 222.6, dn1: -441199.8 },
+    { rn: -7.7, dn0: 132.5, dn1: 513197.9 },
+    { rn: -3.6, dn0: 357.5, dn1: 35999.1 },
+    { rn: -2.3, dn0: 233.2, dn1: 926533.3 },
+    { rn: -1.8, dn0: 98.3, dn1: 449334.4 },
+    { rn: 1.4, dn0: 240.6, dn1: 818536.1 },
+    { rn: 1.2, dn0: 295.4, dn1: 481266.2 },
+    { rn: 0.9, dn0: 13.1, dn1: 1331734 },
+    { rn: -0.7, dn0: 328.2, dn1: -99862.6 },
+    { rn: 0.7, dn0: 105.7, dn1: 341337.3 },
+    { rn: 0.5, dn0: 87.6, dn1: -918398.7 },
+    { rn: -0.4, dn0: 235.7, dn1: 890534.2 },
+    { rn: -0.4, dn0: 267.5, dn1: 990396.8 },
+    { rn: 0.3, dn0: 338.9, dn1: 12678705e-1 },
+    { rn: -0.3, dn0: 95.8, dn1: 485333.5 },
+    { rn: 0.3, dn0: 220.1, dn1: -405200.8 },
+    { rn: -0.2, dn0: 8.2, dn1: 14037321e-1 }
+  ];
+  var NutationData = [
+    { psin: -477767e-8, psi1n: -484e-8, obn: 255625e-8, ob1n: 25e-8, mu0n: 125.0446, mu1n: -1934.1362, mu2n: 21e-4 },
+    { psin: -36631e-8, psi1n: 0, obn: 15933e-8, ob1n: -9e-8, mu0n: 200.9329, mu1n: 72001.5397, mu2n: 6e-4 },
+    { psin: -6317e-8, psi1n: 0, obn: 2714e-8, ob1n: 0, mu0n: 76.6333, mu1n: 962535.7627, mu2n: -27e-4 },
+    { psin: 5728e-8, psi1n: 0, obn: -2486e-8, ob1n: 0, mu0n: 250.0891, mu1n: -3868.2724, mu2n: 42e-4 },
+    { psin: 3961e-8, psi1n: -9e-8, obn: 0, ob1n: 0, mu0n: 357.5291, mu1n: 35999.0503, mu2n: -2e-4 },
+    { psin: 1978e-8, psi1n: 0, obn: 0, ob1n: 0, mu0n: 134.9634, mu1n: 477198.8676, mu2n: 9e-3 },
+    { psin: -1436e-8, psi1n: 0, obn: 622e-8, ob1n: 0, mu0n: 195.9911, mu1n: 143999.6402, mu2n: 3e-4 },
+    { psin: -1072e-8, psi1n: 0, obn: 556e-8, ob1n: 0, mu0n: 311.5888, mu1n: 964469.8989, mu2n: -47e-4 },
+    { psin: -836e-8, psi1n: 0, obn: 358e-8, ob1n: 0, mu0n: 211.5967, mu1n: 14397346303e-4, mu2n: 63e-4 },
+    { psin: 603e-8, psi1n: 0, obn: 0, ob1n: 0, mu0n: 203.4038, mu1n: 36002.4894, mu2n: 8e-4 },
+    { psin: -439e-8, psi1n: 0, obn: 0, ob1n: 0, mu0n: 259.263, mu1n: -413335.3554, mu2n: 0.0123 },
+    { psin: 358e-8, psi1n: 0, obn: 0, ob1n: 0, mu0n: 75.8883, mu1n: 73935.6758, mu2n: -15e-4 },
+    { psin: 342e-8, psi1n: 0, obn: 0, ob1n: 0, mu0n: 301.6699, mu1n: 485336.8951, mu2n: -0.0117 }
+  ];
+  var Nv = [29, 59, 218];
+  var N1v = [1, 3, 244];
+  var N2v = [6, 16, 154];
+  var N3v = [1, 5, 25];
+  var Nu = [14, 45, 188];
+  var N1u = [0, 2, 64];
+  var N2u = [0, 6, 64];
+  var N3u = [0, 0, 12];
+  var Nr = [18, 40, 154];
+  var N1r = [0, 0, 114];
+  var N2r = [3, 9, 68];
+  var N3r = [0, 4, 19];
+  var NNut = [1, 2, 13];
+
+  // src/astronomy/wb-moon.ts
+  function lunarLongitudeForTDT(t, p, cache) {
+    const slotIndex = 49 /* LunarLongitudeLow */ + p;
+    if (cache && cache.isValid(slotIndex)) {
+      return cache.get(slotIndex);
+    }
+    const t2 = t * t;
+    const t3 = t * t2;
+    const t4 = t2 * t2;
+    let SV = 0;
+    const nvEnd = Nv[p];
+    for (let i = 0; i < nvEnd; i++) {
+      const d = Sv[i];
+      const sinArg = d.an0 + d.an1 * t + d.an2 * t2 * 1e-4 + d.an3 * t3 * 1e-6 + d.an4 * t4 * 1e-8;
+      SV += d.vn * Math.sin(Math.PI / 180 * sinArg);
+    }
+    let SV1 = 0;
+    const n1vEnd = N1v[p];
+    for (let i = 0; i < n1vEnd; i++) {
+      const d = Sv1[i];
+      SV1 += d.vn * Math.sin(Math.PI / 180 * (d.an0 + d.an1 * t));
+    }
+    let SV2 = 0;
+    const n2vEnd = N2v[p];
+    for (let i = 0; i < n2vEnd; i++) {
+      const d = Sv2[i];
+      SV2 += d.vn * Math.sin(Math.PI / 180 * (d.an0 + d.an1 * t));
+    }
+    let SV3 = 0;
+    const n3vEnd = N3v[p];
+    for (let i = 0; i < n3vEnd; i++) {
+      const d = Sv3[i];
+      SV3 += d.vn * Math.sin(Math.PI / 180 * (d.an0 + d.an1 * t));
+    }
+    let V = 218.31665436 + 481267.8813424 * t - 13268e-7 * t2 + 1856e-9 * t3 - 1534e-11 * t4 + SV + 1e-3 * (SV1 + t * SV2 + t2 * 1e-4 * SV3);
+    V = fmod(V, 360);
+    if (cache) cache.set(slotIndex, V);
+    return V;
+  }
+  function lunarLatitudeForTDT(t, p, cache) {
+    const slotIndex = 52 /* LunarLatitudeLow */ + p;
+    if (cache && cache.isValid(slotIndex)) {
+      return cache.get(slotIndex);
+    }
+    const t2 = t * t;
+    const t3 = t * t2;
+    const t4 = t2 * t2;
+    let SU = 0;
+    const nuEnd = Nu[p];
+    for (let i = 0; i < nuEnd; i++) {
+      const d = Su[i];
+      const sinArg = d.bn0 + d.bn1 * t + d.bn2 * t2 * 1e-4 + d.bn3 * t3 * 1e-6 + d.bn4 * t4 * 1e-8;
+      SU += d.un * Math.sin(Math.PI / 180 * sinArg);
+    }
+    let SU1 = 0;
+    for (let i = 0; i < N1u[p]; i++) {
+      const d = Su1[i];
+      SU1 += d.un * Math.sin(Math.PI / 180 * (d.bn0 + d.bn1 * t));
+    }
+    let SU2 = 0;
+    for (let i = 0; i < N2u[p]; i++) {
+      const d = Su2[i];
+      SU2 += d.un * Math.sin(Math.PI / 180 * (d.bn0 + d.bn1 * t));
+    }
+    let SU3 = 0;
+    for (let i = 0; i < N3u[p]; i++) {
+      const d = Su3[i];
+      SU3 += d.un * Math.sin(Math.PI / 180 * (d.bn0 + d.bn1 * t));
+    }
+    let U = SU + 1e-3 * (SU1 + t * SU2 + t2 * 1e-4 * SU3);
+    U = fmod(U, 360);
+    if (U > 180) U -= 360;
+    if (cache) cache.set(slotIndex, U);
+    return U;
+  }
+  function lunarDistanceForTDT(t, p, cache) {
+    const slotIndex = 55 /* LunarDistanceLow */ + p;
+    if (cache && cache.isValid(slotIndex)) {
+      return cache.get(slotIndex);
+    }
+    const t2 = t * t;
+    const t3 = t * t2;
+    const t4 = t2 * t2;
+    let SR = 0;
+    for (let i = 0; i < Nr[p]; i++) {
+      const d = Sr[i];
+      const cosArg = d.dn0 + d.dn1 * t + d.dn2 * t2 * 1e-4 + d.dn3 * t3 * 1e-6 + d.dn4 * t4 * 1e-8;
+      SR += d.rn * Math.cos(Math.PI / 180 * cosArg);
+    }
+    let SR1 = 0;
+    for (let i = 0; i < N1r[p]; i++) {
+      const d = Sr1[i];
+      SR1 += d.rn * Math.cos(Math.PI / 180 * (d.dn0 + d.dn1 * t));
+    }
+    let SR2 = 0;
+    for (let i = 0; i < N2r[p]; i++) {
+      const d = Sr2[i];
+      SR2 += d.rn * Math.cos(Math.PI / 180 * (d.dn0 + d.dn1 * t));
+    }
+    let SR3 = 0;
+    for (let i = 0; i < N3r[p]; i++) {
+      const d = Sr3[i];
+      SR3 += d.rn * Math.cos(Math.PI / 180 * (d.dn0 + d.dn1 * t));
+    }
+    const R = 385000.57 + SR + SR1 + t * SR2 + t2 * 1e-4 * SR3;
+    if (cache) cache.set(slotIndex, R);
+    return R;
+  }
+  function lunarAberrationV(t) {
+    return Math.PI / 180 * (-19524e-8 - 1059e-8 * Math.sin((225 + 477198.9 * t) * Math.PI / 180));
+  }
+  function lunarAberrationU(t) {
+    return Math.PI / 180 * (-1754e-8 * Math.sin((183.3 + 483202 * t) * Math.PI / 180));
+  }
+  function lunarAberrationR(t) {
+    return Math.PI / 180 * (0.0708 * Math.cos((225 + 477198.9 * t) * Math.PI / 180));
+  }
+  function meanObliquityFromTDT(t) {
+    const t2 = t * t;
+    const t3 = t * t2;
+    const t4 = t2 * t2;
+    return Math.PI / 180 * (23.43928 - 0.013 * t + 555e-9 * t3 - 14e-11 * t4);
+  }
+  function nutations(t) {
+    let longNut = 0;
+    let obliqueNut = 0;
+    const iterations = NNut[2 /* Full */];
+    const t2 = t * t;
+    for (let i = 0; i < iterations; i++) {
+      const d = NutationData[i];
+      const arg = (d.mu0n + d.mu1n * t + d.mu2n * t2) * Math.PI / 180;
+      longNut += (d.psin + d.psi1n * t) * Math.sin(arg);
+      if (i < 4 || i > 5 && i < 9) {
+        obliqueNut += (d.obn + d.ob1n * t) * Math.cos(arg);
+      }
+    }
+    return {
+      longitudeNutation: longNut * Math.PI / 180,
+      obliquityNutation: obliqueNut * Math.PI / 180
+    };
+  }
+  function moonRightAscensionAndDeclForTDT(V, U, centuriesSinceEpochTDT) {
+    const meanOb = meanObliquityFromTDT(centuriesSinceEpochTDT);
+    const { longitudeNutation, obliquityNutation } = nutations(centuriesSinceEpochTDT);
+    const Vn = V + longitudeNutation;
+    const trueOb = meanOb + obliquityNutation;
+    const cosV = Math.cos(Vn);
+    const sinV = Math.sin(Vn);
+    const sinU = Math.sin(U);
+    const cosU = Math.cos(U);
+    const cosTrueOb = Math.cos(trueOb);
+    const sinTrueOb = Math.sin(trueOb);
+    let ra;
+    if (cosV === 0) {
+      ra = Vn;
+    } else {
+      ra = Math.atan2(
+        cosTrueOb * sinV * cosU - sinTrueOb * sinU,
+        cosV * cosU
+      );
+      if (ra < 0) ra += Math.PI * 2;
+    }
+    const decl = Math.asin(sinTrueOb * sinV * cosU + cosTrueOb * sinU);
+    return { ra, decl };
+  }
+  function WB_MoonRAAndDecl(centuriesSinceEpochTDT, cache, p) {
+    const raSlot = 58 /* MoonRALow */ + p;
+    const declSlot = 61 /* MoonDeclLow */ + p;
+    const longSlot = 64 /* MoonEclipticLongitudeLow */ + p;
+    const latSlot = 67 /* MoonEclipticLatitudeLow */ + p;
+    if (cache && cache.isValid(raSlot)) {
+      return {
+        rightAscension: cache.get(raSlot),
+        declination: cache.get(declSlot),
+        longitude: cache.get(longSlot),
+        latitude: cache.get(latSlot)
+      };
+    }
+    const V = lunarLongitudeForTDT(centuriesSinceEpochTDT, p, cache);
+    const U = lunarLatitudeForTDT(centuriesSinceEpochTDT, p, cache);
+    const longitude = V * Math.PI / 180 + lunarAberrationV(centuriesSinceEpochTDT);
+    const latitude = U * Math.PI / 180 + lunarAberrationU(centuriesSinceEpochTDT);
+    const { ra, decl } = moonRightAscensionAndDeclForTDT(
+      longitude,
+      latitude,
+      centuriesSinceEpochTDT
+    );
+    if (cache) {
+      cache.set(raSlot, ra);
+      cache.set(declSlot, decl);
+      cache.set(longSlot, longitude);
+      cache.set(latSlot, latitude);
+    }
+    return { rightAscension: ra, declination: decl, longitude, latitude };
+  }
+  function WB_MoonDistance(centuriesSinceEpochTDT, cache, p) {
+    const slotIndex = 70 /* MoonDistanceLow */ + p;
+    if (cache && cache.isValid(slotIndex)) return cache.get(slotIndex);
+    let R = lunarDistanceForTDT(centuriesSinceEpochTDT, p, cache);
+    R += lunarAberrationR(centuriesSinceEpochTDT);
+    if (cache) cache.set(slotIndex, R);
+    return R;
+  }
+
+  // src/astronomy/es-coordinates.ts
+  var TWO_PI2 = Math.PI * 2;
+  function topocentricParallax(ra, decl, H, distInAU, observerLatitude, observerAltitude) {
+    const bOverA = 0.99664719;
+    const u = Math.atan(bOverA * Math.tan(observerLatitude));
+    const delta = observerAltitude / 6378140;
+    const rhoSinPhiPrime = bOverA * Math.sin(u) + delta * Math.sin(observerLatitude);
+    const rhoCosPhiPrime = Math.cos(u) + delta * Math.cos(observerLatitude);
+    const sinPi = Math.sin(8.794 / 3600 * Math.PI / 180) / distInAU;
+    const A = Math.cos(decl) * Math.sin(H);
+    const B = Math.cos(decl) * Math.cos(H) - rhoCosPhiPrime * sinPi;
+    const C = Math.sin(decl) - rhoSinPhiPrime * sinPi;
+    const q = Math.sqrt(A * A + B * B + C * C);
+    let Hprime = Math.atan2(A, B);
+    if (Hprime < 0) {
+      Hprime += TWO_PI2;
+    }
+    const declPrime = Math.asin(C / q);
+    return { Hprime, declPrime };
+  }
+  function sunRAandDecl(dateInterval, cache) {
+    if (cache && cache.isValid(2 /* sunRA */)) {
+      return {
+        rightAscension: cache.get(2 /* sunRA */),
+        declination: cache.get(3 /* sunDecl */)
+      };
+    }
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const result = WB_sunRAAndDecl(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+    if (cache) {
+      cache.set(2 /* sunRA */, result.rightAscension);
+      cache.set(3 /* sunDecl */, result.declination);
+    }
+    return { rightAscension: result.rightAscension, declination: result.declination };
+  }
+  function moonRAAndDecl(dateInterval, cache) {
+    if (cache && cache.isValid(8 /* moonRA */)) {
+      return {
+        rightAscension: cache.get(8 /* moonRA */),
+        declination: cache.get(9 /* moonDecl */),
+        moonEclipticLongitude: cache.get(12 /* moonEclipticLongitude */)
+      };
+    }
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const result = WB_MoonRAAndDecl(
+      julianCenturiesSince2000Epoch,
+      cache ?? void 0,
+      2 /* Full */
+    );
+    if (cache) {
+      cache.set(8 /* moonRA */, result.rightAscension);
+      cache.set(9 /* moonDecl */, result.declination);
+      cache.set(12 /* moonEclipticLongitude */, result.longitude);
+    }
+    return {
+      rightAscension: result.rightAscension,
+      declination: result.declination,
+      moonEclipticLongitude: result.longitude
+    };
+  }
+  function planetSizeAndParallax(planetNumber, distanceInAU) {
+    const radiusInAU = planetRadiiInAU[planetNumber];
+    const angularSize = 2 * Math.atan(radiusInAU / distanceInAU);
+    const parallax = Math.asin(Math.sin(8.794 / 3600 * Math.PI / 180) / distanceInAU);
+    return { angularSize, parallax };
+  }
+  function distanceOfPlanetInAU(planetNumber, julianCenturiesSince2000Epoch, cache, moonPrecision = 2 /* Full */) {
+    switch (planetNumber) {
+      case 0 /* Sun */:
+        return WB_sunRadius(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+      case 1 /* Moon */:
+        return WB_MoonDistance(julianCenturiesSince2000Epoch, cache ?? void 0, moonPrecision) / kECAUInKilometers;
+      default:
+        return 1;
+    }
+  }
+  function altitudeAtRiseSet(julianCenturiesSince2000Epoch, planetNumber, wantGeocentricAltitude, cache, moonPrecision = 2 /* Full */) {
+    const dist = distanceOfPlanetInAU(planetNumber, julianCenturiesSince2000Epoch, cache, moonPrecision);
+    const { angularSize: angularDiameter, parallax } = planetSizeAndParallax(planetNumber, dist);
+    return (wantGeocentricAltitude ? parallax : 0) - kECRefractionAtHorizonX - angularDiameter / 2;
+  }
+
+  // src/astronomy/es-astro.ts
+  var TWO_PI3 = Math.PI * 2;
+  function planetAltAz(planetNumber, calculationDateInterval, observerLatitude, observerLongitude, correctForParallax, altNotAz, cache) {
+    const altSlotBase = 381 /* planetAltitude */;
+    const azSlotBase = 391 /* planetAzimuth */;
+    const slotBase = altNotAz ? altSlotBase : azSlotBase;
+    if (cache && cache.isValid(slotBase + planetNumber)) {
+      return cache.get(slotBase + planetNumber);
+    }
+    if (observerLatitude > kECLimitingAzimuthLatitude) {
+      observerLatitude = kECLimitingAzimuthLatitude;
+    } else if (observerLatitude < -kECLimitingAzimuthLatitude) {
+      observerLatitude = -kECLimitingAzimuthLatitude;
+    }
+    let planetRightAscension;
+    let planetDeclination;
+    let planetGeocentricDistance;
+    if (planetNumber === 0 /* Sun */) {
+      const sunResult = sunRAandDecl(calculationDateInterval, cache);
+      planetRightAscension = sunResult.rightAscension;
+      planetDeclination = sunResult.declination;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+      planetGeocentricDistance = distanceOfPlanetInAU(
+        0 /* Sun */,
+        julianCenturiesSince2000Epoch,
+        cache
+      );
+    } else if (planetNumber === 1 /* Moon */) {
+      const moonResult = moonRAAndDecl(calculationDateInterval, cache);
+      planetRightAscension = moonResult.rightAscension;
+      planetDeclination = moonResult.declination;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+      planetGeocentricDistance = distanceOfPlanetInAU(
+        1 /* Moon */,
+        julianCenturiesSince2000Epoch,
+        cache
+      );
+    } else {
+      if (cache && cache.isValid(401 /* planetRA */ + planetNumber)) {
+        planetRightAscension = cache.get(401 /* planetRA */ + planetNumber);
+        planetDeclination = cache.get(411 /* planetDecl */ + planetNumber);
+        planetGeocentricDistance = cache.get(108 /* planetGeocentricDistance */ + planetNumber);
+      } else {
+        return 0;
+      }
+    }
+    const gst = convertUTToGSTP03(calculationDateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    let planetHourAngle = lst - planetRightAscension;
+    if (correctForParallax) {
+      const { Hprime, declPrime } = topocentricParallax(
+        planetRightAscension,
+        planetDeclination,
+        planetHourAngle,
+        planetGeocentricDistance,
+        observerLatitude,
+        0
+      );
+      planetDeclination = declPrime;
+      planetHourAngle = Hprime;
+    }
+    const sinAlt = Math.sin(planetDeclination) * Math.sin(observerLatitude) + Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.cos(planetHourAngle);
+    const planetAzimuth = Math.atan2(
+      -Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.sin(planetHourAngle),
+      Math.sin(planetDeclination) - Math.sin(observerLatitude) * sinAlt
+    );
+    const planetAltitude = Math.asin(sinAlt);
+    if (cache) {
+      cache.set(381 /* planetAltitude */ + planetNumber, planetAltitude);
+      cache.set(391 /* planetAzimuth */ + planetNumber, planetAzimuth);
+    }
+    return altNotAz ? planetAltitude : planetAzimuth;
+  }
+  function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
+  }
+  function sunAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, false, cache);
+  }
+  function moonAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+  }
+  function moonAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, false, cache);
+  }
+  function moonAge(dateInterval, cache) {
+    if (cache && cache.isValid(15 /* moonAge */)) {
+      return {
+        age: cache.get(15 /* moonAge */),
+        phase: cache.get(16 /* moonPhase */)
+      };
+    }
+    const { moonEclipticLongitude } = moonRAAndDecl(dateInterval, cache);
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const sunEclipticLong = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+    let age = moonEclipticLongitude - sunEclipticLong;
+    if (age < 0) {
+      age += TWO_PI3;
+    }
+    const phase = (1 - Math.cos(age)) / 2;
+    if (cache) {
+      cache.set(15 /* moonAge */, age);
+      cache.set(16 /* moonPhase */, phase);
+    }
+    return { age, phase };
+  }
+
+  // src/astronomy/es-riseset.ts
+  var TWO_PI4 = Math.PI * 2;
+  function riseSetTime(riseNotSet, rightAscension, declination, observerLatitude, observerLongitude, altAtRiseSet, calculationDateInterval, cachePool) {
+    const cosH = (Math.sin(altAtRiseSet) - Math.sin(observerLatitude) * Math.sin(declination)) / (Math.cos(observerLatitude) * Math.cos(declination));
+    if (cosH < -1) {
+      return ALWAYS_ABOVE_HORIZON;
+    } else if (cosH > 1) {
+      return ALWAYS_BELOW_HORIZON;
+    }
+    const H = Math.acos(cosH);
+    let LST_rs = rightAscension + (riseNotSet ? TWO_PI4 - H : H);
+    if (LST_rs > TWO_PI4) {
+      LST_rs -= TWO_PI4;
+    }
+    const { gst: GST_rs } = convertLSTtoGST(LST_rs, observerLongitude);
+    const riseSetDate = convertGSTtoUTclosest(GST_rs, calculationDateInterval, cachePool);
+    return riseSetDate;
+  }
+  function linearFit(X1, Y1, X2, Y2) {
+    const offset = X1;
+    const x1 = 0;
+    const y1 = Y1 - offset;
+    const x2 = X2 - offset;
+    const y2 = Y2 - offset;
+    const denom = x2 - x1 - y2 + y1;
+    if (denom === 0) {
+      return y2 + offset;
+    }
+    const root = (y1 * (x2 - x1) - x1 * (y2 - y1)) / denom;
+    if (Math.abs(root - y2) > 12 * 3600) {
+      return y2 + offset;
+    }
+    return offset + root;
+  }
+  function extrapolateToYEqualX(x, y, numValues) {
+    if (numValues === 1) {
+      return y[0];
+    }
+    if (numValues > 2) {
+      const offset = x[numValues - 3];
+      const X1 = 0;
+      const Y1 = y[numValues - 3] - offset;
+      const X2 = x[numValues - 2] - offset;
+      const Y2 = y[numValues - 2] - offset;
+      const X3 = x[numValues - 1] - offset;
+      const Y3 = y[numValues - 1] - offset;
+      if (X1 !== X2 && X1 !== X3 && X2 !== X3) {
+        const k1 = Y1 / ((X1 - X2) * (X1 - X3));
+        const k2 = Y2 / ((X2 - X1) * (X2 - X3));
+        const k3 = Y3 / ((X3 - X1) * (X3 - X2));
+        const C2 = k1 + k2 + k3;
+        const C1 = k1 * (X2 + X3) + k2 * (X1 + X3) + k3 * (X1 + X2);
+        const C0 = k1 * X2 * X3 + k2 * X1 * X3 + k3 * X1 * X2;
+        if (C2 !== 0) {
+          const p = (-C1 - 1) / C2;
+          const q = C0 / C2;
+          const D = p * p / 4 - q;
+          if (D >= 0) {
+            const sqrtTerm = Math.sqrt(D);
+            const root1 = -p / 2 + sqrtTerm;
+            const root2 = -p / 2 - sqrtTerm;
+            if (Math.abs(root1 - Y3) < Math.abs(root2 - Y3)) {
+              if (Math.abs(root1 - Y3) < 24 * 3600) {
+                return root1 + offset;
+              }
+            } else {
+              if (Math.abs(root2 - Y3) < 24 * 3600) {
+                return root2 + offset;
+              }
+            }
+          }
+        }
+      }
+    }
+    return linearFit(x[numValues - 2], y[numValues - 2], x[numValues - 1], y[numValues - 1]);
+  }
+  function getPlanetRADeclDist(planetNumber, julianCenturiesSince2000Epoch, cache, precision) {
+    if (planetNumber === 0 /* Sun */) {
+      const result = WB_sunRAAndDecl(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+      return {
+        rightAscension: result.rightAscension,
+        declination: result.declination,
+        distance: 1
+        // approximate; will use WB_sunRadius for precise
+      };
+    } else if (planetNumber === 1 /* Moon */) {
+      const result = WB_MoonRAAndDecl(julianCenturiesSince2000Epoch, cache ?? void 0, precision);
+      const distKm = WB_MoonDistance(julianCenturiesSince2000Epoch, cache ?? void 0, precision);
+      return {
+        rightAscension: result.rightAscension,
+        declination: result.declination,
+        distance: distKm / 149597870691e-3
+      };
+    } else {
+      return { rightAscension: 0, declination: 0, distance: 1 };
+    }
+  }
+  function planetaryRiseSetTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, riseNotSet, planetNumber, overrideAltitudeDesired, cachePool) {
+    let tryDate = calculationDateInterval;
+    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
+    const numIterations = 20;
+    const tryDates = new Array(numIterations + 11);
+    const results = new Array(numIterations + 11);
+    let fitTries = 0;
+    for (let i = 0; i < numIterations; i++) {
+      if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
+        precision = 2 /* Full */;
+        i--;
+        fitTries = 0;
+      }
+      const priorCache = pushECAstroCacheWithSlopInPool(
+        cachePool,
+        cachePool.refinementCache,
+        tryDate,
+        0
+      );
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
+      const { rightAscension, declination } = getPlanetRADeclDist(
+        planetNumber,
+        julianCenturiesSince2000Epoch,
+        cachePool.currentCache,
+        precision
+      );
+      const altitude = isNaN(overrideAltitudeDesired) ? altitudeAtRiseSet(julianCenturiesSince2000Epoch, planetNumber, true, cachePool.currentCache, precision) : overrideAltitudeDesired;
+      const newDate = riseSetTime(
+        riseNotSet,
+        rightAscension,
+        declination,
+        observerLatitude,
+        observerLongitude,
+        altitude,
+        tryDate,
+        cachePool
+      );
+      popECAstroCacheToInPool(cachePool, priorCache);
+      if (isNoRiseSet(newDate)) {
+        return newDate;
+      }
+      if (Math.abs(newDate - tryDate) < 0.1) {
+        if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
+          precision = 2 /* Full */;
+        } else {
+          return newDate;
+        }
+      }
+      tryDates[fitTries] = tryDate;
+      results[fitTries] = newDate;
+      fitTries++;
+      tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
+    }
+    return tryDate;
+  }
+  function sunriseForDay(dateInterval, observerLatitude, observerLongitude, cachePool) {
+    if (cachePool.currentCache && cachePool.currentCache.isValid(148 /* sunriseForDay */)) {
+      return cachePool.currentCache.get(148 /* sunriseForDay */);
+    }
+    const midnight = priorUTMidnightForDateInterval(dateInterval, cachePool.currentCache);
+    const noon = midnight + 12 * 3600;
+    const result = planetaryRiseSetTimeRefined(
+      noon,
+      observerLatitude,
+      observerLongitude,
+      true,
+      0 /* Sun */,
+      NaN,
+      cachePool
+    );
+    if (cachePool.currentCache) {
+      cachePool.currentCache.set(148 /* sunriseForDay */, result);
+    }
+    return result;
+  }
+  function sunsetForDay(dateInterval, observerLatitude, observerLongitude, cachePool) {
+    if (cachePool.currentCache && cachePool.currentCache.isValid(149 /* sunsetForDay */)) {
+      return cachePool.currentCache.get(149 /* sunsetForDay */);
+    }
+    const midnight = priorUTMidnightForDateInterval(dateInterval, cachePool.currentCache);
+    const noon = midnight + 12 * 3600;
+    const result = planetaryRiseSetTimeRefined(
+      noon,
+      observerLatitude,
+      observerLongitude,
+      false,
+      0 /* Sun */,
+      NaN,
+      cachePool
+    );
+    if (cachePool.currentCache) {
+      cachePool.currentCache.set(149 /* sunsetForDay */, result);
+    }
+    return result;
+  }
+
   // src/watch/watch-env.ts
+  var OBSERVER_LAT = 37.205 * Math.PI / 180;
+  var OBSERVER_LON = -121.954 * Math.PI / 180;
   function createWatchEnvironment(watch) {
     const env = createDefaultEnvironment();
     env.variables.set("updateAtNextSunriseOrMidnight", 86400);
@@ -1157,36 +3680,117 @@ Rise/set (Moon)
   }
   function registerTimeFunctions(env) {
     const { functions } = env;
-    functions.set("hour12ValueAngle", () => (10 + 10 / 60) * 2 * Math.PI / 12);
-    functions.set("minuteValueAngle", () => 10 * 2 * Math.PI / 60);
-    functions.set("secondValueAngle", () => 36 * 2 * Math.PI / 60);
-    functions.set("secondNumberAngle", () => 36 * 2 * Math.PI / 60);
-    functions.set("secondValue", () => 36);
-    functions.set("hour24Number", () => 10);
-    functions.set("dayNumber", () => 21);
-    functions.set("monthNumber", () => 2);
-    functions.set("weekdayNumberAngle", () => 5 * 2 * Math.PI / 7);
+    const now = /* @__PURE__ */ new Date();
+    const dateInterval = dateToDateInterval(now);
+    const tzOffsetMinutes = now.getTimezoneOffset();
+    const tzOffsetSeconds = -tzOffsetMinutes * 60;
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const seconds = now.getSeconds();
+    const ms = now.getMilliseconds();
+    const totalSeconds = seconds + ms / 1e3;
+    const totalMinutes = minutes + totalSeconds / 60;
+    const totalHours12 = hours % 12 + totalMinutes / 60;
+    const hour24 = hours;
+    functions.set("hour12ValueAngle", () => totalHours12 * 2 * Math.PI / 12);
+    functions.set("minuteValueAngle", () => totalMinutes * 2 * Math.PI / 60);
+    functions.set("secondValueAngle", () => totalSeconds * 2 * Math.PI / 60);
+    functions.set("secondNumberAngle", () => Math.floor(totalSeconds) * 2 * Math.PI / 60);
+    functions.set("secondValue", () => totalSeconds);
+    functions.set("hour24Number", () => hour24);
+    const dayOfMonth = now.getDate();
+    const month = now.getMonth();
+    const weekday = now.getDay();
+    functions.set("dayNumber", () => dayOfMonth - 1);
+    functions.set("monthNumber", () => month);
+    functions.set("weekdayNumberAngle", () => weekday * 2 * Math.PI / 7);
     functions.set("days", () => 86400);
-    functions.set("sunAzimuth", () => 3);
-    functions.set("sunAltitude", () => 0.8);
-    functions.set("sunriseForDayValid", () => 1);
-    functions.set("sunriseForDayHour12ValueAngle", () => 6.25 * 2 * Math.PI / 12);
-    functions.set("sunriseForDayMinuteValueAngle", () => 15 * 2 * Math.PI / 60);
-    functions.set("sunsetForDayValid", () => 1);
-    functions.set("sunsetForDayHour12ValueAngle", () => 6.25 * 2 * Math.PI / 12);
-    functions.set("sunsetForDayMinuteValueAngle", () => 15 * 2 * Math.PI / 60);
-    functions.set("moonAzimuth", () => 1.5);
-    functions.set("moonAltitude", () => 0.4);
-    functions.set("moonAgeAngle", () => Math.PI / 4);
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
+    const cache = pool.currentCache;
+    const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    functions.set("sunAzimuth", () => sunAz);
+    functions.set("sunAltitude", () => sunAlt);
+    const sunrise = sunriseForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
+    const sunset = sunsetForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
+    if (!isNoRiseSet(sunrise)) {
+      const srDate = new Date((sunrise + 978307200) * 1e3);
+      const srHour12 = srDate.getHours() % 12 + srDate.getMinutes() / 60 + srDate.getSeconds() / 3600;
+      const srMinute = srDate.getMinutes() + srDate.getSeconds() / 60;
+      functions.set("sunriseForDayValid", () => 1);
+      functions.set("sunriseForDayHour12ValueAngle", () => srHour12 * 2 * Math.PI / 12);
+      functions.set("sunriseForDayMinuteValueAngle", () => srMinute * 2 * Math.PI / 60);
+    } else {
+      functions.set("sunriseForDayValid", () => 0);
+      functions.set("sunriseForDayHour12ValueAngle", () => 0);
+      functions.set("sunriseForDayMinuteValueAngle", () => 0);
+    }
+    if (!isNoRiseSet(sunset)) {
+      const ssDate = new Date((sunset + 978307200) * 1e3);
+      const ssHour12 = ssDate.getHours() % 12 + ssDate.getMinutes() / 60 + ssDate.getSeconds() / 3600;
+      const ssMinute = ssDate.getMinutes() + ssDate.getSeconds() / 60;
+      functions.set("sunsetForDayValid", () => 1);
+      functions.set("sunsetForDayHour12ValueAngle", () => ssHour12 * 2 * Math.PI / 12);
+      functions.set("sunsetForDayMinuteValueAngle", () => ssMinute * 2 * Math.PI / 60);
+    } else {
+      functions.set("sunsetForDayValid", () => 0);
+      functions.set("sunsetForDayHour12ValueAngle", () => 0);
+      functions.set("sunsetForDayMinuteValueAngle", () => 0);
+    }
+    const moonAlt = moonAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    const moonAz = moonAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    const { age: mAge } = moonAge(dateInterval, cache);
+    functions.set("moonAzimuth", () => moonAz);
+    functions.set("moonAltitude", () => moonAlt);
+    functions.set("moonAgeAngle", () => mAge);
     functions.set("moonRelativePositionAngle", () => 0);
-    functions.set("moonriseForDayValid", () => 1);
-    functions.set("moonriseForDayHour12ValueAngle", () => 9 * 2 * Math.PI / 12);
-    functions.set("moonriseForDayMinuteValueAngle", () => 30 * 2 * Math.PI / 60);
-    functions.set("moonriseForDayHour24Number", () => 21);
-    functions.set("moonsetForDayValid", () => 1);
-    functions.set("moonsetForDayHour12ValueAngle", () => 7 * 2 * Math.PI / 12);
-    functions.set("moonsetForDayMinuteValueAngle", () => 45 * 2 * Math.PI / 60);
-    functions.set("moonsetForDayHour24Number", () => 7);
+    const moonrise = planetaryRiseSetTimeRefined(
+      dateInterval,
+      OBSERVER_LAT,
+      OBSERVER_LON,
+      true,
+      1 /* Moon */,
+      NaN,
+      pool
+    );
+    const moonset = planetaryRiseSetTimeRefined(
+      dateInterval,
+      OBSERVER_LAT,
+      OBSERVER_LON,
+      false,
+      1 /* Moon */,
+      NaN,
+      pool
+    );
+    if (!isNoRiseSet(moonrise)) {
+      const mrDate = new Date((moonrise + 978307200) * 1e3);
+      const mrHour12 = mrDate.getHours() % 12 + mrDate.getMinutes() / 60;
+      const mrMinute = mrDate.getMinutes() + mrDate.getSeconds() / 60;
+      functions.set("moonriseForDayValid", () => 1);
+      functions.set("moonriseForDayHour12ValueAngle", () => mrHour12 * 2 * Math.PI / 12);
+      functions.set("moonriseForDayMinuteValueAngle", () => mrMinute * 2 * Math.PI / 60);
+      functions.set("moonriseForDayHour24Number", () => mrDate.getHours());
+    } else {
+      functions.set("moonriseForDayValid", () => 0);
+      functions.set("moonriseForDayHour12ValueAngle", () => 0);
+      functions.set("moonriseForDayMinuteValueAngle", () => 0);
+      functions.set("moonriseForDayHour24Number", () => 0);
+    }
+    if (!isNoRiseSet(moonset)) {
+      const msDate = new Date((moonset + 978307200) * 1e3);
+      const msHour12 = msDate.getHours() % 12 + msDate.getMinutes() / 60;
+      const msMinute = msDate.getMinutes() + msDate.getSeconds() / 60;
+      functions.set("moonsetForDayValid", () => 1);
+      functions.set("moonsetForDayHour12ValueAngle", () => msHour12 * 2 * Math.PI / 12);
+      functions.set("moonsetForDayMinuteValueAngle", () => msMinute * 2 * Math.PI / 60);
+      functions.set("moonsetForDayHour24Number", () => msDate.getHours());
+    } else {
+      functions.set("moonsetForDayValid", () => 0);
+      functions.set("moonsetForDayHour12ValueAngle", () => 0);
+      functions.set("moonsetForDayMinuteValueAngle", () => 0);
+      functions.set("moonsetForDayHour24Number", () => 0);
+    }
     functions.set("manualSet", () => 0);
     functions.set("timeIsCorrect", () => 1);
     functions.set("inReverse", () => 0);
@@ -1208,8 +3812,9 @@ Rise/set (Moon)
     functions.set("advanceToMoonriseForDay", () => 0);
     functions.set("advanceToMoonsetForDay", () => 0);
     functions.set("heading", () => 0);
-    functions.set("tzOffset", () => 0);
+    functions.set("tzOffset", () => tzOffsetSeconds);
     functions.set("calendarWeekdayStart", () => 0);
+    releaseCachePool(pool);
   }
 
   // src/watch/renderer.ts

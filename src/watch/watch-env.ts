@@ -2,7 +2,7 @@
  * Watch expression environment setup.
  *
  * Creates an Environment populated with all init-block variables
- * and stub time/astronomy functions for a parsed Watch model.
+ * and time/astronomy functions for a parsed Watch model.
  */
 
 import {
@@ -12,12 +12,22 @@ import {
     Environment,
 } from '../expr/evaluator.js';
 import type { Watch } from './types.js';
+import { dateToDateInterval } from '../astronomy/es-time.js';
+import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
+import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge } from '../astronomy/es-astro.js';
+import { sunriseForDay, sunsetForDay } from '../astronomy/es-riseset.js';
+import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
+import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
+
+// Hardcoded observer location: 37.205°N, 121.954°W
+const OBSERVER_LAT = 37.205 * Math.PI / 180;  // radians
+const OBSERVER_LON = -121.954 * Math.PI / 180; // radians (west is negative)
 
 /**
  * Build the expression environment for a watch:
  *  1. Math builtins + color constants
  *  2. Evaluate all init blocks (populates watch variables)
- *  3. Register time/astronomy stub functions
+ *  3. Register time/astronomy functions using real current time
  */
 export function createWatchEnvironment(watch: Watch): Environment {
     const env = createDefaultEnvironment();
@@ -29,8 +39,7 @@ export function createWatchEnvironment(watch: Watch): Environment {
     env.variables.set('updateAtNextMoonsetOrMidnight', 86400);
     env.variables.set('updateAtEnvChangeOnly', 86400);
 
-    // Register stub time functions — return demo values
-    // Phase 4 will replace these with real-time calculations
+    // Register real time functions
     registerTimeFunctions(env);
 
     // Evaluate all init blocks in document order
@@ -78,55 +87,141 @@ function argbToCSS(argb: number): string {
 }
 
 // ============================================================================
-// Stub time functions — return fixed demo values for Phase 3
+// Real time functions — computed once from Date.now()
 // ============================================================================
 
 function registerTimeFunctions(env: Environment): void {
     const { functions } = env;
 
-    // Clock hands — set to ~10:10:36 for a classic demo position
-    functions.set('hour12ValueAngle', () => (10 + 10 / 60) * 2 * Math.PI / 12);
-    functions.set('minuteValueAngle', () => 10 * 2 * Math.PI / 60);
-    functions.set('secondValueAngle', () => 36 * 2 * Math.PI / 60);
-    functions.set('secondNumberAngle', () => 36 * 2 * Math.PI / 60);
-    functions.set('secondValue', () => 36);
-    functions.set('hour24Number', () => 10);
+    // Current time
+    const now = new Date();
+    const dateInterval = dateToDateInterval(now);
 
-    // Day/date for calendar wheels
-    functions.set('dayNumber', () => 21);
-    functions.set('monthNumber', () => 2);    // March (0-indexed)
-    functions.set('weekdayNumberAngle', () => 5 * 2 * Math.PI / 7); // Friday
+    // Local timezone offset in seconds (JS gives minutes, positive for west)
+    const tzOffsetMinutes = now.getTimezoneOffset();
+    const tzOffsetSeconds = -tzOffsetMinutes * 60; // Convert to seconds, east-positive
+
+    // --- Clock hands ---
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const seconds = now.getSeconds();
+    const ms = now.getMilliseconds();
+
+    const totalSeconds = seconds + ms / 1000;
+    const totalMinutes = minutes + totalSeconds / 60;
+    const totalHours12 = (hours % 12) + totalMinutes / 60;
+    const hour24 = hours;
+
+    functions.set('hour12ValueAngle', () => totalHours12 * 2 * Math.PI / 12);
+    functions.set('minuteValueAngle', () => totalMinutes * 2 * Math.PI / 60);
+    functions.set('secondValueAngle', () => totalSeconds * 2 * Math.PI / 60);
+    functions.set('secondNumberAngle', () => Math.floor(totalSeconds) * 2 * Math.PI / 60);
+    functions.set('secondValue', () => totalSeconds);
+    functions.set('hour24Number', () => hour24);
+
+    // --- Calendar ---
+    const dayOfMonth = now.getDate();     // 1-31
+    const month = now.getMonth();         // 0-11
+    const weekday = now.getDay();         // 0=Sunday
+
+    functions.set('dayNumber', () => dayOfMonth - 1);  // 0-indexed for wheel math
+    functions.set('monthNumber', () => month);
+    functions.set('weekdayNumberAngle', () => weekday * 2 * Math.PI / 7);
 
     // Helper that returns days-in-seconds
     functions.set('days', () => 86400);
 
-    // Sun position
-    functions.set('sunAzimuth', () => 3.0);     // ~172 degrees
-    functions.set('sunAltitude', () => 0.8);    // ~46 degrees
+    // --- Astronomy setup ---
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
+    const cache = pool.currentCache;
 
-    // Sunrise/sunset
-    functions.set('sunriseForDayValid', () => 1);
-    functions.set('sunriseForDayHour12ValueAngle', () => 6.25 * 2 * Math.PI / 12);
-    functions.set('sunriseForDayMinuteValueAngle', () => 15 * 2 * Math.PI / 60);
-    functions.set('sunsetForDayValid', () => 1);
-    functions.set('sunsetForDayHour12ValueAngle', () => 6.25 * 2 * Math.PI / 12);
-    functions.set('sunsetForDayMinuteValueAngle', () => 15 * 2 * Math.PI / 60);
+    // --- Sun position ---
+    const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
 
-    // Moon (back side only, but needed for init expressions)
-    functions.set('moonAzimuth', () => 1.5);
-    functions.set('moonAltitude', () => 0.4);
-    functions.set('moonAgeAngle', () => Math.PI / 4);
-    functions.set('moonRelativePositionAngle', () => 0);
-    functions.set('moonriseForDayValid', () => 1);
-    functions.set('moonriseForDayHour12ValueAngle', () => 9 * 2 * Math.PI / 12);
-    functions.set('moonriseForDayMinuteValueAngle', () => 30 * 2 * Math.PI / 60);
-    functions.set('moonriseForDayHour24Number', () => 21);
-    functions.set('moonsetForDayValid', () => 1);
-    functions.set('moonsetForDayHour12ValueAngle', () => 7 * 2 * Math.PI / 12);
-    functions.set('moonsetForDayMinuteValueAngle', () => 45 * 2 * Math.PI / 60);
-    functions.set('moonsetForDayHour24Number', () => 7);
+    functions.set('sunAzimuth', () => sunAz);
+    functions.set('sunAltitude', () => sunAlt);
 
-    // Button action stubs (no-ops)
+    // --- Sunrise/sunset for today ---
+    const sunrise = sunriseForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
+    const sunset = sunsetForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
+
+    if (!isNoRiseSet(sunrise)) {
+        const srDate = new Date((sunrise + 978307200) * 1000);
+        const srHour12 = (srDate.getHours() % 12) + srDate.getMinutes() / 60 + srDate.getSeconds() / 3600;
+        const srMinute = srDate.getMinutes() + srDate.getSeconds() / 60;
+        functions.set('sunriseForDayValid', () => 1);
+        functions.set('sunriseForDayHour12ValueAngle', () => srHour12 * 2 * Math.PI / 12);
+        functions.set('sunriseForDayMinuteValueAngle', () => srMinute * 2 * Math.PI / 60);
+    } else {
+        functions.set('sunriseForDayValid', () => 0);
+        functions.set('sunriseForDayHour12ValueAngle', () => 0);
+        functions.set('sunriseForDayMinuteValueAngle', () => 0);
+    }
+
+    if (!isNoRiseSet(sunset)) {
+        const ssDate = new Date((sunset + 978307200) * 1000);
+        const ssHour12 = (ssDate.getHours() % 12) + ssDate.getMinutes() / 60 + ssDate.getSeconds() / 3600;
+        const ssMinute = ssDate.getMinutes() + ssDate.getSeconds() / 60;
+        functions.set('sunsetForDayValid', () => 1);
+        functions.set('sunsetForDayHour12ValueAngle', () => ssHour12 * 2 * Math.PI / 12);
+        functions.set('sunsetForDayMinuteValueAngle', () => ssMinute * 2 * Math.PI / 60);
+    } else {
+        functions.set('sunsetForDayValid', () => 0);
+        functions.set('sunsetForDayHour12ValueAngle', () => 0);
+        functions.set('sunsetForDayMinuteValueAngle', () => 0);
+    }
+
+    // --- Moon ---
+    const moonAlt = moonAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    const moonAz = moonAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    const { age: mAge } = moonAge(dateInterval, cache);
+
+    functions.set('moonAzimuth', () => moonAz);
+    functions.set('moonAltitude', () => moonAlt);
+    functions.set('moonAgeAngle', () => mAge);
+    functions.set('moonRelativePositionAngle', () => 0);  // TODO: implement
+
+    // --- Moonrise/moonset ---
+    const moonrise = planetaryRiseSetTimeRefined(
+        dateInterval, OBSERVER_LAT, OBSERVER_LON, true, ECPlanetNumber.Moon, NaN, pool,
+    );
+    const moonset = planetaryRiseSetTimeRefined(
+        dateInterval, OBSERVER_LAT, OBSERVER_LON, false, ECPlanetNumber.Moon, NaN, pool,
+    );
+
+    if (!isNoRiseSet(moonrise)) {
+        const mrDate = new Date((moonrise + 978307200) * 1000);
+        const mrHour12 = (mrDate.getHours() % 12) + mrDate.getMinutes() / 60;
+        const mrMinute = mrDate.getMinutes() + mrDate.getSeconds() / 60;
+        functions.set('moonriseForDayValid', () => 1);
+        functions.set('moonriseForDayHour12ValueAngle', () => mrHour12 * 2 * Math.PI / 12);
+        functions.set('moonriseForDayMinuteValueAngle', () => mrMinute * 2 * Math.PI / 60);
+        functions.set('moonriseForDayHour24Number', () => mrDate.getHours());
+    } else {
+        functions.set('moonriseForDayValid', () => 0);
+        functions.set('moonriseForDayHour12ValueAngle', () => 0);
+        functions.set('moonriseForDayMinuteValueAngle', () => 0);
+        functions.set('moonriseForDayHour24Number', () => 0);
+    }
+
+    if (!isNoRiseSet(moonset)) {
+        const msDate = new Date((moonset + 978307200) * 1000);
+        const msHour12 = (msDate.getHours() % 12) + msDate.getMinutes() / 60;
+        const msMinute = msDate.getMinutes() + msDate.getSeconds() / 60;
+        functions.set('moonsetForDayValid', () => 1);
+        functions.set('moonsetForDayHour12ValueAngle', () => msHour12 * 2 * Math.PI / 12);
+        functions.set('moonsetForDayMinuteValueAngle', () => msMinute * 2 * Math.PI / 60);
+        functions.set('moonsetForDayHour24Number', () => msDate.getHours());
+    } else {
+        functions.set('moonsetForDayValid', () => 0);
+        functions.set('moonsetForDayHour12ValueAngle', () => 0);
+        functions.set('moonsetForDayMinuteValueAngle', () => 0);
+        functions.set('moonsetForDayHour24Number', () => 0);
+    }
+
+    // --- Button action stubs (no-ops) ---
     functions.set('manualSet', () => 0);
     functions.set('timeIsCorrect', () => 1);
     functions.set('inReverse', () => 0);
@@ -150,8 +245,11 @@ function registerTimeFunctions(env: Environment): void {
     functions.set('heading', () => 0);
 
     // Timezone
-    functions.set('tzOffset', () => 0);
+    functions.set('tzOffset', () => tzOffsetSeconds);
 
     // Calendar wheel helpers
     functions.set('calendarWeekdayStart', () => 0);
+
+    // Release the cache pool
+    releaseCachePool(pool);
 }
