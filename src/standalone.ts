@@ -27,8 +27,9 @@ function main() {
     // so scale to fit the canvas
     const scale = canvas.width / 290;
 
-    // Draw a warm beige background circle as the watch face base
-    ctx.fillStyle = '#e8e0d0';
+    // Placeholder face background — lighter cream so gray subdials (0xffe0e0e0)
+    // appear darker by contrast, matching the original Haleakala face image
+    ctx.fillStyle = '#f0ead8';
     ctx.beginPath();
     ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, 2 * Math.PI);
     ctx.fill();

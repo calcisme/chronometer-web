@@ -29,7 +29,7 @@ async function main() {
     const scale = canvas.width / 290;
 
     // Draw a dark background circle as the watch face base
-    ctx.fillStyle = '#e8e0d0';
+    ctx.fillStyle = '#f0ead8';
     ctx.beginPath();
     ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, 2 * Math.PI);
     ctx.fill();

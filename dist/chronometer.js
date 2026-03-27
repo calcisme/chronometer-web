@@ -1284,8 +1284,8 @@ Rise/set (Moon)
     const radius = evalAttr(part.radius, env);
     if (radius <= 0) return;
     const bgColor = evalColor(part.bgColor, env);
-    const strokeColor = evalColor(part.strokeColor, env);
-    const markWidth = evalAttr(part.markWidth, env) || 1;
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
+    const markWidth = part.markWidth !== void 0 ? evalAttr(part.markWidth, env) : 1;
     const nMarks = evalAttr(part.nMarks, env);
     const mSize = evalAttr(part.mSize, env);
     const angle1 = evalAttr(part.angle1, env);
@@ -1299,7 +1299,7 @@ Rise/set (Moon)
       ctx.arc(0, 0, radius, 0, 2 * Math.PI);
       ctx.fill();
     }
-    if (marks & MARKS_OUTER) {
+    if (marks & MARKS_OUTER && markWidth > 0) {
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = markWidth;
       ctx.beginPath();
@@ -1688,7 +1688,7 @@ Rise/set (Moon)
     const watch = parseWatchXML(Haleakala_default, "front");
     const env = createWatchEnvironment(watch);
     const scale = canvas.width / 290;
-    ctx.fillStyle = "#e8e0d0";
+    ctx.fillStyle = "#f0ead8";
     ctx.beginPath();
     ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, 2 * Math.PI);
     ctx.fill();

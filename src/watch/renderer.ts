@@ -141,8 +141,8 @@ function drawQDial(
     if (radius <= 0) return;
 
     const bgColor = evalColor(part.bgColor, env);
-    const strokeColor = evalColor(part.strokeColor, env);
-    const markWidth = evalAttr(part.markWidth, env) || 1;
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
+    const markWidth = part.markWidth !== undefined ? evalAttr(part.markWidth, env) : 1;
     const nMarks = evalAttr(part.nMarks, env);
     const mSize = evalAttr(part.mSize, env);
     const angle1 = evalAttr(part.angle1, env);
@@ -160,8 +160,8 @@ function drawQDial(
         ctx.fill();
     }
 
-    // Border stroke
-    if (marks & MARKS_OUTER) {
+    // Border stroke (skip when markWidth is 0 — e.g. dial-ua txt suppresses border)
+    if ((marks & MARKS_OUTER) && markWidth > 0) {
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = markWidth;
         ctx.beginPath();
