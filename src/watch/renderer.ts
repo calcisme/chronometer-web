@@ -30,9 +30,13 @@ import type {
     QRectPart,
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
+import type { LoadedImage } from './image-loader.js';
 
 /** Shared context type — works for both on-screen and offscreen canvases. */
 type RenderContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
+/** Module-scoped image map, set during rendering calls. */
+let currentImages: Map<string, LoadedImage> | undefined;
 
 // ============================================================================
 // Public API
@@ -50,7 +54,9 @@ export function buildStaticCache(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    images?: Map<string, LoadedImage>,
 ): OffscreenCanvas {
+    currentImages = images;
     const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
     const ctx = cache.getContext('2d')!;
 
@@ -100,10 +106,11 @@ export function renderWatch(
     watch: Watch,
     env: Environment,
     scale: number,
+    images?: Map<string, LoadedImage>,
 ): void {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
-    const cache = buildStaticCache(watch, env, w, h, scale);
+    const cache = buildStaticCache(watch, env, w, h, scale, images);
     ctx.drawImage(cache, 0, 0);
 
     // Draw hands on top
@@ -258,7 +265,7 @@ function drawStaticPart(
             drawQText(ctx, part, env);
             break;
         case 'Image':
-            // Images skipped for now
+            drawImage(ctx, part, env);
             break;
         case 'QRect':
             drawQRect(ctx, part, env);
@@ -863,6 +870,37 @@ function drawQText(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 0, 0);
+    ctx.restore();
+}
+
+// ============================================================================
+// Image — rendered PNG asset
+// ============================================================================
+
+function drawImage(
+    ctx: RenderContext,
+    part: ImagePart,
+    env: Environment,
+): void {
+    if (!part.src || !currentImages) return;
+    const loaded = currentImages.get(part.src);
+    if (!loaded) return;
+
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
+    const alpha = part.alpha !== undefined ? evalAttr(part.alpha, env) : 1;
+
+    const { bitmap, scale: imgScale } = loaded;
+    // Image dimensions in XML coordinate units (1x space)
+    const drawW = bitmap.width * imgScale;
+    const drawH = bitmap.height * imgScale;
+
+    ctx.save();
+    if (alpha < 1) {
+        ctx.globalAlpha = alpha;
+    }
+    // Draw centered at (x, y)
+    ctx.drawImage(bitmap, x - drawW / 2, y - drawH / 2, drawW, drawH);
     ctx.restore();
 }
 

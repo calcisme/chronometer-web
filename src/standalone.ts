@@ -8,8 +8,9 @@ import haleakalaXML from './watch/__tests__/fixtures/Haleakala.xml';
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { renderWatch } from './watch/renderer.js';
+import { loadWatchImages } from './watch/image-loader.js';
 
-function main() {
+async function main() {
     const canvas = document.getElementById('watch') as HTMLCanvasElement;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -23,6 +24,9 @@ function main() {
     // Create expression environment and evaluate init blocks
     const env = createWatchEnvironment(watch);
 
+    // Load watch face images
+    const images = await loadWatchImages();
+
     // Scale: Haleakala is designed for ~290px diameter (r=143),
     // so scale to fit the canvas
     const scale = canvas.width / 290;
@@ -35,12 +39,12 @@ function main() {
     ctx.fill();
 
     // Render the watch
-    renderWatch(ctx, watch, env, scale);
+    renderWatch(ctx, watch, env, scale, images);
 }
 
 // Run when DOM is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', main);
+    document.addEventListener('DOMContentLoaded', () => main().catch(console.error));
 } else {
-    main();
+    main().catch(console.error);
 }

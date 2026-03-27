@@ -1,0 +1,5 @@
+// Type declaration for PNG image imports
+declare module '*.png' {
+    const url: string;
+    export default url;
+}

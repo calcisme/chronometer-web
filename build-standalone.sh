@@ -15,10 +15,11 @@ cd "$(dirname "$0")"
 
 echo "Building standalone Chronometer…"
 
-# Bundle TypeScript → single JS file (XML embedded as string)
+# Bundle TypeScript → single JS file (XML embedded as string, PNGs as data URLs)
 npx esbuild src/standalone.ts \
   --bundle \
   --loader:.xml=text \
+  --loader:.png=dataurl \
   --outfile=dist/chronometer.js \
   --format=iife \
   --target=es2020
