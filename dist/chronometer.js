@@ -1609,7 +1609,7 @@ Rise/set (Moon)
     if (n === 0) return;
     const fontSize = evalAttr(part.fontSize, env) || 12;
     const fontName = part.fontName || "Arial";
-    const strokeColor = evalColor(part.strokeColor, env);
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
     const bgColor = evalColor(part.bgColor, env);
     const orientation = part.orientation || "twelve";
     ctx.save();
@@ -1646,11 +1646,11 @@ Rise/set (Moon)
             ctx.rotate(angle - angle1 - i * step);
             break;
           case "six":
-            ctx.translate(0, -(tradius - maxH / 2));
+            ctx.translate(0, tradius - maxH / 2);
             ctx.rotate(angle - angle1 - i * step);
             break;
           case "twelve":
-            ctx.translate(0, tradius - maxH / 2);
+            ctx.translate(0, -(tradius - maxH / 2));
             ctx.rotate(angle - angle1 - i * step);
             break;
           case "nine":

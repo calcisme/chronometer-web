@@ -723,7 +723,7 @@ function drawWheel(
 
     const fontSize = evalAttr(part.fontSize, env) || 12;
     const fontName = part.fontName || 'Arial';
-    const strokeColor = evalColor(part.strokeColor, env);
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
     const bgColor = evalColor(part.bgColor, env);
     const orientation = part.orientation || 'twelve';
 
@@ -789,13 +789,15 @@ function drawWheel(
                     ctx.rotate(angle - angle1 - i * step);  // keep text upright
                     break;
                 case 'six':
-                    // Text above center (in iOS Y-up; in canvas Y-down this means negative Y)
-                    ctx.translate(0, -(tradius - maxH / 2));
+                    // 6 o'clock: text below center
+                    // iOS Quartz (Y-up): y = -trad → below. Canvas (Y-down): positive y → below
+                    ctx.translate(0, tradius - maxH / 2);
                     ctx.rotate(angle - angle1 - i * step);
                     break;
                 case 'twelve':
-                    // Text below center
-                    ctx.translate(0, tradius - maxH / 2);
+                    // 12 o'clock: text above center
+                    // iOS Quartz (Y-up): y = +trad → above. Canvas (Y-down): negative y → above
+                    ctx.translate(0, -(tradius - maxH / 2));
                     ctx.rotate(angle - angle1 - i * step);
                     break;
                 case 'nine':
