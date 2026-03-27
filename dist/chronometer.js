@@ -1341,47 +1341,72 @@ Rise/set (Moon)
         ctx.fill();
       }
     }
+    const EC_DIAL_RADIUS_FACTOR = 0.92;
+    const EC_DIAL_SMALL_RADIUS_CUTOFF = 45;
+    const EC_DIAL_SMALL_RADIUS_FACTOR = 0.11 / (EC_DIAL_SMALL_RADIUS_CUTOFF - 25);
     if (part.text) {
       const labels = part.text.split(",");
       const n = labels.length;
       const fontSize = evalAttr(part.fontSize, env) || 12;
       const fontName = part.fontName || "Arial";
       const orientation = part.orientation || "upright";
+      const hasTicks = marks !== MARKS_NONE;
       ctx.fillStyle = strokeColor;
       ctx.font = `${fontSize}px "${fontName}"`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      for (let i = 0; i < n; i++) {
-        const label = labels[i].trim();
-        if (!label) continue;
-        const th = i / n * 2 * Math.PI - Math.PI / 2;
-        if (orientation === "upright") {
-          const textR = radius - fontSize * 1.2;
+      if (orientation === "upright") {
+        const radiusFactor = radius < EC_DIAL_SMALL_RADIUS_CUTOFF ? EC_DIAL_RADIUS_FACTOR + EC_DIAL_SMALL_RADIUS_FACTOR * (EC_DIAL_SMALL_RADIUS_CUTOFF - radius) : EC_DIAL_RADIUS_FACTOR;
+        for (let i = 0; i < n; i++) {
+          const label = labels[i].trim();
+          if (!label) continue;
+          const th = i / n * 2 * Math.PI - Math.PI / 2;
+          const measured = ctx.measureText(label);
+          const w = measured.width;
+          const h = fontSize;
+          const textR = radius * radiusFactor - Math.sqrt(w * w + h * h) / 2;
           const tx = textR * Math.cos(th);
           const ty = textR * Math.sin(th);
           ctx.save();
           ctx.translate(tx, ty);
           ctx.fillText(label, 0, 0);
           ctx.restore();
-        } else if (orientation === "demi") {
-          const textR = radius - fontSize * 0.85;
-          const demiTweak = evalAttr(part.demiTweak, env);
-          const tx = textR * Math.cos(th);
-          const ty = textR * Math.sin(th);
+        }
+      } else if (orientation === "demi") {
+        const demiTweak = evalAttr(part.demiTweak, env);
+        const baseR = radius;
+        for (let i = 0; i < n; i++) {
+          const label = labels[i].trim();
+          if (!label) continue;
+          const th = i / n * 2 * Math.PI - Math.PI / 2;
+          const measured = ctx.measureText(label);
+          const textH = fontSize;
           ctx.save();
-          ctx.translate(tx, ty);
-          const angle = th + Math.PI / 2;
-          if (angle > Math.PI / 2 && angle < 3 * Math.PI / 2) {
-            ctx.rotate(angle + Math.PI);
-            ctx.translate(0, demiTweak);
+          if (i > n / 4 && i < 3 * n / 4) {
+            const r = baseR + demiTweak;
+            const textR = r - textH / 2;
+            const tx = textR * Math.cos(th);
+            const ty = textR * Math.sin(th);
+            ctx.translate(tx, ty);
+            ctx.rotate(th + Math.PI / 2 + Math.PI);
+            ctx.fillText(label, 0, 0);
           } else {
-            ctx.rotate(angle);
-            ctx.translate(0, -demiTweak);
+            const textR = baseR - textH / 2;
+            const tx = textR * Math.cos(th);
+            const ty = textR * Math.sin(th);
+            ctx.translate(tx, ty);
+            ctx.rotate(th + Math.PI / 2);
+            ctx.fillText(label, 0, 0);
           }
-          ctx.fillText(label, 0, 0);
           ctx.restore();
-        } else {
-          const textR = radius - fontSize * 0.85;
+        }
+      } else {
+        for (let i = 0; i < n; i++) {
+          const label = labels[i].trim();
+          if (!label) continue;
+          const th = i / n * 2 * Math.PI - Math.PI / 2;
+          const textH = fontSize;
+          const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
           const tx = textR * Math.cos(th);
           const ty = textR * Math.sin(th);
           ctx.save();
