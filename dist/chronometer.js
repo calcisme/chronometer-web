@@ -1614,14 +1614,16 @@ Rise/set (Moon)
     ctx.restore();
   }
   function drawQRect(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
+    const xCorner = evalAttr(part.x, env);
+    const yCorner = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     if (w <= 0 || h <= 0) return;
+    const cx = xCorner + w / 2;
+    const cy = -(yCorner + h / 2);
     const bgColor = evalColor(part.bgColor, env);
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(cx, cy);
     if (bgColor !== "rgba(0,0,0,0)") {
       ctx.fillStyle = bgColor;
       ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -1644,16 +1646,18 @@ Rise/set (Moon)
     ctx.restore();
   }
   function drawWindow(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
+    const xCorner = evalAttr(part.x, env);
+    const yCorner = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     const border = evalAttr(part.border, env);
     const strokeColor = evalColor(part.strokeColor, env);
     const isPorthole = part.windowType === "porthole";
     if (w <= 0 || h <= 0) return;
+    const cx = xCorner + w / 2;
+    const cy = -(yCorner + h / 2);
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(cx, cy);
     const shadowOpacity = evalAttr(part.shadowOpacity, env);
     if (shadowOpacity > 0) {
       const shadowSigma = evalAttr(part.shadowSigma, env) || 1;

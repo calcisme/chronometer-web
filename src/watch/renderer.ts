@@ -638,16 +638,20 @@ function drawQRect(
     part: QRectPart,
     env: Environment,
 ): void {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
+    const xCorner = evalAttr(part.x, env);
+    const yCorner = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     if (w <= 0 || h <= 0) return;
 
+    // Original iOS: (x,y) is top-left corner; center = (x+w/2, y+h/2)
+    const cx = xCorner + w / 2;
+    const cy = -(yCorner + h / 2);  // Negate Y: XML Y-up → Canvas Y-down
+
     const bgColor = evalColor(part.bgColor, env);
 
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(cx, cy);
 
     // Centered rect
     if (bgColor !== 'rgba(0,0,0,0)') {
@@ -685,8 +689,8 @@ function drawWindow(
     part: WindowPart,
     env: Environment,
 ): void {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
+    const xCorner = evalAttr(part.x, env);
+    const yCorner = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     const border = evalAttr(part.border, env);
@@ -695,8 +699,12 @@ function drawWindow(
 
     if (w <= 0 || h <= 0) return;
 
+    // Original iOS: (x,y) is top-left corner; center = (x+w/2, y+h/2)
+    const cx = xCorner + w / 2;
+    const cy = -(yCorner + h / 2);  // Negate Y: XML Y-up → Canvas Y-down
+
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(cx, cy);
 
     // Shadow
     const shadowOpacity = evalAttr(part.shadowOpacity, env);
