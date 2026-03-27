@@ -1545,56 +1545,56 @@ Rise/set (Moon)
 
   // src/astronomy/planet-tables.ts
   var sunData = [
-    { li: 403406, ri: 4.721964, ali: 1.621043, bli: 0 },
-    { li: 195207, ri: 5.937458, ali: 62830.348067, bli: -97597 },
-    { li: 119433, ri: 1.115589, ali: 62830.821524, bli: -59715 },
-    { li: 112392, ri: 5.781616, ali: 62829.634302, bli: -56188 },
-    { li: 3891, ri: 5.5474, ali: 125660.5691, bli: -1556 },
-    { li: 2819, ri: 1.512, ali: 125660.9845, bli: -1126 },
-    { li: 1721, ri: 4.1897, ali: 62832.4766, bli: -861 },
-    { li: 0, ri: 1.163, ali: 0.813, bli: 941 },
-    { li: 660, ri: 5.415, ali: 125659.31, bli: -264 },
-    { li: 350, ri: 4.315, ali: 57533.85, bli: -163 },
-    { li: 334, ri: 4.553, ali: -33.931, bli: 0 },
-    { li: 314, ri: 5.198, ali: 777137.715, bli: 309 },
-    { li: 268, ri: 5.989, ali: 78604.191, bli: -158 },
-    { li: 242, ri: 2.911, ali: 5.412, bli: 0 },
-    { li: 234, ri: 1.423, ali: 39302.098, bli: -54 },
-    { li: 158, ri: 0.061, ali: -34.861, bli: 0 },
-    { li: 132, ri: 2.317, ali: 115067.698, bli: -93 },
-    { li: 129, ri: 3.193, ali: 15774.337, bli: -20 },
-    { li: 114, ri: 2.828, ali: 5296.67, bli: 0 },
-    { li: 99, ri: 0.52, ali: 58849.27, bli: -47 },
-    { li: 93, ri: 4.65, ali: 5296.11, bli: 0 },
-    { li: 86, ri: 4.35, ali: -3980.7, bli: 0 },
-    { li: 78, ri: 2.75, ali: 52237.69, bli: -33 },
-    { li: 72, ri: 4.5, ali: 55076.47, bli: -32 },
-    { li: 68, ri: 3.23, ali: 261.08, bli: 0 },
-    { li: 64, ri: 1.22, ali: 15773.85, bli: -10 },
-    { li: 46, ri: 0.14, ali: 188491.03, bli: -16 },
-    { li: 38, ri: 3.44, ali: -7756.55, bli: 0 },
-    { li: 37, ri: 4.37, ali: 264.89, bli: 0 },
-    { li: 32, ri: 1.14, ali: 117906.27, bli: -24 },
-    { li: 29, ri: 2.84, ali: 55075.75, bli: -13 },
-    { li: 28, ri: 5.96, ali: -7961.39, bli: 0 },
-    { li: 27, ri: 5.09, ali: 188489.81, bli: -9 },
-    { li: 27, ri: 1.72, ali: 2132.19, bli: 0 },
-    { li: 25, ri: 2.56, ali: 109771.03, bli: -17 },
-    { li: 24, ri: 1.92, ali: 54868.56, bli: -11 },
-    { li: 21, ri: 0.09, ali: 25443.93, bli: 0 },
-    { li: 21, ri: 5.98, ali: -55731.43, bli: 31 },
-    { li: 20, ri: 4.03, ali: 60697.74, bli: -10 },
-    { li: 18, ri: 4.27, ali: 2132.79, bli: 0 },
-    { li: 17, ri: 0.79, ali: 109771.63, bli: -12 },
-    { li: 14, ri: 4.24, ali: -7752.82, bli: 0 },
-    { li: 13, ri: 2.01, ali: 188491.91, bli: -5 },
-    { li: 13, ri: 2.65, ali: 207.81, bli: 0 },
-    { li: 13, ri: 4.98, ali: 29424.63, bli: 0 },
-    { li: 12, ri: 0.93, ali: -7.99, bli: 0 },
-    { li: 10, ri: 2.21, ali: 46941.14, bli: 0 },
-    { li: 10, ri: 3.59, ali: -68.29, bli: 0 },
-    { li: 10, ri: 1.5, ali: 21463.25, bli: 0 },
-    { li: 10, ri: 2.55, ali: 157208.4, bli: -9 }
+    { li: 403406, ali: 4.721964, bli: 1.621043, ri: 0 },
+    { li: 195207, ali: 5.937458, bli: 62830.348067, ri: -97597 },
+    { li: 119433, ali: 1.115589, bli: 62830.821524, ri: -59715 },
+    { li: 112392, ali: 5.781616, bli: 62829.634302, ri: -56188 },
+    { li: 3891, ali: 5.5474, bli: 125660.5691, ri: -1556 },
+    { li: 2819, ali: 1.512, bli: 125660.9845, ri: -1126 },
+    { li: 1721, ali: 4.1897, bli: 62832.4766, ri: -861 },
+    { li: 0, ali: 1.163, bli: 0.813, ri: 941 },
+    { li: 660, ali: 5.415, bli: 125659.31, ri: -264 },
+    { li: 350, ali: 4.315, bli: 57533.85, ri: -163 },
+    { li: 334, ali: 4.553, bli: -33.931, ri: 0 },
+    { li: 314, ali: 5.198, bli: 777137.715, ri: 309 },
+    { li: 268, ali: 5.989, bli: 78604.191, ri: -158 },
+    { li: 242, ali: 2.911, bli: 5.412, ri: 0 },
+    { li: 234, ali: 1.423, bli: 39302.098, ri: -54 },
+    { li: 158, ali: 0.061, bli: -34.861, ri: 0 },
+    { li: 132, ali: 2.317, bli: 115067.698, ri: -93 },
+    { li: 129, ali: 3.193, bli: 15774.337, ri: -20 },
+    { li: 114, ali: 2.828, bli: 5296.67, ri: 0 },
+    { li: 99, ali: 0.52, bli: 58849.27, ri: -47 },
+    { li: 93, ali: 4.65, bli: 5296.11, ri: 0 },
+    { li: 86, ali: 4.35, bli: -3980.7, ri: 0 },
+    { li: 78, ali: 2.75, bli: 52237.69, ri: -33 },
+    { li: 72, ali: 4.5, bli: 55076.47, ri: -32 },
+    { li: 68, ali: 3.23, bli: 261.08, ri: 0 },
+    { li: 64, ali: 1.22, bli: 15773.85, ri: -10 },
+    { li: 46, ali: 0.14, bli: 188491.03, ri: -16 },
+    { li: 38, ali: 3.44, bli: -7756.55, ri: 0 },
+    { li: 37, ali: 4.37, bli: 264.89, ri: 0 },
+    { li: 32, ali: 1.14, bli: 117906.27, ri: -24 },
+    { li: 29, ali: 2.84, bli: 55075.75, ri: -13 },
+    { li: 28, ali: 5.96, bli: -7961.39, ri: 0 },
+    { li: 27, ali: 5.09, bli: 188489.81, ri: -9 },
+    { li: 27, ali: 1.72, bli: 2132.19, ri: 0 },
+    { li: 25, ali: 2.56, bli: 109771.03, ri: -17 },
+    { li: 24, ali: 1.92, bli: 54868.56, ri: -11 },
+    { li: 21, ali: 0.09, bli: 25443.93, ri: 0 },
+    { li: 21, ali: 5.98, bli: -55731.43, ri: 31 },
+    { li: 20, ali: 4.03, bli: 60697.74, ri: -10 },
+    { li: 18, ali: 4.27, bli: 2132.79, ri: 0 },
+    { li: 17, ali: 0.79, bli: 109771.63, ri: -12 },
+    { li: 14, ali: 4.24, bli: -7752.82, ri: 0 },
+    { li: 13, ali: 2.01, bli: 188491.91, ri: -5 },
+    { li: 13, ali: 2.65, bli: 207.81, ri: 0 },
+    { li: 13, ali: 4.98, bli: 29424.63, ri: 0 },
+    { li: 12, ali: 0.93, bli: -7.99, ri: 0 },
+    { li: 10, ali: 2.21, bli: 46941.14, ri: 0 },
+    { li: 10, ali: 3.59, bli: -68.29, ri: 0 },
+    { li: 10, ali: 1.5, bli: 21463.25, ri: 0 },
+    { li: 10, ali: 2.55, bli: 157208.4, ri: -9 }
   ];
   var numSunData = sunData.length;
 
@@ -3602,46 +3602,6 @@ Rise/set (Moon)
     }
     return tryDate;
   }
-  function sunriseForDay(dateInterval, observerLatitude, observerLongitude, cachePool) {
-    if (cachePool.currentCache && cachePool.currentCache.isValid(148 /* sunriseForDay */)) {
-      return cachePool.currentCache.get(148 /* sunriseForDay */);
-    }
-    const midnight = priorUTMidnightForDateInterval(dateInterval, cachePool.currentCache);
-    const noon = midnight + 12 * 3600;
-    const result = planetaryRiseSetTimeRefined(
-      noon,
-      observerLatitude,
-      observerLongitude,
-      true,
-      0 /* Sun */,
-      NaN,
-      cachePool
-    );
-    if (cachePool.currentCache) {
-      cachePool.currentCache.set(148 /* sunriseForDay */, result);
-    }
-    return result;
-  }
-  function sunsetForDay(dateInterval, observerLatitude, observerLongitude, cachePool) {
-    if (cachePool.currentCache && cachePool.currentCache.isValid(149 /* sunsetForDay */)) {
-      return cachePool.currentCache.get(149 /* sunsetForDay */);
-    }
-    const midnight = priorUTMidnightForDateInterval(dateInterval, cachePool.currentCache);
-    const noon = midnight + 12 * 3600;
-    const result = planetaryRiseSetTimeRefined(
-      noon,
-      observerLatitude,
-      observerLongitude,
-      false,
-      0 /* Sun */,
-      NaN,
-      cachePool
-    );
-    if (cachePool.currentCache) {
-      cachePool.currentCache.set(149 /* sunsetForDay */, result);
-    }
-    return result;
-  }
 
   // src/watch/watch-env.ts
   var OBSERVER_LAT = 37.205 * Math.PI / 180;
@@ -3708,32 +3668,67 @@ Rise/set (Moon)
     const pool = new AstroCachePool();
     initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
     const cache = pool.currentCache;
+    {
+      const { julianCenturiesSince2000Epoch: jc, deltaT } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+      console.log(`[Astro] Julian centuries TDT: ${jc.toFixed(10)}, deltaT: ${deltaT.toFixed(2)}s`);
+      const sunRD = sunRAandDecl(dateInterval, cache);
+      console.log(`[Astro] Sun RA: ${(sunRD.rightAscension * 180 / Math.PI).toFixed(4)}\xB0 (${(sunRD.rightAscension * 12 / Math.PI).toFixed(4)}h), Decl: ${(sunRD.declination * 180 / Math.PI).toFixed(4)}\xB0`);
+      const gst = convertUTToGSTP03(dateInterval, cache);
+      const lst = convertGSTtoLST(gst, OBSERVER_LON);
+      const ha = lst - sunRD.rightAscension;
+      console.log(`[Astro] GST: ${(gst * 12 / Math.PI).toFixed(4)}h, LST: ${(lst * 12 / Math.PI).toFixed(4)}h, HA: ${(ha * 180 / Math.PI).toFixed(4)}\xB0`);
+    }
     const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
     const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+    console.log(`[Astro] Observer: ${(OBSERVER_LAT * 180 / Math.PI).toFixed(3)}\xB0N, ${(-OBSERVER_LON * 180 / Math.PI).toFixed(3)}\xB0W`);
+    console.log(`[Astro] Time: ${now.toISOString()} (dateInterval=${dateInterval.toFixed(1)}, tzOffset=${tzOffsetSeconds}s)`);
+    console.log(`[Astro] Sun altitude: ${(sunAlt * 180 / Math.PI).toFixed(2)}\xB0, azimuth: ${(sunAz * 180 / Math.PI).toFixed(2)}\xB0`);
     functions.set("sunAzimuth", () => sunAz);
     functions.set("sunAltitude", () => sunAlt);
-    const sunrise = sunriseForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
-    const sunset = sunsetForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
+    const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1e3 - 978307200;
+    const localNoon = localMidnight + 12 * 3600;
+    const sunrise = planetaryRiseSetTimeRefined(
+      localNoon,
+      OBSERVER_LAT,
+      OBSERVER_LON,
+      true,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const sunset = planetaryRiseSetTimeRefined(
+      localNoon,
+      OBSERVER_LAT,
+      OBSERVER_LON,
+      false,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
     if (!isNoRiseSet(sunrise)) {
       const srDate = new Date((sunrise + 978307200) * 1e3);
+      console.log(`[Astro] Sunrise: ${srDate.toLocaleTimeString()} (${srDate.toISOString()})`);
       const srHour12 = srDate.getHours() % 12 + srDate.getMinutes() / 60 + srDate.getSeconds() / 3600;
       const srMinute = srDate.getMinutes() + srDate.getSeconds() / 60;
       functions.set("sunriseForDayValid", () => 1);
       functions.set("sunriseForDayHour12ValueAngle", () => srHour12 * 2 * Math.PI / 12);
       functions.set("sunriseForDayMinuteValueAngle", () => srMinute * 2 * Math.PI / 60);
     } else {
+      console.log(`[Astro] Sunrise: NO RISE (${sunrise})`);
       functions.set("sunriseForDayValid", () => 0);
       functions.set("sunriseForDayHour12ValueAngle", () => 0);
       functions.set("sunriseForDayMinuteValueAngle", () => 0);
     }
     if (!isNoRiseSet(sunset)) {
       const ssDate = new Date((sunset + 978307200) * 1e3);
+      console.log(`[Astro] Sunset: ${ssDate.toLocaleTimeString()} (${ssDate.toISOString()})`);
       const ssHour12 = ssDate.getHours() % 12 + ssDate.getMinutes() / 60 + ssDate.getSeconds() / 3600;
       const ssMinute = ssDate.getMinutes() + ssDate.getSeconds() / 60;
       functions.set("sunsetForDayValid", () => 1);
       functions.set("sunsetForDayHour12ValueAngle", () => ssHour12 * 2 * Math.PI / 12);
       functions.set("sunsetForDayMinuteValueAngle", () => ssMinute * 2 * Math.PI / 60);
     } else {
+      console.log(`[Astro] Sunset: NO SET (${sunset})`);
       functions.set("sunsetForDayValid", () => 0);
       functions.set("sunsetForDayHour12ValueAngle", () => 0);
       functions.set("sunsetForDayMinuteValueAngle", () => 0);
@@ -3746,7 +3741,7 @@ Rise/set (Moon)
     functions.set("moonAgeAngle", () => mAge);
     functions.set("moonRelativePositionAngle", () => 0);
     const moonrise = planetaryRiseSetTimeRefined(
-      dateInterval,
+      localNoon,
       OBSERVER_LAT,
       OBSERVER_LON,
       true,
@@ -3755,7 +3750,7 @@ Rise/set (Moon)
       pool
     );
     const moonset = planetaryRiseSetTimeRefined(
-      dateInterval,
+      localNoon,
       OBSERVER_LAT,
       OBSERVER_LON,
       false,

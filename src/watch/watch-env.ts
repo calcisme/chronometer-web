@@ -12,12 +12,13 @@ import {
     Environment,
 } from '../expr/evaluator.js';
 import type { Watch } from './types.js';
-import { dateToDateInterval } from '../astronomy/es-time.js';
+import { dateToDateInterval, julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
 import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge } from '../astronomy/es-astro.js';
-import { sunriseForDay, sunsetForDay } from '../astronomy/es-riseset.js';
+import { sunriseForDay, sunsetForDay, planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
-import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
+import { convertUTToGSTP03, convertGSTtoLST } from '../astronomy/es-sidereal.js';
+import { sunRAandDecl } from '../astronomy/es-coordinates.js';
 
 // Hardcoded observer location: 37.205°N, 121.954°W
 const OBSERVER_LAT = 37.205 * Math.PI / 180;  // radians
@@ -136,25 +137,54 @@ function registerTimeFunctions(env: Environment): void {
     initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
     const cache = pool.currentCache;
 
+    // --- Diagnostic: dump intermediate values ---
+    {
+        const { julianCenturiesSince2000Epoch: jc, deltaT } =
+            julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+        console.log(`[Astro] Julian centuries TDT: ${jc.toFixed(10)}, deltaT: ${deltaT.toFixed(2)}s`);
+
+        const sunRD = sunRAandDecl(dateInterval, cache);
+        console.log(`[Astro] Sun RA: ${(sunRD.rightAscension * 180 / Math.PI).toFixed(4)}° (${(sunRD.rightAscension * 12 / Math.PI).toFixed(4)}h), Decl: ${(sunRD.declination * 180 / Math.PI).toFixed(4)}°`);
+
+        const gst = convertUTToGSTP03(dateInterval, cache);
+        const lst = convertGSTtoLST(gst, OBSERVER_LON);
+        const ha = lst - sunRD.rightAscension;
+        console.log(`[Astro] GST: ${(gst * 12 / Math.PI).toFixed(4)}h, LST: ${(lst * 12 / Math.PI).toFixed(4)}h, HA: ${(ha * 180 / Math.PI).toFixed(4)}°`);
+    }
+
     // --- Sun position ---
     const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
     const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
+
+    console.log(`[Astro] Observer: ${(OBSERVER_LAT * 180 / Math.PI).toFixed(3)}°N, ${(-OBSERVER_LON * 180 / Math.PI).toFixed(3)}°W`);
+    console.log(`[Astro] Time: ${now.toISOString()} (dateInterval=${dateInterval.toFixed(1)}, tzOffset=${tzOffsetSeconds}s)`);
+    console.log(`[Astro] Sun altitude: ${(sunAlt * 180 / Math.PI).toFixed(2)}°, azimuth: ${(sunAz * 180 / Math.PI).toFixed(2)}°`);
 
     functions.set('sunAzimuth', () => sunAz);
     functions.set('sunAltitude', () => sunAlt);
 
     // --- Sunrise/sunset for today ---
-    const sunrise = sunriseForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
-    const sunset = sunsetForDay(dateInterval, OBSERVER_LAT, OBSERVER_LON, pool);
+    // Use LOCAL noon as starting point (not UT noon, which is 5 AM PDT and
+    // would find yesterday's sunset instead of today's)
+    const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000 - 978307200;
+    const localNoon = localMidnight + 12 * 3600;
 
+    const sunrise = planetaryRiseSetTimeRefined(
+        localNoon, OBSERVER_LAT, OBSERVER_LON, true, ECPlanetNumber.Sun, NaN, pool,
+    );
+    const sunset = planetaryRiseSetTimeRefined(
+        localNoon, OBSERVER_LAT, OBSERVER_LON, false, ECPlanetNumber.Sun, NaN, pool,
+    );
     if (!isNoRiseSet(sunrise)) {
         const srDate = new Date((sunrise + 978307200) * 1000);
+        console.log(`[Astro] Sunrise: ${srDate.toLocaleTimeString()} (${srDate.toISOString()})`);
         const srHour12 = (srDate.getHours() % 12) + srDate.getMinutes() / 60 + srDate.getSeconds() / 3600;
         const srMinute = srDate.getMinutes() + srDate.getSeconds() / 60;
         functions.set('sunriseForDayValid', () => 1);
         functions.set('sunriseForDayHour12ValueAngle', () => srHour12 * 2 * Math.PI / 12);
         functions.set('sunriseForDayMinuteValueAngle', () => srMinute * 2 * Math.PI / 60);
     } else {
+        console.log(`[Astro] Sunrise: NO RISE (${sunrise})`);
         functions.set('sunriseForDayValid', () => 0);
         functions.set('sunriseForDayHour12ValueAngle', () => 0);
         functions.set('sunriseForDayMinuteValueAngle', () => 0);
@@ -162,12 +192,14 @@ function registerTimeFunctions(env: Environment): void {
 
     if (!isNoRiseSet(sunset)) {
         const ssDate = new Date((sunset + 978307200) * 1000);
+        console.log(`[Astro] Sunset: ${ssDate.toLocaleTimeString()} (${ssDate.toISOString()})`);
         const ssHour12 = (ssDate.getHours() % 12) + ssDate.getMinutes() / 60 + ssDate.getSeconds() / 3600;
         const ssMinute = ssDate.getMinutes() + ssDate.getSeconds() / 60;
         functions.set('sunsetForDayValid', () => 1);
         functions.set('sunsetForDayHour12ValueAngle', () => ssHour12 * 2 * Math.PI / 12);
         functions.set('sunsetForDayMinuteValueAngle', () => ssMinute * 2 * Math.PI / 60);
     } else {
+        console.log(`[Astro] Sunset: NO SET (${sunset})`);
         functions.set('sunsetForDayValid', () => 0);
         functions.set('sunsetForDayHour12ValueAngle', () => 0);
         functions.set('sunsetForDayMinuteValueAngle', () => 0);
@@ -185,10 +217,10 @@ function registerTimeFunctions(env: Environment): void {
 
     // --- Moonrise/moonset ---
     const moonrise = planetaryRiseSetTimeRefined(
-        dateInterval, OBSERVER_LAT, OBSERVER_LON, true, ECPlanetNumber.Moon, NaN, pool,
+        localNoon, OBSERVER_LAT, OBSERVER_LON, true, ECPlanetNumber.Moon, NaN, pool,
     );
     const moonset = planetaryRiseSetTimeRefined(
-        dateInterval, OBSERVER_LAT, OBSERVER_LON, false, ECPlanetNumber.Moon, NaN, pool,
+        localNoon, OBSERVER_LAT, OBSERVER_LON, false, ECPlanetNumber.Moon, NaN, pool,
     );
 
     if (!isNoRiseSet(moonrise)) {
