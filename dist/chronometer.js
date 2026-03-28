@@ -4441,7 +4441,7 @@ Rise/set (Moon)
         animating: false
       },
       updateIntervalMs,
-      nextUpdateTime: now + updateIntervalMs,
+      nextUpdateTime: nextAlignedUpdate(updateIntervalMs),
       animSpeed
     };
   }
@@ -4450,7 +4450,7 @@ Rise/set (Moon)
       if (now >= state.nextUpdateTime) {
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
         startAnimation(state, newTarget, now);
-        state.nextUpdateTime = now + state.updateIntervalMs;
+        state.nextUpdateTime = nextAlignedUpdate(state.updateIntervalMs);
       }
       const angle = interpolate(state.angle, now);
       if (!state.part.dynamicState) {
@@ -4510,6 +4510,11 @@ Rise/set (Moon)
     val.currentValue += (val.targetValue - val.currentValue) * fraction;
     val.lastAnimationTime = now;
     return val.currentValue;
+  }
+  function nextAlignedUpdate(intervalMs) {
+    const wallNow = Date.now();
+    const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
+    return performance.now() + (nextWall - wallNow);
   }
   function fmod3(value, modulus) {
     const result = value % modulus;

@@ -113,7 +113,7 @@ function createHandState(
             animating: false,
         },
         updateIntervalMs,
-        nextUpdateTime: now + updateIntervalMs,
+        nextUpdateTime: nextAlignedUpdate(updateIntervalMs),
         animSpeed,
     };
 }
@@ -140,7 +140,7 @@ export function tickAnimations(
                 ? evalAttr(state.part.angle, env)
                 : 0;
             startAnimation(state, newTarget, now);
-            state.nextUpdateTime = now + state.updateIntervalMs;
+            state.nextUpdateTime = nextAlignedUpdate(state.updateIntervalMs);
         }
 
         // Interpolate if animating
@@ -240,6 +240,19 @@ function interpolate(val: AnimatingValue, now: number): number {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Compute the next epoch-aligned update time in performance.now() ms.
+ *
+ * For example, with intervalMs=1000, if the wall clock is at 1616000000.350,
+ * the next boundary is 1616000001.000, which is 650ms from now.
+ */
+function nextAlignedUpdate(intervalMs: number): number {
+    const wallNow = Date.now();  // ms since epoch
+    const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
+    // Convert wall-clock delta to performance.now() time
+    return performance.now() + (nextWall - wallNow);
+}
 
 /** Floating-point modulo that always returns a non-negative result. */
 function fmod(value: number, modulus: number): number {
