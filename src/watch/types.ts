@@ -38,11 +38,23 @@ export type WatchPart =
 // Shared base for all parts
 // ============================================================================
 
+/**
+ * Runtime animation state, separate from parsed XML data.
+ * Populated by the animation system; read by the renderer.
+ */
+export interface DynamicState {
+    /** Current interpolated angle (radians), set by the animation system. */
+    currentAngle: number;
+    // Future: currentX, currentY for linear animation
+}
+
 export interface PartBase {
     name: string;
     x?: string;
     y?: string;
     modes?: string;
+    /** Runtime animation state — populated by the animation system, not by XML parsing. */
+    dynamicState?: DynamicState;
 }
 
 // ============================================================================

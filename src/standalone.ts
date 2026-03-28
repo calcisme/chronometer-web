@@ -9,6 +9,7 @@ import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { buildStaticCache, renderFrame } from './watch/renderer.js';
 import { loadWatchImages } from './watch/image-loader.js';
+import { initHandStates, tickAnimations } from './watch/animation.js';
 
 /**
  * Request the user's location from the browser.
@@ -63,8 +64,16 @@ async function main() {
         watch, env, canvas.width, canvas.height, scale, images,
     );
 
-    // Animation loop — redraws dynamic hands every frame
+    // Initialize animation state for all dynamic parts (hands + wheels)
+    const handStates = initHandStates(watch, env, performance.now());
+
+    // Animation loop:
+    //   1. Tick animations — re-evaluate expressions at each part's update
+    //      interval and interpolate toward new targets
+    //   2. Render — blit static cache + draw hands at their animated angles
     function tick() {
+        const now = performance.now();
+        tickAnimations(handStates, env, now);
         renderFrame(ctx!, staticCache, watch, env, scale);
         requestAnimationFrame(tick);
     }

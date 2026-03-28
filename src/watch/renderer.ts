@@ -548,7 +548,10 @@ function drawQHand(
 ): void {
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
-    const angle = evalAttr(part.angle, env);
+    // Use pre-computed animated angle if available, otherwise evaluate expression
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
     const length = evalAttr(part.length, env);
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);

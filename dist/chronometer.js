@@ -4095,7 +4095,7 @@ Rise/set (Moon)
   function drawQHand(ctx, part, env) {
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
-    const angle = evalAttr(part.angle, env);
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
     const length = evalAttr(part.length, env);
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);
@@ -4408,6 +4408,114 @@ Rise/set (Moon)
     return result;
   }
 
+  // src/watch/animation.ts
+  var kECGLAngleAnimationSpeed = 2;
+  var kECGLFrameRate = 1 / 120;
+  function initHandStates(watch, env, now) {
+    const states = [];
+    collectDynamicParts(watch.parts, env, now, states);
+    return states;
+  }
+  function collectDynamicParts(parts, env, now, out) {
+    for (const part of parts) {
+      if (part.type === "QHand" || part.type === "Wheel") {
+        out.push(createHandState(part, env, now));
+      } else if (part.type === "Static") {
+        collectDynamicParts(part.children, env, now, out);
+      }
+    }
+  }
+  function createHandState(part, env, now) {
+    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
+    const updateIntervalMs = updateIntervalSec * 1e3;
+    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
+    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
+    part.dynamicState = { currentAngle: initialAngle };
+    return {
+      part,
+      angle: {
+        currentValue: initialAngle,
+        targetValue: initialAngle,
+        lastAnimationTime: now,
+        animationStopTime: now,
+        animating: false
+      },
+      updateIntervalMs,
+      nextUpdateTime: now + updateIntervalMs,
+      animSpeed
+    };
+  }
+  function tickAnimations(states, env, now) {
+    for (const state of states) {
+      if (now >= state.nextUpdateTime) {
+        const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
+        startAnimation(state, newTarget, now);
+        state.nextUpdateTime = now + state.updateIntervalMs;
+      }
+      const angle = interpolate(state.angle, now);
+      if (!state.part.dynamicState) {
+        state.part.dynamicState = { currentAngle: angle };
+      } else {
+        state.part.dynamicState.currentAngle = angle;
+      }
+    }
+  }
+  function startAnimation(state, newTarget, now) {
+    const val = state.angle;
+    const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+    newTarget = fmod3(newTarget, 2 * Math.PI);
+    if (animateSpeed === 0 || state.animSpeed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    if (newTarget > val.currentValue) {
+      if (newTarget - val.currentValue > Math.PI) {
+        val.currentValue += 2 * Math.PI;
+      }
+    } else {
+      if (val.currentValue - newTarget > Math.PI) {
+        val.currentValue -= 2 * Math.PI;
+      }
+    }
+    const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
+    if (deltaTime < kECGLFrameRate) {
+      val.currentValue = val.targetValue;
+      val.animating = false;
+      return;
+    }
+    if (val.animating) {
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + deltaTime * 1e3;
+  }
+  function interpolate(val, now) {
+    if (!val.animating) {
+      return val.currentValue;
+    }
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = fmod3(val.targetValue, 2 * Math.PI);
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
+  }
+  function fmod3(value, modulus) {
+    const result = value % modulus;
+    return result < 0 ? result + modulus : result;
+  }
+
   // src/standalone.ts
   function requestLocation() {
     if (!navigator.geolocation) {
@@ -4447,7 +4555,10 @@ Rise/set (Moon)
       scale,
       images
     );
+    const handStates = initHandStates(watch, env, performance.now());
     function tick() {
+      const now = performance.now();
+      tickAnimations(handStates, env, now);
       renderFrame(ctx, staticCache, watch, env, scale);
       requestAnimationFrame(tick);
     }
