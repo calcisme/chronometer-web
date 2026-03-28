@@ -861,7 +861,7 @@ function drawQText(
 
     const fontSize = evalAttr(part.fontSize, env) || 12;
     const fontName = part.fontName || 'Arial';
-    const strokeColor = evalColor(part.strokeColor, env);
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
 
     ctx.save();
     ctx.translate(x, y);
