@@ -7,7 +7,7 @@
 import haleakalaXML from './watch/__tests__/fixtures/Haleakala.xml';
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
-import { renderWatch } from './watch/renderer.js';
+import { buildStaticCache, renderFrame } from './watch/renderer.js';
 import { loadWatchImages } from './watch/image-loader.js';
 
 /**
@@ -58,15 +58,17 @@ async function main() {
     // so scale to fit the canvas
     const scale = canvas.width / 290;
 
-    // Placeholder face background — lighter cream so gray subdials (0xffe0e0e0)
-    // appear darker by contrast, matching the original Haleakala face image
-    ctx.fillStyle = '#f0ead8';
-    ctx.beginPath();
-    ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, 2 * Math.PI);
-    ctx.fill();
+    // Build static cache (dials, images, text, windows — rendered once)
+    const staticCache = buildStaticCache(
+        watch, env, canvas.width, canvas.height, scale, images,
+    );
 
-    // Render the watch
-    renderWatch(ctx, watch, env, scale, images);
+    // Animation loop — redraws dynamic hands every frame
+    function tick() {
+        renderFrame(ctx!, staticCache, watch, env, scale);
+        requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
 }
 
 // Run when DOM is ready

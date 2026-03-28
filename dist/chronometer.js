@@ -3646,20 +3646,19 @@ Rise/set (Moon)
     const dateInterval = dateToDateInterval(now);
     const tzOffsetMinutes = now.getTimezoneOffset();
     const tzOffsetSeconds = -tzOffsetMinutes * 60;
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const seconds = now.getSeconds();
-    const ms = now.getMilliseconds();
-    const totalSeconds = seconds + ms / 1e3;
-    const totalMinutes = minutes + totalSeconds / 60;
-    const totalHours12 = hours % 12 + totalMinutes / 60;
-    const hour24 = hours;
-    functions.set("hour12ValueAngle", () => totalHours12 * 2 * Math.PI / 12);
-    functions.set("minuteValueAngle", () => totalMinutes * 2 * Math.PI / 60);
-    functions.set("secondValueAngle", () => totalSeconds * 2 * Math.PI / 60);
-    functions.set("secondNumberAngle", () => Math.floor(totalSeconds) * 2 * Math.PI / 60);
-    functions.set("secondValue", () => totalSeconds);
-    functions.set("hour24Number", () => hour24);
+    const liveTime = () => {
+      const t = /* @__PURE__ */ new Date();
+      const s = t.getSeconds() + t.getMilliseconds() / 1e3;
+      const m = t.getMinutes() + s / 60;
+      const h = t.getHours() % 12 + m / 60;
+      return { h, m, s, h24: t.getHours() };
+    };
+    functions.set("hour12ValueAngle", () => liveTime().h * 2 * Math.PI / 12);
+    functions.set("minuteValueAngle", () => liveTime().m * 2 * Math.PI / 60);
+    functions.set("secondValueAngle", () => liveTime().s * 2 * Math.PI / 60);
+    functions.set("secondNumberAngle", () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
+    functions.set("secondValue", () => liveTime().s);
+    functions.set("hour24Number", () => liveTime().h24);
     const dayOfMonth = now.getDate();
     const month = now.getMonth();
     const weekday = now.getDay();
@@ -3669,11 +3668,15 @@ Rise/set (Moon)
     functions.set("days", () => 86400);
     const pool = new AstroCachePool();
     initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
+    functions.set("sunAltitude", () => {
+      const di = dateToDateInterval(/* @__PURE__ */ new Date());
+      return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set("sunAzimuth", () => {
+      const di = dateToDateInterval(/* @__PURE__ */ new Date());
+      return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
     const cache = pool.currentCache;
-    const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    functions.set("sunAzimuth", () => sunAz);
-    functions.set("sunAltitude", () => sunAlt);
     const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1e3 - 978307200;
     const localNoon = localMidnight + 12 * 3600;
     const sunrise = planetaryRiseSetTimeRefined(
@@ -3718,12 +3721,18 @@ Rise/set (Moon)
       functions.set("sunsetForDayHour12ValueAngle", () => 0);
       functions.set("sunsetForDayMinuteValueAngle", () => 0);
     }
-    const moonAlt = moonAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    const moonAz = moonAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    const { age: mAge } = moonAge(dateInterval, cache);
-    functions.set("moonAzimuth", () => moonAz);
-    functions.set("moonAltitude", () => moonAlt);
-    functions.set("moonAgeAngle", () => mAge);
+    functions.set("moonAltitude", () => {
+      const di = dateToDateInterval(/* @__PURE__ */ new Date());
+      return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set("moonAzimuth", () => {
+      const di = dateToDateInterval(/* @__PURE__ */ new Date());
+      return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set("moonAgeAngle", () => {
+      const di = dateToDateInterval(/* @__PURE__ */ new Date());
+      return moonAge(di, null).age;
+    });
     functions.set("moonRelativePositionAngle", () => 0);
     const moonrise = planetaryRiseSetTimeRefined(
       localNoon,
@@ -3808,11 +3817,11 @@ Rise/set (Moon)
     renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale);
     return cache;
   }
-  function renderWatch(ctx, watch, env, scale, images) {
+  function renderFrame(ctx, staticCache, watch, env, scale) {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
-    const cache = buildStaticCache(watch, env, w, h, scale, images);
-    ctx.drawImage(cache, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(staticCache, 0, 0);
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
@@ -4430,11 +4439,19 @@ Rise/set (Moon)
     const env = loc ? createWatchEnvironment(watch, loc.lat, loc.lon) : createWatchEnvironment(watch);
     const images = await loadWatchImages();
     const scale = canvas.width / 290;
-    ctx.fillStyle = "#f0ead8";
-    ctx.beginPath();
-    ctx.arc(canvas.width / 2, canvas.height / 2, canvas.width / 2, 0, 2 * Math.PI);
-    ctx.fill();
-    renderWatch(ctx, watch, env, scale, images);
+    const staticCache = buildStaticCache(
+      watch,
+      env,
+      canvas.width,
+      canvas.height,
+      scale,
+      images
+    );
+    function tick() {
+      renderFrame(ctx, staticCache, watch, env, scale);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => main().catch(console.error));

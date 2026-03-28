@@ -101,7 +101,7 @@ function argbToCSS(argb: number): string {
 function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_LON: number): void {
     const { functions } = env;
 
-    // Current time
+    // Snapshot time for astronomy/calendar (changes at most daily)
     const now = new Date();
     const dateInterval = dateToDateInterval(now);
 
@@ -109,25 +109,25 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     const tzOffsetMinutes = now.getTimezoneOffset();
     const tzOffsetSeconds = -tzOffsetMinutes * 60; // Convert to seconds, east-positive
 
-    // --- Clock hands ---
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const seconds = now.getSeconds();
-    const ms = now.getMilliseconds();
+    // --- Clock hands (LIVE — recompute from Date.now() on each call) ---
+    // These are called every animation frame so the hands move in real time.
+    // Helper to extract fractional components from the current time:
+    const liveTime = () => {
+        const t = new Date();
+        const s = t.getSeconds() + t.getMilliseconds() / 1000;
+        const m = t.getMinutes() + s / 60;
+        const h = (t.getHours() % 12) + m / 60;
+        return { h, m, s, h24: t.getHours() };
+    };
 
-    const totalSeconds = seconds + ms / 1000;
-    const totalMinutes = minutes + totalSeconds / 60;
-    const totalHours12 = (hours % 12) + totalMinutes / 60;
-    const hour24 = hours;
+    functions.set('hour12ValueAngle', () => liveTime().h * 2 * Math.PI / 12);
+    functions.set('minuteValueAngle', () => liveTime().m * 2 * Math.PI / 60);
+    functions.set('secondValueAngle', () => liveTime().s * 2 * Math.PI / 60);
+    functions.set('secondNumberAngle', () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
+    functions.set('secondValue', () => liveTime().s);
+    functions.set('hour24Number', () => liveTime().h24);
 
-    functions.set('hour12ValueAngle', () => totalHours12 * 2 * Math.PI / 12);
-    functions.set('minuteValueAngle', () => totalMinutes * 2 * Math.PI / 60);
-    functions.set('secondValueAngle', () => totalSeconds * 2 * Math.PI / 60);
-    functions.set('secondNumberAngle', () => Math.floor(totalSeconds) * 2 * Math.PI / 60);
-    functions.set('secondValue', () => totalSeconds);
-    functions.set('hour24Number', () => hour24);
-
-    // --- Calendar ---
+    // --- Calendar (snapshot — changes daily) ---
     const dayOfMonth = now.getDate();     // 1-31
     const month = now.getMonth();         // 0-11
     const weekday = now.getDay();         // 0=Sunday
@@ -139,21 +139,25 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // Helper that returns days-in-seconds
     functions.set('days', () => 86400);
 
-    // --- Astronomy setup ---
+    // --- Astronomy setup (snapshot for rise/set, which are daily values) ---
     const pool = new AstroCachePool();
     initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
-    const cache = pool.currentCache;
 
-    // --- Sun position ---
-    const sunAlt = sunAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    const sunAz = sunAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-
-    functions.set('sunAzimuth', () => sunAz);
-    functions.set('sunAltitude', () => sunAlt);
+    // --- Sun position (LIVE — recompute each call) ---
+    // Sun altitude and azimuth change continuously throughout the day.
+    functions.set('sunAltitude', () => {
+        const di = dateToDateInterval(new Date());
+        return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set('sunAzimuth', () => {
+        const di = dateToDateInterval(new Date());
+        return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
 
     // --- Sunrise/sunset for today ---
     // Use LOCAL noon as starting point (not UT noon, which is 5 AM PDT and
     // would find yesterday's sunset instead of today's)
+    const cache = pool.currentCache;
     const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000 - 978307200;
     const localNoon = localMidnight + 12 * 3600;
 
@@ -189,14 +193,19 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         functions.set('sunsetForDayMinuteValueAngle', () => 0);
     }
 
-    // --- Moon ---
-    const moonAlt = moonAltitude(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    const moonAz = moonAzimuth(dateInterval, OBSERVER_LAT, OBSERVER_LON, cache);
-    const { age: mAge } = moonAge(dateInterval, cache);
-
-    functions.set('moonAzimuth', () => moonAz);
-    functions.set('moonAltitude', () => moonAlt);
-    functions.set('moonAgeAngle', () => mAge);
+    // --- Moon (LIVE — recompute each call) ---
+    functions.set('moonAltitude', () => {
+        const di = dateToDateInterval(new Date());
+        return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set('moonAzimuth', () => {
+        const di = dateToDateInterval(new Date());
+        return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set('moonAgeAngle', () => {
+        const di = dateToDateInterval(new Date());
+        return moonAge(di, null).age;
+    });
     functions.set('moonRelativePositionAngle', () => 0);  // TODO: implement
 
     // --- Moonrise/moonset ---
