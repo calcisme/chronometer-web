@@ -26,6 +26,14 @@ const kECGLAngleAnimationSpeed = 2.0;
 /** Minimum animation duration; below this, snap directly. */
 const kECGLFrameRate = 1.0 / 120;
 
+// --- Named update interval sentinels (matching iOS ECConstants.h) ---
+// Negative values that the animation system interprets specially.
+export const EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT  = -1005;
+export const EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT   = -1006;
+export const EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
+export const EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT  = -1008;
+export const EC_UPDATE_ENV_CHANGE_ONLY           = -1013;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -91,8 +99,8 @@ function createHandState(
     env: Environment,
     now: number,
 ): HandState {
-    // Evaluate the update interval. Special named constants are in the env
-    // as variables; numeric values are expression strings like "1" or "60".
+    // Evaluate the update interval. Named sentinel constants evaluate to
+    // negative values; numeric values are expression strings like "1" or "60".
     const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
     const updateIntervalMs = updateIntervalSec * 1000;
 
@@ -113,7 +121,7 @@ function createHandState(
             animating: false,
         },
         updateIntervalMs,
-        nextUpdateTime: nextAlignedUpdate(updateIntervalMs),
+        nextUpdateTime: scheduleNextUpdate(updateIntervalMs),
         animSpeed,
     };
 }
@@ -140,7 +148,7 @@ export function tickAnimations(
                 ? evalAttr(state.part.angle, env)
                 : 0;
             startAnimation(state, newTarget, now);
-            state.nextUpdateTime = nextAlignedUpdate(state.updateIntervalMs);
+            state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs);
         }
 
         // Interpolate if animating
@@ -242,6 +250,40 @@ function interpolate(val: AnimatingValue, now: number): number {
 // ============================================================================
 
 /**
+ * Schedule the next update time based on the update interval.
+ * Positive intervals use epoch-aligned boundaries.
+ * Negative sentinel values are routed to event-specific scheduling.
+ */
+function scheduleNextUpdate(updateIntervalMs: number): number {
+    if (updateIntervalMs > 0) {
+        return nextAlignedUpdate(updateIntervalMs);
+    }
+
+    // Sentinel value — convert from ms back to the original constant
+    const sentinel = updateIntervalMs / 1000;
+    switch (sentinel) {
+        case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
+        case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
+        case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
+        case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
+            // For now, schedule at next local midnight.
+            // TODO: also check for the actual next sunrise/sunset/moonrise/moonset
+            // and use whichever comes first.
+            return nextLocalMidnight();
+
+        case EC_UPDATE_ENV_CHANGE_ONLY:
+            // Only update when the environment changes (e.g. location changes).
+            // Schedule far in the future; an env change would reset this.
+            return performance.now() + 365 * 24 * 3600 * 1000;
+
+        default:
+            // Unknown sentinel — treat as daily at midnight
+            console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
+            return nextLocalMidnight();
+    }
+}
+
+/**
  * Compute the next epoch-aligned update time in performance.now() ms.
  *
  * For example, with intervalMs=1000, if the wall clock is at 1616000000.350,
@@ -252,6 +294,21 @@ function nextAlignedUpdate(intervalMs: number): number {
     const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
     // Convert wall-clock delta to performance.now() time
     return performance.now() + (nextWall - wallNow);
+}
+
+/**
+ * Compute performance.now() time of next local midnight (00:00:00.000).
+ */
+function nextLocalMidnight(): number {
+    const now = new Date();
+    const midnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,  // next day
+        0, 0, 0, 0,         // 00:00:00.000
+    );
+    const msUntilMidnight = midnight.getTime() - now.getTime();
+    return performance.now() + msUntilMidnight;
 }
 
 /** Floating-point modulo that always returns a non-negative result. */

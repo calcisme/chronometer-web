@@ -13,6 +13,13 @@ import {
 } from '../expr/evaluator.js';
 import type { Watch } from './types.js';
 import { dateToDateInterval } from '../astronomy/es-time.js';
+import {
+    EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT,
+    EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT,
+    EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT,
+    EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT,
+    EC_UPDATE_ENV_CHANGE_ONLY,
+} from './animation.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
 import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
@@ -40,12 +47,13 @@ export function createWatchEnvironment(
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
 
-    // Register update interval constants used in hand `update` attrs
-    env.variables.set('updateAtNextSunriseOrMidnight', 86400);
-    env.variables.set('updateAtNextSunsetOrMidnight', 86400);
-    env.variables.set('updateAtNextMoonriseOrMidnight', 86400);
-    env.variables.set('updateAtNextMoonsetOrMidnight', 86400);
-    env.variables.set('updateAtEnvChangeOnly', 86400);
+    // Named update interval sentinels — negative values matching iOS ECConstants.h.
+    // The animation system detects these and schedules at the appropriate event time.
+    env.variables.set('updateAtNextSunriseOrMidnight', EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set('updateAtNextSunsetOrMidnight', EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
+    env.variables.set('updateAtNextMoonriseOrMidnight', EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
+    env.variables.set('updateAtNextMoonsetOrMidnight', EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
+    env.variables.set('updateAtEnvChangeOnly', EC_UPDATE_ENV_CHANGE_ONLY);
 
     // Register real time functions
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);

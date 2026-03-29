@@ -1441,6 +1441,158 @@ Rise/set (Moon)
     return date.getTime() / 1e3 - 978307200;
   }
 
+  // src/watch/animation.ts
+  var kECGLAngleAnimationSpeed = 2;
+  var kECGLFrameRate = 1 / 120;
+  var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
+  var EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT = -1006;
+  var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
+  var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
+  var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
+  function initHandStates(watch, env, now) {
+    const states = [];
+    collectDynamicParts(watch.parts, env, now, states);
+    return states;
+  }
+  function collectDynamicParts(parts, env, now, out) {
+    for (const part of parts) {
+      if (part.type === "QHand" || part.type === "Wheel") {
+        out.push(createHandState(part, env, now));
+      } else if (part.type === "Static") {
+        collectDynamicParts(part.children, env, now, out);
+      }
+    }
+  }
+  function createHandState(part, env, now) {
+    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
+    const updateIntervalMs = updateIntervalSec * 1e3;
+    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
+    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
+    part.dynamicState = { currentAngle: initialAngle };
+    return {
+      part,
+      angle: {
+        currentValue: initialAngle,
+        targetValue: initialAngle,
+        lastAnimationTime: now,
+        animationStopTime: now,
+        animating: false
+      },
+      updateIntervalMs,
+      nextUpdateTime: scheduleNextUpdate(updateIntervalMs),
+      animSpeed
+    };
+  }
+  function tickAnimations(states, env, now) {
+    for (const state of states) {
+      if (now >= state.nextUpdateTime) {
+        const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
+        startAnimation(state, newTarget, now);
+        state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs);
+      }
+      const angle = interpolate(state.angle, now);
+      if (!state.part.dynamicState) {
+        state.part.dynamicState = { currentAngle: angle };
+      } else {
+        state.part.dynamicState.currentAngle = angle;
+      }
+    }
+  }
+  function startAnimation(state, newTarget, now) {
+    const val = state.angle;
+    const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+    newTarget = fmod2(newTarget, 2 * Math.PI);
+    if (animateSpeed === 0 || state.animSpeed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    if (newTarget > val.currentValue) {
+      if (newTarget - val.currentValue > Math.PI) {
+        val.currentValue += 2 * Math.PI;
+      }
+    } else {
+      if (val.currentValue - newTarget > Math.PI) {
+        val.currentValue -= 2 * Math.PI;
+      }
+    }
+    const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
+    if (deltaTime < kECGLFrameRate) {
+      val.currentValue = val.targetValue;
+      val.animating = false;
+      return;
+    }
+    if (val.animating) {
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + deltaTime * 1e3;
+  }
+  function interpolate(val, now) {
+    if (!val.animating) {
+      return val.currentValue;
+    }
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
+  }
+  function scheduleNextUpdate(updateIntervalMs) {
+    if (updateIntervalMs > 0) {
+      return nextAlignedUpdate(updateIntervalMs);
+    }
+    const sentinel = updateIntervalMs / 1e3;
+    switch (sentinel) {
+      case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
+      case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
+      case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
+      case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
+        return nextLocalMidnight();
+      case EC_UPDATE_ENV_CHANGE_ONLY:
+        return performance.now() + 365 * 24 * 3600 * 1e3;
+      default:
+        console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
+        return nextLocalMidnight();
+    }
+  }
+  function nextAlignedUpdate(intervalMs) {
+    const wallNow = Date.now();
+    const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
+    return performance.now() + (nextWall - wallNow);
+  }
+  function nextLocalMidnight() {
+    const now = /* @__PURE__ */ new Date();
+    const midnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      // next day
+      0,
+      0,
+      0,
+      0
+      // 00:00:00.000
+    );
+    const msUntilMidnight = midnight.getTime() - now.getTime();
+    return performance.now() + msUntilMidnight;
+  }
+  function fmod2(value, modulus) {
+    const result = value % modulus;
+    return result < 0 ? result + modulus : result;
+  }
+
   // src/astronomy/es-sidereal.ts
   var TWO_PI = Math.PI * 2;
   function convertLSTtoGST(lst, observerLongitude) {
@@ -3610,11 +3762,11 @@ Rise/set (Moon)
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
-    env.variables.set("updateAtNextSunriseOrMidnight", 86400);
-    env.variables.set("updateAtNextSunsetOrMidnight", 86400);
-    env.variables.set("updateAtNextMoonriseOrMidnight", 86400);
-    env.variables.set("updateAtNextMoonsetOrMidnight", 86400);
-    env.variables.set("updateAtEnvChangeOnly", 86400);
+    env.variables.set("updateAtNextSunriseOrMidnight", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set("updateAtNextSunsetOrMidnight", EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
+    env.variables.set("updateAtNextMoonriseOrMidnight", EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
+    env.variables.set("updateAtNextMoonsetOrMidnight", EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
+    env.variables.set("updateAtEnvChangeOnly", EC_UPDATE_ENV_CHANGE_ONLY);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
     for (const expr of watch.initExprs) {
       evaluateInit(expr, env);
@@ -4406,119 +4558,6 @@ Rise/set (Moon)
     });
     await Promise.all(loadPromises);
     return result;
-  }
-
-  // src/watch/animation.ts
-  var kECGLAngleAnimationSpeed = 2;
-  var kECGLFrameRate = 1 / 120;
-  function initHandStates(watch, env, now) {
-    const states = [];
-    collectDynamicParts(watch.parts, env, now, states);
-    return states;
-  }
-  function collectDynamicParts(parts, env, now, out) {
-    for (const part of parts) {
-      if (part.type === "QHand" || part.type === "Wheel") {
-        out.push(createHandState(part, env, now));
-      } else if (part.type === "Static") {
-        collectDynamicParts(part.children, env, now, out);
-      }
-    }
-  }
-  function createHandState(part, env, now) {
-    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
-    const updateIntervalMs = updateIntervalSec * 1e3;
-    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
-    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
-    part.dynamicState = { currentAngle: initialAngle };
-    return {
-      part,
-      angle: {
-        currentValue: initialAngle,
-        targetValue: initialAngle,
-        lastAnimationTime: now,
-        animationStopTime: now,
-        animating: false
-      },
-      updateIntervalMs,
-      nextUpdateTime: nextAlignedUpdate(updateIntervalMs),
-      animSpeed
-    };
-  }
-  function tickAnimations(states, env, now) {
-    for (const state of states) {
-      if (now >= state.nextUpdateTime) {
-        const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
-        startAnimation(state, newTarget, now);
-        state.nextUpdateTime = nextAlignedUpdate(state.updateIntervalMs);
-      }
-      const angle = interpolate(state.angle, now);
-      if (!state.part.dynamicState) {
-        state.part.dynamicState = { currentAngle: angle };
-      } else {
-        state.part.dynamicState.currentAngle = angle;
-      }
-    }
-  }
-  function startAnimation(state, newTarget, now) {
-    const val = state.angle;
-    const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
-    newTarget = fmod3(newTarget, 2 * Math.PI);
-    if (animateSpeed === 0 || state.animSpeed === 0) {
-      val.currentValue = newTarget;
-      val.targetValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    if (val.currentValue === newTarget) {
-      val.animating = false;
-      return;
-    }
-    val.targetValue = newTarget;
-    if (newTarget > val.currentValue) {
-      if (newTarget - val.currentValue > Math.PI) {
-        val.currentValue += 2 * Math.PI;
-      }
-    } else {
-      if (val.currentValue - newTarget > Math.PI) {
-        val.currentValue -= 2 * Math.PI;
-      }
-    }
-    const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
-    if (deltaTime < kECGLFrameRate) {
-      val.currentValue = val.targetValue;
-      val.animating = false;
-      return;
-    }
-    if (val.animating) {
-      return;
-    }
-    val.lastAnimationTime = now;
-    val.animating = true;
-    val.animationStopTime = now + deltaTime * 1e3;
-  }
-  function interpolate(val, now) {
-    if (!val.animating) {
-      return val.currentValue;
-    }
-    if (now >= val.animationStopTime) {
-      val.animating = false;
-      val.currentValue = fmod3(val.targetValue, 2 * Math.PI);
-      return val.currentValue;
-    }
-    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
-    val.currentValue += (val.targetValue - val.currentValue) * fraction;
-    val.lastAnimationTime = now;
-    return val.currentValue;
-  }
-  function nextAlignedUpdate(intervalMs) {
-    const wallNow = Date.now();
-    const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
-    return performance.now() + (nextWall - wallNow);
-  }
-  function fmod3(value, modulus) {
-    const result = value % modulus;
-    return result < 0 ? result + modulus : result;
   }
 
   // src/standalone.ts
