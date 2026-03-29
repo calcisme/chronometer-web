@@ -15,6 +15,24 @@ import { initHandStates, tickAnimations } from './watch/animation.js';
 const DEFAULT_LAT = 37.205;
 const DEFAULT_LON = -121.954;
 
+const STORAGE_KEY = 'chronometer-location';
+
+function loadStoredLocation(): { lat: number; lon: number } | null {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const { lat, lon } = JSON.parse(raw);
+        if (typeof lat === 'number' && typeof lon === 'number') return { lat, lon };
+    } catch { /* ignore */ }
+    return null;
+}
+
+function saveStoredLocation(lat: number, lon: number): void {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ lat, lon }));
+    } catch { /* ignore — may fail in some file:// contexts */ }
+}
+
 /**
  * Request the user's location from the browser.
  * Returns { lat, lon } in degrees, or null if unavailable/denied.
@@ -45,7 +63,7 @@ async function main() {
     const lonInput = document.getElementById('lon-input') as HTMLInputElement;
     const sourceLabel = document.getElementById('location-source')!;
 
-    // Request user location (falls back to default if unavailable)
+    // Resolve location: browser geolocation → localStorage → hardcoded default
     const loc = await requestLocation();
     let lat: number, lon: number;
     if (loc) {
@@ -53,9 +71,16 @@ async function main() {
         lon = loc.lon;
         sourceLabel.textContent = '(from browser)';
     } else {
-        lat = DEFAULT_LAT;
-        lon = DEFAULT_LON;
-        sourceLabel.textContent = "(Steve's house)";
+        const stored = loadStoredLocation();
+        if (stored) {
+            lat = stored.lat;
+            lon = stored.lon;
+            sourceLabel.textContent = '(saved)';
+        } else {
+            lat = DEFAULT_LAT;
+            lon = DEFAULT_LON;
+            sourceLabel.textContent = "(Steve's house)";
+        }
     }
 
     // Populate inputs
@@ -95,16 +120,34 @@ async function main() {
     }
 
     // Handle input changes (on Enter or blur)
+    const resetLink = document.getElementById('reset-location')!;
+
+    function showResetIfSaved() {
+        resetLink.style.display = loadStoredLocation() ? 'inline' : 'none';
+    }
+    showResetIfSaved();
+
     function onLocationChange() {
         const newLat = parseFloat(latInput.value);
         const newLon = parseFloat(lonInput.value);
         if (isNaN(newLat) || isNaN(newLon)) return;
-        sourceLabel.textContent = '(manual)';
+        saveStoredLocation(newLat, newLon);
+        sourceLabel.textContent = '(saved)';
+        showResetIfSaved();
         rebuildForLocation(newLat, newLon);
     }
 
     latInput.addEventListener('change', onLocationChange);
     lonInput.addEventListener('change', onLocationChange);
+
+    resetLink.addEventListener('click', () => {
+        try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+        latInput.value = DEFAULT_LAT.toFixed(3);
+        lonInput.value = DEFAULT_LON.toFixed(3);
+        sourceLabel.textContent = "(Steve's house)";
+        resetLink.style.display = 'none';
+        rebuildForLocation(DEFAULT_LAT, DEFAULT_LON);
+    });
 
     // Animation loop
     function tick() {

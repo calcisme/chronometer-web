@@ -44,6 +44,13 @@
             color: #666;
             font-style: italic;
         }
+        #reset-location {
+            color: #557;
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 12px;
+        }
+        #reset-location:hover { color: #88a; }
     </style>
 </head>
 <body>
@@ -52,6 +59,7 @@
         <label>Lat: <input id="lat-input" type="text"></label>
         <label>Lon: <input id="lon-input" type="text"></label>
         <span id="location-source"></span>
+        <a id="reset-location" style="display:none">reset</a>
     </div>
     <script src="chronometer.js"></script>
 </body>

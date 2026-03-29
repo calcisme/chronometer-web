@@ -4563,6 +4563,23 @@ Rise/set (Moon)
   // src/standalone.ts
   var DEFAULT_LAT = 37.205;
   var DEFAULT_LON = -121.954;
+  var STORAGE_KEY = "chronometer-location";
+  function loadStoredLocation() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const { lat, lon } = JSON.parse(raw);
+      if (typeof lat === "number" && typeof lon === "number") return { lat, lon };
+    } catch {
+    }
+    return null;
+  }
+  function saveStoredLocation(lat, lon) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ lat, lon }));
+    } catch {
+    }
+  }
   function requestLocation() {
     if (!navigator.geolocation) {
       return Promise.resolve(null);
@@ -4593,9 +4610,16 @@ Rise/set (Moon)
       lon = loc.lon;
       sourceLabel.textContent = "(from browser)";
     } else {
-      lat = DEFAULT_LAT;
-      lon = DEFAULT_LON;
-      sourceLabel.textContent = "(Steve's house)";
+      const stored = loadStoredLocation();
+      if (stored) {
+        lat = stored.lat;
+        lon = stored.lon;
+        sourceLabel.textContent = "(saved)";
+      } else {
+        lat = DEFAULT_LAT;
+        lon = DEFAULT_LON;
+        sourceLabel.textContent = "(Steve's house)";
+      }
     }
     latInput.value = lat.toFixed(3);
     lonInput.value = lon.toFixed(3);
@@ -4627,15 +4651,33 @@ Rise/set (Moon)
       );
       handStates = initHandStates(watch, env, performance.now());
     }
+    const resetLink = document.getElementById("reset-location");
+    function showResetIfSaved() {
+      resetLink.style.display = loadStoredLocation() ? "inline" : "none";
+    }
+    showResetIfSaved();
     function onLocationChange() {
       const newLat = parseFloat(latInput.value);
       const newLon = parseFloat(lonInput.value);
       if (isNaN(newLat) || isNaN(newLon)) return;
-      sourceLabel.textContent = "(manual)";
+      saveStoredLocation(newLat, newLon);
+      sourceLabel.textContent = "(saved)";
+      showResetIfSaved();
       rebuildForLocation(newLat, newLon);
     }
     latInput.addEventListener("change", onLocationChange);
     lonInput.addEventListener("change", onLocationChange);
+    resetLink.addEventListener("click", () => {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+      }
+      latInput.value = DEFAULT_LAT.toFixed(3);
+      lonInput.value = DEFAULT_LON.toFixed(3);
+      sourceLabel.textContent = "(Steve's house)";
+      resetLink.style.display = "none";
+      rebuildForLocation(DEFAULT_LAT, DEFAULT_LON);
+    });
     function tick() {
       const now = performance.now();
       tickAnimations(handStates, env, now);
