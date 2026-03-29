@@ -4561,6 +4561,8 @@ Rise/set (Moon)
   }
 
   // src/standalone.ts
+  var DEFAULT_LAT = 37.205;
+  var DEFAULT_LON = -121.954;
   function requestLocation() {
     if (!navigator.geolocation) {
       return Promise.resolve(null);
@@ -4581,17 +4583,27 @@ Rise/set (Moon)
       console.error("Could not get canvas 2d context");
       return;
     }
+    const latInput = document.getElementById("lat-input");
+    const lonInput = document.getElementById("lon-input");
+    const sourceLabel = document.getElementById("location-source");
     const loc = await requestLocation();
+    let lat, lon;
     if (loc) {
-      console.log(`Using browser location: ${loc.lat.toFixed(3)}\xB0N, ${loc.lon.toFixed(3)}\xB0`);
+      lat = loc.lat;
+      lon = loc.lon;
+      sourceLabel.textContent = "(from browser)";
     } else {
-      console.log("Geolocation unavailable \u2014 using default location");
+      lat = DEFAULT_LAT;
+      lon = DEFAULT_LON;
+      sourceLabel.textContent = "(Steve's house)";
     }
+    latInput.value = lat.toFixed(3);
+    lonInput.value = lon.toFixed(3);
     const watch = parseWatchXML(Haleakala_default, "front");
-    const env = loc ? createWatchEnvironment(watch, loc.lat, loc.lon) : createWatchEnvironment(watch);
     const images = await loadWatchImages();
     const scale = canvas.width / 290;
-    const staticCache = buildStaticCache(
+    let env = createWatchEnvironment(watch, lat, lon);
+    let staticCache = buildStaticCache(
       watch,
       env,
       canvas.width,
@@ -4599,7 +4611,31 @@ Rise/set (Moon)
       scale,
       images
     );
-    const handStates = initHandStates(watch, env, performance.now());
+    let handStates = initHandStates(watch, env, performance.now());
+    function rebuildForLocation(newLat, newLon) {
+      const freshWatch = parseWatchXML(Haleakala_default, "front");
+      watch.parts = freshWatch.parts;
+      watch.initExprs = freshWatch.initExprs;
+      env = createWatchEnvironment(watch, newLat, newLon);
+      staticCache = buildStaticCache(
+        watch,
+        env,
+        canvas.width,
+        canvas.height,
+        scale,
+        images
+      );
+      handStates = initHandStates(watch, env, performance.now());
+    }
+    function onLocationChange() {
+      const newLat = parseFloat(latInput.value);
+      const newLon = parseFloat(lonInput.value);
+      if (isNaN(newLat) || isNaN(newLon)) return;
+      sourceLabel.textContent = "(manual)";
+      rebuildForLocation(newLat, newLon);
+    }
+    latInput.addEventListener("change", onLocationChange);
+    lonInput.addEventListener("change", onLocationChange);
     function tick() {
       const now = performance.now();
       tickAnimations(handStates, env, now);

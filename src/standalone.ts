@@ -11,6 +11,10 @@ import { buildStaticCache, renderFrame } from './watch/renderer.js';
 import { loadWatchImages } from './watch/image-loader.js';
 import { initHandStates, tickAnimations } from './watch/animation.js';
 
+// Default observer location: Steve's house
+const DEFAULT_LAT = 37.205;
+const DEFAULT_LON = -121.954;
+
 /**
  * Request the user's location from the browser.
  * Returns { lat, lon } in degrees, or null if unavailable/denied.
@@ -36,21 +40,30 @@ async function main() {
         return;
     }
 
+    // Location UI elements
+    const latInput = document.getElementById('lat-input') as HTMLInputElement;
+    const lonInput = document.getElementById('lon-input') as HTMLInputElement;
+    const sourceLabel = document.getElementById('location-source')!;
+
     // Request user location (falls back to default if unavailable)
     const loc = await requestLocation();
+    let lat: number, lon: number;
     if (loc) {
-        console.log(`Using browser location: ${loc.lat.toFixed(3)}°N, ${loc.lon.toFixed(3)}°`);
+        lat = loc.lat;
+        lon = loc.lon;
+        sourceLabel.textContent = '(from browser)';
     } else {
-        console.log('Geolocation unavailable — using default location');
+        lat = DEFAULT_LAT;
+        lon = DEFAULT_LON;
+        sourceLabel.textContent = "(Steve's house)";
     }
+
+    // Populate inputs
+    latInput.value = lat.toFixed(3);
+    lonInput.value = lon.toFixed(3);
 
     // Parse for front side only
     const watch = parseWatchXML(haleakalaXML, 'front');
-
-    // Create expression environment with observer location
-    const env = loc
-        ? createWatchEnvironment(watch, loc.lat, loc.lon)
-        : createWatchEnvironment(watch);
 
     // Load watch face images
     const images = await loadWatchImages();
@@ -59,18 +72,41 @@ async function main() {
     // so scale to fit the canvas
     const scale = canvas.width / 290;
 
-    // Build static cache (dials, images, text, windows — rendered once)
-    const staticCache = buildStaticCache(
+    // --- Mutable state that gets rebuilt on location change ---
+    let env = createWatchEnvironment(watch, lat, lon);
+    let staticCache = buildStaticCache(
         watch, env, canvas.width, canvas.height, scale, images,
     );
+    let handStates = initHandStates(watch, env, performance.now());
 
-    // Initialize animation state for all dynamic parts (hands + wheels)
-    const handStates = initHandStates(watch, env, performance.now());
+    // Rebuild watch when location changes
+    function rebuildForLocation(newLat: number, newLon: number) {
+        // Re-parse to get a fresh part tree (clears old dynamicState)
+        const freshWatch = parseWatchXML(haleakalaXML, 'front');
+        // Copy fresh parts into our watch object so renderer references stay valid
+        watch.parts = freshWatch.parts;
+        watch.initExprs = freshWatch.initExprs;
 
-    // Animation loop:
-    //   1. Tick animations — re-evaluate expressions at each part's update
-    //      interval and interpolate toward new targets
-    //   2. Render — blit static cache + draw hands at their animated angles
+        env = createWatchEnvironment(watch, newLat, newLon);
+        staticCache = buildStaticCache(
+            watch, env, canvas.width, canvas.height, scale, images,
+        );
+        handStates = initHandStates(watch, env, performance.now());
+    }
+
+    // Handle input changes (on Enter or blur)
+    function onLocationChange() {
+        const newLat = parseFloat(latInput.value);
+        const newLon = parseFloat(lonInput.value);
+        if (isNaN(newLat) || isNaN(newLon)) return;
+        sourceLabel.textContent = '(manual)';
+        rebuildForLocation(newLat, newLon);
+    }
+
+    latInput.addEventListener('change', onLocationChange);
+    lonInput.addEventListener('change', onLocationChange);
+
+    // Animation loop
     function tick() {
         const now = performance.now();
         tickAnimations(handStates, env, now);
