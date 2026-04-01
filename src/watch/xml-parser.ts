@@ -18,6 +18,8 @@ import type {
     StaticPart,
     QRectPart,
 } from './types.js';
+import { parse } from '../expr/parser.js';
+import type { ASTNode } from '../expr/parser.js';
 
 // ============================================================================
 // Public API
@@ -67,7 +69,7 @@ export function parseWatchXML(
 function processElement(
     el: Element,
     mode: ModeFilter,
-    initExprs: string[],
+    initExprs: ASTNode[],
     parts: WatchPart[],
 ): void {
     const tag = el.tagName.toLowerCase();
@@ -76,9 +78,13 @@ function processElement(
         case 'init':
             // Always collect init blocks (they define variables needed by all modes)
             {
-                const expr = attr(el, 'expr');
-                if (expr) {
-                    initExprs.push(expr);
+                const exprStr = attr(el, 'expr');
+                if (exprStr) {
+                    try {
+                        initExprs.push(parse(exprStr));
+                    } catch (e) {
+                        console.error(`Failed to parse <init expr="${exprStr}">`, e);
+                    }
                 }
             }
             break;
@@ -159,7 +165,7 @@ function processElement(
 function processStatic(
     el: Element,
     mode: ModeFilter,
-    initExprs: string[],
+    initExprs: ASTNode[],
     parts: WatchPart[],
 ): void {
     // If the static element itself doesn't match the mode, skip entirely
@@ -172,8 +178,8 @@ function processStatic(
     const staticPart: StaticPart = {
         type: 'Static',
         name: attr(el, 'name') ?? '',
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
         children: [],
     };
@@ -193,34 +199,34 @@ function parseQDial(el: Element): QDialPart {
     return {
         type: 'QDial',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
-        radius: attr(el, 'radius'),
-        radius2: attr(el, 'radius2'),
-        clipRadius: attr(el, 'clipRadius'),
+        radius: attrExpr(el, 'radius'),
+        radius2: attrExpr(el, 'radius2'),
+        clipRadius: attrExpr(el, 'clipRadius'),
         orientation: attr(el, 'orientation'),
-        demiTweak: attr(el, 'demiTweak'),
+        demiTweak: attrExpr(el, 'demiTweak'),
         text: attr(el, 'text'),
-        fontSize: attr(el, 'fontSize'),
+        fontSize: attrExpr(el, 'fontSize'),
         fontName: attr(el, 'fontName'),
-        bgColor: attr(el, 'bgColor'),
-        strokeColor: attr(el, 'strokeColor'),
-        fillColor1: attr(el, 'fillColor1'),
-        fillColor2: attr(el, 'fillColor2'),
+        bgColor: attrExpr(el, 'bgColor'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        fillColor1: attrExpr(el, 'fillColor1'),
+        fillColor2: attrExpr(el, 'fillColor2'),
         marks: attr(el, 'marks'),
-        markWidth: attr(el, 'markWidth'),
-        nMarks: attr(el, 'nMarks'),
-        mSize: attr(el, 'mSize'),
-        angle: attr(el, 'angle'),
-        angle0: attr(el, 'angle0'),
-        angle1: attr(el, 'angle1'),
-        angle2: attr(el, 'angle2'),
-        update: attr(el, 'update'),
-        updateOffset: attr(el, 'updateOffset'),
+        markWidth: attrExpr(el, 'markWidth'),
+        nMarks: attrExpr(el, 'nMarks'),
+        mSize: attrExpr(el, 'mSize'),
+        angle: attrExpr(el, 'angle'),
+        angle0: attrExpr(el, 'angle0'),
+        angle1: attrExpr(el, 'angle1'),
+        angle2: attrExpr(el, 'angle2'),
+        update: attrExpr(el, 'update'),
+        updateOffset: attrExpr(el, 'updateOffset'),
         kind: attr(el, 'kind'),
-        z: attr(el, 'z'),
-        thick: attr(el, 'thick'),
+        z: attrExpr(el, 'z'),
+        thick: attrExpr(el, 'thick'),
     };
 }
 
@@ -228,32 +234,32 @@ function parseQHand(el: Element): QHandPart {
     return {
         type: 'QHand',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
-        angle: attr(el, 'angle'),
-        length: attr(el, 'length'),
-        width: attr(el, 'width'),
-        tail: attr(el, 'tail'),
+        angle: attrExpr(el, 'angle'),
+        length: attrExpr(el, 'length'),
+        width: attrExpr(el, 'width'),
+        tail: attrExpr(el, 'tail'),
         handType: attr(el, 'type'),
-        strokeColor: attr(el, 'strokeColor'),
-        fillColor: attr(el, 'fillColor'),
-        lineWidth: attr(el, 'lineWidth'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        fillColor: attrExpr(el, 'fillColor'),
+        lineWidth: attrExpr(el, 'lineWidth'),
         kind: attr(el, 'kind'),
-        update: attr(el, 'update'),
-        updateOffset: attr(el, 'updateOffset'),
-        z: attr(el, 'z'),
-        thick: attr(el, 'thick'),
-        animSpeed: attr(el, 'animSpeed'),
+        update: attrExpr(el, 'update'),
+        updateOffset: attrExpr(el, 'updateOffset'),
+        z: attrExpr(el, 'z'),
+        thick: attrExpr(el, 'thick'),
+        animSpeed: attrExpr(el, 'animSpeed'),
         dragAnimationType: attr(el, 'dragAnimationType'),
-        oLength: attr(el, 'oLength'),
-        oWidth: attr(el, 'oWidth'),
-        oTail: attr(el, 'oTail'),
-        oLineWidth: attr(el, 'oLineWidth'),
-        oStrokeColor: attr(el, 'oStrokeColor'),
-        oFillColor: attr(el, 'oFillColor'),
-        oCenter: attr(el, 'oCenter'),
-        oRadius: attr(el, 'oRadius'),
+        oLength: attrExpr(el, 'oLength'),
+        oWidth: attrExpr(el, 'oWidth'),
+        oTail: attrExpr(el, 'oTail'),
+        oLineWidth: attrExpr(el, 'oLineWidth'),
+        oStrokeColor: attrExpr(el, 'oStrokeColor'),
+        oFillColor: attrExpr(el, 'oFillColor'),
+        oCenter: attrExpr(el, 'oCenter'),
+        oRadius: attrExpr(el, 'oRadius'),
     };
 }
 
@@ -262,20 +268,20 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel'): WheelPart {
         type: 'Wheel',
         wheelVariant: variant,
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
-        angle: attr(el, 'angle'),
-        radius: attr(el, 'radius'),
+        angle: attrExpr(el, 'angle'),
+        radius: attrExpr(el, 'radius'),
         orientation: attr(el, 'orientation'),
         text: attr(el, 'text'),
-        fontSize: attr(el, 'fontSize'),
+        fontSize: attrExpr(el, 'fontSize'),
         fontName: attr(el, 'fontName'),
-        strokeColor: attr(el, 'strokeColor'),
-        bgColor: attr(el, 'bgColor'),
-        update: attr(el, 'update'),
-        updateOffset: attr(el, 'updateOffset'),
-        animSpeed: attr(el, 'animSpeed'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        bgColor: attrExpr(el, 'bgColor'),
+        update: attrExpr(el, 'update'),
+        updateOffset: attrExpr(el, 'updateOffset'),
+        animSpeed: attrExpr(el, 'animSpeed'),
         dragAnimationType: attr(el, 'dragAnimationType'),
         marks: attr(el, 'marks'),
         refName: attr(el, 'refName'),
@@ -286,13 +292,13 @@ function parseQText(el: Element): QTextPart {
     return {
         type: 'QText',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
         text: attr(el, 'text'),
-        fontSize: attr(el, 'fontSize'),
+        fontSize: attrExpr(el, 'fontSize'),
         fontName: attr(el, 'fontName'),
-        strokeColor: attr(el, 'strokeColor'),
+        strokeColor: attrExpr(el, 'strokeColor'),
     };
 }
 
@@ -300,11 +306,11 @@ function parseImage(el: Element): ImagePart {
     return {
         type: 'Image',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
         src: attr(el, 'src'),
-        alpha: attr(el, 'alpha'),
+        alpha: attrExpr(el, 'alpha'),
     };
 }
 
@@ -312,20 +318,20 @@ function parseButton(el: Element): ButtonPart {
     return {
         type: 'Button',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
         action: attr(el, 'action'),
-        enabled: attr(el, 'enabled'),
+        enabled: attrExpr(el, 'enabled'),
         src: attr(el, 'src'),
-        motion: attr(el, 'motion'),
-        xMotion: attr(el, 'xMotion'),
-        yMotion: attr(el, 'yMotion'),
-        w: attr(el, 'w'),
-        h: attr(el, 'h'),
-        opacity: attr(el, 'opacity'),
-        rotation: attr(el, 'rotation'),
-        expanded: attr(el, 'expanded'),
+        motion: attrExpr(el, 'motion'),
+        xMotion: attrExpr(el, 'xMotion'),
+        yMotion: attrExpr(el, 'yMotion'),
+        w: attrExpr(el, 'w'),
+        h: attrExpr(el, 'h'),
+        opacity: attrExpr(el, 'opacity'),
+        rotation: attrExpr(el, 'rotation'),
+        expanded: attrExpr(el, 'expanded'),
         immediate: attr(el, 'immediate'),
         repeatStrategy: attr(el, 'repeatStrategy'),
         grabPrio: attr(el, 'grabPrio'),
@@ -336,17 +342,17 @@ function parseWindow(el: Element): WindowPart {
     return {
         type: 'Window',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
-        w: attr(el, 'w'),
-        h: attr(el, 'h'),
+        w: attrExpr(el, 'w'),
+        h: attrExpr(el, 'h'),
         windowType: attr(el, 'type'),
-        border: attr(el, 'border'),
-        strokeColor: attr(el, 'strokeColor'),
-        shadowOpacity: attr(el, 'shadowOpacity'),
-        shadowSigma: attr(el, 'shadowSigma'),
-        shadowOffset: attr(el, 'shadowOffset'),
+        border: attrExpr(el, 'border'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        shadowOpacity: attrExpr(el, 'shadowOpacity'),
+        shadowSigma: attrExpr(el, 'shadowSigma'),
+        shadowOffset: attrExpr(el, 'shadowOffset'),
     };
 }
 
@@ -354,13 +360,13 @@ function parseQRect(el: Element): QRectPart {
     return {
         type: 'QRect',
         name: partName(el),
-        x: attr(el, 'x'),
-        y: attr(el, 'y'),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
-        w: attr(el, 'w'),
-        h: attr(el, 'h'),
-        bgColor: attr(el, 'bgColor'),
-        panes: attr(el, 'panes'),
+        w: attrExpr(el, 'w'),
+        h: attrExpr(el, 'h'),
+        bgColor: attrExpr(el, 'bgColor'),
+        panes: attrExpr(el, 'panes'),
     };
 }
 
@@ -374,6 +380,20 @@ function parseQRect(el: Element): QRectPart {
 function attr(el: Element, name: string): string | undefined {
     const val = el.getAttribute(name);
     return val !== null ? val.trim() : undefined;
+}
+
+/**
+ * Get an attribute and eagerly compile it to an ASTNode.
+ */
+function attrExpr(el: Element, name: string): ASTNode | undefined {
+    const val = attr(el, name);
+    if (!val) return undefined;
+    try {
+        return parse(val);
+    } catch (e) {
+        console.warn(`[xml-parser] Failed to parse AST for attribute: ${name}="${val}"`, e);
+        return undefined;
+    }
 }
 
 /**
