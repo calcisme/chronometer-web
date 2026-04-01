@@ -235,291 +235,6 @@ Rise/set (Moon)
 -->
 `;
 
-  // src/watch/xml-parser.ts
-  function parseWatchXML(xmlText, mode, domParser) {
-    const parser = domParser ?? new DOMParser();
-    const doc = parser.parseFromString(xmlText, "text/xml");
-    const watchEl = doc.querySelector("watch");
-    if (!watchEl) {
-      throw new Error("No <watch> element found in XML");
-    }
-    const watch = {
-      name: attr(watchEl, "name") ?? "unknown",
-      beatsPerSecond: attr(watchEl, "beatsPerSecond") ?? "1",
-      initExprs: [],
-      parts: []
-    };
-    for (const child of Array.from(watchEl.children)) {
-      processElement(child, mode, watch.initExprs, watch.parts);
-    }
-    return watch;
-  }
-  function processElement(el, mode, initExprs, parts) {
-    const tag = el.tagName.toLowerCase();
-    switch (tag) {
-      case "init":
-        {
-          const expr = attr(el, "expr");
-          if (expr) {
-            initExprs.push(expr);
-          }
-        }
-        break;
-      case "atlas":
-        break;
-      case "static":
-        processStatic(el, mode, initExprs, parts);
-        break;
-      case "qdial":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQDial(el));
-        }
-        break;
-      case "qhand":
-      case "hand":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQHand(el));
-        }
-        break;
-      case "swheel":
-      case "qwheel":
-        if (matchesMode(el, mode)) {
-          parts.push(parseWheel(el, tag === "qwheel" ? "QWheel" : "SWheel"));
-        }
-        break;
-      case "qtext":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQText(el));
-        }
-        break;
-      case "image":
-        if (matchesMode(el, mode)) {
-          parts.push(parseImage(el));
-        }
-        break;
-      case "button":
-        if (matchesMode(el, mode)) {
-          parts.push(parseButton(el));
-        }
-        break;
-      case "window":
-        if (matchesMode(el, mode)) {
-          parts.push(parseWindow(el));
-        }
-        break;
-      case "qrect":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQRect(el));
-        }
-        break;
-      case "terminator":
-      case "tick":
-        break;
-      default:
-        break;
-    }
-  }
-  function processStatic(el, mode, initExprs, parts) {
-    if (!matchesMode(el, mode)) {
-      return;
-    }
-    const staticPart = {
-      type: "Static",
-      name: attr(el, "name") ?? "",
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      children: []
-    };
-    for (const child of Array.from(el.children)) {
-      processElement(child, mode, initExprs, staticPart.children);
-    }
-    parts.push(staticPart);
-  }
-  function parseQDial(el) {
-    return {
-      type: "QDial",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      radius: attr(el, "radius"),
-      radius2: attr(el, "radius2"),
-      clipRadius: attr(el, "clipRadius"),
-      orientation: attr(el, "orientation"),
-      demiTweak: attr(el, "demiTweak"),
-      text: attr(el, "text"),
-      fontSize: attr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      bgColor: attr(el, "bgColor"),
-      strokeColor: attr(el, "strokeColor"),
-      fillColor1: attr(el, "fillColor1"),
-      fillColor2: attr(el, "fillColor2"),
-      marks: attr(el, "marks"),
-      markWidth: attr(el, "markWidth"),
-      nMarks: attr(el, "nMarks"),
-      mSize: attr(el, "mSize"),
-      angle: attr(el, "angle"),
-      angle0: attr(el, "angle0"),
-      angle1: attr(el, "angle1"),
-      angle2: attr(el, "angle2"),
-      update: attr(el, "update"),
-      updateOffset: attr(el, "updateOffset"),
-      kind: attr(el, "kind"),
-      z: attr(el, "z"),
-      thick: attr(el, "thick")
-    };
-  }
-  function parseQHand(el) {
-    return {
-      type: "QHand",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      angle: attr(el, "angle"),
-      length: attr(el, "length"),
-      width: attr(el, "width"),
-      tail: attr(el, "tail"),
-      handType: attr(el, "type"),
-      strokeColor: attr(el, "strokeColor"),
-      fillColor: attr(el, "fillColor"),
-      lineWidth: attr(el, "lineWidth"),
-      kind: attr(el, "kind"),
-      update: attr(el, "update"),
-      updateOffset: attr(el, "updateOffset"),
-      z: attr(el, "z"),
-      thick: attr(el, "thick"),
-      animSpeed: attr(el, "animSpeed"),
-      dragAnimationType: attr(el, "dragAnimationType"),
-      oLength: attr(el, "oLength"),
-      oWidth: attr(el, "oWidth"),
-      oTail: attr(el, "oTail"),
-      oLineWidth: attr(el, "oLineWidth"),
-      oStrokeColor: attr(el, "oStrokeColor"),
-      oFillColor: attr(el, "oFillColor"),
-      oCenter: attr(el, "oCenter"),
-      oRadius: attr(el, "oRadius")
-    };
-  }
-  function parseWheel(el, variant) {
-    return {
-      type: "Wheel",
-      wheelVariant: variant,
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      angle: attr(el, "angle"),
-      radius: attr(el, "radius"),
-      orientation: attr(el, "orientation"),
-      text: attr(el, "text"),
-      fontSize: attr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      strokeColor: attr(el, "strokeColor"),
-      bgColor: attr(el, "bgColor"),
-      update: attr(el, "update"),
-      updateOffset: attr(el, "updateOffset"),
-      animSpeed: attr(el, "animSpeed"),
-      dragAnimationType: attr(el, "dragAnimationType"),
-      marks: attr(el, "marks"),
-      refName: attr(el, "refName")
-    };
-  }
-  function parseQText(el) {
-    return {
-      type: "QText",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      text: attr(el, "text"),
-      fontSize: attr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      strokeColor: attr(el, "strokeColor")
-    };
-  }
-  function parseImage(el) {
-    return {
-      type: "Image",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      src: attr(el, "src"),
-      alpha: attr(el, "alpha")
-    };
-  }
-  function parseButton(el) {
-    return {
-      type: "Button",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      action: attr(el, "action"),
-      enabled: attr(el, "enabled"),
-      src: attr(el, "src"),
-      motion: attr(el, "motion"),
-      xMotion: attr(el, "xMotion"),
-      yMotion: attr(el, "yMotion"),
-      w: attr(el, "w"),
-      h: attr(el, "h"),
-      opacity: attr(el, "opacity"),
-      rotation: attr(el, "rotation"),
-      expanded: attr(el, "expanded"),
-      immediate: attr(el, "immediate"),
-      repeatStrategy: attr(el, "repeatStrategy"),
-      grabPrio: attr(el, "grabPrio")
-    };
-  }
-  function parseWindow(el) {
-    return {
-      type: "Window",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      w: attr(el, "w"),
-      h: attr(el, "h"),
-      windowType: attr(el, "type"),
-      border: attr(el, "border"),
-      strokeColor: attr(el, "strokeColor"),
-      shadowOpacity: attr(el, "shadowOpacity"),
-      shadowSigma: attr(el, "shadowSigma"),
-      shadowOffset: attr(el, "shadowOffset")
-    };
-  }
-  function parseQRect(el) {
-    return {
-      type: "QRect",
-      name: partName(el),
-      x: attr(el, "x"),
-      y: attr(el, "y"),
-      modes: attr(el, "modes"),
-      w: attr(el, "w"),
-      h: attr(el, "h"),
-      bgColor: attr(el, "bgColor"),
-      panes: attr(el, "panes")
-    };
-  }
-  function attr(el, name) {
-    const val = el.getAttribute(name);
-    return val !== null ? val.trim() : void 0;
-  }
-  function partName(el) {
-    return attr(el, "name") ?? attr(el, "refName") ?? "";
-  }
-  function matchesMode(el, desiredMode) {
-    const modesAttr = attr(el, "modes");
-    if (modesAttr === void 0) {
-      return desiredMode === "front";
-    }
-    const lower = modesAttr.toLowerCase();
-    if (lower === "all") return true;
-    return lower.split("|").some((m) => m.trim() === desiredMode);
-  }
-
   // src/expr/tokenizer.ts
   var TokenizerError = class extends Error {
     constructor(message, position) {
@@ -941,6 +656,305 @@ Rise/set (Moon)
     return parseFloat(s);
   }
 
+  // src/watch/xml-parser.ts
+  function parseWatchXML(xmlText, mode, domParser) {
+    const parser = domParser ?? new DOMParser();
+    const doc = parser.parseFromString(xmlText, "text/xml");
+    const watchEl = doc.querySelector("watch");
+    if (!watchEl) {
+      throw new Error("No <watch> element found in XML");
+    }
+    const watch = {
+      name: attr(watchEl, "name") ?? "unknown",
+      beatsPerSecond: attr(watchEl, "beatsPerSecond") ?? "1",
+      initExprs: [],
+      parts: []
+    };
+    for (const child of Array.from(watchEl.children)) {
+      processElement(child, mode, watch.initExprs, watch.parts);
+    }
+    return watch;
+  }
+  function processElement(el, mode, initExprs, parts) {
+    const tag = el.tagName.toLowerCase();
+    switch (tag) {
+      case "init":
+        {
+          const exprStr = attr(el, "expr");
+          if (exprStr) {
+            try {
+              initExprs.push(parse(exprStr));
+            } catch (e) {
+              console.error(`Failed to parse <init expr="${exprStr}">`, e);
+            }
+          }
+        }
+        break;
+      case "atlas":
+        break;
+      case "static":
+        processStatic(el, mode, initExprs, parts);
+        break;
+      case "qdial":
+        if (matchesMode(el, mode)) {
+          parts.push(parseQDial(el));
+        }
+        break;
+      case "qhand":
+      case "hand":
+        if (matchesMode(el, mode)) {
+          parts.push(parseQHand(el));
+        }
+        break;
+      case "swheel":
+      case "qwheel":
+        if (matchesMode(el, mode)) {
+          parts.push(parseWheel(el, tag === "qwheel" ? "QWheel" : "SWheel"));
+        }
+        break;
+      case "qtext":
+        if (matchesMode(el, mode)) {
+          parts.push(parseQText(el));
+        }
+        break;
+      case "image":
+        if (matchesMode(el, mode)) {
+          parts.push(parseImage(el));
+        }
+        break;
+      case "button":
+        if (matchesMode(el, mode)) {
+          parts.push(parseButton(el));
+        }
+        break;
+      case "window":
+        if (matchesMode(el, mode)) {
+          parts.push(parseWindow(el));
+        }
+        break;
+      case "qrect":
+        if (matchesMode(el, mode)) {
+          parts.push(parseQRect(el));
+        }
+        break;
+      case "terminator":
+      case "tick":
+        break;
+      default:
+        break;
+    }
+  }
+  function processStatic(el, mode, initExprs, parts) {
+    if (!matchesMode(el, mode)) {
+      return;
+    }
+    const staticPart = {
+      type: "Static",
+      name: attr(el, "name") ?? "",
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      children: []
+    };
+    for (const child of Array.from(el.children)) {
+      processElement(child, mode, initExprs, staticPart.children);
+    }
+    parts.push(staticPart);
+  }
+  function parseQDial(el) {
+    return {
+      type: "QDial",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      radius: attrExpr(el, "radius"),
+      radius2: attrExpr(el, "radius2"),
+      clipRadius: attrExpr(el, "clipRadius"),
+      orientation: attr(el, "orientation"),
+      demiTweak: attrExpr(el, "demiTweak"),
+      text: attr(el, "text"),
+      fontSize: attrExpr(el, "fontSize"),
+      fontName: attr(el, "fontName"),
+      bgColor: attrExpr(el, "bgColor"),
+      strokeColor: attrExpr(el, "strokeColor"),
+      fillColor1: attrExpr(el, "fillColor1"),
+      fillColor2: attrExpr(el, "fillColor2"),
+      marks: attr(el, "marks"),
+      markWidth: attrExpr(el, "markWidth"),
+      nMarks: attrExpr(el, "nMarks"),
+      mSize: attrExpr(el, "mSize"),
+      angle: attrExpr(el, "angle"),
+      angle0: attrExpr(el, "angle0"),
+      angle1: attrExpr(el, "angle1"),
+      angle2: attrExpr(el, "angle2"),
+      update: attrExpr(el, "update"),
+      updateOffset: attrExpr(el, "updateOffset"),
+      kind: attr(el, "kind"),
+      z: attrExpr(el, "z"),
+      thick: attrExpr(el, "thick")
+    };
+  }
+  function parseQHand(el) {
+    return {
+      type: "QHand",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      angle: attrExpr(el, "angle"),
+      length: attrExpr(el, "length"),
+      width: attrExpr(el, "width"),
+      tail: attrExpr(el, "tail"),
+      handType: attr(el, "type"),
+      strokeColor: attrExpr(el, "strokeColor"),
+      fillColor: attrExpr(el, "fillColor"),
+      lineWidth: attrExpr(el, "lineWidth"),
+      kind: attr(el, "kind"),
+      update: attrExpr(el, "update"),
+      updateOffset: attrExpr(el, "updateOffset"),
+      z: attrExpr(el, "z"),
+      thick: attrExpr(el, "thick"),
+      animSpeed: attrExpr(el, "animSpeed"),
+      dragAnimationType: attr(el, "dragAnimationType"),
+      oLength: attrExpr(el, "oLength"),
+      oWidth: attrExpr(el, "oWidth"),
+      oTail: attrExpr(el, "oTail"),
+      oLineWidth: attrExpr(el, "oLineWidth"),
+      oStrokeColor: attrExpr(el, "oStrokeColor"),
+      oFillColor: attrExpr(el, "oFillColor"),
+      oCenter: attrExpr(el, "oCenter"),
+      oRadius: attrExpr(el, "oRadius")
+    };
+  }
+  function parseWheel(el, variant) {
+    return {
+      type: "Wheel",
+      wheelVariant: variant,
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      angle: attrExpr(el, "angle"),
+      radius: attrExpr(el, "radius"),
+      orientation: attr(el, "orientation"),
+      text: attr(el, "text"),
+      fontSize: attrExpr(el, "fontSize"),
+      fontName: attr(el, "fontName"),
+      strokeColor: attrExpr(el, "strokeColor"),
+      bgColor: attrExpr(el, "bgColor"),
+      update: attrExpr(el, "update"),
+      updateOffset: attrExpr(el, "updateOffset"),
+      animSpeed: attrExpr(el, "animSpeed"),
+      dragAnimationType: attr(el, "dragAnimationType"),
+      marks: attr(el, "marks"),
+      refName: attr(el, "refName")
+    };
+  }
+  function parseQText(el) {
+    return {
+      type: "QText",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      text: attr(el, "text"),
+      fontSize: attrExpr(el, "fontSize"),
+      fontName: attr(el, "fontName"),
+      strokeColor: attrExpr(el, "strokeColor")
+    };
+  }
+  function parseImage(el) {
+    return {
+      type: "Image",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      src: attr(el, "src"),
+      alpha: attrExpr(el, "alpha")
+    };
+  }
+  function parseButton(el) {
+    return {
+      type: "Button",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      action: attr(el, "action"),
+      enabled: attrExpr(el, "enabled"),
+      src: attr(el, "src"),
+      motion: attrExpr(el, "motion"),
+      xMotion: attrExpr(el, "xMotion"),
+      yMotion: attrExpr(el, "yMotion"),
+      w: attrExpr(el, "w"),
+      h: attrExpr(el, "h"),
+      opacity: attrExpr(el, "opacity"),
+      rotation: attrExpr(el, "rotation"),
+      expanded: attrExpr(el, "expanded"),
+      immediate: attr(el, "immediate"),
+      repeatStrategy: attr(el, "repeatStrategy"),
+      grabPrio: attr(el, "grabPrio")
+    };
+  }
+  function parseWindow(el) {
+    return {
+      type: "Window",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      w: attrExpr(el, "w"),
+      h: attrExpr(el, "h"),
+      windowType: attr(el, "type"),
+      border: attrExpr(el, "border"),
+      strokeColor: attrExpr(el, "strokeColor"),
+      shadowOpacity: attrExpr(el, "shadowOpacity"),
+      shadowSigma: attrExpr(el, "shadowSigma"),
+      shadowOffset: attrExpr(el, "shadowOffset")
+    };
+  }
+  function parseQRect(el) {
+    return {
+      type: "QRect",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      w: attrExpr(el, "w"),
+      h: attrExpr(el, "h"),
+      bgColor: attrExpr(el, "bgColor"),
+      panes: attrExpr(el, "panes")
+    };
+  }
+  function attr(el, name) {
+    const val = el.getAttribute(name);
+    return val !== null ? val.trim() : void 0;
+  }
+  function attrExpr(el, name) {
+    const val = attr(el, name);
+    if (!val) return void 0;
+    try {
+      return parse(val);
+    } catch (e) {
+      console.warn(`[xml-parser] Failed to parse AST for attribute: ${name}="${val}"`, e);
+      return void 0;
+    }
+  }
+  function partName(el) {
+    return attr(el, "name") ?? attr(el, "refName") ?? "";
+  }
+  function matchesMode(el, desiredMode) {
+    const modesAttr = attr(el, "modes");
+    if (modesAttr === void 0) {
+      return desiredMode === "front";
+    }
+    const lower = modesAttr.toLowerCase();
+    if (lower === "all") return true;
+    return lower.split("|").some((m) => m.trim() === desiredMode);
+  }
+
   // src/expr/evaluator.ts
   function createDefaultEnvironment() {
     const variables = /* @__PURE__ */ new Map();
@@ -1113,13 +1127,6 @@ Rise/set (Moon)
       default:
         throw new EvalError(`Unknown binary operator: ${operator}`);
     }
-  }
-  function evaluateExpression(source, env) {
-    const ast = parse(source);
-    return evaluate(ast, env);
-  }
-  function evaluateInit(source, env) {
-    return evaluateExpression(source, env);
   }
 
   // src/astronomy/astro-constants.ts
@@ -3769,19 +3776,17 @@ Rise/set (Moon)
     env.variables.set("updateAtEnvChangeOnly", EC_UPDATE_ENV_CHANGE_ONLY);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
     for (const expr of watch.initExprs) {
-      evaluateInit(expr, env);
+      evaluate(expr, env);
     }
     return env;
   }
   function evalAttr(expr, env) {
-    if (!expr || expr.trim() === "") return 0;
-    return evaluateExpression(expr.trim(), env);
+    if (!expr) return 0;
+    return evaluate(expr, env);
   }
   function evalColor(expr, env) {
-    if (!expr || expr.trim() === "") return "rgba(0,0,0,0)";
-    const trimmed = expr.trim();
-    if (trimmed === "clear") return "rgba(0,0,0,0)";
-    const val = evaluateExpression(trimmed, env);
+    if (!expr) return "rgba(0,0,0,0)";
+    const val = evaluate(expr, env);
     return argbToCSS(val);
   }
   function argbToCSS(argb) {

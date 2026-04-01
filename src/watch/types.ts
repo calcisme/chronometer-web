@@ -6,6 +6,8 @@
  * so the rendering layer can re-evaluate dynamic attributes per-frame.
  */
 
+import type { ASTNode } from '../expr/parser.js';
+
 // ============================================================================
 // Watch (top level)
 // ============================================================================
@@ -14,7 +16,7 @@ export interface Watch {
     name: string;
     beatsPerSecond: string;
     /** All `<init expr="...">` blocks in document order. */
-    initExprs: string[];
+    initExprs: ASTNode[];
     /** All parts included for the selected mode, in document order. */
     parts: WatchPart[];
 }
@@ -50,8 +52,8 @@ export interface DynamicState {
 
 export interface PartBase {
     name: string;
-    x?: string;
-    y?: string;
+    x?: ASTNode;
+    y?: ASTNode;
     modes?: string;
     /** Runtime animation state — populated by the animation system, not by XML parsing. */
     dynamicState?: DynamicState;
@@ -63,31 +65,31 @@ export interface PartBase {
 
 export interface QDialPart extends PartBase {
     type: 'QDial';
-    radius?: string;
-    radius2?: string;
-    clipRadius?: string;
+    radius?: ASTNode;
+    radius2?: ASTNode;
+    clipRadius?: ASTNode;
     orientation?: string;     // 'upright' | 'demi' | 'radial' etc.
-    demiTweak?: string;
+    demiTweak?: ASTNode;
     text?: string;
-    fontSize?: string;
+    fontSize?: ASTNode;
     fontName?: string;
-    bgColor?: string;
-    strokeColor?: string;
-    fillColor1?: string;
-    fillColor2?: string;
+    bgColor?: ASTNode;
+    strokeColor?: ASTNode;
+    fillColor1?: ASTNode;
+    fillColor2?: ASTNode;
     marks?: string;           // 'outer' | 'center' | 'tickOut' | 'dot' | 'none' etc.
-    markWidth?: string;
-    nMarks?: string;
-    mSize?: string;
-    angle?: string;
-    angle0?: string;
-    angle1?: string;
-    angle2?: string;
-    update?: string;
-    updateOffset?: string;
+    markWidth?: ASTNode;
+    nMarks?: ASTNode;
+    mSize?: ASTNode;
+    angle?: ASTNode;
+    angle0?: ASTNode;
+    angle1?: ASTNode;
+    angle2?: ASTNode;
+    update?: ASTNode;
+    updateOffset?: ASTNode;
     kind?: string;
-    z?: string;
-    thick?: string;
+    z?: ASTNode;
+    thick?: ASTNode;
 }
 
 // ============================================================================
@@ -96,30 +98,30 @@ export interface QDialPart extends PartBase {
 
 export interface QHandPart extends PartBase {
     type: 'QHand';
-    angle?: string;
-    length?: string;
-    width?: string;
-    tail?: string;
+    angle?: ASTNode;
+    length?: ASTNode;
+    width?: ASTNode;
+    tail?: ASTNode;
     handType?: string;         // 'rect' | 'tri' (stored from XML `type` attr)
-    strokeColor?: string;
-    fillColor?: string;
-    lineWidth?: string;
+    strokeColor?: ASTNode;
+    fillColor?: ASTNode;
+    lineWidth?: ASTNode;
     kind?: string;             // 'hour12Kind' | 'minuteKind' | 'secondKind' etc.
-    update?: string;
-    updateOffset?: string;
-    z?: string;
-    thick?: string;
-    animSpeed?: string;
+    update?: ASTNode;
+    updateOffset?: ASTNode;
+    z?: ASTNode;
+    thick?: ASTNode;
+    animSpeed?: ASTNode;
     dragAnimationType?: string;
     // Arrow overlay attributes
-    oLength?: string;
-    oWidth?: string;
-    oTail?: string;
-    oLineWidth?: string;
-    oStrokeColor?: string;
-    oFillColor?: string;
-    oCenter?: string;
-    oRadius?: string;
+    oLength?: ASTNode;
+    oWidth?: ASTNode;
+    oTail?: ASTNode;
+    oLineWidth?: ASTNode;
+    oStrokeColor?: ASTNode;
+    oFillColor?: ASTNode;
+    oCenter?: ASTNode;
+    oRadius?: ASTNode;
 }
 
 // ============================================================================
@@ -129,17 +131,17 @@ export interface QHandPart extends PartBase {
 export interface WheelPart extends PartBase {
     type: 'Wheel';
     wheelVariant: 'SWheel' | 'QWheel';
-    angle?: string;
-    radius?: string;
+    angle?: ASTNode;
+    radius?: ASTNode;
     orientation?: string;     // 'three' | 'six' | 'nine' | 'twelve'
     text?: string;
-    fontSize?: string;
+    fontSize?: ASTNode;
     fontName?: string;
-    strokeColor?: string;
-    bgColor?: string;
-    update?: string;
-    updateOffset?: string;
-    animSpeed?: string;
+    strokeColor?: ASTNode;
+    bgColor?: ASTNode;
+    update?: ASTNode;
+    updateOffset?: ASTNode;
+    animSpeed?: ASTNode;
     dragAnimationType?: string;
     marks?: string;
     refName?: string;
@@ -152,9 +154,9 @@ export interface WheelPart extends PartBase {
 export interface QTextPart extends PartBase {
     type: 'QText';
     text?: string;
-    fontSize?: string;
+    fontSize?: ASTNode;
     fontName?: string;
-    strokeColor?: string;
+    strokeColor?: ASTNode;
 }
 
 // ============================================================================
@@ -164,7 +166,7 @@ export interface QTextPart extends PartBase {
 export interface ImagePart extends PartBase {
     type: 'Image';
     src?: string;
-    alpha?: string;
+    alpha?: ASTNode;
 }
 
 // ============================================================================
@@ -174,16 +176,16 @@ export interface ImagePart extends PartBase {
 export interface ButtonPart extends PartBase {
     type: 'Button';
     action?: string;
-    enabled?: string;
+    enabled?: ASTNode;
     src?: string;
-    motion?: string;
-    xMotion?: string;
-    yMotion?: string;
-    w?: string;
-    h?: string;
-    opacity?: string;
-    rotation?: string;
-    expanded?: string;
+    motion?: ASTNode;
+    xMotion?: ASTNode;
+    yMotion?: ASTNode;
+    w?: ASTNode;
+    h?: ASTNode;
+    opacity?: ASTNode;
+    rotation?: ASTNode;
+    expanded?: ASTNode;
     immediate?: string;
     repeatStrategy?: string;
     grabPrio?: string;
@@ -195,14 +197,14 @@ export interface ButtonPart extends PartBase {
 
 export interface WindowPart extends PartBase {
     type: 'Window';
-    w?: string;
-    h?: string;
+    w?: ASTNode;
+    h?: ASTNode;
     windowType?: string;       // 'porthole' | 'rect' (stored from XML `type` attr)
-    border?: string;
-    strokeColor?: string;
-    shadowOpacity?: string;
-    shadowSigma?: string;
-    shadowOffset?: string;
+    border?: ASTNode;
+    strokeColor?: ASTNode;
+    shadowOpacity?: ASTNode;
+    shadowSigma?: ASTNode;
+    shadowOffset?: ASTNode;
 }
 
 // ============================================================================
@@ -220,8 +222,8 @@ export interface StaticPart extends PartBase {
 
 export interface QRectPart extends PartBase {
     type: 'QRect';
-    w?: string;
-    h?: string;
-    bgColor?: string;
-    panes?: string;
+    w?: ASTNode;
+    h?: ASTNode;
+    bgColor?: ASTNode;
+    panes?: ASTNode;
 }

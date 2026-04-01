@@ -7,10 +7,10 @@
 
 import {
     createDefaultEnvironment,
-    evaluateInit,
-    evaluateExpression,
+    evaluate,
     Environment,
 } from '../expr/evaluator.js';
+import type { ASTNode } from '../expr/parser.js';
 import type { Watch } from './types.js';
 import { dateToDateInterval } from '../astronomy/es-time.js';
 import {
@@ -60,7 +60,7 @@ export function createWatchEnvironment(
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
-        evaluateInit(expr, env);
+        evaluate(expr, env);
     }
 
     return env;
@@ -68,25 +68,20 @@ export function createWatchEnvironment(
 
 /**
  * Evaluate a single attribute expression in the given env.
- * Returns 0 for undefined/empty expressions.
+ * Returns 0 for undefined expressions.
  */
-export function evalAttr(expr: string | undefined, env: Environment): number {
-    if (!expr || expr.trim() === '') return 0;
-    return evaluateExpression(expr.trim(), env);
+export function evalAttr(expr: ASTNode | undefined, env: Environment): number {
+    if (!expr) return 0;
+    return evaluate(expr, env);
 }
 
 /**
  * Evaluate a color expression and return a CSS color string.
  * The XML uses 0xAARRGGBB format (matching iOS UIColor).
  */
-export function evalColor(expr: string | undefined, env: Environment): string {
-    if (!expr || expr.trim() === '') return 'rgba(0,0,0,0)';
-
-    // Handle 'clear' specially
-    const trimmed = expr.trim();
-    if (trimmed === 'clear') return 'rgba(0,0,0,0)';
-
-    const val = evaluateExpression(trimmed, env);
+export function evalColor(expr: ASTNode | undefined, env: Environment): string {
+    if (!expr) return 'rgba(0,0,0,0)';
+    const val = evaluate(expr, env);
     return argbToCSS(val);
 }
 
