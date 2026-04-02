@@ -3973,6 +3973,10 @@
         drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
       }
     }
+    for (const win of pendingWindows) {
+      cutWindowHole(ctx, win, env);
+      drawWindowBorder(ctx, win, env);
+    }
   }
   function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale) {
     const temp = new OffscreenCanvas(canvasWidth, canvasHeight);
@@ -3992,22 +3996,24 @@
     }
   }
   function cutWindowHole(ctx, win, env) {
-    const xCorner = evalAttr(win.x, env);
-    const yCorner = evalAttr(win.y, env);
+    const xVal = evalAttr(win.x, env);
+    const yVal = evalAttr(win.y, env);
     const w = evalAttr(win.w, env);
     const h = evalAttr(win.h, env);
     const isPorthole = win.windowType === "porthole";
-    const cx = xCorner + w / 2;
-    const cy = -(yCorner + h / 2);
     ctx.save();
     ctx.globalCompositeOperation = "destination-out";
     ctx.fillStyle = "rgba(0,0,0,1)";
     if (isPorthole) {
+      const cx = xVal;
+      const cy = -yVal;
       const r = Math.min(w, h) / 2;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, 2 * Math.PI);
       ctx.fill();
     } else {
+      const cx = xVal + w / 2;
+      const cy = -(yVal + h / 2);
       ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
     }
     ctx.restore();
@@ -4459,16 +4465,16 @@
     ctx.restore();
   }
   function drawWindowBorder(ctx, part, env) {
-    const xCorner = evalAttr(part.x, env);
-    const yCorner = evalAttr(part.y, env);
+    const xVal = evalAttr(part.x, env);
+    const yVal = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     const border = evalAttr(part.border, env);
     const strokeColor = evalColor(part.strokeColor, env);
     const isPorthole = part.windowType === "porthole";
     if (w <= 0 || h <= 0) return;
-    const cx = xCorner + w / 2;
-    const cy = -(yCorner + h / 2);
+    const cx = isPorthole ? xVal : xVal + w / 2;
+    const cy = isPorthole ? -yVal : -(yVal + h / 2);
     ctx.save();
     ctx.translate(cx, cy);
     const shadowOpacity = evalAttr(part.shadowOpacity, env);

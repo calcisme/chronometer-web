@@ -198,6 +198,15 @@ function renderPartsWithWindows(
             drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
         }
     }
+
+    // Any leftover pending windows (e.g. the AM/PM porthole at the end of a
+    // static block) are applied as direct cutouts on the accumulated context.
+    // On iOS, applyWindows is called on the static view itself, achieving the
+    // same effect.
+    for (const win of pendingWindows) {
+        cutWindowHole(ctx, win, env);
+        drawWindowBorder(ctx, win, env);
+    }
 }
 
 /**
@@ -249,26 +258,28 @@ function cutWindowHole(
     win: WindowPart,
     env: Environment,
 ): void {
-    const xCorner = evalAttr(win.x, env);
-    const yCorner = evalAttr(win.y, env);
+    const xVal = evalAttr(win.x, env);
+    const yVal = evalAttr(win.y, env);
     const w = evalAttr(win.w, env);
     const h = evalAttr(win.h, env);
     const isPorthole = win.windowType === 'porthole';
-
-    // Center from corner (same as drawWindow/drawQRect)
-    const cx = xCorner + w / 2;
-    const cy = -(yCorner + h / 2);
 
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(0,0,0,1)';
 
     if (isPorthole) {
+        // iOS: x,y is the arc center (CGContextAddArc uses rect.origin directly)
+        const cx = xVal;
+        const cy = -yVal;
         const r = Math.min(w, h) / 2;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, 2 * Math.PI);
         ctx.fill();
     } else {
+        // iOS: x,y is the rect corner (CGContextClearRect uses rect directly)
+        const cx = xVal + w / 2;
+        const cy = -(yVal + h / 2);
         ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
     }
 
@@ -989,8 +1000,8 @@ function drawWindowBorder(
     part: WindowPart,
     env: Environment,
 ): void {
-    const xCorner = evalAttr(part.x, env);
-    const yCorner = evalAttr(part.y, env);
+    const xVal = evalAttr(part.x, env);
+    const yVal = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
     const border = evalAttr(part.border, env);
@@ -999,9 +1010,9 @@ function drawWindowBorder(
 
     if (w <= 0 || h <= 0) return;
 
-    // Original iOS: (x,y) is top-left corner; center = (x+w/2, y+h/2)
-    const cx = xCorner + w / 2;
-    const cy = -(yCorner + h / 2);  // Negate Y: XML Y-up → Canvas Y-down
+    // Porthole: x,y is the center; Rectangular: x,y is the corner
+    const cx = isPorthole ? xVal : xVal + w / 2;
+    const cy = isPorthole ? -yVal : -(yVal + h / 2);
 
     ctx.save();
     ctx.translate(cx, cy);
