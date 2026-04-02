@@ -32,6 +32,14 @@ import type {
 import { evalAttr, evalColor } from './watch-env.js';
 import type { LoadedImage } from './image-loader.js';
 
+/** Returns true if a CSS color string has alpha = 0 (fully transparent). */
+function isTransparent(cssColor: string): boolean {
+    // evalColor always produces 'rgba(r,g,b,a)' strings.
+    // The alpha is the last numeric value; 0.000 means fully transparent.
+    const m = cssColor.match(/,([\d.]+)\)$/);
+    return m !== null && parseFloat(m[1]) === 0;
+}
+
 /** Shared context type — works for both on-screen and offscreen canvases. */
 type RenderContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -781,8 +789,8 @@ function drawWheel(
     }
 
     // angle1/angle2 define the arc range (default: full circle)
-    const angle1 = 0;
-    const angle2 = 2 * Math.PI;
+    const angle1 = part.angle1 ? evalAttr(part.angle1, env) : 0;
+    const angle2 = part.angle2 ? evalAttr(part.angle2, env) : 2 * Math.PI;
     const arcSpan = angle2 - angle1;
     const step = arcSpan / n;
 
@@ -790,7 +798,7 @@ function drawWheel(
     const tradius = radius;
 
     // Draw background arc ring
-    if (bgColor !== 'rgba(0,0,0,0)') {
+    if (!isTransparent(bgColor)) {
         ctx.fillStyle = bgColor;
         ctx.beginPath();
         ctx.arc(0, 0, radius + 2, 0, 2 * Math.PI);
@@ -798,19 +806,13 @@ function drawWheel(
     }
 
     // Draw labels around the circle
-    // The `angle` expression gives the current rotation of the wheel.
-    // In the original iOS code:
-    //   - The context starts rotated by angle1 (0 for full-circle wheels)
-    //   - Each label is drawn at a fixed position determined by orientation
-    //   - Then the context rotates by (angle2-angle1)/n between each label
-    //   - The wheel's current angle offsets all labels
-    //
-    // The wheel angle from the XML rotates CCW in math coords, but since
-    // canvas Y is down, a positive angle rotates CW visually.
-    // The original iOS negates the angle when setting the hand/wheel position.
-
+    // In iOS, the offsetAngle uses -i * step, meaning the labels are placed
+    // counter-clockwise around the wheel. The wheel rotates clockwise (+angle).
+    // This perfectly routes the "unused/future" weekday labels to the LEFT
+    // side of the dial, keeping them safely away from the date window on the right.
+    
     ctx.save();
-    ctx.rotate(-angle + angle1);
+    ctx.rotate(angle + angle1);
 
     for (let i = 0; i < n; i++) {
         const label = labels[i].trim();
@@ -820,29 +822,20 @@ function drawWheel(
             ctx.save();
 
             // Position text based on orientation
-            // Each orientation places text at a specific edge of the wheel
+            // Text rotates with the wheel (top of text faces center),
+            // matching iOS ECQHandSpoke rendering. No counter-rotation.
             switch (orientation.toLowerCase()) {
                 case 'three':
-                    // Text to the right, reading left-to-right
                     ctx.translate(tradius - maxW / 2, 0);
-                    ctx.rotate(angle - angle1 - i * step);  // keep text upright
                     break;
                 case 'six':
-                    // 6 o'clock: text below center
-                    // iOS Quartz (Y-up): y = -trad → below. Canvas (Y-down): positive y → below
                     ctx.translate(0, tradius - maxH / 2);
-                    ctx.rotate(angle - angle1 - i * step);
                     break;
                 case 'twelve':
-                    // 12 o'clock: text above center
-                    // iOS Quartz (Y-up): y = +trad → above. Canvas (Y-down): negative y → above
                     ctx.translate(0, -(tradius - maxH / 2));
-                    ctx.rotate(angle - angle1 - i * step);
                     break;
                 case 'nine':
-                    // Text to the left
                     ctx.translate(-(tradius - maxW / 2), 0);
-                    ctx.rotate(angle - angle1 - i * step);
                     break;
             }
 
@@ -850,13 +843,13 @@ function drawWheel(
             ctx.restore();
         }
 
-        ctx.rotate(step);
+        ctx.rotate(-step);
     }
 
-    ctx.restore();
+    ctx.restore(); // closes ctx.save() for ctx.rotate(angle + angle1)
 
     // Border stroke
-    if (bgColor !== 'rgba(0,0,0,0)') {
+    if (!isTransparent(bgColor)) {
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
@@ -864,7 +857,7 @@ function drawWheel(
         ctx.stroke();
     }
 
-    ctx.restore();
+    ctx.restore(); // closes outermost ctx.save() / ctx.translate(x, y)
 }
 
 function orientationAngle(orientation: string): number {
@@ -961,7 +954,7 @@ function drawQRect(
     ctx.translate(cx, cy);
 
     // Centered rect
-    if (bgColor !== 'rgba(0,0,0,0)') {
+    if (!isTransparent(bgColor)) {
         ctx.fillStyle = bgColor;
         ctx.fillRect(-w / 2, -h / 2, w, h);
     } else {

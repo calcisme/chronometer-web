@@ -136,6 +136,8 @@ export interface WheelPart extends PartBase {
     type: 'Wheel';
     wheelVariant: 'SWheel' | 'QWheel';
     angle?: ASTNode;
+    angle1?: ASTNode;
+    angle2?: ASTNode;
     radius?: ASTNode;
     orientation?: string;     // 'three' | 'six' | 'nine' | 'twelve'
     text?: string;

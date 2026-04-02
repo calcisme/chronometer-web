@@ -3914,6 +3914,10 @@
   }
 
   // src/watch/renderer.ts
+  function isTransparent(cssColor) {
+    const m = cssColor.match(/,([\d.]+)\)$/);
+    return m !== null && parseFloat(m[1]) === 0;
+  }
   var currentImages;
   var BEZEL_THICKNESS_XML = 10;
   function buildStaticCache(watch, env, canvasWidth, canvasHeight, scale, images) {
@@ -4341,19 +4345,19 @@
       const m = ctx.measureText(lab.trim());
       maxW = Math.max(maxW, m.width);
     }
-    const angle1 = 0;
-    const angle2 = 2 * Math.PI;
+    const angle1 = part.angle1 ? evalAttr(part.angle1, env) : 0;
+    const angle2 = part.angle2 ? evalAttr(part.angle2, env) : 2 * Math.PI;
     const arcSpan = angle2 - angle1;
     const step = arcSpan / n;
     const tradius = radius;
-    if (bgColor !== "rgba(0,0,0,0)") {
+    if (!isTransparent(bgColor)) {
       ctx.fillStyle = bgColor;
       ctx.beginPath();
       ctx.arc(0, 0, radius + 2, 0, 2 * Math.PI);
       ctx.fill();
     }
     ctx.save();
-    ctx.rotate(-angle + angle1);
+    ctx.rotate(angle + angle1);
     for (let i = 0; i < n; i++) {
       const label = labels[i].trim();
       if (label) {
@@ -4362,28 +4366,24 @@
         switch (orientation.toLowerCase()) {
           case "three":
             ctx.translate(tradius - maxW / 2, 0);
-            ctx.rotate(angle - angle1 - i * step);
             break;
           case "six":
             ctx.translate(0, tradius - maxH / 2);
-            ctx.rotate(angle - angle1 - i * step);
             break;
           case "twelve":
             ctx.translate(0, -(tradius - maxH / 2));
-            ctx.rotate(angle - angle1 - i * step);
             break;
           case "nine":
             ctx.translate(-(tradius - maxW / 2), 0);
-            ctx.rotate(angle - angle1 - i * step);
             break;
         }
         ctx.fillText(label, 0, 0);
         ctx.restore();
       }
-      ctx.rotate(step);
+      ctx.rotate(-step);
     }
     ctx.restore();
-    if (bgColor !== "rgba(0,0,0,0)") {
+    if (!isTransparent(bgColor)) {
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 0.5;
       ctx.beginPath();
@@ -4437,7 +4437,7 @@
     const bgColor = evalColor(part.bgColor, env);
     ctx.save();
     ctx.translate(cx, cy);
-    if (bgColor !== "rgba(0,0,0,0)") {
+    if (!isTransparent(bgColor)) {
       ctx.fillStyle = bgColor;
       ctx.fillRect(-w / 2, -h / 2, w, h);
     } else {
