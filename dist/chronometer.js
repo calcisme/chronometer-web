@@ -13,7 +13,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Haleakala I' beatsPerSecond='1' faceWidth='266' statusBarLoc='center'>
+<watch name='Haleakala I' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(218,201,162)'>
   <atlas frontWidth='512' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=266, backerWidth=faceWidth' />
 
@@ -601,6 +601,8 @@
     const watch = {
       name: attr(watchEl, "name") ?? "unknown",
       beatsPerSecond: attr(watchEl, "beatsPerSecond") ?? "1",
+      faceWidth: parseFloat(attr(watchEl, "faceWidth") ?? "290"),
+      bezelColor: attr(watchEl, "bezelColor") ?? "",
       initExprs: [],
       parts: []
     };
@@ -3913,6 +3915,7 @@
 
   // src/watch/renderer.ts
   var currentImages;
+  var BEZEL_THICKNESS_XML = 10;
   function buildStaticCache(watch, env, canvasWidth, canvasHeight, scale, images) {
     currentImages = images;
     const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
@@ -3920,6 +3923,20 @@
     ctx.translate(canvasWidth / 2, canvasHeight / 2);
     ctx.scale(scale, scale);
     renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale);
+    if (watch.bezelColor) {
+      const faceRadius = watch.faceWidth / 2;
+      const outerRadius = faceRadius + BEZEL_THICKNESS_XML;
+      ctx.beginPath();
+      ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
+      ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
+      ctx.fillStyle = watch.bezelColor;
+      ctx.fill("evenodd");
+      ctx.beginPath();
+      ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
+    }
     return cache;
   }
   function renderFrame(ctx, staticCache, watch, env, scale) {
@@ -4619,8 +4636,10 @@
       face.canvas.height = physPx;
       face.canvas.style.width = `${size}px`;
       face.canvas.style.height = `${size}px`;
+      const bezel = face.watch.bezelColor ? BEZEL_THICKNESS_XML : 0;
+      const totalDiameter = face.watch.faceWidth + 2 * bezel;
       face.sizePx = size;
-      face.scale = physPx / 266;
+      face.scale = physPx / totalDiameter;
     }
     function buildCache(face) {
       if (!face.enabled || face.sizePx === 0) return;

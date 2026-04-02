@@ -15,6 +15,10 @@ import type { ASTNode } from '../expr/parser.js';
 export interface Watch {
     name: string;
     beatsPerSecond: string;
+    /** Diameter of the watch face in XML coordinate units (from faceWidth attribute). */
+    faceWidth: number;
+    /** CSS color string for the surrounding bezel ring. Empty string means no bezel. */
+    bezelColor: string;
     /** All `<init expr="...">` blocks in document order. */
     initExprs: ASTNode[];
     /** All parts included for the selected mode, in document order. */

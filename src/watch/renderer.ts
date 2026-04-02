@@ -48,6 +48,15 @@ let currentImages: Map<string, LoadedImage> | undefined;
  *
  * Call this once on init, and again when mode/date/timezone changes.
  */
+/**
+ * Bezel ring thickness in XML coordinate units.
+ * Computed as floor(2/3 * gap) where gap = faceRadius - mainR.
+ * For Haleakala: faceRadius=133, mainR=118, gap=15, bezel=10.
+ * This constant is exported so the scale calculation in standalone.ts
+ * can account for the bezel when sizing the canvas.
+ */
+export const BEZEL_THICKNESS_XML = 10;
+
 export function buildStaticCache(
     watch: Watch,
     env: Environment,
@@ -66,6 +75,26 @@ export function buildStaticCache(
 
     // Render static parts with window accumulation
     renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale);
+
+    // Draw bezel ring on top of everything, if the watch specifies one
+    if (watch.bezelColor) {
+        const faceRadius = watch.faceWidth / 2;
+        const outerRadius = faceRadius + BEZEL_THICKNESS_XML;
+        ctx.beginPath();
+        // Outer circle (clockwise)
+        ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
+        // Inner circle (anticlockwise — punches a hole for the face)
+        ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
+        ctx.fillStyle = watch.bezelColor;
+        ctx.fill('evenodd');
+
+        // Black boundary circle at the bezel/face join
+        ctx.beginPath();
+        ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+    }
 
     return cache;
 }
