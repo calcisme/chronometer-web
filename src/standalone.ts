@@ -12,7 +12,7 @@
  */
 
 // esbuild imports this as a string with --loader:.xml=text
-import haleakalaXML from './watch/__tests__/fixtures/Haleakala.xml';
+import haleakalaXML from './watch/assets/haleakala/Haleakala-android.xml';
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { buildStaticCache, renderFrame } from './watch/renderer.js';
@@ -198,9 +198,9 @@ async function main() {
         // CSS size stays at logical pixels so it fits the cell
         face.canvas.style.width = `${size}px`;
         face.canvas.style.height = `${size}px`;
-        // Haleakala reference radius is ~143px at 290px diameter
+        // Haleakala I (Android) faceWidth = 266 XML units
         face.sizePx = size;
-        face.scale = physPx / 290;
+        face.scale = physPx / 266;
     }
 
     // --- Build (or rebuild) the StaticCache for a face ---
