@@ -16,6 +16,9 @@ import type { Watch, WatchPart, QHandPart, WheelPart } from './types.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './watch-env.js';
 
+// Constants used by the scheduler
+export const SCHEDULER_LOOKAHEAD_MS = 50; // arm setTimeout this many ms early to avoid skipping boundaries
+
 // ============================================================================
 // Constants (from ECConstants.h)
 // ============================================================================
@@ -161,6 +164,33 @@ export function tickAnimations(
             state.part.dynamicState.currentAngle = angle;
         }
     }
+}
+
+// ============================================================================
+// Scheduler helpers
+// ============================================================================
+
+/**
+ * Returns the performance.now() time of the next scheduled hand update,
+ * across all hand states. Used by the scheduler to set an idle setTimeout.
+ */
+export function nextWakeupTime(states: HandState[]): number {
+    let earliest = Infinity;
+    for (const s of states) {
+        if (s.nextUpdateTime < earliest) earliest = s.nextUpdateTime;
+    }
+    return earliest;
+}
+
+/**
+ * Returns true if any hand is currently mid-animation.
+ * When this is true the scheduler should keep calling requestAnimationFrame.
+ */
+export function anyAnimating(states: HandState[]): boolean {
+    for (const s of states) {
+        if (s.angle.animating) return true;
+    }
+    return false;
 }
 
 // ============================================================================

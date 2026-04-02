@@ -1,6 +1,14 @@
 /**
  * Standalone entry point — embeds the Haleakala XML at build time
  * so no fetch() is needed. Works from file:// protocol.
+ *
+ * Architecture:
+ *  - Each active face is a FaceInstance with its own Environment,
+ *    StaticCache, and HandState array.
+ *  - A shared scheduler handles all faces: setTimeout fires for the
+ *    next due update, rAF handles active animation frames.
+ *  - A ResizeObserver on the grid container triggers debounced
+ *    StaticCache rebuilds when the window changes size.
  */
 
 // esbuild imports this as a string with --loader:.xml=text
@@ -9,12 +17,18 @@ import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { buildStaticCache, renderFrame } from './watch/renderer.js';
 import { loadWatchImages } from './watch/image-loader.js';
-import { initHandStates, tickAnimations } from './watch/animation.js';
+import type { LoadedImage } from './watch/image-loader.js';
+import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
+import type { HandState } from './watch/animation.js';
+import type { Watch } from './watch/types.js';
+import type { Environment } from './expr/evaluator.js';
 
-// Default observer location: Steve's house
+// ============================================================================
+// Location persistence
+// ============================================================================
+
 const DEFAULT_LAT = 37.205;
 const DEFAULT_LON = -121.954;
-
 const STORAGE_KEY = 'chronometer-location';
 
 function loadStoredLocation(): { lat: number; lon: number } | null {
@@ -38,9 +52,7 @@ function saveStoredLocation(lat: number, lon: number): void {
  * Returns { lat, lon } in degrees, or null if unavailable/denied.
  */
 function requestLocation(): Promise<{ lat: number; lon: number } | null> {
-    if (!navigator.geolocation) {
-        return Promise.resolve(null);
-    }
+    if (!navigator.geolocation) return Promise.resolve(null);
     return new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
             (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
@@ -50,82 +62,288 @@ function requestLocation(): Promise<{ lat: number; lon: number } | null> {
     });
 }
 
-async function main() {
-    const canvas = document.getElementById('watch') as HTMLCanvasElement;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-        console.error('Could not get canvas 2d context');
-        return;
-    }
+// ============================================================================
+// Grid layout maths
+// ============================================================================
 
-    // Location UI elements
+/** Compute (cols, rows) such that cols × rows >= count, most "squarish". */
+function gridDimensions(count: number): { cols: number; rows: number } {
+    if (count <= 0) return { cols: 1, rows: 1 };
+    const cols = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+    return { cols, rows };
+}
+
+/**
+ * Given the grid container size (px), gap (px), padding (px) and desired grid
+ * dimensions, return the size (px) of a single square face cell.
+ */
+function cellSize(
+    containerW: number, containerH: number,
+    cols: number, rows: number,
+    gap: number, padding: number,
+): number {
+    const usableW = containerW - 2 * padding - gap * (cols - 1);
+    const usableH = containerH - 2 * padding - gap * (rows - 1);
+    return Math.floor(Math.min(usableW / cols, usableH / rows));
+}
+
+// ============================================================================
+// Per-face instance
+// ============================================================================
+
+interface FaceInstance {
+    /** Parsed watch model. */
+    watch: Watch;
+    /** Live expression environment. */
+    env: Environment;
+    /** Rendered static background (or null while being built). */
+    staticCache: OffscreenCanvas | null;
+    /** Animation states for dynamic hands. */
+    handStates: HandState[];
+    /** The canvas element for this face. */
+    canvas: HTMLCanvasElement;
+    /** 2D rendering context for the canvas. */
+    ctx: CanvasRenderingContext2D;
+    /** Current logical square size (device-independent pixels). */
+    sizePx: number;
+    /** Images loaded for this face. */
+    images: Map<string, LoadedImage>;
+    /** Whether this face is "enabled" (StaticCache allocated). */
+    enabled: boolean;
+    /** Scale factor: internal drawing units → canvas pixels. */
+    scale: number;
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+async function main() {
+    // --- UI elements ---
+    const grid = document.getElementById('watch-grid') as HTMLDivElement;
     const latInput = document.getElementById('lat-input') as HTMLInputElement;
     const lonInput = document.getElementById('lon-input') as HTMLInputElement;
     const sourceLabel = document.getElementById('location-source')!;
+    const resetLink = document.getElementById('reset-location')!;
 
-    // Resolve location: browser geolocation → localStorage → hardcoded default
+    // --- Resolve location ---
     const loc = await requestLocation();
     let lat: number, lon: number;
     if (loc) {
-        lat = loc.lat;
-        lon = loc.lon;
+        lat = loc.lat; lon = loc.lon;
         sourceLabel.textContent = '(from browser)';
     } else {
         const stored = loadStoredLocation();
         if (stored) {
-            lat = stored.lat;
-            lon = stored.lon;
+            lat = stored.lat; lon = stored.lon;
             sourceLabel.textContent = '(saved)';
         } else {
-            lat = DEFAULT_LAT;
-            lon = DEFAULT_LON;
+            lat = DEFAULT_LAT; lon = DEFAULT_LON;
             sourceLabel.textContent = "(Steve's house)";
         }
     }
-
-    // Populate inputs
     latInput.value = lat.toFixed(3);
     lonInput.value = lon.toFixed(3);
 
-    // Parse for front side only
-    const watch = parseWatchXML(haleakalaXML, 'front');
-
-    // Load watch face images
+    // --- Load shared assets ---
     const images = await loadWatchImages();
 
-    // Scale: Haleakala is designed for ~290px diameter (r=143),
-    // so scale to fit the canvas
-    const scale = canvas.width / 290;
+    // --- Describe the set of faces to show (one for now, Haleakala) ---
+    const FACE_XMLS: string[] = [haleakalaXML];
 
-    // --- Mutable state that gets rebuilt on location change ---
-    let env = createWatchEnvironment(watch, lat, lon);
-    let staticCache = buildStaticCache(
-        watch, env, canvas.width, canvas.height, scale, images,
-    );
-    let handStates = initHandStates(watch, env, performance.now());
+    // --- Parse all watch models up front (read-only after this point) ---
+    const parsedWatches: Watch[] = FACE_XMLS.map(xml => parseWatchXML(xml, 'front'));
 
-    // Rebuild watch when location changes
-    function rebuildForLocation(newLat: number, newLon: number) {
-        // Re-parse to get a fresh part tree (clears old dynamicState)
-        const freshWatch = parseWatchXML(haleakalaXML, 'front');
-        // Copy fresh parts into our watch object so renderer references stay valid
-        watch.parts = freshWatch.parts;
-        watch.initExprs = freshWatch.initExprs;
+    // --- Build the DOM: one cell + canvas per face ---
+    const { cols, rows } = gridDimensions(parsedWatches.length);
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
 
-        env = createWatchEnvironment(watch, newLat, newLon);
-        staticCache = buildStaticCache(
-            watch, env, canvas.width, canvas.height, scale, images,
-        );
-        handStates = initHandStates(watch, env, performance.now());
+    const faces: FaceInstance[] = [];
+
+    for (let i = 0; i < parsedWatches.length; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'face-cell';
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+        cell.appendChild(canvas);
+        grid.appendChild(cell);
+
+        const watch = parsedWatches[i];
+        const env = createWatchEnvironment(watch, lat, lon);
+
+        const face: FaceInstance = {
+            watch,
+            env,
+            staticCache: null,
+            handStates: [],
+            canvas,
+            ctx,
+            sizePx: 0,
+            images,
+            enabled: true,
+            scale: 1,
+        };
+        faces.push(face);
     }
 
-    // Handle input changes (on Enter or blur)
-    const resetLink = document.getElementById('reset-location')!;
+    // --- Size all canvases to match the grid container ---
+    function applySize(face: FaceInstance, size: number) {
+        const dpr = window.devicePixelRatio || 1;
+        const physPx = Math.round(size * dpr);
+        face.canvas.width = physPx;
+        face.canvas.height = physPx;
+        // CSS size stays at logical pixels so it fits the cell
+        face.canvas.style.width = `${size}px`;
+        face.canvas.style.height = `${size}px`;
+        // Haleakala reference radius is ~143px at 290px diameter
+        face.sizePx = size;
+        face.scale = physPx / 290;
+    }
+
+    // --- Build (or rebuild) the StaticCache for a face ---
+    function buildCache(face: FaceInstance) {
+        if (!face.enabled || face.sizePx === 0) return;
+        const { canvas, ctx, watch, env, images, scale } = face;
+        face.staticCache = buildStaticCache(watch, env, canvas.width, canvas.height, scale, images);
+        face.handStates = initHandStates(watch, env, performance.now());
+    }
+
+    // --- Sequential (microtask-queue) cache build for all faces ---
+    function buildAllCachesSequentially(facesToBuild: FaceInstance[], onDone: () => void) {
+        let idx = 0;
+        function buildNext() {
+            if (idx >= facesToBuild.length) { onDone(); return; }
+            buildCache(facesToBuild[idx++]);
+            // Yield to let the browser paint before building the next face
+            setTimeout(buildNext, 0);
+        }
+        buildNext();
+    }
+
+    // =========================================================================
+    // Scheduler
+    // =========================================================================
+
+    let idleTimerId: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
+
+    function stopScheduler() {
+        if (idleTimerId !== null) { clearTimeout(idleTimerId); idleTimerId = null; }
+        if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    function frame() {
+        rafId = null;
+        const now = performance.now();
+        let stillAnimating = false;
+
+        for (const face of faces) {
+            if (!face.enabled || !face.staticCache) continue;
+            tickAnimations(face.handStates, face.env, now);
+            renderFrame(face.ctx, face.staticCache, face.watch, face.env, face.scale);
+            if (anyAnimating(face.handStates)) stillAnimating = true;
+        }
+
+        if (stillAnimating) {
+            rafId = requestAnimationFrame(frame);
+        } else {
+            armIdle();
+        }
+    }
+
+    function armIdle() {
+        if (idleTimerId !== null) return;
+        // Find the nearest next update across all faces
+        let earliest = Infinity;
+        for (const face of faces) {
+            if (!face.enabled || face.handStates.length === 0) continue;
+            const t = nextWakeupTime(face.handStates);
+            if (t < earliest) earliest = t;
+        }
+        if (earliest === Infinity) return;
+        const delay = Math.max(0, earliest - performance.now() - SCHEDULER_LOOKAHEAD_MS);
+        idleTimerId = setTimeout(onIdleWakeup, delay);
+    }
+
+    function onIdleWakeup() {
+        idleTimerId = null;
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(frame);
+    }
+
+    function startScheduler() {
+        stopScheduler();
+        rafId = requestAnimationFrame(frame);
+    }
+
+    // =========================================================================
+    // Resize handling
+    // =========================================================================
+
+    const GAP_PX = 12;
+    const PADDING_PX = 12;
+
+    let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function onGridResize(W: number, H: number) {
+        const size = cellSize(W, H, cols, rows, GAP_PX, PADDING_PX);
+        if (size <= 0) return;
+
+        // Check if the size actually changed meaningfully (>1 device px)
+        const dpr = window.devicePixelRatio || 1;
+        const newPhys = Math.round(size * dpr);
+        if (newPhys === faces[0]?.canvas.width) return;  // no change
+
+        stopScheduler();
+
+        // Resize all canvases immediately (shows at new size on next paint)
+        for (const face of faces) {
+            applySize(face, size);
+            // Invalidate old static cache while we rebuild
+            face.staticCache = null;
+        }
+
+        // Rebuild all static caches one by one, then restart scheduler
+        buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
+    }
+
+    const resizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const { width, height } = entry.contentRect;
+        // Debounce: wait 150ms of quiet before rebuilding (avoids rebuilding on every pixel)
+        if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = setTimeout(() => {
+            resizeDebounceTimer = null;
+            onGridResize(width, height);
+        }, 150);
+    });
+    resizeObserver.observe(grid);
+
+    // =========================================================================
+    // Location change
+    // =========================================================================
 
     function showResetIfSaved() {
         resetLink.style.display = loadStoredLocation() ? 'inline' : 'none';
     }
     showResetIfSaved();
+
+    function rebuildAllForLocation(newLat: number, newLon: number) {
+        stopScheduler();
+        for (const face of faces) {
+            // Re-parse to clear dynamicState
+            const freshWatch = parseWatchXML(FACE_XMLS[faces.indexOf(face)], 'front');
+            face.watch.parts = freshWatch.parts;
+            face.watch.initExprs = freshWatch.initExprs;
+            face.env = createWatchEnvironment(face.watch, newLat, newLon);
+            face.staticCache = null;
+        }
+        buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
+    }
 
     function onLocationChange() {
         const newLat = parseFloat(latInput.value);
@@ -134,7 +352,7 @@ async function main() {
         saveStoredLocation(newLat, newLon);
         sourceLabel.textContent = '(saved)';
         showResetIfSaved();
-        rebuildForLocation(newLat, newLon);
+        rebuildAllForLocation(newLat, newLon);
     }
 
     latInput.addEventListener('change', onLocationChange);
@@ -146,20 +364,20 @@ async function main() {
         lonInput.value = DEFAULT_LON.toFixed(3);
         sourceLabel.textContent = "(Steve's house)";
         resetLink.style.display = 'none';
-        rebuildForLocation(DEFAULT_LAT, DEFAULT_LON);
+        rebuildAllForLocation(DEFAULT_LAT, DEFAULT_LON);
     });
 
-    // Animation loop
-    function tick() {
-        const now = performance.now();
-        tickAnimations(handStates, env, now);
-        renderFrame(ctx!, staticCache, watch, env, scale);
-        requestAnimationFrame(tick);
+    // =========================================================================
+    // Initial build — the ResizeObserver fires once synchronously after observe,
+    // which triggers onGridResize → buildAllCachesSequentially → startScheduler.
+    // If for some reason it doesn't fire, kick off manually.
+    // =========================================================================
+    const initialRect = grid.getBoundingClientRect();
+    if (initialRect.width > 0 && initialRect.height > 0) {
+        onGridResize(initialRect.width, initialRect.height);
     }
-    requestAnimationFrame(tick);
 }
 
-// Run when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => main().catch(console.error));
 } else {

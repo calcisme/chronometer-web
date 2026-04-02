@@ -5,31 +5,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chronometer — Haleakala</title>
     <style>
-        body {
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html, body {
             margin: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
             background: #1a1a2e;
             font-family: system-ui, sans-serif;
             color: #aaa;
         }
-        canvas {
-            border-radius: 50%;
-            box-shadow: 0 0 40px rgba(0,0,0,0.5);
+
+        /* Outer flex column: grid on top, controls at bottom */
+        #app {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
         }
-        #location-panel {
-            margin-top: 16px;
+
+        /* The watch grid takes all remaining vertical space */
+        #watch-grid {
+            flex: 1 1 0;
+            min-height: 0;           /* allow flex child to shrink below content size */
+            display: grid;
+            /* cols/rows set dynamically by JS */
+            gap: 12px;
+            padding: 12px;
+            align-items: center;
+            justify-items: center;
+        }
+
+        /* Each face cell contains exactly one canvas */
+        .face-cell {
             display: flex;
             align-items: center;
+            justify-content: center;
+        }
+
+        .face-cell canvas {
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            display: block;
+        }
+
+        /* Location controls strip at the bottom */
+        #location-panel {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             gap: 12px;
+            padding: 8px 16px;
             font-size: 13px;
+            border-top: 1px solid #2a2a3e;
         }
-        #location-panel label {
-            color: #888;
-        }
+        #location-panel label { color: #888; }
         #location-panel input {
             width: 80px;
             padding: 3px 6px;
@@ -40,10 +73,7 @@
             font-size: 13px;
             font-family: monospace;
         }
-        #location-source {
-            color: #666;
-            font-style: italic;
-        }
+        #location-source { color: #666; font-style: italic; }
         #reset-location {
             color: #557;
             cursor: pointer;
@@ -54,12 +84,14 @@
     </style>
 </head>
 <body>
-    <canvas id="watch" width="640" height="640"></canvas>
-    <div id="location-panel">
-        <label>Lat: <input id="lat-input" type="text"></label>
-        <label>Lon: <input id="lon-input" type="text"></label>
-        <span id="location-source"></span>
-        <a id="reset-location" style="display:none">reset</a>
+    <div id="app">
+        <div id="watch-grid"></div>
+        <div id="location-panel">
+            <label>Lat: <input id="lat-input" type="text"></label>
+            <label>Lon: <input id="lon-input" type="text"></label>
+            <span id="location-source"></span>
+            <a id="reset-location" style="display:none">reset</a>
+        </div>
     </div>
     <script src="chronometer.js"></script>
 </body>

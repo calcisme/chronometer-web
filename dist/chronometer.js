@@ -1449,6 +1449,7 @@ Rise/set (Moon)
   }
 
   // src/watch/animation.ts
+  var SCHEDULER_LOOKAHEAD_MS = 50;
   var kECGLAngleAnimationSpeed = 2;
   var kECGLFrameRate = 1 / 120;
   var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
@@ -1504,6 +1505,19 @@ Rise/set (Moon)
         state.part.dynamicState.currentAngle = angle;
       }
     }
+  }
+  function nextWakeupTime(states) {
+    let earliest = Infinity;
+    for (const s of states) {
+      if (s.nextUpdateTime < earliest) earliest = s.nextUpdateTime;
+    }
+    return earliest;
+  }
+  function anyAnimating(states) {
+    for (const s of states) {
+      if (s.angle.animating) return true;
+    }
+    return false;
   }
   function startAnimation(state, newTarget, now) {
     const val = state.angle;
@@ -4586,28 +4600,32 @@ Rise/set (Moon)
     }
   }
   function requestLocation() {
-    if (!navigator.geolocation) {
-      return Promise.resolve(null);
-    }
+    if (!navigator.geolocation) return Promise.resolve(null);
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
         () => resolve(null),
-        // denied or error → fall back to default
         { timeout: 5e3 }
       );
     });
   }
+  function gridDimensions(count) {
+    if (count <= 0) return { cols: 1, rows: 1 };
+    const cols = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+    return { cols, rows };
+  }
+  function cellSize(containerW, containerH, cols, rows, gap, padding) {
+    const usableW = containerW - 2 * padding - gap * (cols - 1);
+    const usableH = containerH - 2 * padding - gap * (rows - 1);
+    return Math.floor(Math.min(usableW / cols, usableH / rows));
+  }
   async function main() {
-    const canvas = document.getElementById("watch");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      console.error("Could not get canvas 2d context");
-      return;
-    }
+    const grid = document.getElementById("watch-grid");
     const latInput = document.getElementById("lat-input");
     const lonInput = document.getElementById("lon-input");
     const sourceLabel = document.getElementById("location-source");
+    const resetLink = document.getElementById("reset-location");
     const loc = await requestLocation();
     let lat, lon;
     if (loc) {
@@ -4628,39 +4646,155 @@ Rise/set (Moon)
     }
     latInput.value = lat.toFixed(3);
     lonInput.value = lon.toFixed(3);
-    const watch = parseWatchXML(Haleakala_default, "front");
     const images = await loadWatchImages();
-    const scale = canvas.width / 290;
-    let env = createWatchEnvironment(watch, lat, lon);
-    let staticCache = buildStaticCache(
-      watch,
-      env,
-      canvas.width,
-      canvas.height,
-      scale,
-      images
-    );
-    let handStates = initHandStates(watch, env, performance.now());
-    function rebuildForLocation(newLat, newLon) {
-      const freshWatch = parseWatchXML(Haleakala_default, "front");
-      watch.parts = freshWatch.parts;
-      watch.initExprs = freshWatch.initExprs;
-      env = createWatchEnvironment(watch, newLat, newLon);
-      staticCache = buildStaticCache(
+    const FACE_XMLS = [Haleakala_default];
+    const parsedWatches = FACE_XMLS.map((xml) => parseWatchXML(xml, "front"));
+    const { cols, rows } = gridDimensions(parsedWatches.length);
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    const faces = [];
+    for (let i = 0; i < parsedWatches.length; i++) {
+      const cell = document.createElement("div");
+      cell.className = "face-cell";
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      cell.appendChild(canvas);
+      grid.appendChild(cell);
+      const watch = parsedWatches[i];
+      const env = createWatchEnvironment(watch, lat, lon);
+      const face = {
         watch,
         env,
-        canvas.width,
-        canvas.height,
-        scale,
-        images
-      );
-      handStates = initHandStates(watch, env, performance.now());
+        staticCache: null,
+        handStates: [],
+        canvas,
+        ctx,
+        sizePx: 0,
+        images,
+        enabled: true,
+        scale: 1
+      };
+      faces.push(face);
     }
-    const resetLink = document.getElementById("reset-location");
+    function applySize(face, size) {
+      const dpr = window.devicePixelRatio || 1;
+      const physPx = Math.round(size * dpr);
+      face.canvas.width = physPx;
+      face.canvas.height = physPx;
+      face.canvas.style.width = `${size}px`;
+      face.canvas.style.height = `${size}px`;
+      face.sizePx = size;
+      face.scale = physPx / 290;
+    }
+    function buildCache(face) {
+      if (!face.enabled || face.sizePx === 0) return;
+      const { canvas, ctx, watch, env, images: images2, scale } = face;
+      face.staticCache = buildStaticCache(watch, env, canvas.width, canvas.height, scale, images2);
+      face.handStates = initHandStates(watch, env, performance.now());
+    }
+    function buildAllCachesSequentially(facesToBuild, onDone) {
+      let idx = 0;
+      function buildNext() {
+        if (idx >= facesToBuild.length) {
+          onDone();
+          return;
+        }
+        buildCache(facesToBuild[idx++]);
+        setTimeout(buildNext, 0);
+      }
+      buildNext();
+    }
+    let idleTimerId = null;
+    let rafId = null;
+    function stopScheduler() {
+      if (idleTimerId !== null) {
+        clearTimeout(idleTimerId);
+        idleTimerId = null;
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+    function frame() {
+      rafId = null;
+      const now = performance.now();
+      let stillAnimating = false;
+      for (const face of faces) {
+        if (!face.enabled || !face.staticCache) continue;
+        tickAnimations(face.handStates, face.env, now);
+        renderFrame(face.ctx, face.staticCache, face.watch, face.env, face.scale);
+        if (anyAnimating(face.handStates)) stillAnimating = true;
+      }
+      if (stillAnimating) {
+        rafId = requestAnimationFrame(frame);
+      } else {
+        armIdle();
+      }
+    }
+    function armIdle() {
+      if (idleTimerId !== null) return;
+      let earliest = Infinity;
+      for (const face of faces) {
+        if (!face.enabled || face.handStates.length === 0) continue;
+        const t = nextWakeupTime(face.handStates);
+        if (t < earliest) earliest = t;
+      }
+      if (earliest === Infinity) return;
+      const delay = Math.max(0, earliest - performance.now() - SCHEDULER_LOOKAHEAD_MS);
+      idleTimerId = setTimeout(onIdleWakeup, delay);
+    }
+    function onIdleWakeup() {
+      idleTimerId = null;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(frame);
+    }
+    function startScheduler() {
+      stopScheduler();
+      rafId = requestAnimationFrame(frame);
+    }
+    const GAP_PX = 12;
+    const PADDING_PX = 12;
+    let resizeDebounceTimer = null;
+    function onGridResize(W, H) {
+      const size = cellSize(W, H, cols, rows, GAP_PX, PADDING_PX);
+      if (size <= 0) return;
+      const dpr = window.devicePixelRatio || 1;
+      const newPhys = Math.round(size * dpr);
+      if (newPhys === faces[0]?.canvas.width) return;
+      stopScheduler();
+      for (const face of faces) {
+        applySize(face, size);
+        face.staticCache = null;
+      }
+      buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
+    }
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
+      resizeDebounceTimer = setTimeout(() => {
+        resizeDebounceTimer = null;
+        onGridResize(width, height);
+      }, 150);
+    });
+    resizeObserver.observe(grid);
     function showResetIfSaved() {
       resetLink.style.display = loadStoredLocation() ? "inline" : "none";
     }
     showResetIfSaved();
+    function rebuildAllForLocation(newLat, newLon) {
+      stopScheduler();
+      for (const face of faces) {
+        const freshWatch = parseWatchXML(FACE_XMLS[faces.indexOf(face)], "front");
+        face.watch.parts = freshWatch.parts;
+        face.watch.initExprs = freshWatch.initExprs;
+        face.env = createWatchEnvironment(face.watch, newLat, newLon);
+        face.staticCache = null;
+      }
+      buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
+    }
     function onLocationChange() {
       const newLat = parseFloat(latInput.value);
       const newLon = parseFloat(lonInput.value);
@@ -4668,7 +4802,7 @@ Rise/set (Moon)
       saveStoredLocation(newLat, newLon);
       sourceLabel.textContent = "(saved)";
       showResetIfSaved();
-      rebuildForLocation(newLat, newLon);
+      rebuildAllForLocation(newLat, newLon);
     }
     latInput.addEventListener("change", onLocationChange);
     lonInput.addEventListener("change", onLocationChange);
@@ -4681,15 +4815,12 @@ Rise/set (Moon)
       lonInput.value = DEFAULT_LON.toFixed(3);
       sourceLabel.textContent = "(Steve's house)";
       resetLink.style.display = "none";
-      rebuildForLocation(DEFAULT_LAT, DEFAULT_LON);
+      rebuildAllForLocation(DEFAULT_LAT, DEFAULT_LON);
     });
-    function tick() {
-      const now = performance.now();
-      tickAnimations(handStates, env, now);
-      renderFrame(ctx, staticCache, watch, env, scale);
-      requestAnimationFrame(tick);
+    const initialRect = grid.getBoundingClientRect();
+    if (initialRect.width > 0 && initialRect.height > 0) {
+      onGridResize(initialRect.width, initialRect.height);
     }
-    requestAnimationFrame(tick);
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => main().catch(console.error));
