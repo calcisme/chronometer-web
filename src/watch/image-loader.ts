@@ -12,6 +12,7 @@
 // Import images — esbuild bundles these as base64 with --loader:.png=dataurl
 // Vite similarly handles ?url imports
 import faceUrl from './assets/haleakala/Haleakala-face-android.png';
+import backFaceUrl from './assets/hana/Haleakala-back.png';
 import logoUrl from './assets/haleakala/logos-black-4x.png';
 import bandUrl from './assets/haleakala/band-front-4x.png';
 import caseUrl from './assets/haleakala/case-front-4x.png';
@@ -24,6 +25,8 @@ import caseUrl from './assets/haleakala/case-front-4x.png';
 const IMAGE_MAP: Record<string, { url: string; scale: number }> = {
     // Builtin-Android Haleakala I face image (1x scale — same coordinate space as XML)
     'Haleakala-face.png':                                { url: faceUrl, scale: 1 },
+    // Hana I face background — a light gray moon face
+    'Haleakala-back.png':                                { url: backFaceUrl, scale: 1 },
     '../partsBin/logos/black.png':                        { url: logoUrl, scale: 0.25 },
     '../partsBin/HD/brown/front/straight/narrow/band.png': { url: bandUrl, scale: 0.25 },
     '../partsBin/HD/yellow/front/narrow/case.png':        { url: caseUrl, scale: 0.25 },

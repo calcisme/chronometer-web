@@ -24,6 +24,7 @@ import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astron
 import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge, moonRelativePositionAngle } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
+import { terminatorAngle } from './terminator.js';
 
 // Default observer location (San Jose, CA): used if geolocation unavailable
 const DEFAULT_LAT_DEG = 37.205;    // degrees N
@@ -104,8 +105,12 @@ function argbToCSS(argb: number): string {
 function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_LON: number): void {
     const { functions } = env;
 
+    // Time source — currently returns real time; will be overridden for
+    // user time controls (fast-forward, rewind, etc.)
+    const getNow = () => new Date();
+
     // Snapshot time for astronomy/calendar (changes at most daily)
-    const now = new Date();
+    const now = getNow();
     const dateInterval = dateToDateInterval(now);
 
     // Local timezone offset in seconds (JS gives minutes, positive for west)
@@ -116,7 +121,7 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // These are called every animation frame so the hands move in real time.
     // Helper to extract fractional components from the current time:
     const liveTime = () => {
-        const t = new Date();
+        const t = getNow();
         const s = t.getSeconds() + t.getMilliseconds() / 1000;
         const m = t.getMinutes() + s / 60;
         const h = (t.getHours() % 12) + m / 60;
@@ -149,11 +154,11 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // --- Sun position (LIVE — recompute each call) ---
     // Sun altitude and azimuth change continuously throughout the day.
     functions.set('sunAltitude', () => {
-        const di = dateToDateInterval(new Date());
+        const di = dateToDateInterval(getNow());
         return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set('sunAzimuth', () => {
-        const di = dateToDateInterval(new Date());
+        const di = dateToDateInterval(getNow());
         return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
 
@@ -198,19 +203,19 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
 
     // --- Moon (LIVE — recompute each call) ---
     functions.set('moonAltitude', () => {
-        const di = dateToDateInterval(new Date());
+        const di = dateToDateInterval(getNow());
         return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set('moonAzimuth', () => {
-        const di = dateToDateInterval(new Date());
+        const di = dateToDateInterval(getNow());
         return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set('moonAgeAngle', () => {
-        const di = dateToDateInterval(new Date());
+        const di = dateToDateInterval(getNow());
         return moonAge(di, null).age;
     });
     functions.set('moonRelativePositionAngle', () => {
-        const di = dateToDateInterval(new Date());
+        const di = dateToDateInterval(getNow());
         return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
 
@@ -280,6 +285,9 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
 
     // Calendar wheel helpers
     functions.set('calendarWeekdayStart', () => 0);
+
+    // --- Terminator leaf function (5 args) ---
+    functions.set('terminatorAngle', terminatorAngle);
 
     // Release the cache pool
     releaseCachePool(pool);

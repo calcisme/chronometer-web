@@ -31,6 +31,8 @@ import type {
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
 import type { LoadedImage } from './image-loader.js';
+import type { TerminatorLeafState } from './terminator.js';
+import { drawTerminator } from './terminator.js';
 
 /** Returns true if a CSS color string has alpha = 0 (fully transparent). */
 function isTransparent(cssColor: string): boolean {
@@ -72,6 +74,7 @@ export function buildStaticCache(
     canvasHeight: number,
     scale: number,
     images?: Map<string, LoadedImage>,
+    terminatorLeaves?: TerminatorLeafState[],
 ): OffscreenCanvas {
     currentImages = images;
     const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
@@ -82,7 +85,7 @@ export function buildStaticCache(
     ctx.scale(scale, scale);
 
     // Render static parts with window accumulation
-    renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale);
+    renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale, terminatorLeaves);
 
     // Draw bezel ring on top of everything, if the watch specifies one
     if (watch.bezelColor) {
@@ -175,6 +178,7 @@ function renderPartsWithWindows(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    terminatorLeaves?: TerminatorLeafState[],
 ): void {
     const pendingWindows: WindowPart[] = [];
 
@@ -184,8 +188,17 @@ function renderPartsWithWindows(
             continue;
         }
 
-        // Skip dynamic parts in static cache
+        // Skip hands and buttons (drawn dynamically each frame)
         if (part.type === 'QHand' || part.type === 'Button') {
+            continue;
+        }
+
+        // Terminator: draw leaves in document order (they'll be clipped by
+        // any following porthole window, just like in iOS)
+        if (part.type === 'Terminator') {
+            if (terminatorLeaves && terminatorLeaves.length > 0) {
+                drawTerminator(ctx, terminatorLeaves);
+            }
             continue;
         }
 

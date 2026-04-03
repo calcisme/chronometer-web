@@ -13,6 +13,7 @@
 
 // esbuild imports this as a string with --loader:.xml=text
 import haleakalaXML from './watch/assets/haleakala/Haleakala-android.xml';
+import hanaXML from './watch/assets/hana/Hana-I-android.xml';
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { buildStaticCache, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
@@ -22,6 +23,8 @@ import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, SCHEDULER
 import type { HandState } from './watch/animation.js';
 import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
+import type { TerminatorLeafState } from './watch/terminator.js';
+import { expandTerminatorToLeaves, updateLeafAngles } from './watch/terminator.js';
 
 // ============================================================================
 // Location persistence
@@ -113,6 +116,8 @@ interface FaceInstance {
     enabled: boolean;
     /** Scale factor: internal drawing units → canvas pixels. */
     scale: number;
+    /** Expanded terminator leaves (empty if no terminator parts). */
+    terminatorLeaves: TerminatorLeafState[];
 }
 
 // ============================================================================
@@ -149,8 +154,8 @@ async function main() {
     // --- Load shared assets ---
     const images = await loadWatchImages();
 
-    // --- Describe the set of faces to show (one for now, Haleakala) ---
-    const FACE_XMLS: string[] = [haleakalaXML];
+    // --- Describe the set of faces to show ---
+    const FACE_XMLS: string[] = [haleakalaXML, hanaXML];
 
     // --- Parse all watch models up front (read-only after this point) ---
     const parsedWatches: Watch[] = FACE_XMLS.map(xml => parseWatchXML(xml, 'front'));
@@ -185,6 +190,7 @@ async function main() {
             images,
             enabled: true,
             scale: 1,
+            terminatorLeaves: [],
         };
         faces.push(face);
     }
@@ -209,8 +215,19 @@ async function main() {
     // --- Build (or rebuild) the StaticCache for a face ---
     function buildCache(face: FaceInstance) {
         if (!face.enabled || face.sizePx === 0) return;
-        const { canvas, ctx, watch, env, images, scale } = face;
-        face.staticCache = buildStaticCache(watch, env, canvas.width, canvas.height, scale, images);
+        const { canvas, watch, env, images, scale } = face;
+        // Expand terminator parts into leaf states
+        face.terminatorLeaves = [];
+        for (const part of watch.parts) {
+            if (part.type === 'Terminator') {
+                face.terminatorLeaves.push(...expandTerminatorToLeaves(part, env));
+            }
+        }
+        // Update leaf angles before building the cache
+        if (face.terminatorLeaves.length > 0) {
+            updateLeafAngles(face.terminatorLeaves, face.env);
+        }
+        face.staticCache = buildStaticCache(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         face.handStates = initHandStates(watch, env, performance.now());
     }
 
@@ -246,6 +263,20 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled || !face.staticCache) continue;
             tickAnimations(face.handStates, face.env, now);
+            // Update terminator leaves and rebuild cache if angles changed
+            if (face.terminatorLeaves.length > 0) {
+                const prevAngles = face.terminatorLeaves.map(l => l.currentAngle + l.currentRotation);
+                updateLeafAngles(face.terminatorLeaves, face.env);
+                const changed = face.terminatorLeaves.some((l, i) =>
+                    l.currentAngle + l.currentRotation !== prevAngles[i]
+                );
+                if (changed) {
+                    face.staticCache = buildStaticCache(
+                        face.watch, face.env, face.canvas.width, face.canvas.height,
+                        face.scale, face.images, face.terminatorLeaves
+                    );
+                }
+            }
             renderFrame(face.ctx, face.staticCache, face.watch, face.env, face.scale);
             if (anyAnimating(face.handStates)) stillAnimating = true;
         }

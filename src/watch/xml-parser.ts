@@ -17,6 +17,7 @@ import type {
     WindowPart,
     StaticPart,
     QRectPart,
+    TerminatorPart,
 } from './types.js';
 import { parse } from '../expr/parser.js';
 import type { ASTNode } from '../expr/parser.js';
@@ -150,6 +151,11 @@ function processElement(
             break;
 
         case 'terminator':
+            if (matchesMode(el, mode)) {
+                parts.push(parseTerminator(el));
+            }
+            break;
+
         case 'tick':
             // Skipped for now
             break;
@@ -369,6 +375,26 @@ function parseQRect(el: Element): QRectPart {
         h: attrExpr(el, 'h'),
         bgColor: attrExpr(el, 'bgColor'),
         panes: attrExpr(el, 'panes'),
+    };
+}
+
+function parseTerminator(el: Element): TerminatorPart {
+    return {
+        type: 'Terminator',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        radius: attrExpr(el, 'radius'),
+        leavesPerQuadrant: attrExpr(el, 'leavesPerQuadrant'),
+        incremental: attrExpr(el, 'incremental'),
+        leafBorderColor: attrExpr(el, 'leafBorderColor'),
+        leafFillColor: attrExpr(el, 'leafFillColor'),
+        leafAnchorRadius: attrExpr(el, 'leafAnchorRadius'),
+        update: attrExpr(el, 'update'),
+        updateOffset: attrExpr(el, 'updateOffset'),
+        phaseAngle: attrExpr(el, 'phaseAngle'),
+        rotation: attrExpr(el, 'rotation'),
     };
 }
 

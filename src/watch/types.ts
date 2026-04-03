@@ -38,7 +38,8 @@ export type WatchPart =
     | ButtonPart
     | WindowPart
     | StaticPart
-    | QRectPart;
+    | QRectPart
+    | TerminatorPart;
 
 // ============================================================================
 // Shared base for all parts
@@ -232,4 +233,22 @@ export interface QRectPart extends PartBase {
     h?: ASTNode;
     bgColor?: ASTNode;
     panes?: ASTNode;
+}
+
+// ============================================================================
+// Terminator — moon phase leaf display
+// ============================================================================
+
+export interface TerminatorPart extends PartBase {
+    type: 'Terminator';
+    radius?: ASTNode;
+    leavesPerQuadrant?: ASTNode;
+    incremental?: ASTNode;
+    leafBorderColor?: ASTNode;
+    leafFillColor?: ASTNode;
+    leafAnchorRadius?: ASTNode;
+    update?: ASTNode;
+    updateOffset?: ASTNode;
+    phaseAngle?: ASTNode;       // expression: moonAgeAngle()
+    rotation?: ASTNode;         // expression: moonRelativePositionAngle()
 }
