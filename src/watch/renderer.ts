@@ -80,6 +80,7 @@ export function buildStaticCache(
     const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
     const ctx = cache.getContext('2d')!;
 
+
     // Set up coordinate system: origin at center, scale XML units → pixels
     ctx.translate(canvasWidth / 2, canvasHeight / 2);
     ctx.scale(scale, scale);
@@ -188,8 +189,18 @@ function renderPartsWithWindows(
             continue;
         }
 
-        // Skip hands and buttons (drawn dynamically each frame)
-        if (part.type === 'QHand' || part.type === 'Button') {
+        // Skip buttons (interactive, not rendered)
+        if (part.type === 'Button') {
+            continue;
+        }
+
+        // QHand: image-based hands (with src, no length) are drawn as static
+        // images. Regular geometric hands are drawn dynamically each frame.
+        if (part.type === 'QHand') {
+            if (part.src && currentImages) {
+                drawImageHand(ctx, part, env);
+            }
+            // Geometric hands (with length) are drawn in renderFrame
             continue;
         }
 
@@ -212,12 +223,10 @@ function renderPartsWithWindows(
         }
     }
 
-    // Any leftover pending windows (e.g. the AM/PM porthole at the end of a
-    // static block) are applied as direct cutouts on the accumulated context.
-    // On iOS, applyWindows is called on the static view itself, achieving the
-    // same effect.
+    // Leftover pending windows (not followed by a renderable part) —
+    // draw borders only. In iOS, windows only clip their associated view;
+    // stray windows with no following content should not erase the canvas.
     for (const win of pendingWindows) {
-        cutWindowHole(ctx, win, env);
         drawWindowBorder(ctx, win, env);
     }
 }
@@ -749,7 +758,7 @@ function drawHandShape(
     ctx.strokeStyle = strokeColor;
     ctx.fillStyle = fillColor;
 
-    if (handType === 'rect') {
+    if (handType === 'rect' || handType === 'quad') {
         // Rectangle hand: tail to length-oTail, width centered
         // Original: CGRectMake(-width/2, length2-tail, width, length+tail-oTail)
         const hw = width / 2;
@@ -821,13 +830,8 @@ function drawWheel(
     // tradius = text radius (same as radius if not specified)
     const tradius = radius;
 
-    // Draw background arc ring
-    if (!isTransparent(bgColor)) {
-        ctx.fillStyle = bgColor;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius + 2, 0, 2 * Math.PI);
-        ctx.fill();
-    }
+    // Note: SWheels do NOT draw their own background. The QRect behind
+    // the window handles that in the iOS rendering pipeline.
 
     // Draw labels around the circle
     // In iOS, the offsetAngle uses -i * step, meaning the labels are placed
@@ -944,6 +948,42 @@ function drawImage(
     }
     // Draw centered at (x, y)
     ctx.drawImage(bitmap, x - drawW / 2, y - drawH / 2, drawW, drawH);
+    ctx.restore();
+}
+
+/**
+ * Draw an image-based hand (QHand with src but no geometric length).
+ * Used for items like the moon disc and star indicators that appear in the
+ * static cache as images positioned at the hand's (x, y) and rotated by angle.
+ */
+function drawImageHand(
+    ctx: RenderContext,
+    part: QHandPart,
+    env: Environment,
+): void {
+    if (!part.src || !currentImages) return;
+    const loaded = currentImages.get(part.src);
+    if (!loaded) return;
+
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);  // Negate Y
+    const angle = evalAttr(part.angle, env);
+
+    const { bitmap, scale: imgScale } = loaded;
+    const drawW = bitmap.width * imgScale;
+    const drawH = bitmap.height * imgScale;
+
+    ctx.save();
+    ctx.translate(x, y);
+    if (angle) {
+        ctx.rotate(angle);
+    }
+
+    // xAnchor/yAnchor shift the image (e.g. star indicators offset from center)
+    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : 0;
+    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : 0;  // Negate Y
+
+    ctx.drawImage(bitmap, xAnchor - drawW / 2, yAnchor - drawH / 2, drawW, drawH);
     ctx.restore();
 }
 

@@ -16,6 +16,8 @@ import backFaceUrl from './assets/hana/Haleakala-back.png';
 import logoUrl from './assets/haleakala/logos-black-4x.png';
 import bandUrl from './assets/haleakala/band-front-4x.png';
 import caseUrl from './assets/haleakala/case-front-4x.png';
+import moonESUrl from './assets/chandra/moonES.png';
+import whiteLogoUrl from './assets/chandra/logos-white-4x.png';
 
 /**
  * Map from XML src paths to their imported URLs and scale factors.
@@ -30,6 +32,9 @@ const IMAGE_MAP: Record<string, { url: string; scale: number }> = {
     '../partsBin/logos/black.png':                        { url: logoUrl, scale: 0.25 },
     '../partsBin/HD/brown/front/straight/narrow/band.png': { url: bandUrl, scale: 0.25 },
     '../partsBin/HD/yellow/front/narrow/case.png':        { url: caseUrl, scale: 0.25 },
+    // Chandra assets
+    '../partsBin/moonES.png':                             { url: moonESUrl, scale: 1 },
+    '../partsBin/logos/white.png':                         { url: whiteLogoUrl, scale: 0.25 },
 };
 
 /** Loaded image with its scale factor */

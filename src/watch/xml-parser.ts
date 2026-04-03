@@ -268,6 +268,9 @@ function parseQHand(el: Element): QHandPart {
         oFillColor: attrExpr(el, 'oFillColor'),
         oCenter: attrExpr(el, 'oCenter'),
         oRadius: attrExpr(el, 'oRadius'),
+        src: attr(el, 'src'),
+        xAnchor: attrExpr(el, 'xAnchor'),
+        yAnchor: attrExpr(el, 'yAnchor'),
     };
 }
 

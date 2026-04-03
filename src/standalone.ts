@@ -14,6 +14,7 @@
 // esbuild imports this as a string with --loader:.xml=text
 import haleakalaXML from './watch/assets/haleakala/Haleakala-android.xml';
 import hanaXML from './watch/assets/hana/Hana-I-android.xml';
+import chandraXML from './watch/assets/chandra/Chandra-I-android.xml';
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { buildStaticCache, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
@@ -157,7 +158,7 @@ async function main() {
     const images = await loadWatchImages();
 
     // --- Describe the set of faces to show ---
-    const FACE_XMLS: string[] = [haleakalaXML, hanaXML];
+    const FACE_XMLS: string[] = [haleakalaXML, hanaXML, chandraXML];
 
     // --- Parse all watch models up front (read-only after this point) ---
     const parsedWatches: Watch[] = FACE_XMLS.map(xml => parseWatchXML(xml, 'front'));

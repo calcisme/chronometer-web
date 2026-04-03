@@ -107,7 +107,8 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
 
     // Time source — currently returns real time; will be overridden for
     // user time controls (fast-forward, rewind, etc.)
-    const getNow = () => new Date();
+    // DEBUG: Fixed time for testing (April 7, 2026 6:05:05 PM PDT = UTC-7)
+    const getNow = () => new Date('2026-04-08T01:05:05Z');
 
     // Snapshot time for astronomy/calendar (changes at most daily)
     const now = getNow();
@@ -142,10 +143,14 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
 
     functions.set('dayNumber', () => dayOfMonth - 1);  // 0-indexed for wheel math
     functions.set('monthNumber', () => month);
+    functions.set('monthNumberAngle', () => month * 2 * Math.PI / 12);
     functions.set('weekdayNumberAngle', () => weekday * 2 * Math.PI / 7);
 
-    // Helper that returns days-in-seconds
+    // Time-unit helpers (return value in seconds, matching iOS convention for update intervals)
     functions.set('days', () => 86400);
+    functions.set('hours', () => 3600);
+    functions.set('minutes', () => 60);
+    functions.set('seconds', () => 1);
 
     // --- Astronomy setup (snapshot for rise/set, which are daily values) ---
     const pool = new AstroCachePool();
@@ -218,6 +223,10 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         const di = dateToDateInterval(getNow());
         return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
+    // Stub: moonRelativeAngle is the rotation of the moon image on its own axis.
+    // Not yet implemented (used by Chandra's image-based moon hand, which isn't
+    // rendered since image assets aren't bundled). Returns 0 for now.
+    functions.set('moonRelativeAngle', () => 0);
 
     // --- Moonrise/moonset ---
     const moonrise = planetaryRiseSetTimeRefined(

@@ -127,6 +127,12 @@ export interface QHandPart extends PartBase {
     oFillColor?: ASTNode;
     oCenter?: ASTNode;
     oRadius?: ASTNode;
+    /** Image source path (for image-based `hand` elements). */
+    src?: string;
+    /** Image anchor X offset in XML coords. */
+    xAnchor?: ASTNode;
+    /** Image anchor Y offset in XML coords. */
+    yAnchor?: ASTNode;
 }
 
 // ============================================================================

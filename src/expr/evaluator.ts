@@ -43,6 +43,8 @@ export function createDefaultEnvironment(): Environment {
     variables.set('yellow', 0xFFFFFF00 >>> 0);
     variables.set('cyan', 0xFF00FFFF >>> 0);
     variables.set('magenta', 0xFFFF00FF >>> 0);
+    variables.set('darkGray', 0xFF555555 >>> 0);   // iOS [UIColor darkGrayColor] = 1/3
+    variables.set('lightGray', 0xFFAAAAAA >>> 0);   // iOS [UIColor lightGrayColor] = 2/3
 
     // Math functions
     functions.set('sin', Math.sin);
