@@ -12,6 +12,7 @@ import {
     ECPlanetNumber,
     ECWBPrecision,
     kECAUInKilometers,
+    kECUnixToAppleEpochOffset,
     kECLimitingAzimuthLatitude,
     kECRefractionAtHorizonX,
 } from './astro-constants';
@@ -431,47 +432,105 @@ export function moonElongation(
 }
 
 // ============================================================================
-// Closest lunar phase quarter (days from now to nearest quarter)
+// Closest lunar phase quarter — iOS-faithful iterative refinement
 // ============================================================================
 
+/** Mean synodic month in seconds (iOS: kECLunarCycleInSeconds) */
+const LUNAR_CYCLE_SECONDS = 29.530589 * 86400;
+
 /**
- * Find the day number relative to today when the moon is closest to
- * a given phase angle (0=new, π/2=first quarter, π=full, 3π/2=third quarter).
- *
- * Returns the day-of-month (1-based) of the closest occurrence within ±16 days.
- * The search uses daily moon age samples and looks for the day where the age
- * is closest to the target phase.
- *
- * @param targetPhase - Phase angle to search for (0, π/2, π, or 3π/2)
+ * One step of iterative refinement: compute moon age at tryDate,
+ * find the delta to targetAge, and adjust proportionally using
+ * the synodic month period.
+ * 
+ * Follows iOS stepRefineMoonAgeTargetForDate() exactly.
+ */
+function stepRefineMoonAgeTarget(
+    dateInterval: number,
+    targetAge: number,
+    cache: AstroCache | null,
+): number {
+    const { age } = moonAge(dateInterval, cache);
+    let deltaAge = targetAge - age;
+    if (deltaAge > Math.PI) {
+        deltaAge -= TWO_PI;
+    } else if (deltaAge < -Math.PI) {
+        deltaAge += TWO_PI;
+    }
+    return dateInterval + deltaAge / TWO_PI * LUNAR_CYCLE_SECONDS;
+}
+
+/**
+ * Iteratively refine a guess date to find the exact time when
+ * moon age equals targetAge, converging to within 0.1 seconds.
+ * 
+ * Follows iOS refineMoonAgeTargetForDate(): up to 5 iterations.
+ * 
+ * @param dateInterval - Initial guess (Apple epoch seconds)
+ * @param targetAge - Target moon age angle (radians)
+ * @returns Refined dateInterval when moon age ≈ targetAge
+ */
+function refineMoonAgeTargetForDate(
+    dateInterval: number,
+    targetAge: number,
+): number {
+    let tryDate = dateInterval;
+    for (let i = 0; i < 5; i++) {
+        const newDate = stepRefineMoonAgeTarget(tryDate, targetAge, null);
+        if (Math.abs(newDate - tryDate) < 0.1) {
+            return newDate;
+        }
+        tryDate = newDate;
+    }
+    return tryDate;
+}
+
+/**
+ * Find the exact time (Apple epoch seconds) of the closest occurrence
+ * of a given lunar phase quarter.
+ * 
+ * Follows iOS closestQuarterAngle() exactly:
+ * 1. Compute current moon age
+ * 2. Find angular distance since the target quarter
+ * 3. Determine if closest occurrence is backward or forward in time
+ * 4. Estimate a guess date using synodic month ratio
+ * 5. Refine iteratively to sub-second accuracy
+ * 
+ * @param quarterAngle - Phase angle: 0=new, π/2=first quarter, π=full, 3π/2=third quarter
  * @param dateInterval - Current time in Apple epoch seconds
- * @param cache - AstroCache or null (a fresh cache is used per day anyway)
+ * @returns Apple epoch seconds of the closest phase occurrence
+ */
+export function closestQuarterPhaseTime(
+    quarterAngle: number,
+    dateInterval: number,
+): number {
+    const { age } = moonAge(dateInterval, null);
+    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI);
+    // iOS: closestIsBack when not running backward and ageSinceQuarter < π - 0.01
+    // We never run backward, so simplify:
+    const closestIsBack = ageSinceQuarter < Math.PI - 0.01;
+    const guessDate = closestIsBack
+        ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI
+        : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI - ageSinceQuarter) / TWO_PI;
+    return refineMoonAgeTargetForDate(guessDate, quarterAngle);
+}
+
+/**
+ * Find the day-of-month (1-based) of the closest occurrence of a given
+ * lunar phase quarter in the user's local timezone.
+ * 
+ * @param targetPhase - Phase angle: 0=new, π/2=first quarter, π=full, 3π/2=third quarter
+ * @param dateInterval - Current time in Apple epoch seconds
+ * @returns Day-of-month (1-based) when the phase occurs
  */
 export function closestPhaseDayNumber(
     targetPhase: number,
     dateInterval: number,
 ): number {
-    const DAY_SECONDS = 86400;
-    let bestDelta = Infinity;
-    let bestDayOffset = 0;
-
-    // Search ±16 days (slightly more than one synodic month / 2)
-    for (let d = -16; d <= 16; d++) {
-        const di = dateInterval + d * DAY_SECONDS;
-        const { age } = moonAge(di, null);
-
-        // Angular distance to target phase (wrapping around 2π)
-        let delta = Math.abs(age - targetPhase);
-        if (delta > Math.PI) delta = TWO_PI - delta;
-
-        if (delta < bestDelta) {
-            bestDelta = delta;
-            bestDayOffset = d;
-        }
-    }
-
-    // Convert offset to day-of-month
-    const targetDate = new Date((dateInterval + bestDayOffset * DAY_SECONDS + 978307200) * 1000);
-    return targetDate.getDate();
+    const phaseTime = closestQuarterPhaseTime(targetPhase, dateInterval);
+    // Convert Apple epoch seconds → JS Date (user's local timezone)
+    const phaseDate = new Date((phaseTime + kECUnixToAppleEpochOffset) * 1000);
+    return phaseDate.getDate();
 }
 
 // ============================================================================
