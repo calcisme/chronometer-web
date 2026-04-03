@@ -4255,8 +4255,7 @@
   }
   function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON) {
     const { functions } = env;
-    const DEBUG_DATE = /* @__PURE__ */ new Date("2026-04-08T01:05:05Z");
-    const getNow = () => DEBUG_DATE ?? /* @__PURE__ */ new Date();
+    const getNow = () => /* @__PURE__ */ new Date();
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
     const tzOffsetMinutes = now.getTimezoneOffset();
