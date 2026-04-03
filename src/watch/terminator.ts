@@ -234,6 +234,8 @@ export interface TerminatorLeafState {
     phaseExpr: ASTNode | undefined;
     /** The rotation expression AST */
     rotationExpr: ASTNode | undefined;
+    /** Update interval in seconds (from XML update attr) */
+    updateIntervalSec: number;
 }
 
 /**
@@ -255,6 +257,7 @@ export function expandTerminatorToLeaves(
     const centerX = part.x ? evaluate(part.x, env) : 0;
     const centerY = part.y ? evaluate(part.y, env) : 0;
     const offsetRadius = radius + anchorEdgeRadius;
+    const updateIntervalSec = part.update ? evaluate(part.update, env) : 60;
 
     const leaves: TerminatorLeafState[] = [];
 
@@ -282,6 +285,7 @@ export function expandTerminatorToLeaves(
                 currentRotation: 0,
                 phaseExpr: part.phaseAngle,
                 rotationExpr: part.rotation,
+                updateIntervalSec,
             });
         }
     }

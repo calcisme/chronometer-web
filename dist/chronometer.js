@@ -4074,6 +4074,7 @@
     const centerX = part.x ? evaluate(part.x, env) : 0;
     const centerY = part.y ? evaluate(part.y, env) : 0;
     const offsetRadius = radius + anchorEdgeRadius;
+    const updateIntervalSec = part.update ? evaluate(part.update, env) : 60;
     const leaves = [];
     for (let i = 0; i < leavesPerQuadrant; i++) {
       for (let q = 0; q < 4; q++) {
@@ -4095,7 +4096,8 @@
           currentAngle: 0,
           currentRotation: 0,
           phaseExpr: part.phaseAngle,
-          rotationExpr: part.rotation
+          rotationExpr: part.rotation,
+          updateIntervalSec
         });
       }
     }
@@ -5147,7 +5149,8 @@
         images,
         enabled: true,
         scale: 1,
-        terminatorLeaves: []
+        terminatorLeaves: [],
+        lastTerminatorRebuild: 0
       };
       faces.push(face);
     }
@@ -5210,12 +5213,9 @@
         if (!face.enabled || !face.staticCache) continue;
         tickAnimations(face.handStates, face.env, now);
         if (face.terminatorLeaves.length > 0) {
-          const prevAngles = face.terminatorLeaves.map((l) => l.currentAngle + l.currentRotation);
-          updateLeafAngles(face.terminatorLeaves, face.env);
-          const changed = face.terminatorLeaves.some(
-            (l, i) => l.currentAngle + l.currentRotation !== prevAngles[i]
-          );
-          if (changed) {
+          const intervalMs = Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
+          if (now - face.lastTerminatorRebuild > intervalMs) {
+            updateLeafAngles(face.terminatorLeaves, face.env);
             face.staticCache = buildStaticCache(
               face.watch,
               face.env,
@@ -5225,6 +5225,7 @@
               face.images,
               face.terminatorLeaves
             );
+            face.lastTerminatorRebuild = now;
           }
         }
         renderFrame(face.ctx, face.staticCache, face.watch, face.env, face.scale);

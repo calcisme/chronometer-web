@@ -118,6 +118,8 @@ interface FaceInstance {
     scale: number;
     /** Expanded terminator leaves (empty if no terminator parts). */
     terminatorLeaves: TerminatorLeafState[];
+    /** Last time (performance.now()) the terminator cache was rebuilt. */
+    lastTerminatorRebuild: number;
 }
 
 // ============================================================================
@@ -191,6 +193,7 @@ async function main() {
             enabled: true,
             scale: 1,
             terminatorLeaves: [],
+            lastTerminatorRebuild: 0,
         };
         faces.push(face);
     }
@@ -263,18 +266,16 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled || !face.staticCache) continue;
             tickAnimations(face.handStates, face.env, now);
-            // Update terminator leaves and rebuild cache if angles changed
+            // Rebuild terminator cache at the part's update interval
             if (face.terminatorLeaves.length > 0) {
-                const prevAngles = face.terminatorLeaves.map(l => l.currentAngle + l.currentRotation);
-                updateLeafAngles(face.terminatorLeaves, face.env);
-                const changed = face.terminatorLeaves.some((l, i) =>
-                    l.currentAngle + l.currentRotation !== prevAngles[i]
-                );
-                if (changed) {
+                const intervalMs = Math.min(...face.terminatorLeaves.map(l => l.updateIntervalSec)) * 1000;
+                if (now - face.lastTerminatorRebuild > intervalMs) {
+                    updateLeafAngles(face.terminatorLeaves, face.env);
                     face.staticCache = buildStaticCache(
                         face.watch, face.env, face.canvas.width, face.canvas.height,
                         face.scale, face.images, face.terminatorLeaves
                     );
+                    face.lastTerminatorRebuild = now;
                 }
             }
             renderFrame(face.ctx, face.staticCache, face.watch, face.env, face.scale);
