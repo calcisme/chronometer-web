@@ -26,6 +26,7 @@ import {
     topocentricParallax,
     distanceOfPlanetInAU,
     planetSizeAndParallax,
+    altitudeAtRiseSet,
 } from './es-coordinates';
 import { WB_sunLongitudeApparent, WB_sunRAAndDecl } from './wb-sun';
 import { WB_MoonDistance } from './wb-moon';
@@ -415,20 +416,235 @@ export function moonRelativePositionAngle(
 
     return angle;
 }
+// ============================================================================
+// Eclipse calculation — ported from iOS ESAstronomy.cpp
+// ============================================================================
+
+/** Eclipse type classification (iOS ECEclipseKind) */
+export enum EclipseKind {
+    NoneSolar = 0,
+    SolarNotUp,
+    PartialSolar,
+    AnnularSolar,
+    TotalSolar,
+    NoneLunar,
+    LunarNotUp,
+    PartialLunar,
+    TotalLunar,
+}
+
+/**
+ * Angular separation between two celestial objects using the Vincenty formula.
+ * Works well for small separations (unlike acos-based formulas).
+ * iOS: angularSeparation() at line 4555.
+ */
+function angularSeparation(
+    ra1: number, decl1: number,
+    ra2: number, decl2: number,
+): number {
+    const sinDecl1 = Math.sin(decl1);
+    const cosDecl1 = Math.cos(decl1);
+    const sinDecl2 = Math.sin(decl2);
+    const cosDecl2 = Math.cos(decl2);
+    const sinRADelta = Math.sin(ra2 - ra1);
+    const cosRADelta = Math.cos(ra2 - ra1);
+    const x = cosDecl1 * sinDecl2 - sinDecl1 * cosDecl2 * cosRADelta;
+    const y = cosDecl2 * sinRADelta;
+    const z = sinDecl1 * sinDecl2 + cosDecl1 * cosDecl2 * cosRADelta;
+    return Math.atan2(Math.sqrt(x * x + y * y), z);
+}
+
+/**
+ * Umbral angular radius of Earth's shadow at the Moon's distance.
+ * iOS: umbralAngularRadius() at line 4547.
+ */
+function umbralAngularRadius(
+    moonParallax: number,
+    sunAngularRadius: number,
+    sunParallax: number,
+): number {
+    return 1.01 * moonParallax - sunAngularRadius + sunParallax;
+}
+
+/** Result of calculateEclipse */
+export interface EclipseResult {
+    abstractSeparation: number;   // Normalized separation (0-3 scale)
+    angularSeparation: number;    // Physical angular separation (radians)
+    shadowAngularSize: number;    // Angular size of Earth's shadow (radians, lunar only)
+    eclipseKind: EclipseKind;
+}
+
+/**
+ * Calculate eclipse parameters for the current time and observer.
+ * 
+ * When Sun and Moon are close in RA (raDelta < π/2, near new moon):
+ *   Uses topocentric coordinates for maximum accuracy near solar eclipses.
+ * When far apart (raDelta ≥ π/2, near full moon):
+ *   Uses Earth shadow position for lunar eclipse detection.
+ * 
+ * Ported from iOS calculateEclipse() at line 4600.
+ */
+export function calculateEclipse(
+    dateInterval: number,
+    observerLatitude: number,
+    observerLongitude: number,
+    cache: AstroCache | null,
+): EclipseResult {
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const { julianCenturiesSince2000Epoch } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+
+    // Sun position and size
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const sunDistAU = distanceOfPlanetInAU(ECPlanetNumber.Sun, julianCenturiesSince2000Epoch, cache);
+    const sunSizeParallax = planetSizeAndParallax(ECPlanetNumber.Sun, sunDistAU);
+    const sunAngularSize = sunSizeParallax.angularSize;
+    const sunParallax = sunSizeParallax.parallax;
+
+    // Moon position and size
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    const moonDistAU = distanceOfPlanetInAU(ECPlanetNumber.Moon, julianCenturiesSince2000Epoch, cache);
+    const moonSizeParallax = planetSizeAndParallax(ECPlanetNumber.Moon, moonDistAU);
+    const moonAngularSize = moonSizeParallax.angularSize;
+    const moonParallax = moonSizeParallax.parallax;
+
+    // Quick check: RA delta to determine solar vs lunar proximity
+    let raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI);
+    if (raDelta > Math.PI) raDelta = TWO_PI - raDelta;
+
+    let physicalSeparation: number;
+    let separationAtPartialEclipse: number;
+    let separationAtTotalEclipse: number;
+    let eclipseKind: EclipseKind;
+    let solarNotLunar: boolean;
+    let shadowAngularSize = 0;
+
+    if (raDelta < Math.PI / 2) {
+        // Near new moon — possible solar eclipse
+        // Use topocentric positions for accuracy
+        const sunH = lst - sunRA;
+        const sunTopo = topocentricParallax(sunRA, sunDecl, sunH, sunDistAU, observerLatitude, 0);
+        const sunTopoRA = lst - sunTopo.Hprime;
+
+        const moonH = lst - moonRA;
+        const moonTopo = topocentricParallax(moonRA, moonDecl, moonH, moonDistAU, observerLatitude, 0);
+        const moonTopoRA = lst - moonTopo.Hprime;
+
+        physicalSeparation = angularSeparation(sunTopoRA, sunTopo.declPrime, moonTopoRA, moonTopo.declPrime);
+        separationAtPartialEclipse = sunAngularSize / 2 + moonAngularSize / 2;
+        separationAtTotalEclipse = moonAngularSize / 2 - sunAngularSize / 2;
+        const separationAtAnnularEclipse = sunAngularSize / 2 - moonAngularSize / 2;
+
+        // Check if Sun is above horizon
+        const sunAlt = planetAltAz(ECPlanetNumber.Sun, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+        const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, ECPlanetNumber.Sun, false, cache);
+
+        if (sunAlt < altAtRS) {
+            eclipseKind = EclipseKind.SolarNotUp;
+        } else if (physicalSeparation > separationAtPartialEclipse) {
+            eclipseKind = EclipseKind.NoneSolar;
+        } else if (physicalSeparation < separationAtAnnularEclipse) {
+            eclipseKind = EclipseKind.AnnularSolar;
+        } else if (physicalSeparation > separationAtTotalEclipse) {
+            eclipseKind = EclipseKind.PartialSolar;
+        } else {
+            eclipseKind = EclipseKind.TotalSolar;
+        }
+        solarNotLunar = true;
+    } else {
+        // Near full moon — possible lunar eclipse
+        // Use Earth's shadow position (anti-sun)
+        shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
+        let shadowRA = sunRA + Math.PI;
+        if (shadowRA > TWO_PI) shadowRA -= TWO_PI;
+        const shadowDecl = -sunDecl;
+
+        physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
+        separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
+        separationAtTotalEclipse = shadowAngularSize / 2 - moonAngularSize / 2;
+
+        // Check if Moon is above horizon
+        const moonAlt = planetAltAz(ECPlanetNumber.Moon, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+        const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, ECPlanetNumber.Moon, false, cache);
+
+        if (moonAlt < altAtRS) {
+            eclipseKind = EclipseKind.LunarNotUp;
+        } else if (physicalSeparation > separationAtPartialEclipse) {
+            eclipseKind = EclipseKind.NoneLunar;
+        } else if (physicalSeparation > separationAtTotalEclipse) {
+            eclipseKind = EclipseKind.PartialLunar;
+        } else {
+            eclipseKind = EclipseKind.TotalLunar;
+        }
+        solarNotLunar = false;
+    }
+
+    // Normalized abstract separation (0-3 scale)
+    let abstractSeparation = 1 + (physicalSeparation - separationAtTotalEclipse)
+        / (separationAtPartialEclipse - separationAtTotalEclipse);
+    if (abstractSeparation < 0) {
+        abstractSeparation = 0;
+    } else if (abstractSeparation > 3) {
+        abstractSeparation = 3;
+        eclipseKind = solarNotLunar ? EclipseKind.NoneSolar : EclipseKind.NoneLunar;
+    }
+
+    return {
+        abstractSeparation,
+        angularSeparation: physicalSeparation,
+        shadowAngularSize,
+        eclipseKind,
+    };
+}
+
+/**
+ * Whether an eclipse kind is more solar than lunar (i.e. near new moon).
+ * iOS: eclipseKindIsMoreSolarThanLunar() at line 4796.
+ */
+export function eclipseKindIsMoreSolarThanLunar(kind: EclipseKind): boolean {
+    switch (kind) {
+        case EclipseKind.NoneSolar:
+        case EclipseKind.SolarNotUp:
+        case EclipseKind.PartialSolar:
+        case EclipseKind.AnnularSolar:
+        case EclipseKind.TotalSolar:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // ============================================================================
-// Moon elongation (angular separation Sun–Moon in ecliptic longitude)
+// Moon elongation — uses eclipse calculation for accuracy
 // ============================================================================
 
 /**
- * Moon elongation angle — same as moon age angle.
- * Range [0, 2π). 0 = new moon (conjunction), π = full moon (opposition).
+ * Moon elongation — angular separation between Sun and Moon.
+ * Range [0, π]. 0 = new moon (conjunction), π = full moon (opposition).
+ * 
+ * Uses eclipse calculation for accuracy:
+ * - Near new moon (solar side): returns eclipseAngularSeparation directly
+ * - Near full moon (lunar side): returns π - eclipseAngularSeparation
+ * 
+ * iOS implementation from Selene virtual machine.
  */
 export function moonElongation(
     dateInterval: number,
+    observerLatitude: number,
+    observerLongitude: number,
     cache: AstroCache | null,
 ): number {
-    return moonAge(dateInterval, cache).age;
+    const eclipse = calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache);
+    if (eclipseKindIsMoreSolarThanLunar(eclipse.eclipseKind)) {
+        return eclipse.angularSeparation;
+    } else {
+        return Math.PI - eclipse.angularSeparation;
+    }
 }
 
 // ============================================================================

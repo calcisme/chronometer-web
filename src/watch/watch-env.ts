@@ -109,11 +109,9 @@ function argbToCSS(argb: number): string {
 
 function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_LON: number): void {
     const { functions } = env;
-
-    // Time source — currently returns real time; will be overridden for
+    // Time source — returns real time; will be overridden for
     // user time controls (fast-forward, rewind, etc.)
-    // DEBUG: Fixed time for testing (April 7, 2026 6:05:05 PM PDT = UTC-7)
-    const getNow = () => new Date('2026-04-08T01:05:05Z');
+    const getNow = () => new Date();
 
     // Snapshot time for astronomy/calendar (changes at most daily)
     const now = getNow();
@@ -236,7 +234,7 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // --- Moon elongation (angular separation Sun–Moon) ---
     functions.set('moonElongation', () => {
         const di = dateToDateInterval(getNow());
-        return computeMoonElongation(di, null);
+        return computeMoonElongation(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
 
     // --- Closest phase quarter day numbers ---
