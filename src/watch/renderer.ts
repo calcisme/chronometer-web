@@ -855,14 +855,19 @@ function drawWheel(
     // the window handles that in the iOS rendering pipeline.
 
     // Draw labels around the circle.
-    // In iOS, each label (spoke) has offsetAngle = angle1 + i*step.
-    // The wheel angle scrolls labels: screen_position = -angle + offsetAngle.
-    // For the "current" label i to be at position 0 (the window),
-    // angle = angle1 + i*step, so screen_position = -angle + angle1 + i*step = 0.
-    // Text is counter-rotated to stay horizontal/upright.
+    // Two modes depending on whether the wheel spans a full circle or partial arc:
+    // - Full circle (no angle1/angle2): text rotates with wheel, tops toward center
+    //   (iOS ECQHandSpoke rendering — e.g. Haleakala weekday/date wheels)
+    // - Partial arc (angle1/angle2 specified): text stays horizontal/upright
+    //   through small windows (e.g. Chandra date digit wheels)
+    const isPartialArc = !!part.angle1 || !!part.angle2;
     
     ctx.save();
-    ctx.rotate(-angle + angle1);
+    if (isPartialArc) {
+        ctx.rotate(-angle + angle1);
+    } else {
+        ctx.rotate(angle + angle1);
+    }
 
     for (let i = 0; i < n; i++) {
         const label = labels[i].trim();
@@ -871,9 +876,8 @@ function drawWheel(
             ctx.fillStyle = strokeColor;
             ctx.save();
 
-            // Position text at the orientation direction, then counter-rotate
-            // so text stays upright (horizontal) regardless of wheel position.
-            const currentRotation = -angle + angle1 + i * step;
+            // Position text based on orientation
+            const currentRotation = isPartialArc ? (-angle + angle1 + i * step) : 0;
             switch (orientation.toLowerCase()) {
                 case 'three':
                     ctx.translate(tradius - maxW / 2, 0);
@@ -888,14 +892,16 @@ function drawWheel(
                     ctx.translate(-(tradius - maxW / 2), 0);
                     break;
             }
-            // Counter-rotate to keep text horizontal
-            ctx.rotate(-currentRotation);
+            // Counter-rotate only for partial-arc wheels to keep text horizontal
+            if (isPartialArc) {
+                ctx.rotate(-currentRotation);
+            }
 
             ctx.fillText(label, 0, 0);
             ctx.restore();
         }
 
-        ctx.rotate(step);
+        ctx.rotate(isPartialArc ? step : -step);
     }
 
     ctx.restore(); // closes ctx.save() for ctx.rotate(angle + angle1)
