@@ -833,14 +833,15 @@ function drawWheel(
     // Note: SWheels do NOT draw their own background. The QRect behind
     // the window handles that in the iOS rendering pipeline.
 
-    // Draw labels around the circle
-    // In iOS, the offsetAngle uses -i * step, meaning the labels are placed
-    // counter-clockwise around the wheel. The wheel rotates clockwise (+angle).
-    // This perfectly routes the "unused/future" weekday labels to the LEFT
-    // side of the dial, keeping them safely away from the date window on the right.
+    // Draw labels around the circle.
+    // In iOS, each label (spoke) has offsetAngle = angle1 + i*step.
+    // The wheel angle scrolls labels: screen_position = -angle + offsetAngle.
+    // For the "current" label i to be at position 0 (the window),
+    // angle = angle1 + i*step, so screen_position = -angle + angle1 + i*step = 0.
+    // Text is counter-rotated to stay horizontal/upright.
     
     ctx.save();
-    ctx.rotate(angle + angle1);
+    ctx.rotate(-angle + angle1);
 
     for (let i = 0; i < n; i++) {
         const label = labels[i].trim();
@@ -849,9 +850,9 @@ function drawWheel(
             ctx.fillStyle = strokeColor;
             ctx.save();
 
-            // Position text based on orientation
-            // Text rotates with the wheel (top of text faces center),
-            // matching iOS ECQHandSpoke rendering. No counter-rotation.
+            // Position text at the orientation direction, then counter-rotate
+            // so text stays upright (horizontal) regardless of wheel position.
+            const currentRotation = -angle + angle1 + i * step;
             switch (orientation.toLowerCase()) {
                 case 'three':
                     ctx.translate(tradius - maxW / 2, 0);
@@ -866,12 +867,14 @@ function drawWheel(
                     ctx.translate(-(tradius - maxW / 2), 0);
                     break;
             }
+            // Counter-rotate to keep text horizontal
+            ctx.rotate(-currentRotation);
 
             ctx.fillText(label, 0, 0);
             ctx.restore();
         }
 
-        ctx.rotate(-step);
+        ctx.rotate(step);
     }
 
     ctx.restore(); // closes ctx.save() for ctx.rotate(angle + angle1)

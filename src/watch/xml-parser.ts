@@ -283,6 +283,8 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel'): WheelPart {
         y: attrExpr(el, 'y'),
         modes: attr(el, 'modes'),
         angle: attrExpr(el, 'angle'),
+        angle1: attrExpr(el, 'angle1'),
+        angle2: attrExpr(el, 'angle2'),
         radius: attrExpr(el, 'radius'),
         orientation: attr(el, 'orientation'),
         text: attr(el, 'text'),
