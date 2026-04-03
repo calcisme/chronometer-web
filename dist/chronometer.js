@@ -4906,13 +4906,6 @@
       ctx.rotate(-step);
     }
     ctx.restore();
-    if (!isTransparent(bgColor)) {
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-      ctx.stroke();
-    }
     ctx.restore();
   }
   function drawQText(ctx, part, env) {

@@ -872,14 +872,8 @@ function drawWheel(
 
     ctx.restore(); // closes ctx.save() for ctx.rotate(angle + angle1)
 
-    // Border stroke
-    if (!isTransparent(bgColor)) {
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-        ctx.stroke();
-    }
+    // Note: iOS SWheels render text in rectangular panes — no circular border.
+    // The window + QRect system handles visual framing.
 
     ctx.restore(); // closes outermost ctx.save() / ctx.translate(x, y)
 }
