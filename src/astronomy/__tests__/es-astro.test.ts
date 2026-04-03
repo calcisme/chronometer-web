@@ -35,6 +35,7 @@ import {
     sunAzimuth,
     moonAltitude,
     moonAge,
+    moonRelativePositionAngle,
     EOTSeconds,
     localSiderealTime,
 } from '../es-astro';
@@ -381,5 +382,55 @@ describe('AstroCache', () => {
         const date = appleEpoch(new Date('2024-06-15T12:00:00Z'));
         initializeCachePool(pool, date, toRad(20), toRad(-156));
         expect(pool.currentCache).toBeTruthy();
+    });
+});
+
+describe('Moon astronomy end-to-end', () => {
+    // San Jose, CA
+    const lat = toRad(37.205);
+    const lon = toRad(-121.954);
+
+    test('moonRelativePositionAngle returns a value in [0, 2π)', () => {
+        const date = appleEpoch(new Date('2024-06-15T22:00:00Z'));
+        const angle = moonRelativePositionAngle(date, lat, lon, null);
+        expect(angle).toBeGreaterThanOrEqual(0);
+        expect(angle).toBeLessThan(Math.PI * 2);
+    });
+
+    test('moonRelativePositionAngle changes appreciably over 6 hours', () => {
+        const date1 = appleEpoch(new Date('2024-06-15T12:00:00Z'));
+        const date2 = appleEpoch(new Date('2024-06-15T18:00:00Z'));
+        const angle1 = moonRelativePositionAngle(date1, lat, lon, null);
+        const angle2 = moonRelativePositionAngle(date2, lat, lon, null);
+        // The angle should change noticeably over 6 hours (not stuck at 0)
+        const diff = Math.abs(angle2 - angle1);
+        expect(diff).toBeGreaterThan(0.01);
+    });
+
+    test('moonAge at known full moon is approximately π', () => {
+        // Full Moon: 2024-06-22 01:08 UTC
+        const fullMoon = appleEpoch(new Date('2024-06-22T01:08:00Z'));
+        const { age } = moonAge(fullMoon, null);
+        // Should be close to π (180°)
+        expect(toDeg(age)).toBeCloseTo(180, -1);  // within ~10°
+    });
+
+    test('moonAge at known new moon is approximately 0 or 2π', () => {
+        // New Moon: 2024-06-06 12:38 UTC
+        const newMoon = appleEpoch(new Date('2024-06-06T12:38:00Z'));
+        const { age } = moonAge(newMoon, null);
+        // Should be close to 0 (or 2π wrapped)
+        const ageDeg = toDeg(age);
+        const nearZero = ageDeg < 10 || ageDeg > 350;
+        expect(nearZero).toBe(true);
+    });
+
+    test('moonAge phase is near 0 at new moon, near 1 at full moon', () => {
+        const newMoon = appleEpoch(new Date('2024-06-06T12:38:00Z'));
+        const fullMoon = appleEpoch(new Date('2024-06-22T01:08:00Z'));
+        const { phase: phaseNew } = moonAge(newMoon, null);
+        const { phase: phaseFull } = moonAge(fullMoon, null);
+        expect(phaseNew).toBeLessThan(0.05);
+        expect(phaseFull).toBeGreaterThan(0.95);
     });
 });

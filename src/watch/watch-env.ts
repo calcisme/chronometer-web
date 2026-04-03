@@ -21,7 +21,7 @@ import {
     EC_UPDATE_ENV_CHANGE_ONLY,
 } from './animation.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
-import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge } from '../astronomy/es-astro.js';
+import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge, moonRelativePositionAngle } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
 
@@ -209,7 +209,10 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         const di = dateToDateInterval(new Date());
         return moonAge(di, null).age;
     });
-    functions.set('moonRelativePositionAngle', () => 0);  // TODO: implement
+    functions.set('moonRelativePositionAngle', () => {
+        const di = dateToDateInterval(new Date());
+        return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
 
     // --- Moonrise/moonset ---
     const moonrise = planetaryRiseSetTimeRefined(

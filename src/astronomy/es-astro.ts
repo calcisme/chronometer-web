@@ -291,3 +291,126 @@ export function localSiderealTime(
 
     return lst;
 }
+
+// ============================================================================
+// Moon relative position angle (terminator rotation as seen in sky)
+// ============================================================================
+
+/**
+ * Position angle between the Sun and an object (Moon).
+ * Standard astronomical position angle — the angle at the object
+ * between the great circle to the Sun and the great circle to the
+ * north celestial pole, measured eastward.
+ *
+ * Ported from ECAstronomy.m positionAngle().
+ */
+export function positionAngle(
+    sunRA: number, sunDecl: number,
+    objRA: number, objDecl: number,
+): number {
+    return Math.atan2(
+        Math.cos(sunDecl) * Math.sin(sunRA - objRA),
+        Math.cos(objDecl) * Math.sin(sunDecl) - Math.sin(objDecl) * Math.cos(sunDecl) * Math.cos(sunRA - objRA),
+    );
+}
+
+/**
+ * Great circle initial course from (lat1, lon1) to (lat2, lon2).
+ * Ported from ECAstronomy.m greatCircleCourse().
+ */
+export function greatCircleCourse(
+    lat1: number, lon1: number,
+    lat2: number, lon2: number,
+): number {
+    return Math.atan2(
+        Math.sin(lon1 - lon2) * Math.cos(lat2),
+        Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2),
+    );
+}
+
+/**
+ * The angle from an object to the celestial north pole as seen by an observer.
+ * Uses the great circle course on a sphere whose north is at the zenith,
+ * where the celestial north pole is at (observerLatitude, 0) and
+ * the object is at (altitude, azimuth).
+ *
+ * Ported from ECAstronomy.m northAngleForObject().
+ */
+export function northAngleForObject(
+    altitude: number,
+    azimuth: number,
+    observerLatitude: number,
+): number {
+    return greatCircleCourse(altitude, azimuth, observerLatitude, 0);
+}
+
+/**
+ * Rotation of the terminator as it appears in the sky.
+ *
+ * Combines the Sun–Moon position angle with the observer's
+ * sky orientation (via northAngleForObject) to give the angle
+ * the terminator should be drawn at for a sky-aligned display.
+ *
+ * Ported from ECAstronomy.m moonRelativePositionAngle (lines 3153-3196).
+ *
+ * @param dateInterval - Apple epoch seconds
+ * @param observerLatitude - Observer latitude in radians
+ * @param observerLongitude - Observer longitude in radians (east positive)
+ * @param cache - AstroCache or null
+ * @returns angle in [0, 2π)
+ */
+export function moonRelativePositionAngle(
+    dateInterval: number,
+    observerLatitude: number,
+    observerLongitude: number,
+    cache: AstroCache | null,
+): number {
+    // Sun RA/Decl
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+
+    // Moon RA/Decl
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+
+    // Position angle Sun→Moon
+    let posAngle = positionAngle(sunRA, sunDecl, moonRA, moonDecl);
+
+    // Moon age — if waning (age > π), bright limb is on the left,
+    // so the sense of posAngle is reversed by 180°
+    const { age: moonAgeAngle } = moonAge(dateInterval, cache);
+    if (moonAgeAngle > Math.PI) {
+        if (posAngle > Math.PI) {
+            posAngle -= Math.PI;
+        } else {
+            posAngle += Math.PI;
+        }
+    }
+
+    // Moon's local hour angle, altitude, azimuth
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const moonHourAngle = lst - moonRA;
+    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude)
+        + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
+    const moonAz = Math.atan2(
+        -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
+        Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt,
+    );
+    const moonAlt = Math.asin(sinAlt);
+
+    // North angle for the Moon
+    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
+
+    // Combine into final angle
+    let angle = -northAngle - posAngle - Math.PI / 2;
+    if (angle < 0) {
+        angle += TWO_PI;
+    } else if (angle > TWO_PI) {
+        angle -= TWO_PI;
+    }
+
+    return angle;
+}
