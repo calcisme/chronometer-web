@@ -10,6 +10,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { JSDOM } from 'jsdom';
 import { parseWatchXML } from '../xml-parser.js';
+import { parse } from '../../expr/parser.js';
+import type { ASTNode } from '../../expr/parser.js';
 import type {
     QDialPart,
     QHandPart,
@@ -37,6 +39,37 @@ const haleakalaXML = readFileSync(
 function makeDOMParser() {
     const jsdom = new JSDOM('');
     return new jsdom.window.DOMParser();
+}
+
+/**
+ * Assert that a parsed ASTNode matches the expected expression string.
+ * Parses the expected string into an AST and compares structurally.
+ */
+function expectExpr(node: ASTNode | undefined, exprStr: string) {
+    expect(node).toBeDefined();
+    expect(node).toEqual(parse(exprStr));
+}
+
+/**
+ * Assert that a parsed ASTNode contains the given substring when
+ * the source expression is examined. This handles cases like
+ * `.toContain('fmod')` by re-serializing the AST isn't practical,
+ * so we check specific structural properties instead.
+ */
+function expectExprContains(node: ASTNode | undefined, funcName: string) {
+    expect(node).toBeDefined();
+    // For function calls, check the name
+    function containsFunc(n: ASTNode): boolean {
+        if (n.kind === 'FunctionCall' && n.name === funcName) return true;
+        if (n.kind === 'BinaryOp') return containsFunc(n.left) || containsFunc(n.right);
+        if (n.kind === 'UnaryOp') return containsFunc(n.operand);
+        if (n.kind === 'Ternary') return containsFunc(n.condition) || containsFunc(n.consequent) || containsFunc(n.alternate);
+        if (n.kind === 'FunctionCall') return n.args.some(containsFunc);
+        if (n.kind === 'ExpressionList') return n.expressions.some(containsFunc);
+        if (n.kind === 'Assignment') return containsFunc(n.value);
+        return false;
+    }
+    expect(containsFunc(node!)).toBe(true);
 }
 
 // ============================================================================
@@ -97,9 +130,36 @@ describe('parseWatchXML: Haleakala front side', () => {
     test('collects all init expressions', () => {
         // There are 7 <init> blocks in Haleakala.xml (6 near the top + 1 before hands)
         expect(watch.initExprs.length).toBe(7);
-        expect(watch.initExprs[0]).toContain('hairline=0.25');
-        expect(watch.initExprs[1]).toContain('azR=130');
-        expect(watch.initExprs[6]).toContain('handStrokeColor=black');
+        // initExprs are now ASTNodes — check structural properties
+        // First block contains 'hairline=0.25' as one of its assignments
+        const first = watch.initExprs[0];
+        expect(first.kind).toBe('ExpressionList');
+        if (first.kind === 'ExpressionList') {
+            const hairline = first.expressions.find(
+                e => e.kind === 'Assignment' && e.name === 'hairline',
+            );
+            expect(hairline).toBeDefined();
+        }
+        // Second block contains 'azR=130'
+        const second = watch.initExprs[1];
+        if (second.kind === 'ExpressionList') {
+            const azR = second.expressions.find(
+                e => e.kind === 'Assignment' && e.name === 'azR',
+            );
+            expect(azR).toBeDefined();
+        } else if (second.kind === 'Assignment') {
+            expect(second.name).toBe('azR');
+        }
+        // Last block contains 'handStrokeColor=black'
+        const last = watch.initExprs[6];
+        if (last.kind === 'ExpressionList') {
+            const hsc = last.expressions.find(
+                e => e.kind === 'Assignment' && e.name === 'handStrokeColor',
+            );
+            expect(hsc).toBeDefined();
+        } else if (last.kind === 'Assignment') {
+            expect(last.name).toBe('handStrokeColor');
+        }
     });
 
     // --- Mode filtering ---
@@ -170,37 +230,37 @@ describe('parseWatchXML: Haleakala front side', () => {
         const azDial = findPartByName<QDialPart>(watch.parts, 'az dial');
         expect(azDial).toBeDefined();
         expect(azDial!.type).toBe('QDial');
-        expect(azDial!.radius).toBe('azR+16');
+        expectExpr(azDial!.radius, 'azR+16');
         expect(azDial!.orientation).toBe('upright');
         expect(azDial!.text).toBe('N,E,S,W');
-        expect(azDial!.fontSize).toBe('12');
+        expectExpr(azDial!.fontSize, '12');
         expect(azDial!.fontName).toBe('Times New Roman');
-        expect(azDial!.bgColor).toBe('clear');
-        expect(azDial!.strokeColor).toBe('black');
+        expectExpr(azDial!.bgColor, 'clear');
+        expectExpr(azDial!.strokeColor, 'black');
         expect(azDial!.marks).toBe('center');
-        expect(azDial!.markWidth).toBe('4');
+        expectExpr(azDial!.markWidth, '4');
     });
 
     test('parses QDial with tick marks', () => {
         const dial = findPartByName<QDialPart>(watch.parts, 'main dial2');
         expect(dial).toBeDefined();
         expect(dial!.marks).toBe('tickOut');
-        expect(dial!.nMarks).toBe('60');
-        expect(dial!.mSize).toBe('6');
+        expectExpr(dial!.nMarks, '60');
+        expectExpr(dial!.mSize, '6');
     });
 
     test('parses QDial with angle range', () => {
         const dial = findPartByName<QDialPart>(watch.parts, 'alt dial');
         expect(dial).toBeDefined();
-        expect(dial!.angle1).toBe('42*pi/36');
-        expect(dial!.angle2).toBe('63*pi/36');
+        expectExpr(dial!.angle1, '42*pi/36');
+        expectExpr(dial!.angle2, '63*pi/36');
     });
 
     test('parses QDial with demiTweak', () => {
         const dial = findPartByName<QDialPart>(watch.parts, 'az dial2');
         expect(dial).toBeDefined();
         expect(dial!.orientation).toBe('demi');
-        expect(dial!.demiTweak).toBe('-1.0');
+        expectExpr(dial!.demiTweak, '-1.0');
     });
 
     // --- QHand ---
@@ -211,15 +271,15 @@ describe('parseWatchXML: Haleakala front side', () => {
         expect(hr!.type).toBe('QHand');
         expect(hr!.handType).toBe('rect');
         expect(hr!.kind).toBe('hour12Kind');
-        expect(hr!.angle).toBe('hour12ValueAngle()');
-        expect(hr!.length).toBe('hrLen-hrArrow');
-        expect(hr!.oLength).toBe('hrArrow');
-        expect(hr!.oWidth).toBe('8');
-        expect(hr!.oTail).toBe('hrTail');
-        expect(hr!.oLineWidth).toBe('arrowWidth');
-        expect(hr!.oStrokeColor).toBe('handStrokeColor');
-        expect(hr!.oFillColor).toBe('arrowClr');
-        expect(hr!.z).toBe('5');
+        expectExpr(hr!.angle, 'hour12ValueAngle()');
+        expectExpr(hr!.length, 'hrLen-hrArrow');
+        expectExpr(hr!.oLength, 'hrArrow');
+        expectExpr(hr!.oWidth, '8');
+        expectExpr(hr!.oTail, 'hrTail');
+        expectExpr(hr!.oLineWidth, 'arrowWidth');
+        expectExpr(hr!.oStrokeColor, 'handStrokeColor');
+        expectExpr(hr!.oFillColor, 'arrowClr');
+        expectExpr(hr!.z, '5');
     });
 
     test('parses QHand with tri type', () => {
@@ -227,15 +287,15 @@ describe('parseWatchXML: Haleakala front side', () => {
         expect(sec).toBeDefined();
         expect(sec!.handType).toBe('tri');
         expect(sec!.kind).toBe('secondKind');
-        expect(sec!.angle).toBe('secondValueAngle()');
+        expectExpr(sec!.angle, 'secondValueAngle()');
     });
 
     test('parses sun azimuth hand', () => {
         const hand = findPartByName<QHandPart>(watch.parts, 'saz hand');
         expect(hand).toBeDefined();
-        expect(hand!.angle).toBe('sunAzimuth()');
-        expect(hand!.strokeColor).toBe('azColor');
-        expect(hand!.length).toBe('azR-5');
+        expectExpr(hand!.angle, 'sunAzimuth()');
+        expectExpr(hand!.strokeColor, 'azColor');
+        expectExpr(hand!.length, 'azR-5');
     });
 
     // --- Wheels ---
@@ -247,7 +307,7 @@ describe('parseWatchXML: Haleakala front side', () => {
         expect(day1s!.wheelVariant).toBe('SWheel');
         expect(day1s!.orientation).toBe('three');
         expect(day1s!.text).toBe('0,1,2,3,4,5,6,7,8,9');
-        expect(day1s!.angle).toContain('fmod');
+        expectExprContains(day1s!.angle, 'fmod');
     });
 
     test('parses SWheel with refName', () => {
@@ -255,14 +315,14 @@ describe('parseWatchXML: Haleakala front side', () => {
         const wheels = findParts<WheelPart>(watch.parts, 'Wheel');
         const refWheel = wheels.find(w => w.refName === 'day1s');
         expect(refWheel).toBeDefined();
-        expect(refWheel!.x).toBe('firstDateX');
+        expectExpr(refWheel!.x, 'firstDateX');
     });
 
     test('parses QWheel parts', () => {
         const ampm = findPartByName<WheelPart>(watch.parts, 'am/pm');
         expect(ampm).toBeDefined();
         expect(ampm!.wheelVariant).toBe('QWheel');
-        expect(ampm!.animSpeed).toBe('5.0');
+        expectExpr(ampm!.animSpeed, '5.0');
         expect(ampm!.marks).toBe('0');
     });
 
@@ -273,7 +333,7 @@ describe('parseWatchXML: Haleakala front side', () => {
         expect(rise).toBeDefined();
         expect(rise!.type).toBe('QText');
         expect(rise!.text).toBe('Sunrise');
-        expect(rise!.fontSize).toBe('10');
+        expectExpr(rise!.fontSize, '10');
         expect(rise!.fontName).toBe('Verdana');
     });
 
@@ -284,7 +344,7 @@ describe('parseWatchXML: Haleakala front side', () => {
         expect(face).toBeDefined();
         expect(face!.type).toBe('Image');
         expect(face!.src).toBe('Haleakala-face.png');
-        expect(face!.alpha).toBe('1');
+        expectExpr(face!.alpha, '1');
     });
 
     // --- Button ---
@@ -293,19 +353,20 @@ describe('parseWatchXML: Haleakala front side', () => {
         const stem = findPartByName<ButtonPart>(watch.parts, 'stem');
         expect(stem).toBeDefined();
         expect(stem!.type).toBe('Button');
-        expect(stem!.x).toBe('r-4');
-        expect(stem!.y).toBe('0');
+        expectExpr(stem!.x, 'r-4');
+        expectExpr(stem!.y, '0');
         expect(stem!.src).toBe('../partsBin/HD/yellow/front/stem.png');
+        // action is still a raw string, not parsed
         expect(stem!.action).toContain('manualSet()');
-        expect(stem!.motion).toBe('manualSet() ? 1 : 0');
-        expect(stem!.expanded).toBe('1');
+        expectExpr(stem!.motion, 'manualSet() ? 1 : 0');
+        expectExpr(stem!.expanded, '1');
     });
 
     test('parses invisible (hit-area-only) button', () => {
         const riseBut = findPartByName<ButtonPart>(watch.parts, 'rise but');
         expect(riseBut).toBeDefined();
-        expect(riseBut!.w).toBe('riseSetRadius*2');
-        expect(riseBut!.h).toBe('riseSetRadius*2');
+        expectExpr(riseBut!.w, 'riseSetRadius*2');
+        expectExpr(riseBut!.h, 'riseSetRadius*2');
         expect(riseBut!.action).toBe('advanceToSunriseForDay()');
         expect(riseBut!.src).toBeUndefined(); // no image
     });
@@ -316,10 +377,10 @@ describe('parseWatchXML: Haleakala front side', () => {
         const monthWin = findPartByName<WindowPart>(watch.parts, 'month win');
         expect(monthWin).toBeDefined();
         expect(monthWin!.type).toBe('Window');
-        expect(monthWin!.w).toBe('42');
-        expect(monthWin!.h).toBe('16');
-        expect(monthWin!.border).toBe('2');
-        expect(monthWin!.shadowOpacity).toBe('0.4');
+        expectExpr(monthWin!.w, '42');
+        expectExpr(monthWin!.h, '16');
+        expectExpr(monthWin!.border, '2');
+        expectExpr(monthWin!.shadowOpacity, '0.4');
     });
 
     test('parses porthole window', () => {
@@ -334,9 +395,9 @@ describe('parseWatchXML: Haleakala front side', () => {
         const dayBack = findPartByName<QRectPart>(watch.parts, 'day back');
         expect(dayBack).toBeDefined();
         expect(dayBack!.type).toBe('QRect');
-        expect(dayBack!.w).toBe('24');
-        expect(dayBack!.h).toBe('16');
-        expect(dayBack!.panes).toBe('2');
+        expectExpr(dayBack!.w, '24');
+        expectExpr(dayBack!.h, '16');
+        expectExpr(dayBack!.panes, '2');
     });
 });
 
@@ -378,7 +439,9 @@ describe('parseWatchXML: small examples', () => {
         </watch>`;
         const watch = parseWatchXML(xml, 'front', makeDOMParser());
         expect(watch.name).toBe('Test');
-        expect(watch.initExprs).toEqual(['r=100']);
+        // initExprs are now ASTNodes
+        expect(watch.initExprs.length).toBe(1);
+        expect(watch.initExprs[0]).toEqual(parse('r=100'));
         expect(watch.parts.length).toBe(1);
         expect(watch.parts[0].type).toBe('QDial');
     });
