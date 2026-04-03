@@ -105,6 +105,7 @@ export interface QHandPart extends PartBase {
     type: 'QHand';
     angle?: ASTNode;
     length?: ASTNode;
+    length2?: ASTNode;
     width?: ASTNode;
     tail?: ASTNode;
     handType?: string;         // 'rect' | 'tri' (stored from XML `type` attr)

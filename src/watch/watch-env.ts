@@ -21,7 +21,12 @@ import {
     EC_UPDATE_ENV_CHANGE_ONLY,
 } from './animation.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
-import { sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge, moonRelativePositionAngle } from '../astronomy/es-astro.js';
+import {
+    sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge,
+    moonRelativePositionAngle, moonElongation as computeMoonElongation,
+    closestPhaseDayNumber, planetEclipticLongitude, planetEclipticLatitude,
+    planetGeocentricDistance, lunarAscendingNodeLongitude as computeLunarAscendingNode,
+} from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
 import { terminatorAngle } from './terminator.js';
@@ -227,6 +232,53 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // Not yet implemented (used by Chandra's image-based moon hand, which isn't
     // rendered since image assets aren't bundled). Returns 0 for now.
     functions.set('moonRelativeAngle', () => 0);
+
+    // --- Moon elongation (angular separation Sun–Moon) ---
+    functions.set('moonElongation', () => {
+        const di = dateToDateInterval(getNow());
+        return computeMoonElongation(di, null);
+    });
+
+    // --- Closest phase quarter day numbers ---
+    // Each returns the day-of-month (1-based) of the closest occurrence
+    functions.set('closestNewMoonDayNumber', () => {
+        return closestPhaseDayNumber(0, dateInterval) - 1;  // 0-indexed for wheel math
+    });
+    functions.set('closestFirstQuarterDayNumber', () => {
+        return closestPhaseDayNumber(Math.PI / 2, dateInterval) - 1;
+    });
+    functions.set('closestFullMoonDayNumber', () => {
+        return closestPhaseDayNumber(Math.PI, dateInterval) - 1;
+    });
+    functions.set('closestThirdQuarterDayNumber', () => {
+        return closestPhaseDayNumber(3 * Math.PI / 2, dateInterval) - 1;
+    });
+
+    // --- Planetary ecliptic coordinates ---
+    // ELongitudeOfPlanet(n): geocentric apparent ecliptic longitude (radians)
+    functions.set('ELongitudeOfPlanet', (n: number) => {
+        const di = dateToDateInterval(getNow());
+        return planetEclipticLongitude(n as ECPlanetNumber, di, null);
+    });
+    // ELatitudeOfPlanet(n): geocentric apparent ecliptic latitude (radians)
+    functions.set('ELatitudeOfPlanet', (n: number) => {
+        const di = dateToDateInterval(getNow());
+        return planetEclipticLatitude(n as ECPlanetNumber, di, null);
+    });
+    // distanceFromEarthOfPlanet(n): geocentric distance in AU
+    functions.set('distanceFromEarthOfPlanet', (n: number) => {
+        const di = dateToDateInterval(getNow());
+        return planetGeocentricDistance(n as ECPlanetNumber, di, null);
+    });
+
+    // --- Lunar ascending node longitude ---
+    functions.set('lunarAscendingNodeLongitude', () => {
+        const di = dateToDateInterval(getNow());
+        return computeLunarAscendingNode(di, null);
+    });
+
+    // --- QWedge-only function (deferred — QWedge rendering not yet implemented) ---
+    functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (_n: number) => 0);
 
     // --- Moonrise/moonset ---
     const moonrise = planetaryRiseSetTimeRefined(

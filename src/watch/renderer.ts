@@ -391,14 +391,17 @@ const MARKS_DOT      = 1 << 4;
 
 function parseMarksType(marks: string | undefined): number {
     if (!marks) return MARKS_NONE;
-    switch (marks.toLowerCase()) {
-        case 'none': return MARKS_NONE;
-        case 'outer': return MARKS_OUTER;
-        case 'center': return MARKS_CENTER;
-        case 'tickout': return MARKS_TICK_OUT;
-        case 'dot': return MARKS_DOT;
-        default: return MARKS_NONE;
+    // Handle pipe-separated values like 'outer|tickOut'
+    let result = MARKS_NONE;
+    for (const part of marks.split('|')) {
+        switch (part.trim().toLowerCase()) {
+            case 'outer': result |= MARKS_OUTER; break;
+            case 'center': result |= MARKS_CENTER; break;
+            case 'tickout': result |= MARKS_TICK_OUT; break;
+            case 'dot': result |= MARKS_DOT; break;
+        }
     }
+    return result;
 }
 
 function drawQDial(
@@ -436,7 +439,12 @@ function drawQDial(
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = markWidth;
         ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        // Respect angle1/angle2 range if specified
+        if (angle1 !== 0 || angle2 !== 2 * Math.PI) {
+            ctx.arc(0, 0, radius, angle1 - Math.PI / 2, angle2 - Math.PI / 2);
+        } else {
+            ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        }
         ctx.stroke();
     }
 
@@ -639,7 +647,8 @@ function drawQHand(
 
     // Main hand body (rect stops short by oTail so ornament overlaps cleanly)
     const oTail = evalAttr(part.oTail, env);
-    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail);
+    const length2 = evalAttr(part.length2, env);
+    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
 
     // Ornament arrowhead (diamond/kite shape at the tip)
     const oLength = evalAttr(part.oLength, env);
@@ -752,6 +761,7 @@ function drawHandShape(
     fillColor: string,
     lineWidth: number,
     oTail: number = 0,
+    length2: number = 0,
 ): void {
     ctx.beginPath();
     ctx.lineWidth = lineWidth;
@@ -759,16 +769,27 @@ function drawHandShape(
     ctx.fillStyle = fillColor;
 
     if (handType === 'rect' || handType === 'quad') {
-        // Rectangle hand: tail to length-oTail, width centered
-        // Original: CGRectMake(-width/2, length2-tail, width, length+tail-oTail)
+        // Rectangle hand: from length2 to length (or tail to length if no length2)
         const hw = width / 2;
-        ctx.rect(-hw, tail, width, -(length + tail - oTail));
+        if (length2 > 0) {
+            // Short outer segment: draw from -length2 to -length
+            ctx.rect(-hw, -length2, width, -(length - length2));
+        } else {
+            ctx.rect(-hw, tail, width, -(length + tail - oTail));
+        }
     } else {
         // Triangle hand: pointed tip, wide base
         const hw = width / 2;
-        ctx.moveTo(0, -length);          // tip
-        ctx.lineTo(hw, tail);            // bottom right
-        ctx.lineTo(-hw, tail);           // bottom left
+        if (length2 > 0) {
+            // Short outer segment triangle: start at length2, tip at length
+            ctx.moveTo(0, -length);          // tip
+            ctx.lineTo(hw, -length2);        // bottom right
+            ctx.lineTo(-hw, -length2);       // bottom left
+        } else {
+            ctx.moveTo(0, -length);          // tip
+            ctx.lineTo(hw, tail);            // bottom right
+            ctx.lineTo(-hw, tail);           // bottom left
+        }
         ctx.closePath();
     }
 

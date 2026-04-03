@@ -46,6 +46,10 @@ export function createDefaultEnvironment(): Environment {
     variables.set('darkGray', 0xFF555555 >>> 0);   // iOS [UIColor darkGrayColor] = 1/3
     variables.set('lightGray', 0xFFAAAAAA >>> 0);   // iOS [UIColor lightGrayColor] = 2/3
 
+    // Planet number constants (matching ECPlanetNumber enum)
+    variables.set('planetSun', 0);
+    variables.set('planetMoon', 1);
+
     // Math functions
     functions.set('sin', Math.sin);
     functions.set('cos', Math.cos);

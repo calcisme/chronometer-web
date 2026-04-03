@@ -132,6 +132,10 @@ function processElement(
             }
             break;
 
+        case 'qwedge':
+            // QWedge elements (annular wedge segments) — parsed but skipped for now
+            break;
+
         case 'button':
             if (matchesMode(el, mode)) {
                 parts.push(parseButton(el));
@@ -247,6 +251,7 @@ function parseQHand(el: Element): QHandPart {
         modes: attr(el, 'modes'),
         angle: attrExpr(el, 'angle'),
         length: attrExpr(el, 'length'),
+        length2: attrExpr(el, 'length2'),
         width: attrExpr(el, 'width'),
         tail: attrExpr(el, 'tail'),
         handType: attr(el, 'type'),

@@ -18,6 +18,13 @@ import bandUrl from './assets/haleakala/band-front-4x.png';
 import caseUrl from './assets/haleakala/case-front-4x.png';
 import moonESUrl from './assets/chandra/moonES-4x.png';
 import whiteLogoUrl from './assets/chandra/logos-white-4x.png';
+// Selene assets
+import seleneFaceUrl from './assets/selene/face-white-trim-4x.png';
+import seleneMoonUrl from './assets/selene/moonES72-4x.png';
+import phaseNUrl from './assets/selene/phaseN.png';
+import phase1Url from './assets/selene/phase1.png';
+import phase3Url from './assets/selene/phase3.png';
+import phaseFUrl from './assets/selene/phaseF.png';
 
 /**
  * Map from XML src paths to their imported URLs and scale factors.
@@ -35,6 +42,13 @@ const IMAGE_MAP: Record<string, { url: string; scale: number }> = {
     // Chandra assets
     '../partsBin/moonES.png':                             { url: moonESUrl, scale: 0.25 },
     '../partsBin/logos/white.png':                         { url: whiteLogoUrl, scale: 0.25 },
+    // Selene assets — scale to cover dialOuterRad*2=274 (274/1060 ≈ 0.2585)
+    'face-white-trim.png':                                { url: seleneFaceUrl, scale: 274 / 1060 },
+    '../partsBin/moonES72.png':                           { url: seleneMoonUrl, scale: 0.25 },
+    'phaseN.png':                                         { url: phaseNUrl, scale: 1 },
+    'phase1.png':                                         { url: phase1Url, scale: 1 },
+    'phase3.png':                                         { url: phase3Url, scale: 1 },
+    'phaseF.png':                                         { url: phaseFUrl, scale: 1 },
 };
 
 /** Loaded image with its scale factor */

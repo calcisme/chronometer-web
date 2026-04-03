@@ -1,11 +1,11 @@
 /**
- * Core astronomy functions for Haleakala: Sun/Moon altitude/azimuth, Moon age, EOT.
- *
- * Ported from ESAstronomy.cpp. All functions are stateless (pure functions
- * taking a cache parameter), following the same pattern as the WB modules.
- *
- * Angles in radians, times in Apple epoch seconds.
- */
+* Core astronomy functions for Haleakala: Sun/Moon altitude/azimuth, Moon age, EOT.
+*
+* Ported from ESAstronomy.cpp. All functions are stateless (pure functions
+* taking a cache parameter), following the same pattern as the WB modules.
+*
+* Angles in radians, times in Apple epoch seconds.
+*/
 
 import {
     fmod,
@@ -414,3 +414,144 @@ export function moonRelativePositionAngle(
 
     return angle;
 }
+
+// ============================================================================
+// Moon elongation (angular separation Sun–Moon in ecliptic longitude)
+// ============================================================================
+
+/**
+ * Moon elongation angle — same as moon age angle.
+ * Range [0, 2π). 0 = new moon (conjunction), π = full moon (opposition).
+ */
+export function moonElongation(
+    dateInterval: number,
+    cache: AstroCache | null,
+): number {
+    return moonAge(dateInterval, cache).age;
+}
+
+// ============================================================================
+// Closest lunar phase quarter (days from now to nearest quarter)
+// ============================================================================
+
+/**
+ * Find the day number relative to today when the moon is closest to
+ * a given phase angle (0=new, π/2=first quarter, π=full, 3π/2=third quarter).
+ *
+ * Returns the day-of-month (1-based) of the closest occurrence within ±16 days.
+ * The search uses daily moon age samples and looks for the day where the age
+ * is closest to the target phase.
+ *
+ * @param targetPhase - Phase angle to search for (0, π/2, π, or 3π/2)
+ * @param dateInterval - Current time in Apple epoch seconds
+ * @param cache - AstroCache or null (a fresh cache is used per day anyway)
+ */
+export function closestPhaseDayNumber(
+    targetPhase: number,
+    dateInterval: number,
+): number {
+    const DAY_SECONDS = 86400;
+    let bestDelta = Infinity;
+    let bestDayOffset = 0;
+
+    // Search ±16 days (slightly more than one synodic month / 2)
+    for (let d = -16; d <= 16; d++) {
+        const di = dateInterval + d * DAY_SECONDS;
+        const { age } = moonAge(di, null);
+
+        // Angular distance to target phase (wrapping around 2π)
+        let delta = Math.abs(age - targetPhase);
+        if (delta > Math.PI) delta = TWO_PI - delta;
+
+        if (delta < bestDelta) {
+            bestDelta = delta;
+            bestDayOffset = d;
+        }
+    }
+
+    // Convert offset to day-of-month
+    const targetDate = new Date((dateInterval + bestDayOffset * DAY_SECONDS + 978307200) * 1000);
+    return targetDate.getDate();
+}
+
+// ============================================================================
+// Planetary ecliptic coordinates (for ELatitudeOfPlanet, ELongitudeOfPlanet, etc.)
+// ============================================================================
+
+import { WB_planetApparentPosition } from './willmann-bell';
+
+/**
+ * Get geocentric apparent ecliptic longitude of a planet (radians).
+ */
+export function planetEclipticLongitude(
+    planetNumber: ECPlanetNumber,
+    dateInterval: number,
+    cache: AstroCache | null,
+): number {
+    const { julianCenturiesSince2000Epoch } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? undefined);
+    return pos.geocentricApparentLongitude;
+}
+
+/**
+ * Get geocentric apparent ecliptic latitude of a planet (radians).
+ */
+export function planetEclipticLatitude(
+    planetNumber: ECPlanetNumber,
+    dateInterval: number,
+    cache: AstroCache | null,
+): number {
+    const { julianCenturiesSince2000Epoch } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? undefined);
+    return pos.geocentricApparentLatitude;
+}
+
+/**
+ * Get geocentric distance of a planet in AU.
+ */
+export function planetGeocentricDistance(
+    planetNumber: ECPlanetNumber,
+    dateInterval: number,
+    cache: AstroCache | null,
+): number {
+    const { julianCenturiesSince2000Epoch } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? undefined);
+    return pos.geocentricDistance;
+}
+
+// ============================================================================
+// Lunar ascending node longitude
+// ============================================================================
+
+/**
+ * Mean longitude of the lunar ascending node (Ω).
+ * Uses the standard Meeus formula.
+ *
+ * @param dateInterval - Apple epoch seconds
+ * @param cache - AstroCache or null
+ * @returns longitude in radians [0, 2π)
+ */
+export function lunarAscendingNodeLongitude(
+    dateInterval: number,
+    cache: AstroCache | null,
+): number {
+    const { julianCenturiesSince2000Epoch: T } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+
+    // Mean longitude of ascending node (Meeus, Table 47.a)
+    // Ω = 125.0445479° − 1934.1362891°T + 0.0020754°T² + T³/467441 − T⁴/60616000
+    const omegaDeg = 125.0445479
+        - 1934.1362891 * T
+        + 0.0020754 * T * T
+        + T * T * T / 467441
+        - T * T * T * T / 60616000;
+
+    return fmod(omegaDeg * Math.PI / 180, TWO_PI);
+}
+
