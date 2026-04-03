@@ -939,6 +939,7 @@ function drawQText(
     const fontSize = evalAttr(part.fontSize, env) || 12;
     const fontName = part.fontName || 'Arial';
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
+    const radius = part.radius ? evalAttr(part.radius, env) : 0;
 
     ctx.save();
     ctx.translate(x, y);
@@ -946,7 +947,63 @@ function drawQText(
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 0, 0);
+
+    if (radius > 0 && part.orientation === 'demi') {
+        // Curved text along an arc: each character is placed at a position
+        // on a circle of the given radius, centered around startAngle.
+        // startAngle: 0 = top (12 o'clock), π = bottom (6 o'clock)
+        const startAngle = part.startAngle ? evalAttr(part.startAngle, env) : 0;
+
+        // Measure each character's width to compute angular spans
+        const charWidths: number[] = [];
+        let totalWidth = 0;
+        for (let i = 0; i < text.length; i++) {
+            const w = ctx.measureText(text[i]).width;
+            charWidths.push(w);
+            totalWidth += w;
+        }
+
+        // Total angular span of the text along the arc
+        const totalAngle = totalWidth / radius;
+
+        // Determine if text is on the bottom half of the dial.
+        // Bottom half: characters need π rotation to stay upright,
+        // and step counter-clockwise so text reads left-to-right.
+        const normalizedAngle = ((startAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const isBottomHalf = normalizedAngle > Math.PI / 2 && normalizedAngle < 3 * Math.PI / 2;
+
+        let currentAngle: number;
+        const direction = isBottomHalf ? -1 : 1;
+
+        if (isBottomHalf) {
+            // Start from the right end so text reads L-to-R from outside
+            currentAngle = startAngle + totalAngle / 2;
+        } else {
+            // Start from the left end, step clockwise
+            currentAngle = startAngle - totalAngle / 2;
+        }
+
+        for (let i = 0; i < text.length; i++) {
+            const charAngle = charWidths[i] / radius;
+            const midAngle = currentAngle + direction * charAngle / 2;
+
+            ctx.save();
+            ctx.rotate(midAngle);
+            ctx.translate(0, -radius + fontSize / 2);
+            if (isBottomHalf) {
+                // Flip character so it's right-side up at the bottom
+                ctx.rotate(Math.PI);
+            }
+            ctx.fillText(text[i], 0, 0);
+            ctx.restore();
+
+            currentAngle += direction * charAngle;
+        }
+    } else {
+        // Simple flat text (no radius)
+        ctx.fillText(text, 0, 0);
+    }
+
     ctx.restore();
 }
 

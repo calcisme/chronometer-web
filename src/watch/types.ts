@@ -171,6 +171,9 @@ export interface QTextPart extends PartBase {
     fontSize?: ASTNode;
     fontName?: string;
     strokeColor?: ASTNode;
+    radius?: ASTNode;       // If set, text is drawn along a circular arc
+    startAngle?: ASTNode;   // Center angle for curved text (radians, 0=top)
+    orientation?: string;   // 'demi' = text along arc, tops inward
 }
 
 // ============================================================================

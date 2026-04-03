@@ -317,6 +317,9 @@ function parseQText(el: Element): QTextPart {
         fontSize: attrExpr(el, 'fontSize'),
         fontName: attr(el, 'fontName'),
         strokeColor: attrExpr(el, 'strokeColor'),
+        radius: attrExpr(el, 'radius'),
+        startAngle: attrExpr(el, 'startAngle'),
+        orientation: attr(el, 'orientation'),
     };
 }
 
