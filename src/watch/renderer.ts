@@ -194,13 +194,15 @@ function renderPartsWithWindows(
             continue;
         }
 
-        // QHand: image-based hands (with src, no length) are drawn as static
-        // images. Regular geometric hands are drawn dynamically each frame.
+        // QHand: geometric hands are always drawn dynamically each frame.
+        // Image-based hands (with src, no length) are drawn in static cache
+        // to maintain correct rendering order (e.g. moon disc before terminator).
+        // Hands with xAnchor/yAnchor (star indicators) are dynamic since they
+        // orbit at a radius.
         if (part.type === 'QHand') {
-            if (part.src && currentImages) {
+            if (part.src && currentImages && !part.xAnchor && !part.yAnchor) {
                 drawImageHand(ctx, part, env);
             }
-            // Geometric hands (with length) are drawn in renderFrame
             continue;
         }
 
@@ -354,7 +356,15 @@ function drawDynamicParts(
     env: Environment,
 ): void {
     if (part.type === 'QHand') {
-        drawQHand(ctx, part, env);
+        if (part.src && !part.length && currentImages && (part.xAnchor || part.yAnchor)) {
+            // Image-based hand with anchors (e.g. star indicators) — draw
+            // dynamically since the angle changes per frame.
+            // Static image hands (no anchors, e.g. moon disc) are drawn
+            // in the static cache to maintain correct layering.
+            drawImageHand(ctx, part, env);
+        } else {
+            drawQHand(ctx, part, env);
+        }
     } else if (part.type === 'Static') {
         for (const child of part.children) {
             drawDynamicParts(ctx, child, env);
@@ -1066,11 +1076,12 @@ function drawImageHand(
         ctx.rotate(angle);
     }
 
-    // xAnchor/yAnchor shift the image (e.g. star indicators offset from center)
-    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : 0;
-    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : 0;  // Negate Y
+    // xAnchor: pivot X position from image's left edge (default: image center)
+    // yAnchor: pivot Y offset — image inner edge sits at this radius
+    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
+    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;  // Negate Y
 
-    ctx.drawImage(bitmap, xAnchor - drawW / 2, yAnchor - drawH / 2, drawW, drawH);
+    ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
     ctx.restore();
 }
 

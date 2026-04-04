@@ -18,6 +18,8 @@ import bandUrl from './assets/haleakala/band-front-4x.png';
 import caseUrl from './assets/haleakala/case-front-4x.png';
 import moonESUrl from './assets/chandra/moonES-4x.png';
 import whiteLogoUrl from './assets/chandra/logos-white-4x.png';
+import redStarUrl from './assets/chandra/redStar.png';
+import blueStarUrl from './assets/chandra/blueStar.png';
 // Selene assets
 import seleneFaceUrl from './assets/selene/face-white-trim-4x.png';
 import seleneMoonUrl from './assets/selene/moonES72-4x.png';
@@ -42,6 +44,8 @@ const IMAGE_MAP: Record<string, { url: string; scale: number }> = {
     // Chandra assets
     '../partsBin/moonES.png':                             { url: moonESUrl, scale: 0.25 },
     '../partsBin/logos/white.png':                         { url: whiteLogoUrl, scale: 0.25 },
+    'redStar.png':                                        { url: redStarUrl, scale: 1 },
+    'blueStar.png':                                       { url: blueStarUrl, scale: 1 },
     // Selene assets — scale to cover dialOuterRad*2=274 (274/1060 ≈ 0.2585)
     'face-white-trim.png':                                { url: seleneFaceUrl, scale: 274 / 1060 },
     '../partsBin/moonES72.png':                           { url: seleneMoonUrl, scale: 0.25 },
