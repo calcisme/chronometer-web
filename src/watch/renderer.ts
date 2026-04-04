@@ -180,6 +180,7 @@ function renderPartsWithWindows(
     canvasHeight: number,
     scale: number,
     terminatorLeaves?: TerminatorLeafState[],
+    applyTrailingCutouts: boolean = false,
 ): void {
     const pendingWindows: WindowPart[] = [];
 
@@ -225,10 +226,14 @@ function renderPartsWithWindows(
         }
     }
 
-    // Leftover pending windows (not followed by a renderable part) —
-    // draw borders only. In iOS, windows only clip their associated view;
-    // stray windows with no following content should not erase the canvas.
+    // Leftover pending windows (not followed by a renderable part).
+    // Inside <static> blocks, trailing windows cut through the entire static
+    // composite (e.g. the AM/PM porthole). At the top level, only draw borders
+    // — cutouts would incorrectly erase content from earlier parts.
     for (const win of pendingWindows) {
+        if (applyTrailingCutouts) {
+            cutWindowHole(ctx, win, env);
+        }
         drawWindowBorder(ctx, win, env);
     }
 }
@@ -384,8 +389,9 @@ function drawStatic(
     canvasHeight: number,
     scale: number,
 ): void {
-    // Static containers can have windows inside them
-    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale);
+    // Static containers can have windows inside them — trailing windows
+    // should cut through the entire static composite (e.g. AM/PM porthole).
+    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, undefined, true);
 }
 
 // ============================================================================
