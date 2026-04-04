@@ -658,37 +658,83 @@ function drawQHand(
     // Main hand body (rect stops short by oTail so ornament overlaps cleanly)
     const oTail = evalAttr(part.oTail, env);
     const length2 = evalAttr(part.length2, env);
-    drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
 
-    // Ornament arrowhead (diamond/kite shape at the tip)
-    const oLength = evalAttr(part.oLength, env);
-    if (oLength > 0) {
+    if (handType === 'quad') {
+        // iOS ECQHandQuad: bezier curves + filled triangle tip
+        // Uses oWidth, oLength, oCenter (not width for the shape)
+        const oLength = evalAttr(part.oLength, env);
         const oWidth = evalAttr(part.oWidth, env);
-        const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
-        const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-        drawHandOrnament(ctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor);
-    }
+        const oCenter2 = evalAttr(part.oCenter, env);
 
-    // Tail circle
-    const oRadius = evalAttr(part.oRadius, env);
-    if (oRadius > 0) {
-        const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-        drawTailCircle(ctx, tail, oRadius, lineWidth, oStrokeColor, oFillColor);
-    }
+        // Two quadratic bezier curves forming the bulging body
+        // iOS Y-up → Canvas Y-down: negate Y values
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = strokeColor;
+        ctx.fillStyle = fillColor;
 
-    // Center dot
-    const oCenter = evalAttr(part.oCenter, env);
-    if (oCenter > 0) {
-        const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        drawCenterDot(ctx, oCenter, osc);
+        // Left curve: from -oWidth/12 at oCenter up to -oWidth/4 at oLength
+        ctx.beginPath();
+        ctx.moveTo(-oWidth / 12, -oCenter2);
+        ctx.quadraticCurveTo(-oWidth * 0.45, -oLength / 2, -oWidth / 4, -oLength);
+        // Right curve: from oWidth/4 at oLength down to oWidth/12 at oCenter
+        ctx.moveTo(oWidth / 4, -oLength);
+        ctx.quadraticCurveTo(oWidth * 0.45, -oLength / 2, oWidth / 12, -oCenter2);
+        if (fillColor !== 'rgba(0,0,0,0)') ctx.fill();
+        if (strokeColor !== 'rgba(0,0,0,0)') ctx.stroke();
+
+        // Filled triangle tip from oLength to length
+        const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+        ctx.fillStyle = oStrokeColor;
+        ctx.lineWidth = 0;
+        ctx.beginPath();
+        ctx.moveTo(oWidth / 4 + lineWidth / 2, -oLength);
+        ctx.lineTo(0, -length);
+        ctx.lineTo(-oWidth / 4 - lineWidth / 2, -oLength);
+        ctx.lineTo(-oWidth / 4 + lineWidth / 2, -oLength);
+        ctx.lineTo(0, -oLength * 1.2);
+        ctx.lineTo(oWidth / 4 - lineWidth / 2, -oLength);
+        ctx.closePath();
+        ctx.fill();
+
+        // Center dot
+        const oCenter3 = evalAttr(part.oCenter, env);
+        if (oCenter3 > 0) {
+            const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+            drawCenterDot(ctx, oCenter3, osc);
+        }
+    } else {
+        drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
+
+        // Ornament diamond (for non-quad hands)
+        const oLength = evalAttr(part.oLength, env);
+        if (oLength > 0) {
+            const oWidth = evalAttr(part.oWidth, env);
+            const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
+            const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+            const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
+            drawHandOrnament(ctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor);
+        }
+
+        // Tail circle
+        const oRadius = evalAttr(part.oRadius, env);
+        if (oRadius > 0) {
+            const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+            const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
+            drawTailCircle(ctx, tail, oRadius, lineWidth, oStrokeColor, oFillColor);
+        }
+
+        // Center dot
+        const oCenter2 = evalAttr(part.oCenter, env);
+        if (oCenter2 > 0) {
+            const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+            drawCenterDot(ctx, oCenter2, osc);
+        }
     }
 
     ctx.restore();
 }
 
-/** Diamond/kite-shaped arrowhead ornament — matches original iOS drawOrnaments */
+/** Diamond/kite-shaped arrowhead ornament at the hand tip */
 function drawHandOrnament(
     ctx: CanvasRenderingContext2D,
     length: number,
@@ -699,7 +745,7 @@ function drawHandOrnament(
     oStrokeColor: string,
     oFillColor: string,
 ): void {
-    // Original iOS coords (Y-up) → Canvas (Y-down, hands point in -Y)
+    // Ornament extends beyond the hand tip as a kite/arrowhead
     const baseY = -(length - oLineWidth * 3);   // widest point
     const tipY = -(length - oLineWidth * 3 + oLength);  // tip
     const innerY = -(length - oTail);            // inner point
@@ -778,7 +824,7 @@ function drawHandShape(
     ctx.strokeStyle = strokeColor;
     ctx.fillStyle = fillColor;
 
-    if (handType === 'rect' || handType === 'quad') {
+    if (handType === 'rect') {
         // Rectangle hand: from length2 to length (or tail to length if no length2)
         const hw = width / 2;
         if (length2 > 0) {
@@ -787,11 +833,22 @@ function drawHandShape(
         } else {
             ctx.rect(-hw, tail, width, -(length + tail - oTail));
         }
+    } else if (handType === 'quad') {
+        // Diamond/needle hand: quadrilateral that tapers from a point at
+        // the tail to max width at the midpoint, then back to a point at the tip.
+        const hw = width / 2;
+        const totalLen = length + tail;
+        const midY = -(totalLen * 0.3) + tail;  // widest point at ~30% from center
+
+        ctx.moveTo(0, tail);              // point at tail end
+        ctx.lineTo(hw, midY);             // right side at widest point
+        ctx.lineTo(0, -(length - oTail)); // point at tip
+        ctx.lineTo(-hw, midY);            // left side at widest point
+        ctx.closePath();
     } else {
-        // Triangle hand: pointed tip, wide base
+        // Triangle hand (default): pointed tip, wide base
         const hw = width / 2;
         if (length2 > 0) {
-            // Short outer segment triangle: start at length2, tip at length
             ctx.moveTo(0, -length);          // tip
             ctx.lineTo(hw, -length2);        // bottom right
             ctx.lineTo(-hw, -length2);       // bottom left
