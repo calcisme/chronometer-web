@@ -27,9 +27,10 @@ import {
     distanceOfPlanetInAU,
     planetSizeAndParallax,
     altitudeAtRiseSet,
+    generalObliquity,
 } from './es-coordinates';
 import { WB_sunLongitudeApparent, WB_sunRAAndDecl } from './wb-sun';
-import { WB_MoonDistance } from './wb-moon';
+import { WB_MoonDistance, WB_MoonAscendingNodeLongitude } from './wb-moon';
 
 const TWO_PI = Math.PI * 2;
 
@@ -408,6 +409,84 @@ export function moonRelativePositionAngle(
 
     // Combine into final angle
     let angle = -northAngle - posAngle - Math.PI / 2;
+    if (angle < 0) {
+        angle += TWO_PI;
+    } else if (angle > TWO_PI) {
+        angle -= TWO_PI;
+    }
+
+    return angle;
+}
+
+// ============================================================================
+// Moon relative angle (rotation of the Moon IMAGE as seen in the sky)
+// ============================================================================
+
+// Moon equator–ecliptic inclination (~1.5427°)
+const kECsinMoonEquatorEclipticAngle = 0.026917056028711;
+const kECcosMoonEquatorEclipticAngle = 0.999637670406006;
+
+/**
+ * Rotation of the Moon *image* as it appears in the sky.
+ *
+ * Uses Meeus p373 "Position Angle of Axis" to determine the
+ * angle of the Moon's north pole projected onto the sky plane,
+ * combined with the observer's sky orientation (north angle).
+ *
+ * This is different from moonRelativePositionAngle, which gives
+ * the terminator rotation (Sun–Moon position angle).
+ *
+ * Ported from iOS ESAstronomy.cpp moonRelativeAngle() (line 3503).
+ */
+export function moonRelativeAngle(
+    dateInterval: number,
+    observerLatitude: number,
+    observerLongitude: number,
+    cache: AstroCache | null,
+): number {
+    // Moon RA/Decl
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+
+    // Moon local hour angle, altitude, azimuth
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const moonHourAngle = lst - moonRA;
+    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude)
+        + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
+    const moonAz = Math.atan2(
+        -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
+        Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt,
+    );
+    const moonAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
+
+    // Approximate geocentric longitude/latitude
+    const apparentGeocentricLongitude = moonRA - gst;
+    const apparentGeocentricLatitude = moonDecl;
+
+    // Meeus p373, "Position Angle of Axis"
+    const { julianCenturiesSince2000Epoch } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const eclipticTrueObliquity = generalObliquity(julianCenturiesSince2000Epoch);
+    const longitudeOfAscendingNode = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch, cache ?? undefined);
+
+    const W = apparentGeocentricLongitude - longitudeOfAscendingNode;
+    const b = Math.asin(
+        -Math.sin(W) * Math.cos(apparentGeocentricLatitude) * kECsinMoonEquatorEclipticAngle
+        - Math.sin(apparentGeocentricLatitude) * kECcosMoonEquatorEclipticAngle,
+    );
+    // Ignore physical librations (Meeus p373, rho and sigma)
+    const V = longitudeOfAscendingNode;
+    const X = kECsinMoonEquatorEclipticAngle * Math.sin(V);
+    const Y = kECsinMoonEquatorEclipticAngle * Math.cos(V) * Math.cos(eclipticTrueObliquity)
+        - kECcosMoonEquatorEclipticAngle * Math.sin(eclipticTrueObliquity);
+    const omega = Math.atan2(X, Y);
+    const sinP = Math.sqrt(X * X + Y * Y) * Math.cos(moonRA - omega) / Math.cos(b);
+    const posAngle = Math.asin(sinP);
+
+    let angle = -northAngle - posAngle;
     if (angle < 0) {
         angle += TWO_PI;
     } else if (angle > TWO_PI) {

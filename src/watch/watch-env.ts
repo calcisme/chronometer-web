@@ -23,7 +23,8 @@ import {
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
 import {
     sunAltitude, sunAzimuth, moonAltitude, moonAzimuth, moonAge,
-    moonRelativePositionAngle, moonElongation as computeMoonElongation,
+    moonRelativePositionAngle, moonRelativeAngle as computeMoonRelativeAngle,
+    moonElongation as computeMoonElongation,
     closestPhaseDayNumber, planetEclipticLongitude, planetEclipticLatitude,
     planetGeocentricDistance, lunarAscendingNodeLongitude as computeLunarAscendingNode,
 } from '../astronomy/es-astro.js';
@@ -226,10 +227,10 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         const di = dateToDateInterval(getNow());
         return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
-    // Stub: moonRelativeAngle is the rotation of the moon image on its own axis.
-    // Not yet implemented (used by Chandra's image-based moon hand, which isn't
-    // rendered since image assets aren't bundled). Returns 0 for now.
-    functions.set('moonRelativeAngle', () => 0);
+    functions.set('moonRelativeAngle', () => {
+        const di = dateToDateInterval(getNow());
+        return computeMoonRelativeAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
 
     // --- Moon elongation (angular separation Sun–Moon) ---
     functions.set('moonElongation', () => {
