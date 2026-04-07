@@ -18,7 +18,7 @@ import chandraXML from './watch/assets/chandra/Chandra-I-android.xml';
 import seleneXML from './watch/assets/selene/Selene-I.xml';
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
-import { buildStaticCache, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
+import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import { loadWatchImages } from './watch/image-loader.js';
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
@@ -102,8 +102,8 @@ interface FaceInstance {
     watch: Watch;
     /** Live expression environment. */
     env: Environment;
-    /** Rendered static background (or null while being built). */
-    staticCache: OffscreenCanvas | null;
+    /** Whether static block caches have been built. */
+    cachesBuilt: boolean;
     /** Animation states for dynamic hands. */
     handStates: HandState[];
     /** The canvas element for this face. */
@@ -186,7 +186,7 @@ async function main() {
         const face: FaceInstance = {
             watch,
             env,
-            staticCache: null,
+            cachesBuilt: false,
             handStates: [],
             canvas,
             ctx,
@@ -232,7 +232,8 @@ async function main() {
         if (face.terminatorLeaves.length > 0) {
             updateLeafAngles(face.terminatorLeaves, face.env);
         }
-        face.staticCache = buildStaticCache(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        face.cachesBuilt = true;
         face.handStates = initHandStates(watch, env, performance.now());
     }
 
@@ -266,21 +267,21 @@ async function main() {
         let stillAnimating = false;
 
         for (const face of faces) {
-            if (!face.enabled || !face.staticCache) continue;
+            if (!face.enabled || !face.cachesBuilt) continue;
             tickAnimations(face.handStates, face.env, now);
             // Rebuild terminator cache at the part's update interval
             if (face.terminatorLeaves.length > 0) {
                 const intervalMs = Math.min(...face.terminatorLeaves.map(l => l.updateIntervalSec)) * 1000;
                 if (now - face.lastTerminatorRebuild > intervalMs) {
                     updateLeafAngles(face.terminatorLeaves, face.env);
-                    face.staticCache = buildStaticCache(
+                    buildStaticBlockCaches(
                         face.watch, face.env, face.canvas.width, face.canvas.height,
                         face.scale, face.images, face.terminatorLeaves
                     );
                     face.lastTerminatorRebuild = now;
                 }
             }
-            renderFrame(face.ctx, face.staticCache, face.watch, face.env, face.scale);
+            renderFrame(face.ctx, face.watch, face.env, face.scale, face.terminatorLeaves);
             if (anyAnimating(face.handStates)) stillAnimating = true;
         }
 
@@ -340,7 +341,7 @@ async function main() {
         for (const face of faces) {
             applySize(face, size);
             // Invalidate old static cache while we rebuild
-            face.staticCache = null;
+            face.cachesBuilt = false;
         }
 
         // Rebuild all static caches one by one, then restart scheduler
@@ -377,7 +378,7 @@ async function main() {
             face.watch.parts = freshWatch.parts;
             face.watch.initExprs = freshWatch.initExprs;
             face.env = createWatchEnvironment(face.watch, newLat, newLon);
-            face.staticCache = null;
+            face.cachesBuilt = false;
         }
         buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
     }

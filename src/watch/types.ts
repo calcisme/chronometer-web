@@ -128,6 +128,9 @@ export interface QHandPart extends PartBase {
     oFillColor?: ASTNode;
     oCenter?: ASTNode;
     oRadius?: ASTNode;
+    tFillColor?: ASTNode;
+    tStrokeColor?: ASTNode;
+    tLineWidth?: ASTNode;
     /** Image source path (for image-based `hand` elements). */
     src?: string;
     /** Image anchor X offset in XML coords. */
@@ -231,6 +234,10 @@ export interface WindowPart extends PartBase {
 export interface StaticPart extends PartBase {
     type: 'Static';
     children: WatchPart[];
+    /** Pre-rendered cache (with all window cutouts baked in). Set at cache-build time. */
+    cachedCanvas?: OffscreenCanvas;
+    /** Windows that precede this static block in document order; consumed at cache-build time. */
+    precedingWindows?: WindowPart[];
 }
 
 // ============================================================================

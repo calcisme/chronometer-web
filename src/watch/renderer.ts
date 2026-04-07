@@ -1,17 +1,16 @@
 /**
  * Canvas 2D renderer for Chronometer watch parts.
  *
- * Two-phase architecture for 60fps animation:
- *   1. buildStaticCache() — renders all static parts (dials, text, ticks,
- *      images, QRects, windows) to an OffscreenCanvas. Runs once per
- *      mode/date change.
- *   2. renderFrame() — blits the cached static layer, then draws dynamic
- *      parts (hands) on top. Runs every frame via requestAnimationFrame.
+ * Document-order architecture:
+ *   1. buildStaticBlockCaches() — pre-renders only explicit <static> blocks
+ *      (with window cutouts baked in) to OffscreenCanvases stored on each
+ *      StaticPart node. Runs once per mode/date/resize change.
+ *   2. renderFrame() — iterates ALL parts in XML document order each frame:
+ *      - <static> blocks → blit their pre-cached image
+ *      - QHands → draw live geometry
+ *      - Everything else → draw directly
  *
- * Window cutouts use Canvas 2D compositing (destination-out) to punch
- * transparent holes through the part that follows them, matching the
- * original iOS rendering pipeline.
- *
+ * Window cutouts use Canvas 2D compositing (destination-out).
  * Parts are always rendered in XML document order — no sorting or z-index.
  */
 
@@ -53,21 +52,20 @@ let currentImages: Map<string, LoadedImage> | undefined;
 // ============================================================================
 
 /**
- * Build an OffscreenCanvas containing all static parts (everything except
- * QHands and Buttons). Window cutouts are applied via compositing.
- *
- * Call this once on init, and again when mode/date/timezone changes.
- */
-/**
  * Bezel ring thickness in XML coordinate units.
- * Computed as floor(2/3 * gap) where gap = faceRadius - mainR.
- * For Haleakala: faceRadius=133, mainR=118, gap=15, bezel=10.
  * This constant is exported so the scale calculation in standalone.ts
  * can account for the bezel when sizing the canvas.
  */
 export const BEZEL_THICKNESS_XML = 10;
 
-export function buildStaticCache(
+/**
+ * Pre-render all <static> blocks in the watch.
+ *
+ * Each StaticPart gets its own OffscreenCanvas (stored on part.cachedCanvas)
+ * with all window cutouts — both internal and from preceding windows — baked
+ * in. Call once on init, and again when mode/date/timezone/size changes.
+ */
+export function buildStaticBlockCaches(
     watch: Watch,
     env: Environment,
     canvasWidth: number,
@@ -75,72 +73,72 @@ export function buildStaticCache(
     scale: number,
     images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
-): OffscreenCanvas {
+): void {
     currentImages = images;
-    const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
-    const ctx = cache.getContext('2d')!;
 
+    // Walk top-level parts, accumulating windows that precede <static> blocks
+    const pendingWindows: WindowPart[] = [];
 
-    // Set up coordinate system: origin at center, scale XML units → pixels
-    ctx.translate(canvasWidth / 2, canvasHeight / 2);
-    ctx.scale(scale, scale);
+    for (const part of watch.parts) {
+        if (part.type === 'Window') {
+            pendingWindows.push(part);
+        } else if (part.type === 'Static') {
+            // Capture the preceding windows for this block
+            part.precedingWindows = pendingWindows.slice();
+            pendingWindows.length = 0;
 
-    // Render static parts with window accumulation
-    renderPartsWithWindows(ctx, watch.parts, env, canvasWidth, canvasHeight, scale, terminatorLeaves);
+            // Build the cache for this static block
+            const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
+            const ctx = cache.getContext('2d')!;
+            ctx.translate(canvasWidth / 2, canvasHeight / 2);
+            ctx.scale(scale, scale);
 
-    // Draw bezel ring on top of everything, if the watch specifies one
-    if (watch.bezelColor) {
-        const faceRadius = watch.faceWidth / 2;
-        const outerRadius = faceRadius + BEZEL_THICKNESS_XML;
-        ctx.beginPath();
-        // Outer circle (clockwise)
-        ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
-        // Inner circle (anticlockwise — punches a hole for the face)
-        ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
-        ctx.fillStyle = watch.bezelColor;
-        ctx.fill('evenodd');
+            // Draw the static block's children with internal window handling
+            renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, terminatorLeaves, true);
 
-        // Black boundary circle at the bezel/face join
-        ctx.beginPath();
-        ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 0.75;
-        ctx.stroke();
+            // Apply preceding window cutouts
+            for (const win of part.precedingWindows) {
+                cutWindowHole(ctx, win, env);
+            }
+
+            part.cachedCanvas = cache;
+        } else {
+            // Non-window, non-static parts reset the pending windows
+            pendingWindows.length = 0;
+        }
     }
-
-    return cache;
 }
 
 /**
- * Render a single frame: blit the static cache, then draw dynamic hands.
+ * Render a single frame in document order.
+ *
+ * All parts are drawn in XML order: <static> blocks blit pre-cached images,
+ * QHands draw live, and everything else draws directly.
  */
 export function renderFrame(
     ctx: CanvasRenderingContext2D,
-    staticCache: OffscreenCanvas,
     watch: Watch,
     env: Environment,
     scale: number,
+    terminatorLeaves?: TerminatorLeafState[],
 ): void {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
 
-    // Clear and draw cached static layer
     ctx.clearRect(0, 0, w, h);
-    ctx.drawImage(staticCache, 0, 0);
-
-    // Draw dynamic parts (hands) on top
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
-    for (const part of watch.parts) {
-        drawDynamicParts(ctx, part, env);
-    }
+
+    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, terminatorLeaves);
+    drawBezel(ctx, watch);
+
     ctx.restore();
 }
 
 /**
- * Legacy single-call API — builds cache and renders in one step.
- * Kept for backward compatibility during transition.
+ * Legacy single-call API — builds caches and renders in one step.
+ * Kept for backward compatibility (main.ts).
  */
 export function renderWatch(
     ctx: CanvasRenderingContext2D,
@@ -151,26 +149,143 @@ export function renderWatch(
 ): void {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
-    const cache = buildStaticCache(watch, env, w, h, scale, images);
-    ctx.drawImage(cache, 0, 0);
-
-    // Draw hands on top
-    ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(scale, scale);
-    for (const part of watch.parts) {
-        drawDynamicParts(ctx, part, env);
-    }
-    ctx.restore();
+    buildStaticBlockCaches(watch, env, w, h, scale, images);
+    renderFrame(ctx, watch, env, scale);
 }
 
 // ============================================================================
 // Window accumulation + compositing
 // ============================================================================
 
+// ============================================================================
+// Document-order frame rendering
+// ============================================================================
+
+/**
+ * Iterate parts in document order, drawing each appropriately.
+ * Windows accumulate and are applied to the next drawable part
+ * (unless consumed by a <static> block, whose cache already has them).
+ */
+function renderPartsDocumentOrder(
+    ctx: CanvasRenderingContext2D,
+    parts: WatchPart[],
+    env: Environment,
+    canvasWidth: number,
+    canvasHeight: number,
+    scale: number,
+    terminatorLeaves?: TerminatorLeafState[],
+): void {
+    const pendingWindows: WindowPart[] = [];
+
+    for (const part of parts) {
+        if (part.type === 'Window') {
+            pendingWindows.push(part);
+            continue;
+        }
+
+        if (part.type === 'Button') continue;
+
+        if (part.type === 'Static') {
+            // The static cache already has preceding window cutouts baked in
+            pendingWindows.length = 0;
+
+            if (part.cachedCanvas) {
+                ctx.save();
+                ctx.resetTransform();
+                ctx.drawImage(part.cachedCanvas, 0, 0);
+                ctx.restore();
+            }
+
+            // Draw any QHands inside the static block (they're dynamic)
+            drawQHandsInParts(ctx, part.children, env);
+
+            // Draw window borders from the preceding windows
+            if (part.precedingWindows) {
+                for (const win of part.precedingWindows) {
+                    drawWindowBorder(ctx, win, env);
+                }
+            }
+            continue;
+        }
+
+        if (part.type === 'QHand') {
+            // Flush any pending windows as borders only (they don't clip QHands)
+            for (const win of pendingWindows) {
+                drawWindowBorder(ctx, win, env);
+            }
+            pendingWindows.length = 0;
+
+            if (part.src && currentImages) {
+                drawImageHand(ctx, part, env);
+            } else {
+                drawQHand(ctx, part, env);
+            }
+            continue;
+        }
+
+        if (part.type === 'Terminator') {
+            if (terminatorLeaves && terminatorLeaves.length > 0) {
+                drawTerminator(ctx, terminatorLeaves);
+            }
+            continue;
+        }
+
+        // Regular drawable part — apply pending window cutouts if any
+        if (pendingWindows.length > 0) {
+            renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+            pendingWindows.length = 0;
+        } else {
+            drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+        }
+    }
+
+    // Leftover windows — draw borders only
+    for (const win of pendingWindows) {
+        drawWindowBorder(ctx, win, env);
+    }
+}
+
+/** Draw only QHands found within a list of parts (recursive into Static). */
+function drawQHandsInParts(
+    ctx: CanvasRenderingContext2D,
+    parts: WatchPart[],
+    env: Environment,
+): void {
+    for (const part of parts) {
+        if (part.type === 'QHand') {
+            if (part.src && currentImages) {
+                drawImageHand(ctx, part, env);
+            } else {
+                drawQHand(ctx, part, env);
+            }
+        } else if (part.type === 'Static') {
+            drawQHandsInParts(ctx, part.children, env);
+        }
+    }
+}
+
+/** Draw the bezel ring if the watch specifies one. */
+function drawBezel(ctx: RenderContext, watch: Watch): void {
+    if (!watch.bezelColor) return;
+    const faceRadius = watch.faceWidth / 2;
+    const outerRadius = faceRadius + BEZEL_THICKNESS_XML;
+    ctx.beginPath();
+    ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
+    ctx.fillStyle = watch.bezelColor;
+    ctx.fill('evenodd');
+
+    ctx.beginPath();
+    ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+}
+
 /**
  * Render a list of parts in document order, accumulating windows and
  * applying cutouts to the next drawable part.
+ * Used internally for building <static> block caches.
  */
 function renderPartsWithWindows(
     ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
@@ -190,16 +305,10 @@ function renderPartsWithWindows(
             continue;
         }
 
-        // Skip buttons (interactive, not rendered)
-        if (part.type === 'Button') {
-            continue;
-        }
+        if (part.type === 'Button') continue;
 
-        // QHand: geometric hands are always drawn dynamically each frame.
-        // Image-based hands (with src, no length) are drawn in static cache
-        // to maintain correct rendering order (e.g. moon disc before terminator).
-        // Hands with xAnchor/yAnchor (star indicators) are dynamic since they
-        // orbit at a radius.
+        // QHand: Image-based hands without anchors (e.g. moon disc) are drawn
+        // into the static cache. Everything else is dynamic.
         if (part.type === 'QHand') {
             if (part.src && currentImages && !part.xAnchor && !part.yAnchor) {
                 drawImageHand(ctx, part, env);
@@ -207,8 +316,6 @@ function renderPartsWithWindows(
             continue;
         }
 
-        // Terminator: draw leaves in document order (they'll be clipped by
-        // any following porthole window, just like in iOS)
         if (part.type === 'Terminator') {
             if (terminatorLeaves && terminatorLeaves.length > 0) {
                 drawTerminator(ctx, terminatorLeaves);
@@ -217,19 +324,14 @@ function renderPartsWithWindows(
         }
 
         if (pendingWindows.length > 0) {
-            // This part has windows — render to temp canvas, cut holes, composite
             renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
             pendingWindows.length = 0;
         } else {
-            // No pending windows — draw directly
             drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
         }
     }
 
-    // Leftover pending windows (not followed by a renderable part).
-    // Inside <static> blocks, trailing windows cut through the entire static
-    // composite (e.g. the AM/PM porthole). At the top level, only draw borders
-    // — cutouts would incorrectly erase content from earlier parts.
+    // Leftover pending windows
     for (const win of pendingWindows) {
         if (applyTrailingCutouts) {
             cutWindowHole(ctx, win, env);
@@ -351,29 +453,6 @@ function drawStaticPart(
             // Standalone window (no following part to clip) — just draw border
             drawWindowBorder(ctx, part, env);
             break;
-    }
-}
-
-/** Walk dynamic parts tree, drawing only QHands. */
-function drawDynamicParts(
-    ctx: CanvasRenderingContext2D,
-    part: WatchPart,
-    env: Environment,
-): void {
-    if (part.type === 'QHand') {
-        if (part.src && !part.length && currentImages && (part.xAnchor || part.yAnchor)) {
-            // Image-based hand with anchors (e.g. star indicators) — draw
-            // dynamically since the angle changes per frame.
-            // Static image hands (no anchors, e.g. moon disc) are drawn
-            // in the static cache to maintain correct layering.
-            drawImageHand(ctx, part, env);
-        } else {
-            drawQHand(ctx, part, env);
-        }
-    } else if (part.type === 'Static') {
-        for (const child of part.children) {
-            drawDynamicParts(ctx, child, env);
-        }
     }
 }
 
@@ -724,9 +803,12 @@ function drawQHand(
         // Tail circle
         const oRadius = evalAttr(part.oRadius, env);
         if (oRadius > 0) {
-            const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-            const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-            drawTailCircle(ctx, tail, oRadius, lineWidth, oStrokeColor, oFillColor);
+            const tLW = evalAttr(part.tLineWidth, env) || evalAttr(part.oLineWidth, env) || lineWidth;
+            const tSC = part.tStrokeColor ? evalColor(part.tStrokeColor, env)
+                      : (part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor);
+            const tFC = part.tFillColor ? evalColor(part.tFillColor, env)
+                      : (part.oFillColor ? evalColor(part.oFillColor, env) : fillColor);
+            drawTailCircle(ctx, tail, oRadius, tLW, tSC, tFC);
         }
 
         // Center dot
@@ -796,9 +878,12 @@ function drawTailCircle(
     ctx.strokeStyle = strokeColor;
     ctx.fillStyle = fillColor;
     ctx.beginPath();
-    ctx.arc(0, tail + 2 * oRadius, oRadius, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.stroke();
+    // iOS: CGRectMake(-oRadiusX, -tail-2*oRadius, oRadiusX*2, oRadius*2)
+    // The center of that ellipse is at y = -tail - oRadius (Y-up).
+    // In our Y-down canvas, the tail extends in +Y, so center = tail + oRadius.
+    ctx.arc(0, tail + oRadius, oRadius, 0, 2 * Math.PI);
+    if (fillColor !== 'rgba(0,0,0,0)') ctx.fill();
+    if (strokeColor !== 'rgba(0,0,0,0)') ctx.stroke();
 }
 
 /** Filled dot at the center of rotation */
