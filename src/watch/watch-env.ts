@@ -140,15 +140,11 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     functions.set('secondValue', () => liveTime().s);
     functions.set('hour24Number', () => liveTime().h24);
 
-    // --- Calendar (snapshot — changes daily) ---
-    const dayOfMonth = now.getDate();     // 1-31
-    const month = now.getMonth();         // 0-11
-    const weekday = now.getDay();         // 0=Sunday
-
-    functions.set('dayNumber', () => dayOfMonth - 1);  // 0-indexed for wheel math
-    functions.set('monthNumber', () => month);
-    functions.set('monthNumberAngle', () => month * 2 * Math.PI / 12);
-    functions.set('weekdayNumberAngle', () => weekday * 2 * Math.PI / 7);
+    // --- Calendar (LIVE — recompute from getNow()) ---
+    functions.set('dayNumber', () => getNow().getDate() - 1);  // 0-indexed for wheel math
+    functions.set('monthNumber', () => getNow().getMonth());
+    functions.set('monthNumberAngle', () => getNow().getMonth() * 2 * Math.PI / 12);
+    functions.set('weekdayNumberAngle', () => getNow().getDay() * 2 * Math.PI / 7);
 
     // Time-unit helpers (return value in seconds, matching iOS convention for update intervals)
     functions.set('days', () => 86400);
@@ -171,44 +167,81 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
 
-    // --- Sunrise/sunset for today ---
-    // Use LOCAL noon as starting point (not UT noon, which is 5 AM PDT and
-    // would find yesterday's sunset instead of today's)
-    const cache = pool.currentCache;
-    const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000 - 978307200;
-    const localNoon = localMidnight + 12 * 3600;
+    // --- Rise/set "for day" helpers ---
+    // iOS planetRiseSetForDay: search forward then backward, only accept
+    // results on the current calendar day.  Return NaN if no event today.
+    function riseSetForDay(
+        riseNotSet: boolean,
+        planetNumber: ECPlanetNumber,
+    ): number {
+        const fudgeSeconds = -5;  // match iOS: fudge backward slightly
+        const lookahead = 3600 * 13.2;
+        const calcDate = dateToDateInterval(getNow());
 
-    const sunrise = planetaryRiseSetTimeRefined(
-        localNoon, OBSERVER_LAT, OBSERVER_LON, true, ECPlanetNumber.Sun, NaN, pool,
-    );
-    const sunset = planetaryRiseSetTimeRefined(
-        localNoon, OBSERVER_LAT, OBSERVER_LON, false, ECPlanetNumber.Sun, NaN, pool,
-    );
-    if (!isNoRiseSet(sunrise)) {
-        const srDate = new Date((sunrise + 978307200) * 1000);
-        const srHour12 = (srDate.getHours() % 12) + srDate.getMinutes() / 60 + srDate.getSeconds() / 3600;
-        const srMinute = srDate.getMinutes() + srDate.getSeconds() / 60;
-        functions.set('sunriseForDayValid', () => 1);
-        functions.set('sunriseForDayHour12ValueAngle', () => srHour12 * 2 * Math.PI / 12);
-        functions.set('sunriseForDayMinuteValueAngle', () => srMinute * 2 * Math.PI / 60);
-    } else {
-        functions.set('sunriseForDayValid', () => 0);
-        functions.set('sunriseForDayHour12ValueAngle', () => 0);
-        functions.set('sunriseForDayMinuteValueAngle', () => 0);
+        // Search forward
+        const fwdResult = planetaryRiseSetTimeRefined(
+            calcDate + fudgeSeconds, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(fwdResult) && isSameLocalDay(fwdResult, calcDate)) {
+            return fwdResult;
+        }
+
+        // Forward wasn't today — search backward
+        const bwdResult = planetaryRiseSetTimeRefined(
+            calcDate - fudgeSeconds - lookahead, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(bwdResult) && isSameLocalDay(bwdResult, calcDate)) {
+            return bwdResult;
+        }
+
+        return NaN;  // no event on current day
     }
 
-    if (!isNoRiseSet(sunset)) {
-        const ssDate = new Date((sunset + 978307200) * 1000);
-        const ssHour12 = (ssDate.getHours() % 12) + ssDate.getMinutes() / 60 + ssDate.getSeconds() / 3600;
-        const ssMinute = ssDate.getMinutes() + ssDate.getSeconds() / 60;
-        functions.set('sunsetForDayValid', () => 1);
-        functions.set('sunsetForDayHour12ValueAngle', () => ssHour12 * 2 * Math.PI / 12);
-        functions.set('sunsetForDayMinuteValueAngle', () => ssMinute * 2 * Math.PI / 60);
-    } else {
-        functions.set('sunsetForDayValid', () => 0);
-        functions.set('sunsetForDayHour12ValueAngle', () => 0);
-        functions.set('sunsetForDayMinuteValueAngle', () => 0);
+    /** Check if two date intervals fall on the same local calendar day */
+    function isSameLocalDay(di1: number, di2: number): boolean {
+        const d1 = new Date((di1 + 978307200) * 1000);
+        const d2 = new Date((di2 + 978307200) * 1000);
+        return d1.getFullYear() === d2.getFullYear()
+            && d1.getMonth() === d2.getMonth()
+            && d1.getDate() === d2.getDate();
     }
+
+    /** Convert a dateInterval rise/set result into hour12/minute/hour24 values */
+    function riseSetAngles(di: number): { hour12: number; minute: number; hour24: number } {
+        const d = new Date((di + 978307200) * 1000);
+        return {
+            hour12: (d.getHours() % 12) + d.getMinutes() / 60 + d.getSeconds() / 3600,
+            minute: d.getMinutes() + d.getSeconds() / 60,
+            hour24: d.getHours(),
+        };
+    }
+
+    // --- Sunrise/sunset for today (LIVE — recompute on call) ---
+    functions.set('sunriseForDayValid', () => {
+        return isNaN(riseSetForDay(true, ECPlanetNumber.Sun)) ? 0 : 1;
+    });
+    functions.set('sunriseForDayHour12ValueAngle', () => {
+        const sr = riseSetForDay(true, ECPlanetNumber.Sun);
+        return isNaN(sr) ? 0 : riseSetAngles(sr).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('sunriseForDayMinuteValueAngle', () => {
+        const sr = riseSetForDay(true, ECPlanetNumber.Sun);
+        return isNaN(sr) ? 0 : riseSetAngles(sr).minute * 2 * Math.PI / 60;
+    });
+
+    functions.set('sunsetForDayValid', () => {
+        return isNaN(riseSetForDay(false, ECPlanetNumber.Sun)) ? 0 : 1;
+    });
+    functions.set('sunsetForDayHour12ValueAngle', () => {
+        const ss = riseSetForDay(false, ECPlanetNumber.Sun);
+        return isNaN(ss) ? 0 : riseSetAngles(ss).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('sunsetForDayMinuteValueAngle', () => {
+        const ss = riseSetForDay(false, ECPlanetNumber.Sun);
+        return isNaN(ss) ? 0 : riseSetAngles(ss).minute * 2 * Math.PI / 60;
+    });
 
     // --- Moon (LIVE — recompute each call) ---
     functions.set('moonAltitude', () => {
@@ -238,19 +271,18 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         return computeMoonElongation(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
 
-    // --- Closest phase quarter day numbers ---
-    // Each returns the day-of-month (1-based) of the closest occurrence
+    // --- Closest phase quarter day numbers (LIVE — recompute from getNow()) ---
     functions.set('closestNewMoonDayNumber', () => {
-        return closestPhaseDayNumber(0, dateInterval) - 1;  // 0-indexed for wheel math
+        return closestPhaseDayNumber(0, dateToDateInterval(getNow())) - 1;
     });
     functions.set('closestFirstQuarterDayNumber', () => {
-        return closestPhaseDayNumber(Math.PI / 2, dateInterval) - 1;
+        return closestPhaseDayNumber(Math.PI / 2, dateToDateInterval(getNow())) - 1;
     });
     functions.set('closestFullMoonDayNumber', () => {
-        return closestPhaseDayNumber(Math.PI, dateInterval) - 1;
+        return closestPhaseDayNumber(Math.PI, dateToDateInterval(getNow())) - 1;
     });
     functions.set('closestThirdQuarterDayNumber', () => {
-        return closestPhaseDayNumber(3 * Math.PI / 2, dateInterval) - 1;
+        return closestPhaseDayNumber(3 * Math.PI / 2, dateToDateInterval(getNow())) - 1;
     });
 
     // --- Planetary ecliptic coordinates ---
@@ -279,81 +311,38 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // --- QWedge-only function (deferred — QWedge rendering not yet implemented) ---
     functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (_n: number) => 0);
 
-    // --- Moonrise/moonset "for day" ---
-    // iOS planetRiseSetForDay: search forward then backward, only accept
-    // results on the current calendar day.  Return NaN if no event today.
-    function riseSetForDay(
-        riseNotSet: boolean,
-        planetNumber: ECPlanetNumber,
-    ): number {
-        const fudgeSeconds = -5;  // match iOS: fudge backward slightly
-        const lookahead = 3600 * 13.2;
-        const calcDate = dateToDateInterval(getNow());
+    // --- Moonrise/moonset for today (LIVE — recompute on call) ---
+    functions.set('moonriseForDayValid', () => {
+        return isNaN(riseSetForDay(true, ECPlanetNumber.Moon)) ? 0 : 1;
+    });
+    functions.set('moonriseForDayHour12ValueAngle', () => {
+        const mr = riseSetForDay(true, ECPlanetNumber.Moon);
+        return isNaN(mr) ? 0 : riseSetAngles(mr).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('moonriseForDayMinuteValueAngle', () => {
+        const mr = riseSetForDay(true, ECPlanetNumber.Moon);
+        return isNaN(mr) ? 0 : riseSetAngles(mr).minute * 2 * Math.PI / 60;
+    });
+    functions.set('moonriseForDayHour24Number', () => {
+        const mr = riseSetForDay(true, ECPlanetNumber.Moon);
+        return isNaN(mr) ? 0 : riseSetAngles(mr).hour24;
+    });
 
-        // Search forward
-        const fwdResult = planetaryRiseSetTimeRefined(
-            calcDate + fudgeSeconds, OBSERVER_LAT, OBSERVER_LON,
-            riseNotSet, planetNumber, NaN, pool,
-        );
-
-        if (!isNoRiseSet(fwdResult) && isSameLocalDay(fwdResult, calcDate)) {
-            return fwdResult;
-        }
-
-        // Forward wasn't today — search backward
-        const bwdResult = planetaryRiseSetTimeRefined(
-            calcDate - fudgeSeconds - lookahead, OBSERVER_LAT, OBSERVER_LON,
-            riseNotSet, planetNumber, NaN, pool,
-        );
-
-        if (!isNoRiseSet(bwdResult) && isSameLocalDay(bwdResult, calcDate)) {
-            return bwdResult;
-        }
-
-        return NaN;  // no event on current day
-    }
-
-    /** Check if two date intervals fall on the same local calendar day */
-    function isSameLocalDay(di1: number, di2: number): boolean {
-        const d1 = new Date((di1 + 978307200) * 1000);
-        const d2 = new Date((di2 + 978307200) * 1000);
-        return d1.getFullYear() === d2.getFullYear()
-            && d1.getMonth() === d2.getMonth()
-            && d1.getDate() === d2.getDate();
-    }
-
-    const moonrise = riseSetForDay(true, ECPlanetNumber.Moon);
-    const moonset = riseSetForDay(false, ECPlanetNumber.Moon);
-
-    if (!isNaN(moonrise)) {
-        const mrDate = new Date((moonrise + 978307200) * 1000);
-        const mrHour12 = (mrDate.getHours() % 12) + mrDate.getMinutes() / 60;
-        const mrMinute = mrDate.getMinutes() + mrDate.getSeconds() / 60;
-        functions.set('moonriseForDayValid', () => 1);
-        functions.set('moonriseForDayHour12ValueAngle', () => mrHour12 * 2 * Math.PI / 12);
-        functions.set('moonriseForDayMinuteValueAngle', () => mrMinute * 2 * Math.PI / 60);
-        functions.set('moonriseForDayHour24Number', () => mrDate.getHours());
-    } else {
-        functions.set('moonriseForDayValid', () => 0);
-        functions.set('moonriseForDayHour12ValueAngle', () => 0);
-        functions.set('moonriseForDayMinuteValueAngle', () => 0);
-        functions.set('moonriseForDayHour24Number', () => 0);
-    }
-
-    if (!isNaN(moonset)) {
-        const msDate = new Date((moonset + 978307200) * 1000);
-        const msHour12 = (msDate.getHours() % 12) + msDate.getMinutes() / 60;
-        const msMinute = msDate.getMinutes() + msDate.getSeconds() / 60;
-        functions.set('moonsetForDayValid', () => 1);
-        functions.set('moonsetForDayHour12ValueAngle', () => msHour12 * 2 * Math.PI / 12);
-        functions.set('moonsetForDayMinuteValueAngle', () => msMinute * 2 * Math.PI / 60);
-        functions.set('moonsetForDayHour24Number', () => msDate.getHours());
-    } else {
-        functions.set('moonsetForDayValid', () => 0);
-        functions.set('moonsetForDayHour12ValueAngle', () => 0);
-        functions.set('moonsetForDayMinuteValueAngle', () => 0);
-        functions.set('moonsetForDayHour24Number', () => 0);
-    }
+    functions.set('moonsetForDayValid', () => {
+        return isNaN(riseSetForDay(false, ECPlanetNumber.Moon)) ? 0 : 1;
+    });
+    functions.set('moonsetForDayHour12ValueAngle', () => {
+        const ms = riseSetForDay(false, ECPlanetNumber.Moon);
+        return isNaN(ms) ? 0 : riseSetAngles(ms).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('moonsetForDayMinuteValueAngle', () => {
+        const ms = riseSetForDay(false, ECPlanetNumber.Moon);
+        return isNaN(ms) ? 0 : riseSetAngles(ms).minute * 2 * Math.PI / 60;
+    });
+    functions.set('moonsetForDayHour24Number', () => {
+        const ms = riseSetForDay(false, ECPlanetNumber.Moon);
+        return isNaN(ms) ? 0 : riseSetAngles(ms).hour24;
+    });
 
     // --- Button action stubs (no-ops) ---
     functions.set('manualSet', () => 0);
