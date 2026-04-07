@@ -924,8 +924,14 @@ function drawWheel(
     // tradius = text radius (same as radius if not specified)
     const tradius = radius;
 
-    // Note: SWheels do NOT draw their own background. The QRect behind
-    // the window handles that in the iOS rendering pipeline.
+    // QWheels draw their own circular background; SWheels rely on
+    // the QRect behind the window for their background.
+    if (part.wheelVariant === 'QWheel' && bgColor !== 'rgba(0,0,0,0)') {
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.fill();
+    }
 
     // Draw labels around the circle.
     // Two modes depending on whether the wheel spans a full circle or partial arc:
