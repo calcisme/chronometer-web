@@ -9,9 +9,9 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Selene I' beatsPerSecond='0' faceWidth='272' bezelColor='#c0c0c0' statusBarLoc='bottom'>
+<watch name='Selene I' beatsPerSecond='0' faceWidth='274' bezelColor='#c0c0c0' statusBarLoc='bottom'>
   <atlas frontWidth='512' frontHeight='512' backWidth='64' backHeight='256' nightWidth='512' nightHeight='512'/>
-  <init expr='faceWidth=272, backerWidth=faceWidth' />
+  <init expr='faceWidth=274, backerWidth=faceWidth' />
 
   <init expr='hairline=0.25, demoing=0, handFillColor=white, handStrokeColor=white, fgclr=black, bgclr=white, gwclr=0xffffffff, gbclr=black' />
   <init expr='r=143, ri=r-5, th=26, bx=r*cos(th*pi/180), by=r*sin(th*pi/180), dr=8, mx=dr*cos(th*pi/180), my=dr*sin(th*pi/180)' />
@@ -96,6 +96,7 @@
   <window	name='fullface hole'    x='0'	y='0' w='dialOuterRad*2' h='dialOuterRad*2' type='porthole' border='0' strokeColor='holeBorderColor' modes='front' />
   <static name='prefront' modes='front'>
     <QRect      name='maskRect'     x='-backerWidth/2' y='-backerWidth/2'  modes='front'  w='backerWidth' h='backerWidth' bgColor='black'/>
+    <QDial	name='border ring'	    x='0'   y='0'  modes='front'	radius='dialOuterRad'  marks='outer' markWidth='1'			     bgColor='clear' strokeColor='0xff000000' />
     <QDial	name='phase bg'	    x='0'   y='0'  modes='front'	radius='dialOuterRad-dialWidth/2'  marks='outer' markWidth='dialWidth'			     bgColor='clear' strokeColor='0xff707070' />
   </static>
   <window	name='fullface hole n'    x='0'	y='0' w='dialOuterRad*2' h='dialOuterRad*2' type='porthole' border='0' strokeColor='holeBorderColor' modes='night' />

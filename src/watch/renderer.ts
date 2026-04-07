@@ -315,6 +315,7 @@ function drawBezel(ctx: RenderContext, watch: Watch): void {
     ctx.lineWidth = 0.6;
     ctx.stroke();
 
+
     // --- 4. Fine outer edge highlight ---
     ctx.beginPath();
     ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI);
