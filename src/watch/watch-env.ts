@@ -279,15 +279,53 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // --- QWedge-only function (deferred — QWedge rendering not yet implemented) ---
     functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (_n: number) => 0);
 
-    // --- Moonrise/moonset ---
-    const moonrise = planetaryRiseSetTimeRefined(
-        localNoon, OBSERVER_LAT, OBSERVER_LON, true, ECPlanetNumber.Moon, NaN, pool,
-    );
-    const moonset = planetaryRiseSetTimeRefined(
-        localNoon, OBSERVER_LAT, OBSERVER_LON, false, ECPlanetNumber.Moon, NaN, pool,
-    );
+    // --- Moonrise/moonset "for day" ---
+    // iOS planetRiseSetForDay: search forward then backward, only accept
+    // results on the current calendar day.  Return NaN if no event today.
+    function riseSetForDay(
+        riseNotSet: boolean,
+        planetNumber: ECPlanetNumber,
+    ): number {
+        const fudgeSeconds = -5;  // match iOS: fudge backward slightly
+        const lookahead = 3600 * 13.2;
+        const calcDate = dateToDateInterval(getNow());
 
-    if (!isNoRiseSet(moonrise)) {
+        // Search forward
+        const fwdResult = planetaryRiseSetTimeRefined(
+            calcDate + fudgeSeconds, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+
+        if (!isNoRiseSet(fwdResult) && isSameLocalDay(fwdResult, calcDate)) {
+            return fwdResult;
+        }
+
+        // Forward wasn't today — search backward
+        const bwdResult = planetaryRiseSetTimeRefined(
+            calcDate - fudgeSeconds - lookahead, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+
+        if (!isNoRiseSet(bwdResult) && isSameLocalDay(bwdResult, calcDate)) {
+            return bwdResult;
+        }
+
+        return NaN;  // no event on current day
+    }
+
+    /** Check if two date intervals fall on the same local calendar day */
+    function isSameLocalDay(di1: number, di2: number): boolean {
+        const d1 = new Date((di1 + 978307200) * 1000);
+        const d2 = new Date((di2 + 978307200) * 1000);
+        return d1.getFullYear() === d2.getFullYear()
+            && d1.getMonth() === d2.getMonth()
+            && d1.getDate() === d2.getDate();
+    }
+
+    const moonrise = riseSetForDay(true, ECPlanetNumber.Moon);
+    const moonset = riseSetForDay(false, ECPlanetNumber.Moon);
+
+    if (!isNaN(moonrise)) {
         const mrDate = new Date((moonrise + 978307200) * 1000);
         const mrHour12 = (mrDate.getHours() % 12) + mrDate.getMinutes() / 60;
         const mrMinute = mrDate.getMinutes() + mrDate.getSeconds() / 60;
@@ -302,7 +340,7 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         functions.set('moonriseForDayHour24Number', () => 0);
     }
 
-    if (!isNoRiseSet(moonset)) {
+    if (!isNaN(moonset)) {
         const msDate = new Date((moonset + 978307200) * 1000);
         const msHour12 = (msDate.getHours() % 12) + msDate.getMinutes() / 60;
         const msMinute = msDate.getMinutes() + msDate.getSeconds() / 60;
