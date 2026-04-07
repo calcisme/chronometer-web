@@ -266,22 +266,104 @@ function drawQHandsInParts(
     }
 }
 
-/** Draw the bezel ring if the watch specifies one. */
+/** Draw the bezel ring if the watch specifies one, with a 3D metallic look. */
 function drawBezel(ctx: RenderContext, watch: Watch): void {
     if (!watch.bezelColor) return;
     const faceRadius = watch.faceWidth / 2;
     const outerRadius = faceRadius + BEZEL_THICKNESS_XML;
-    ctx.beginPath();
-    ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
-    ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
-    ctx.fillStyle = watch.bezelColor;
-    ctx.fill('evenodd');
+
+    // Parse the base bezel color to derive highlight/shadow variants
+    ctx.save();
+
+    // --- 1. Base bezel band with radial gradient (dark edges, bright centre) ---
+    const baseGrad = ctx.createRadialGradient(0, 0, faceRadius, 0, 0, outerRadius);
+    // Inner edge: darken for a shadowed lip
+    baseGrad.addColorStop(0,    darkenColor(watch.bezelColor, 0.45));
+    baseGrad.addColorStop(0.08, darkenColor(watch.bezelColor, 0.65));
+    // Main body
+    baseGrad.addColorStop(0.25, watch.bezelColor);
+    baseGrad.addColorStop(0.50, lightenColor(watch.bezelColor, 1.12));
+    baseGrad.addColorStop(0.75, watch.bezelColor);
+    // Outer edge: darken for a rolled-over lip
+    baseGrad.addColorStop(0.92, darkenColor(watch.bezelColor, 0.70));
+    baseGrad.addColorStop(1,    darkenColor(watch.bezelColor, 0.40));
 
     ctx.beginPath();
+    ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius,  0, 2 * Math.PI, true);
+    ctx.fillStyle = baseGrad;
+    ctx.fill('evenodd');
+
+    // --- 2. Specular highlight sweep (upper portion, simulated light from above) ---
+    ctx.beginPath();
+    ctx.arc(0, 0, outerRadius - 0.5, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius + 0.5,  0, 2 * Math.PI, true);
+    // Linear gradient from top to bottom for directional light
+    const highlightGrad = ctx.createLinearGradient(0, -outerRadius, 0, outerRadius);
+    highlightGrad.addColorStop(0,    'rgba(255,255,255,0.35)');
+    highlightGrad.addColorStop(0.30, 'rgba(255,255,255,0.12)');
+    highlightGrad.addColorStop(0.50, 'rgba(0,0,0,0)');
+    highlightGrad.addColorStop(0.70, 'rgba(0,0,0,0.08)');
+    highlightGrad.addColorStop(1,    'rgba(0,0,0,0.15)');
+    ctx.fillStyle = highlightGrad;
+    ctx.fill('evenodd');
+
+    // --- 3. Fine inner ring (shadow where bezel meets glass) ---
+    ctx.beginPath();
     ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 0.75;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 0.6;
     ctx.stroke();
+
+    // --- 4. Fine outer edge highlight ---
+    ctx.beginPath();
+    ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+/**
+ * Parse a CSS color string into [r, g, b] components (0-255).
+ * Handles hex (#rgb, #rrggbb), rgb(), and named "silver"/"gray".
+ */
+function parseColorComponents(color: string): [number, number, number] {
+    const c = color.trim().toLowerCase();
+    // Hex
+    if (c.startsWith('#')) {
+        const hex = c.slice(1);
+        if (hex.length === 3) {
+            return [
+                parseInt(hex[0] + hex[0], 16),
+                parseInt(hex[1] + hex[1], 16),
+                parseInt(hex[2] + hex[2], 16),
+            ];
+        }
+        return [
+            parseInt(hex.slice(0, 2), 16),
+            parseInt(hex.slice(2, 4), 16),
+            parseInt(hex.slice(4, 6), 16),
+        ];
+    }
+    // rgb(r,g,b)
+    const m = c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+    if (m) return [+m[1], +m[2], +m[3]];
+    // Fallback: silver
+    return [192, 192, 192];
+}
+
+/** Darken a CSS color by a factor (0 = black, 1 = unchanged). */
+function darkenColor(color: string, factor: number): string {
+    const [r, g, b] = parseColorComponents(color);
+    return `rgb(${Math.round(r * factor)},${Math.round(g * factor)},${Math.round(b * factor)})`;
+}
+
+/** Lighten a CSS color by a factor (1 = unchanged, >1 = lighter). */
+function lightenColor(color: string, factor: number): string {
+    const [r, g, b] = parseColorComponents(color);
+    return `rgb(${Math.min(255, Math.round(r * factor))},${Math.min(255, Math.round(g * factor))},${Math.min(255, Math.round(b * factor))})`;
 }
 
 /**
