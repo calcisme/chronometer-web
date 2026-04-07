@@ -562,6 +562,26 @@ function drawStatic(
 }
 
 // ============================================================================
+// Text positioning helper
+// ============================================================================
+
+/**
+ * Compute the Y offset for fillText() so that text is vertically centred
+ * on the font's em box — replicating what textBaseline='middle' does, but
+ * anchored to the more cross-browser-consistent 'alphabetic' baseline.
+ *
+ * Uses fontBoundingBox metrics (which are constant for a given font/size,
+ * regardless of which specific glyphs are being rendered) rather than
+ * actualBoundingBox (which varies per glyph and shifts per-character).
+ *
+ * Requires ctx.textBaseline = 'alphabetic' and ctx.font already set.
+ */
+function textVisualCenterY(ctx: RenderContext, text: string): number {
+    const m = ctx.measureText(text);
+    return (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
+}
+
+// ============================================================================
 // QDial — circular dial with marks and text
 // ============================================================================
 
@@ -691,7 +711,7 @@ function drawQDial(
         ctx.fillStyle = strokeColor;
         ctx.font = `${fontSize}px "${fontName}"`;
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.textBaseline = 'alphabetic';
 
         if (orientation === 'upright') {
             // Original iOS: drawDialUpright
@@ -717,7 +737,7 @@ function drawQDial(
                 const ty = textR * Math.sin(th);
                 ctx.save();
                 ctx.translate(tx, ty);
-                ctx.fillText(label, 0, 0);
+                ctx.fillText(label, 0, textVisualCenterY(ctx, label));
                 ctx.restore();
             }
         } else if (orientation === 'demi') {
@@ -753,7 +773,7 @@ function drawQDial(
                     const ty = textR * Math.sin(th);
                     ctx.translate(tx, ty);
                     ctx.rotate(th + Math.PI / 2 + Math.PI);  // rotated + flipped
-                    ctx.fillText(label, 0, 0);
+                    ctx.fillText(label, 0, textVisualCenterY(ctx, label));
                 } else {
                     // Radial half: text upright along radius
                     // iOS: rect at y = r - s.height → center at r - textH/2
@@ -762,7 +782,7 @@ function drawQDial(
                     const ty = textR * Math.sin(th);
                     ctx.translate(tx, ty);
                     ctx.rotate(th + Math.PI / 2);
-                    ctx.fillText(label, 0, 0);
+                    ctx.fillText(label, 0, textVisualCenterY(ctx, label));
                 }
                 ctx.restore();
             }
@@ -781,7 +801,7 @@ function drawQDial(
                 ctx.save();
                 ctx.translate(tx, ty);
                 ctx.rotate(th + Math.PI / 2);
-                ctx.fillText(label, 0, 0);
+                ctx.fillText(label, 0, textVisualCenterY(ctx, label));
                 ctx.restore();
             }
         }
@@ -1079,7 +1099,7 @@ function drawWheel(
 
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.textBaseline = 'alphabetic';
 
     // Compute max label dimensions for consistent positioning
     let maxW = 0, maxH = fontSize;
@@ -1149,7 +1169,7 @@ function drawWheel(
                 ctx.rotate(-currentRotation);
             }
 
-            ctx.fillText(label, 0, 0);
+            ctx.fillText(label, 0, textVisualCenterY(ctx, label));
             ctx.restore();
         }
 
@@ -1198,7 +1218,7 @@ function drawQText(
     ctx.fillStyle = strokeColor;
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.textBaseline = 'alphabetic';
 
     if (radius > 0 && part.orientation === 'demi') {
         // Curved text along an arc: each character is placed at a position
@@ -1217,6 +1237,10 @@ function drawQText(
 
         // Total angular span of the text along the arc
         const totalAngle = totalWidth / radius;
+
+        // Compute consistent vertical offset from the full string so all
+        // characters share the same baseline (not individually centred).
+        const yOff = textVisualCenterY(ctx, text);
 
         // Determine if text is on the bottom half of the dial.
         // Bottom half: characters need π rotation to stay upright,
@@ -1246,14 +1270,14 @@ function drawQText(
                 // Flip character so it's right-side up at the bottom
                 ctx.rotate(Math.PI);
             }
-            ctx.fillText(text[i], 0, 0);
+            ctx.fillText(text[i], 0, yOff);
             ctx.restore();
 
             currentAngle += direction * charAngle;
         }
     } else {
         // Simple flat text (no radius)
-        ctx.fillText(text, 0, 0);
+        ctx.fillText(text, 0, textVisualCenterY(ctx, text));
     }
 
     ctx.restore();
