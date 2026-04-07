@@ -27,6 +27,7 @@ import type {
     WindowPart,
     StaticPart,
     QRectPart,
+    QWedgePart,
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
 import type { LoadedImage } from './image-loader.js';
@@ -222,6 +223,7 @@ function renderPartsDocumentOrder(
             }
             continue;
         }
+
 
         if (part.type === 'Terminator') {
             if (terminatorLeaves && terminatorLeaves.length > 0) {
@@ -448,6 +450,9 @@ function drawStaticPart(
             break;
         case 'QRect':
             drawQRect(ctx, part, env);
+            break;
+        case 'QWedge':
+            drawQWedge(ctx, part, env);
             break;
         case 'Window':
             // Standalone window (no following part to clip) — just draw border
@@ -1285,6 +1290,53 @@ function drawQRect(
             ctx.lineTo(px, h / 2);
             ctx.stroke();
         }
+    }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// QWedge — annular sector (pie-slice of a ring)
+// ============================================================================
+
+function drawQWedge(
+    ctx: RenderContext,
+    part: QWedgePart,
+    env: Environment,
+): void {
+    const cx = evalAttr(part.x, env);
+    const cy = -evalAttr(part.y, env);  // Y-flip
+    const outerR = evalAttr(part.outerRadius, env);
+    const innerR = evalAttr(part.innerRadius, env);
+    const span = evalAttr(part.angleSpan, env);
+    const angle = evalAttr(part.angle, env);
+    if (outerR <= 0 || innerR <= 0 || span <= 0) return;
+
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'black';
+    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : 'transparent';
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    // Rotate by angle — same convention as QHand (CW for positive angle)
+    ctx.rotate(angle);
+
+    // Draw annular sector path centred on -PI/2 (12 o'clock)
+    const startAngle = -Math.PI / 2 - span / 2;
+    const endAngle = -Math.PI / 2 + span / 2;
+
+    ctx.beginPath();
+    ctx.arc(0, 0, outerR, startAngle, endAngle);
+    ctx.arc(0, 0, innerR, endAngle, startAngle, true);
+    ctx.closePath();
+
+    if (!isTransparent(fillColor)) {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+    }
+    if (!isTransparent(strokeColor)) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 0.3;
+        ctx.stroke();
     }
 
     ctx.restore();

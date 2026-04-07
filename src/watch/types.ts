@@ -39,7 +39,8 @@ export type WatchPart =
     | WindowPart
     | StaticPart
     | QRectPart
-    | TerminatorPart;
+    | TerminatorPart
+    | QWedgePart;
 
 // ============================================================================
 // Shared base for all parts
@@ -268,4 +269,20 @@ export interface TerminatorPart extends PartBase {
     updateOffset?: ASTNode;
     phaseAngle?: ASTNode;       // expression: moonAgeAngle()
     rotation?: ASTNode;         // expression: moonRelativePositionAngle()
+}
+
+// ============================================================================
+// QWedge — annular sector (pie-slice of a ring)
+// ============================================================================
+
+export interface QWedgePart extends PartBase {
+    type: 'QWedge';
+    outerRadius?: ASTNode;
+    innerRadius?: ASTNode;
+    angleSpan?: ASTNode;
+    angle?: ASTNode;
+    strokeColor?: ASTNode;
+    fillColor?: ASTNode;
+    opaque?: number;
+    update?: ASTNode;
 }

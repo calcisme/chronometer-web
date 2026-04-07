@@ -18,6 +18,7 @@ import type {
     StaticPart,
     QRectPart,
     TerminatorPart,
+    QWedgePart,
 } from './types.js';
 import { parse } from '../expr/parser.js';
 import type { ASTNode } from '../expr/parser.js';
@@ -133,7 +134,9 @@ function processElement(
             break;
 
         case 'qwedge':
-            // QWedge elements (annular wedge segments) — parsed but skipped for now
+            if (matchesMode(el, mode)) {
+                parts.push(parseQWedge(el));
+            }
             break;
 
         case 'button':
@@ -414,6 +417,23 @@ function parseTerminator(el: Element): TerminatorPart {
     };
 }
 
+function parseQWedge(el: Element): QWedgePart {
+    return {
+        type: 'QWedge',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        outerRadius: attrExpr(el, 'outerRadius'),
+        innerRadius: attrExpr(el, 'innerRadius'),
+        angleSpan: attrExpr(el, 'angleSpan'),
+        angle: attrExpr(el, 'angle'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        fillColor: attrExpr(el, 'fillColor'),
+        opaque: el.getAttribute('opaque') ? Number(el.getAttribute('opaque')) : undefined,
+        update: attrExpr(el, 'update'),
+    };
+}
 // ============================================================================
 // Helpers
 // ============================================================================

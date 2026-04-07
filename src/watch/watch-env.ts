@@ -308,8 +308,16 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
         return computeLunarAscendingNode(di, null);
     });
 
-    // --- QWedge-only function (deferred — QWedge rendering not yet implemented) ---
-    functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (_n: number) => 0);
+    // --- Moon delta ecliptic longitude at delta day ---
+    // computes moonAge (= moonEclipticLong - sunEclipticLong) at midnight ± n days
+    functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (n: number) => {
+        const nowDate = getNow();
+        // Seconds since midnight local time
+        const secSinceMidnight = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
+        const nowDI = dateToDateInterval(nowDate);
+        const requestedDI = nowDI - secSinceMidnight + n * 86400;
+        return moonAge(requestedDI, null).age;
+    });
 
     // --- Moonrise/moonset for today (LIVE — recompute on call) ---
     functions.set('moonriseForDayValid', () => {

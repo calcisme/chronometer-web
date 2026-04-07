@@ -46,8 +46,8 @@ const IMAGE_MAP: Record<string, { url: string; scale: number }> = {
     '../partsBin/logos/white.png':                         { url: whiteLogoUrl, scale: 0.25 },
     'redStar.png':                                        { url: redStarUrl, scale: 1 },
     'blueStar.png':                                       { url: blueStarUrl, scale: 1 },
-    // Selene assets — scale to cover dialOuterRad*2=274 (274/1060 ≈ 0.2585)
-    'face-white-trim.png':                                { url: seleneFaceUrl, scale: 274 / 1060 },
+    // Selene assets (4x images)
+    'face-white-trim.png':                                { url: seleneFaceUrl, scale: 0.25 },
     '../partsBin/moonES72.png':                           { url: seleneMoonUrl, scale: 0.25 },
     'phaseN.png':                                         { url: phaseNUrl, scale: 1 },
     'phase1.png':                                         { url: phase1Url, scale: 1 },
