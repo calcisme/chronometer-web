@@ -793,7 +793,7 @@ function drawQHand(
         // Ornament diamond (for non-quad hands)
         const oLength = evalAttr(part.oLength, env);
         if (oLength > 0) {
-            const oWidth = evalAttr(part.oWidth, env);
+            const oWidth = evalAttr(part.oWidth, env) || width;
             const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
             const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
             const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
