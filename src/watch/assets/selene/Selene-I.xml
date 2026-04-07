@@ -91,7 +91,7 @@
   <SWheel       name='sdigits'	    x='dayX-22'	y='dayY+dateFS/2-1' dragAnimationType='dragAnimationAlways' modes='front'  radius='31' orientation='three'  update='1 * days()' angle='fmod(floor((dayNumber()+1)/10), 10)*2*pi/10'	fontSize='dateFS' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='fgclr' bgColor='clear' />
   <SWheel    refName='sdigits'	    x='dayX-8'	y='dayY+dateFS/2-1' dragAnimationType='dragAnimationAlways' modes='front'  radius='27' orientation='three'  update='1 * days()' angle='fmod(dayNumber()+1,             10)*2*pi/10'	fontSize='dateFS' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='fgclr' bgColor='clear' />
 
-  <QWheel   name='am/pm' x='timeBackX' y='timeBackY+timeBackRad+ampmWheelTweak'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='front'  radius='ampmWheelRadius' orientation='twelve' update='60'  angle='hour24Number() >= 12 ? 0 : pi' fontSize='ampmWheelFontSize' fontName='Arial' marks='0' text='●,' strokeColor='black' bgColor='white' />
+  <QWheel   name='am/pm' x='timeBackX' y='timeBackY+timeBackRad+ampmWheelTweak-1'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='front'  radius='ampmWheelRadius' orientation='twelve' update='60'  angle='hour24Number() >= 12 ? 0 : pi' fontSize='ampmWheelFontSize' fontName='Arial' marks='0' text='●,' strokeColor='black' bgColor='white' />
 
   <window	name='fullface hole'    x='0'	y='0' w='dialOuterRad*2' h='dialOuterRad*2' type='porthole' border='0' strokeColor='holeBorderColor' modes='front' />
   <static name='prefront' modes='front'>

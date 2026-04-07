@@ -112,7 +112,7 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     const { functions } = env;
     // Time source — returns real time; will be overridden for
     // user time controls (fast-forward, rewind, etc.)
-    const getNow = () => new Date();
+    const getNow = () => { const d = new Date(); d.setHours(15, 30, 0, 0); return d; }; // TEMP: hardcoded PM for testing
 
     // Snapshot time for astronomy/calendar (changes at most daily)
     const now = getNow();
