@@ -309,13 +309,13 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     });
 
     // --- Moon delta ecliptic longitude at delta day ---
-    // computes moonAge (= moonEclipticLong - sunEclipticLong) at midnight ± n days
+    // Computes moonAge (= moonEclipticLong - sunEclipticLong) at local midnight ± n days.
+    // Uses JS Date for DST-correct midnight (better than iOS, which is imprecise across DST).
     functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (n: number) => {
         const nowDate = getNow();
-        // Seconds since midnight local time
-        const secSinceMidnight = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
-        const nowDI = dateToDateInterval(nowDate);
-        const requestedDI = nowDI - secSinceMidnight + n * 86400;
+        // Midnight of the target day in local timezone (DST-aware)
+        const targetMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + n);
+        const requestedDI = dateToDateInterval(targetMidnight);
         return moonAge(requestedDI, null).age;
     });
 
