@@ -4,7 +4,8 @@
   "description": "Web port of the Emerald Chronometer watch app",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/standalone.ts --bundle --loader:.xml=text --loader:.png=dataurl --outfile=dist/chronometer.js --format=iife --target=es2020 && cp src/standalone.html dist/index.html",
+    "build": "bash build.sh",
+    "build:legacy": "esbuild src/standalone.ts --bundle --loader:.xml=text --loader:.png=dataurl --outfile=dist/chronometer.js --format=iife --target=es2020 && cp src/standalone.html dist/index.html",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

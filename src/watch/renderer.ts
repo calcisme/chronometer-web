@@ -570,15 +570,21 @@ function drawStatic(
  * on the font's em box — replicating what textBaseline='middle' does, but
  * anchored to the more cross-browser-consistent 'alphabetic' baseline.
  *
- * Uses fontBoundingBox metrics (which are constant for a given font/size,
- * regardless of which specific glyphs are being rendered) rather than
- * actualBoundingBox (which varies per glyph and shifts per-character).
+ * Uses fontBoundingBox metrics (constant for a given font/size) and
+ * caches the result per font string to avoid repeated measureText() calls.
  *
  * Requires ctx.textBaseline = 'alphabetic' and ctx.font already set.
  */
-function textVisualCenterY(ctx: RenderContext, text: string): number {
-    const m = ctx.measureText(text);
-    return (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
+const _fontCenterCache = new Map<string, number>();
+
+function textVisualCenterY(ctx: RenderContext, _text: string): number {
+    const font = ctx.font;
+    let cached = _fontCenterCache.get(font);
+    if (cached !== undefined) return cached;
+    const m = ctx.measureText('X');  // any character works — fontBoundingBox is per-font
+    cached = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
+    _fontCenterCache.set(font, cached);
+    return cached;
 }
 
 // ============================================================================
