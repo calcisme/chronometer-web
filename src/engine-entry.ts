@@ -1,14 +1,4 @@
-// TEMPORARY: Freeze time at 10:10am PDT for thumbnails
-const _OrigDate = Date;
-const _frozenTime = new _OrigDate('2026-04-07T10:10:00-07:00').getTime();
-(window as any).Date = function(...args: any[]) {
-    if (args.length === 0) return new _OrigDate(_frozenTime);
-    return new (_OrigDate as any)(...args);
-} as any;
-(window as any).Date.now = () => _frozenTime;
-(window as any).Date.parse = _OrigDate.parse;
-(window as any).Date.UTC = _OrigDate.UTC;
-(window as any).Date.prototype = _OrigDate.prototype;
+
 
 /**
  * Per-face data files push their data onto this global array.

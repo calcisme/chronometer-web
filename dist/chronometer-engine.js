@@ -12428,16 +12428,6 @@
   }
 
   // src/engine-entry.ts
-  var _OrigDate = Date;
-  var _frozenTime = new _OrigDate("2026-04-07T10:10:00-07:00").getTime();
-  window.Date = function(...args) {
-    if (args.length === 0) return new _OrigDate(_frozenTime);
-    return new _OrigDate(...args);
-  };
-  window.Date.now = () => _frozenTime;
-  window.Date.parse = _OrigDate.parse;
-  window.Date.UTC = _OrigDate.UTC;
-  window.Date.prototype = _OrigDate.prototype;
   var DEFAULT_LAT = 37.205;
   var DEFAULT_LON = -121.954;
   var STORAGE_KEY = "chronometer-location";
