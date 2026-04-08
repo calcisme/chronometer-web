@@ -141,6 +141,16 @@
             <p class="desc">View all watch faces together</p>
         </a>
     </div>
+    <script>
+        // Pass along query parameters (like ?lat=...&lon=...) when clicking links
+        if (window.location.search) {
+            document.querySelectorAll('a.face-card').forEach(a => {
+                const url = new URL(a.href, window.location.href);
+                url.search = window.location.search;
+                a.href = url.toString();
+            });
+        }
+    </script>
 </body>
 
 </html>

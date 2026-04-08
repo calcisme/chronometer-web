@@ -40,6 +40,19 @@ const DEFAULT_LAT = 37.205;
 const DEFAULT_LON = -121.954;
 const STORAGE_KEY = 'chronometer-location';
 
+function getQueryLocation(): { lat: number; lon: number; name?: string } | null {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const latStr = params.get('lat');
+    const lonStr = params.get('lon') || params.get('long');
+    const lat = parseFloat(latStr || '');
+    const lon = parseFloat(lonStr || '');
+    if (!isNaN(lat) && !isNaN(lon)) {
+        return { lat, lon, name: params.get('loc') || '(from URL)' };
+    }
+    return null;
+}
+
 function loadStoredLocation(): { lat: number; lon: number } | null {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -150,19 +163,27 @@ async function main() {
     const resetLink = document.getElementById('reset-location')!;
 
     // --- Resolve location ---
-    const loc = await requestLocation();
     let lat: number, lon: number;
-    if (loc) {
-        lat = loc.lat; lon = loc.lon;
-        sourceLabel.textContent = '(from browser)';
+    const queryLoc = getQueryLocation();
+
+    if (queryLoc) {
+        lat = queryLoc.lat;
+        lon = queryLoc.lon;
+        sourceLabel.textContent = queryLoc.name || '(from URL)';
     } else {
-        const stored = loadStoredLocation();
-        if (stored) {
-            lat = stored.lat; lon = stored.lon;
-            sourceLabel.textContent = '(saved)';
+        const loc = await requestLocation();
+        if (loc) {
+            lat = loc.lat; lon = loc.lon;
+            sourceLabel.textContent = '(from browser)';
         } else {
-            lat = DEFAULT_LAT; lon = DEFAULT_LON;
-            sourceLabel.textContent = "(Steve's house)";
+            const stored = loadStoredLocation();
+            if (stored) {
+                lat = stored.lat; lon = stored.lon;
+                sourceLabel.textContent = '(saved)';
+            } else {
+                lat = DEFAULT_LAT; lon = DEFAULT_LON;
+                sourceLabel.textContent = "(Steve's house)";
+            }
         }
     }
     latInput.value = lat.toFixed(3);

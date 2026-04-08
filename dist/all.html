@@ -111,5 +111,16 @@
     <script src="face-hana.js"></script>
     <script src="face-chandra.js"></script>
     <script src="face-selene.js"></script>
+    <script>
+        // Pass along query parameters (like ?lat=...&lon=...) when going back home
+        if (window.location.search) {
+            const backLink = document.getElementById('back-link');
+            if (backLink) {
+                const url = new URL(backLink.href, window.location.href);
+                url.search = window.location.search;
+                backLink.href = url.toString();
+            }
+        }
+    </script>
 </body>
 </html>
