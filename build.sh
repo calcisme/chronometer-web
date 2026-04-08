@@ -77,5 +77,6 @@ ls -lh "$DIST"/*.js "$DIST"/*.html
 
 echo ""
 echo "=== Creating zip archive ==="
-(cd "$DIST" && zip -r chronometer-web.zip . -x "chronometer-web.zip")
-echo "  → chronometer-web.zip ($(du -h "$DIST/chronometer-web.zip" | cut -f1))"
+rm -f dist.zip
+(cd "$DIST" && zip -r ../dist.zip .)
+echo "  → dist.zip ($(du -h dist.zip | cut -f1))"

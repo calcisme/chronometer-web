@@ -44,7 +44,8 @@ There are no runtime server dependencies. The build output is a set of static fi
    - `chronometer-engine.js` — the shared rendering engine
    - `face-*.js` — per-face data (XML definitions and image assets, all inlined)
    - `thumb-*.png` — thumbnail images for the selector page
-   - `chronometer-web.zip` — a zip archive of everything above
+
+   It also creates `dist.zip` at the project root — a zip archive of the entire `dist/` directory.
 
 ## Running
 
