@@ -74,3 +74,8 @@ done
 echo ""
 echo "=== Build complete ==="
 ls -lh "$DIST"/*.js "$DIST"/*.html
+
+echo ""
+echo "=== Creating zip archive ==="
+(cd "$DIST" && zip -r chronometer-web.zip . -x "chronometer-web.zip")
+echo "  → chronometer-web.zip ($(du -h "$DIST/chronometer-web.zip" | cut -f1))"
