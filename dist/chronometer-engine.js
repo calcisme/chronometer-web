@@ -12954,16 +12954,24 @@
       );
     });
   }
-  function gridDimensions(count) {
-    if (count <= 0) return { cols: 1, rows: 1 };
-    const cols = Math.ceil(Math.sqrt(count));
-    const rows = Math.ceil(count / cols);
-    return { cols, rows };
-  }
-  function cellSize(containerW, containerH, cols, rows, gap, padding) {
-    const usableW = containerW - 2 * padding - gap * (cols - 1);
-    const usableH = containerH - 2 * padding - gap * (rows - 1);
-    return Math.floor(Math.min(usableW / cols, usableH / rows));
+  function optimizeGrid(count, containerW, containerH, gap, padding) {
+    if (count <= 0) return { cols: 1, rows: 1, size: 0 };
+    let bestCols = 1, bestRows = count, bestSize = 0;
+    for (let c = 1; c <= count; c++) {
+      const r = Math.ceil(count / c);
+      const usableW = containerW - 2 * padding - gap * (c - 1);
+      const usableH = containerH - 2 * padding - gap * (r - 1);
+      const size = Math.floor(Math.min(usableW / c, usableH / r));
+      const isBetter = size > bestSize;
+      const isTie = size === bestSize && c + r < bestCols + bestRows;
+      if (isBetter || isTie) {
+        bestSize = size;
+        bestCols = c;
+        bestRows = r;
+      }
+    }
+    console.log(`[grid] chose ${bestCols}x${bestRows} (size=${bestSize}) for ${count} faces in ${containerW}x${containerH}`);
+    return { cols: bestCols, rows: bestRows, size: bestSize };
   }
   async function loadImagesFromFaceData(imageMap) {
     const result = /* @__PURE__ */ new Map();
@@ -13027,9 +13035,7 @@
       fd.images = null;
     }
     delete window.ChronometerFaces;
-    const { cols, rows } = gridDimensions(parsedWatches.length);
-    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    let cols = 1, rows = 1;
     const faces = [];
     for (let i = 0; i < parsedWatches.length; i++) {
       const cell = document.createElement("div");
@@ -13166,14 +13172,44 @@
     const PADDING_PX = 12;
     let resizeDebounceTimer = null;
     function onGridResize(W, H) {
-      const size = cellSize(W, H, cols, rows, GAP_PX, PADDING_PX);
-      if (size <= 0) return;
+      const result = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
+      if (result.size <= 0) return;
       const dpr = window.devicePixelRatio || 1;
-      const newPhys = Math.round(size * dpr);
+      const newPhys = Math.round(result.size * dpr);
       if (newPhys === faces[0]?.canvas.width) return;
       stopScheduler();
-      grid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
-      grid.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
+      cols = result.cols;
+      rows = result.rows;
+      const size = result.size;
+      const cellStep = size + GAP_PX;
+      const gridW = cols * size + (cols - 1) * GAP_PX;
+      const gridH = rows * size + (rows - 1) * GAP_PX;
+      const offsetX = (W - gridW) / 2;
+      const offsetY = (H - gridH) / 2;
+      const remainder = faces.length - cols * (rows - 1);
+      for (let i = 0; i < faces.length; i++) {
+        let row, colIdx, itemsInRow;
+        if (i < remainder) {
+          row = 0;
+          colIdx = i;
+          itemsInRow = remainder;
+        } else {
+          const j = i - remainder;
+          row = 1 + Math.floor(j / cols);
+          colIdx = j % cols;
+          itemsInRow = cols;
+        }
+        const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
+        const rowOffsetX = (gridW - rowW) / 2;
+        const x = offsetX + rowOffsetX + colIdx * cellStep;
+        const y = offsetY + row * cellStep;
+        const cell = faces[i].canvas.parentElement;
+        cell.style.position = "absolute";
+        cell.style.left = `${x}px`;
+        cell.style.top = `${y}px`;
+        cell.style.width = `${size}px`;
+        cell.style.height = `${size}px`;
+      }
       for (const face of faces) {
         applySize(face, size);
         face.cachesBuilt = false;
@@ -13183,14 +13219,17 @@
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const { width, height } = entry.contentRect;
+      const { width } = entry.contentRect;
+      const locationPanel = document.getElementById("location-panel");
+      const panelH = locationPanel ? locationPanel.offsetHeight : 0;
+      const height = entry.contentRect.height - panelH;
       if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
       resizeDebounceTimer = setTimeout(() => {
         resizeDebounceTimer = null;
         onGridResize(width, height);
       }, 150);
     });
-    resizeObserver.observe(grid);
+    resizeObserver.observe(grid.parentElement);
     function showResetIfSaved() {
       resetLink.style.display = loadStoredLocation() ? "inline" : "none";
     }

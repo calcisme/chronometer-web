@@ -82,23 +82,38 @@ function requestLocation(): Promise<{ lat: number; lon: number } | null> {
 
 // ============================================================================
 // Grid layout maths
-// ============================================================================
-
-function gridDimensions(count: number): { cols: number; rows: number } {
-    if (count <= 0) return { cols: 1, rows: 1 };
-    const cols = Math.ceil(Math.sqrt(count));
-    const rows = Math.ceil(count / cols);
-    return { cols, rows };
-}
-
-function cellSize(
+/**
+ * Find the (cols, rows) layout that maximizes face size for the given
+ * container dimensions.  Tries every valid column count from 1..count
+ * and picks the one producing the largest cells.  When two candidates
+ * tie on size, prefer the one with smaller rows+cols (more balanced).
+ */
+function optimizeGrid(
+    count: number,
     containerW: number, containerH: number,
-    cols: number, rows: number,
     gap: number, padding: number,
-): number {
-    const usableW = containerW - 2 * padding - gap * (cols - 1);
-    const usableH = containerH - 2 * padding - gap * (rows - 1);
-    return Math.floor(Math.min(usableW / cols, usableH / rows));
+): { cols: number; rows: number; size: number } {
+    if (count <= 0) return { cols: 1, rows: 1, size: 0 };
+
+    let bestCols = 1, bestRows = count, bestSize = 0;
+
+    for (let c = 1; c <= count; c++) {
+        const r = Math.ceil(count / c);
+        const usableW = containerW - 2 * padding - gap * (c - 1);
+        const usableH = containerH - 2 * padding - gap * (r - 1);
+        const size = Math.floor(Math.min(usableW / c, usableH / r));
+        // Prefer larger size; break ties with smaller rows+cols (more balanced)
+        const isBetter = size > bestSize;
+        const isTie = size === bestSize && (c + r) < (bestCols + bestRows);
+        if (isBetter || isTie) {
+            bestSize = size;
+            bestCols = c;
+            bestRows = r;
+        }
+    }
+
+    console.log(`[grid] chose ${bestCols}x${bestRows} (size=${bestSize}) for ${count} faces in ${containerW}x${containerH}`);
+    return { cols: bestCols, rows: bestRows, size: bestSize };
 }
 
 // ============================================================================
@@ -204,9 +219,8 @@ async function main() {
     delete (window as any).ChronometerFaces;
 
     // --- Build the DOM: one cell + canvas per face ---
-    const { cols, rows } = gridDimensions(parsedWatches.length);
-    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    // cols/rows are recomputed on every resize via optimizeGrid
+    let cols = 1, rows = 1;
 
     const faces: FaceInstance[] = [];
 
@@ -358,18 +372,63 @@ async function main() {
     let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
     function onGridResize(W: number, H: number) {
-        const size = cellSize(W, H, cols, rows, GAP_PX, PADDING_PX);
-        if (size <= 0) return;
+        const result = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
+        if (result.size <= 0) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const newPhys = Math.round(size * dpr);
+        const newPhys = Math.round(result.size * dpr);
         if (newPhys === faces[0]?.canvas.width) return;
 
         stopScheduler();
 
-        // Use fixed pixel sizes so the grid forms a square area
-        grid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
-        grid.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
+        cols = result.cols;
+        rows = result.rows;
+
+        const size = result.size;
+        const cellStep = size + GAP_PX; // center-to-center distance
+
+        // Total grid dimensions
+        const gridW = cols * size + (cols - 1) * GAP_PX;
+        const gridH = rows * size + (rows - 1) * GAP_PX;
+
+        // Offset to center the grid in the container
+        const offsetX = (W - gridW) / 2;
+        const offsetY = (H - gridH) / 2;
+
+        // Position each face cell absolutely.
+        // The first (incomplete) row goes at the top.
+        const remainder = faces.length - cols * (rows - 1); // items in short top row
+
+        for (let i = 0; i < faces.length; i++) {
+            let row: number, colIdx: number, itemsInRow: number;
+
+            if (i < remainder) {
+                // Short top row
+                row = 0;
+                colIdx = i;
+                itemsInRow = remainder;
+            } else {
+                // Full rows below
+                const j = i - remainder;
+                row = 1 + Math.floor(j / cols);
+                colIdx = j % cols;
+                itemsInRow = cols;
+            }
+
+            // Center incomplete rows: extra offset for short rows
+            const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
+            const rowOffsetX = (gridW - rowW) / 2;
+
+            const x = offsetX + rowOffsetX + colIdx * cellStep;
+            const y = offsetY + row * cellStep;
+
+            const cell = faces[i].canvas.parentElement as HTMLElement;
+            cell.style.position = 'absolute';
+            cell.style.left = `${x}px`;
+            cell.style.top = `${y}px`;
+            cell.style.width = `${size}px`;
+            cell.style.height = `${size}px`;
+        }
 
         for (const face of faces) {
             applySize(face, size);
@@ -382,14 +441,18 @@ async function main() {
     const resizeObserver = new ResizeObserver((entries) => {
         const entry = entries[0];
         if (!entry) return;
-        const { width, height } = entry.contentRect;
+        const { width } = entry.contentRect;
+        // Subtract the location panel height from the parent's height
+        const locationPanel = document.getElementById('location-panel');
+        const panelH = locationPanel ? locationPanel.offsetHeight : 0;
+        const height = entry.contentRect.height - panelH;
         if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = setTimeout(() => {
             resizeDebounceTimer = null;
             onGridResize(width, height);
         }, 150);
     });
-    resizeObserver.observe(grid);
+    resizeObserver.observe(grid.parentElement!);
 
     // =========================================================================
     // Location change
