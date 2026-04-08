@@ -35,6 +35,8 @@
             padding: 12px;
             align-items: center;
             justify-items: center;
+            align-content: center;
+            justify-content: center;
         }
 
         /* Each face cell contains exactly one canvas */
@@ -80,10 +82,21 @@
             font-size: 12px;
         }
         #reset-location:hover { color: #88a; }
+        #back-link {
+            position: absolute;
+            top: 28px;
+            left: 28px;
+            color: #667;
+            text-decoration: none;
+            font-size: 28px;
+            z-index: 10;
+        }
+        #back-link:hover { color: #99b; }
     </style>
 </head>
 <body>
     <div id="app">
+        <a id="back-link" href="index.html">← Back</a>
         <div id="watch-grid"></div>
         <div id="location-panel">
             <label>Lat: <input id="lat-input" type="text"></label>

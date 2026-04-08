@@ -11547,10 +11547,8 @@
     const m = cssColor.match(/,([\d.]+)\)$/);
     return m !== null && parseFloat(m[1]) === 0;
   }
-  var currentImages;
   var BEZEL_THICKNESS_XML = 10;
   function buildStaticBlockCaches(watch, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves) {
-    currentImages = images;
     const pendingWindows = [];
     for (const part of watch.parts) {
       if (part.type === "Window") {
@@ -11562,7 +11560,7 @@
         const ctx = cache.getContext("2d");
         ctx.translate(canvasWidth / 2, canvasHeight / 2);
         ctx.scale(scale, scale);
-        renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, terminatorLeaves, true);
+        renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, true);
         for (const win of part.precedingWindows) {
           cutWindowHole(ctx, win, env);
         }
@@ -11572,18 +11570,18 @@
       }
     }
   }
-  function renderFrame(ctx, watch, env, scale, terminatorLeaves) {
+  function renderFrame(ctx, watch, env, scale, images, terminatorLeaves) {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
     ctx.clearRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
-    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, terminatorLeaves);
+    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves);
     drawBezel(ctx, watch);
     ctx.restore();
   }
-  function renderPartsDocumentOrder(ctx, parts, env, canvasWidth, canvasHeight, scale, terminatorLeaves) {
+  function renderPartsDocumentOrder(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves) {
     const pendingWindows = [];
     for (const part of parts) {
       if (part.type === "Window") {
@@ -11599,7 +11597,7 @@
           ctx.drawImage(part.cachedCanvas, 0, 0);
           ctx.restore();
         }
-        drawQHandsInParts(ctx, part.children, env);
+        drawQHandsInParts(ctx, part.children, env, images);
         if (part.precedingWindows) {
           for (const win of part.precedingWindows) {
             drawWindowBorder(ctx, win, env);
@@ -11612,8 +11610,8 @@
           drawWindowBorder(ctx, win, env);
         }
         pendingWindows.length = 0;
-        if (part.src && currentImages) {
-          drawImageHand(ctx, part, env);
+        if (part.src && images) {
+          drawImageHand(ctx, part, env, images);
         } else {
           drawQHand(ctx, part, env);
         }
@@ -11626,26 +11624,26 @@
         continue;
       }
       if (pendingWindows.length > 0) {
-        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
         pendingWindows.length = 0;
       } else {
-        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
       }
     }
     for (const win of pendingWindows) {
       drawWindowBorder(ctx, win, env);
     }
   }
-  function drawQHandsInParts(ctx, parts, env) {
+  function drawQHandsInParts(ctx, parts, env, images) {
     for (const part of parts) {
       if (part.type === "QHand") {
-        if (part.src && currentImages) {
-          drawImageHand(ctx, part, env);
+        if (part.src && images) {
+          drawImageHand(ctx, part, env, images);
         } else {
           drawQHand(ctx, part, env);
         }
       } else if (part.type === "Static") {
-        drawQHandsInParts(ctx, part.children, env);
+        drawQHandsInParts(ctx, part.children, env, images);
       }
     }
   }
@@ -11719,7 +11717,7 @@
     const [r, g, b] = parseColorComponents(color);
     return `rgb(${Math.min(255, Math.round(r * factor))},${Math.min(255, Math.round(g * factor))},${Math.min(255, Math.round(b * factor))})`;
   }
-  function renderPartsWithWindows(ctx, parts, env, canvasWidth, canvasHeight, scale, terminatorLeaves, applyTrailingCutouts = false) {
+  function renderPartsWithWindows(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, applyTrailingCutouts = false) {
     const pendingWindows = [];
     for (const part of parts) {
       if (part.type === "Window") {
@@ -11728,8 +11726,8 @@
       }
       if (part.type === "Button") continue;
       if (part.type === "QHand") {
-        if (part.src && currentImages && !part.xAnchor && !part.yAnchor) {
-          drawImageHand(ctx, part, env);
+        if (part.src && images && !part.xAnchor && !part.yAnchor) {
+          drawImageHand(ctx, part, env, images);
         }
         continue;
       }
@@ -11740,10 +11738,10 @@
         continue;
       }
       if (pendingWindows.length > 0) {
-        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
         pendingWindows.length = 0;
       } else {
-        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
       }
     }
     for (const win of pendingWindows) {
@@ -11753,12 +11751,12 @@
       drawWindowBorder(ctx, win, env);
     }
   }
-  function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale) {
+  function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale, images) {
     const temp = new OffscreenCanvas(canvasWidth, canvasHeight);
     const tctx = temp.getContext("2d");
     tctx.translate(canvasWidth / 2, canvasHeight / 2);
     tctx.scale(scale, scale);
-    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale);
+    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale, images);
     for (const win of windows) {
       cutWindowHole(tctx, win, env);
     }
@@ -11793,10 +11791,10 @@
     }
     ctx.restore();
   }
-  function drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale) {
+  function drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images) {
     switch (part.type) {
       case "Static":
-        drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale);
+        drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale, images);
         break;
       case "QDial":
         drawQDial(ctx, part, env);
@@ -11808,7 +11806,7 @@
         drawQText(ctx, part, env);
         break;
       case "Image":
-        drawImage(ctx, part, env);
+        drawImage(ctx, part, env, images);
         break;
       case "QRect":
         drawQRect(ctx, part, env);
@@ -11821,8 +11819,8 @@
         break;
     }
   }
-  function drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale) {
-    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, void 0, true);
+  function drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale, images) {
+    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, void 0, true);
   }
   var _fontCenterCache = /* @__PURE__ */ new Map();
   function textVisualCenterY(ctx, _text) {
@@ -12294,9 +12292,9 @@
     }
     ctx.restore();
   }
-  function drawImage(ctx, part, env) {
-    if (!part.src || !currentImages) return;
-    const loaded = currentImages.get(part.src);
+  function drawImage(ctx, part, env, images) {
+    if (!part.src || !images) return;
+    const loaded = images.get(part.src);
     if (!loaded) return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
@@ -12311,9 +12309,9 @@
     ctx.drawImage(bitmap, x - drawW / 2, y - drawH / 2, drawW, drawH);
     ctx.restore();
   }
-  function drawImageHand(ctx, part, env) {
-    if (!part.src || !currentImages) return;
-    const loaded = currentImages.get(part.src);
+  function drawImageHand(ctx, part, env, images) {
+    if (!part.src || !images) return;
+    const loaded = images.get(part.src);
     if (!loaded) return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
@@ -12430,6 +12428,16 @@
   }
 
   // src/engine-entry.ts
+  var _OrigDate = Date;
+  var _frozenTime = new _OrigDate("2026-04-07T10:10:00-07:00").getTime();
+  window.Date = function(...args) {
+    if (args.length === 0) return new _OrigDate(_frozenTime);
+    return new _OrigDate(...args);
+  };
+  window.Date.now = () => _frozenTime;
+  window.Date.parse = _OrigDate.parse;
+  window.Date.UTC = _OrigDate.UTC;
+  window.Date.prototype = _OrigDate.prototype;
   var DEFAULT_LAT = 37.205;
   var DEFAULT_LON = -121.954;
   var STORAGE_KEY = "chronometer-location";
@@ -12630,7 +12638,7 @@
             face.lastTerminatorRebuild = now;
           }
         }
-        renderFrame(face.ctx, face.watch, face.env, face.scale, face.terminatorLeaves);
+        renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
         if (anyAnimating(face.handStates)) stillAnimating = true;
       }
       if (stillAnimating) {
@@ -12670,6 +12678,8 @@
       const newPhys = Math.round(size * dpr);
       if (newPhys === faces[0]?.canvas.width) return;
       stopScheduler();
+      grid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+      grid.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
       for (const face of faces) {
         applySize(face, size);
         face.cachesBuilt = false;

@@ -45,8 +45,7 @@ function isTransparent(cssColor: string): boolean {
 /** Shared context type — works for both on-screen and offscreen canvases. */
 type RenderContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
-/** Module-scoped image map, set during rendering calls. */
-let currentImages: Map<string, LoadedImage> | undefined;
+
 
 // ============================================================================
 // Public API
@@ -75,7 +74,6 @@ export function buildStaticBlockCaches(
     images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
 ): void {
-    currentImages = images;
 
     // Walk top-level parts, accumulating windows that precede <static> blocks
     const pendingWindows: WindowPart[] = [];
@@ -95,7 +93,7 @@ export function buildStaticBlockCaches(
             ctx.scale(scale, scale);
 
             // Draw the static block's children with internal window handling
-            renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, terminatorLeaves, true);
+            renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, true);
 
             // Apply preceding window cutouts
             for (const win of part.precedingWindows) {
@@ -121,6 +119,7 @@ export function renderFrame(
     watch: Watch,
     env: Environment,
     scale: number,
+    images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
 ): void {
     const w = ctx.canvas.width;
@@ -131,7 +130,7 @@ export function renderFrame(
     ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
 
-    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, terminatorLeaves);
+    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves);
     drawBezel(ctx, watch);
 
     ctx.restore();
@@ -151,7 +150,7 @@ export function renderWatch(
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
     buildStaticBlockCaches(watch, env, w, h, scale, images);
-    renderFrame(ctx, watch, env, scale);
+    renderFrame(ctx, watch, env, scale, images);
 }
 
 // ============================================================================
@@ -174,6 +173,7 @@ function renderPartsDocumentOrder(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
 ): void {
     const pendingWindows: WindowPart[] = [];
@@ -198,7 +198,7 @@ function renderPartsDocumentOrder(
             }
 
             // Draw any QHands inside the static block (they're dynamic)
-            drawQHandsInParts(ctx, part.children, env);
+            drawQHandsInParts(ctx, part.children, env, images);
 
             // Draw window borders from the preceding windows
             if (part.precedingWindows) {
@@ -216,8 +216,8 @@ function renderPartsDocumentOrder(
             }
             pendingWindows.length = 0;
 
-            if (part.src && currentImages) {
-                drawImageHand(ctx, part, env);
+            if (part.src && images) {
+                drawImageHand(ctx, part, env, images);
             } else {
                 drawQHand(ctx, part, env);
             }
@@ -234,10 +234,10 @@ function renderPartsDocumentOrder(
 
         // Regular drawable part — apply pending window cutouts if any
         if (pendingWindows.length > 0) {
-            renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+            renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
             pendingWindows.length = 0;
         } else {
-            drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+            drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
         }
     }
 
@@ -252,16 +252,17 @@ function drawQHandsInParts(
     ctx: CanvasRenderingContext2D,
     parts: WatchPart[],
     env: Environment,
+    images?: Map<string, LoadedImage>,
 ): void {
     for (const part of parts) {
         if (part.type === 'QHand') {
-            if (part.src && currentImages) {
-                drawImageHand(ctx, part, env);
+            if (part.src && images) {
+                drawImageHand(ctx, part, env, images);
             } else {
                 drawQHand(ctx, part, env);
             }
         } else if (part.type === 'Static') {
-            drawQHandsInParts(ctx, part.children, env);
+            drawQHandsInParts(ctx, part.children, env, images);
         }
     }
 }
@@ -379,6 +380,7 @@ function renderPartsWithWindows(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
     applyTrailingCutouts: boolean = false,
 ): void {
@@ -395,8 +397,8 @@ function renderPartsWithWindows(
         // QHand: Image-based hands without anchors (e.g. moon disc) are drawn
         // into the static cache. Everything else is dynamic.
         if (part.type === 'QHand') {
-            if (part.src && currentImages && !part.xAnchor && !part.yAnchor) {
-                drawImageHand(ctx, part, env);
+            if (part.src && images && !part.xAnchor && !part.yAnchor) {
+                drawImageHand(ctx, part, env, images);
             }
             continue;
         }
@@ -409,10 +411,10 @@ function renderPartsWithWindows(
         }
 
         if (pendingWindows.length > 0) {
-            renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale);
+            renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
             pendingWindows.length = 0;
         } else {
-            drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale);
+            drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
         }
     }
 
@@ -437,6 +439,7 @@ function renderWithWindowCutouts(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    images?: Map<string, LoadedImage>,
 ): void {
     // Create temp canvas for compositing
     const temp = new OffscreenCanvas(canvasWidth, canvasHeight);
@@ -447,7 +450,7 @@ function renderWithWindowCutouts(
     tctx.scale(scale, scale);
 
     // Draw the part onto the temp canvas
-    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale);
+    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale, images);
 
     // Cut window holes using destination-out
     for (const win of windows) {
@@ -514,10 +517,11 @@ function drawStaticPart(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    images?: Map<string, LoadedImage>,
 ): void {
     switch (part.type) {
         case 'Static':
-            drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale);
+            drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale, images);
             break;
         case 'QDial':
             drawQDial(ctx, part, env);
@@ -529,7 +533,7 @@ function drawStaticPart(
             drawQText(ctx, part, env);
             break;
         case 'Image':
-            drawImage(ctx, part, env);
+            drawImage(ctx, part, env, images);
             break;
         case 'QRect':
             drawQRect(ctx, part, env);
@@ -555,10 +559,11 @@ function drawStatic(
     canvasWidth: number,
     canvasHeight: number,
     scale: number,
+    images?: Map<string, LoadedImage>,
 ): void {
     // Static containers can have windows inside them — trailing windows
     // should cut through the entire static composite (e.g. AM/PM porthole).
-    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, undefined, true);
+    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, undefined, true);
 }
 
 // ============================================================================
@@ -1297,9 +1302,10 @@ function drawImage(
     ctx: RenderContext,
     part: ImagePart,
     env: Environment,
+    images?: Map<string, LoadedImage>,
 ): void {
-    if (!part.src || !currentImages) return;
-    const loaded = currentImages.get(part.src);
+    if (!part.src || !images) return;
+    const loaded = images.get(part.src);
     if (!loaded) return;
 
     const x = evalAttr(part.x, env);
@@ -1329,9 +1335,10 @@ function drawImageHand(
     ctx: RenderContext,
     part: QHandPart,
     env: Environment,
+    images?: Map<string, LoadedImage>,
 ): void {
-    if (!part.src || !currentImages) return;
-    const loaded = currentImages.get(part.src);
+    if (!part.src || !images) return;
+    const loaded = images.get(part.src);
     if (!loaded) return;
 
     const x = evalAttr(part.x, env);

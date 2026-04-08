@@ -1,3 +1,15 @@
+// TEMPORARY: Freeze time at 10:10am PDT for thumbnails
+const _OrigDate = Date;
+const _frozenTime = new _OrigDate('2026-04-07T10:10:00-07:00').getTime();
+(window as any).Date = function(...args: any[]) {
+    if (args.length === 0) return new _OrigDate(_frozenTime);
+    return new (_OrigDate as any)(...args);
+} as any;
+(window as any).Date.now = () => _frozenTime;
+(window as any).Date.parse = _OrigDate.parse;
+(window as any).Date.UTC = _OrigDate.UTC;
+(window as any).Date.prototype = _OrigDate.prototype;
+
 /**
  * Per-face data files push their data onto this global array.
  * The engine reads it at startup.
@@ -290,7 +302,7 @@ async function main() {
                     face.lastTerminatorRebuild = now;
                 }
             }
-            renderFrame(face.ctx, face.watch, face.env, face.scale, face.terminatorLeaves);
+            renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
             if (anyAnimating(face.handStates)) stillAnimating = true;
         }
 
@@ -343,6 +355,10 @@ async function main() {
         if (newPhys === faces[0]?.canvas.width) return;
 
         stopScheduler();
+
+        // Use fixed pixel sizes so the grid forms a square area
+        grid.style.gridTemplateColumns = `repeat(${cols}, ${size}px)`;
+        grid.style.gridTemplateRows = `repeat(${rows}, ${size}px)`;
 
         for (const face of faces) {
             applySize(face, size);
