@@ -45,8 +45,10 @@ for face in $FACES; do
   TITLE=$(get_title "$face")
   SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-'"$face"'.js"><\/script>'
+  ICON="thumb-${face}.png"
   sed -e "s|{{TITLE}}|$TITLE|g" \
       -e "s|{{SCRIPTS}}|$SCRIPTS|g" \
+      -e "s|{{ICON}}|$ICON|g" \
       "$SRC/face-template.html" > "$DIST/$face.html"
   echo "  → $face.html"
 done
@@ -59,6 +61,7 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-selene.js"><\/script>'
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
+    -e "s|{{ICON}}|thumb-all-faces.png|g" \
     "$SRC/face-template.html" > "$DIST/all.html"
 echo "  → all.html"
 
@@ -66,8 +69,8 @@ echo "  → all.html"
 cp "$SRC/index.html" "$DIST/index.html"
 echo "  → index.html"
 
-# Also copy thumbnail images if they exist
-for f in "$SRC"/thumb-*.png; do
+# Also copy thumbnail images and app icon if they exist
+for f in "$SRC"/thumb-*.png "$SRC"/apple-touch-icon.png; do
   [ -f "$f" ] && cp "$f" "$DIST/" && echo "  → $(basename "$f")"
 done
 
