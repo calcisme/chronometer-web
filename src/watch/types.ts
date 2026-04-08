@@ -19,6 +19,8 @@ export interface Watch {
     faceWidth: number;
     /** CSS color string for the surrounding bezel ring. Empty string means no bezel. */
     bezelColor: string;
+    /** If true, draw a fine noon-indicator line at the top of the bezel. */
+    bezelNoonMark: boolean;
     /** All `<init expr="...">` blocks in document order. */
     initExprs: ASTNode[];
     /** All parts included for the selected mode, in document order. */
@@ -40,7 +42,8 @@ export type WatchPart =
     | StaticPart
     | QRectPart
     | TerminatorPart
-    | QWedgePart;
+    | QWedgePart
+    | QDayNightRingPart;
 
 // ============================================================================
 // Shared base for all parts
@@ -138,6 +141,12 @@ export interface QHandPart extends PartBase {
     xAnchor?: ASTNode;
     /** Image anchor Y offset in XML coords. */
     yAnchor?: ASTNode;
+    /** Polar offset radius (e.g. moon orbiting 24-hr dial). */
+    offsetRadius?: ASTNode;
+    /** Polar offset angle expression. */
+    offsetAngle?: ASTNode;
+    /** Number of rays for 'sun' hand type. */
+    nRays?: ASTNode;
 }
 
 // ============================================================================
@@ -163,6 +172,10 @@ export interface WheelPart extends PartBase {
     dragAnimationType?: string;
     marks?: string;
     refName?: string;
+    /** Separate text radius (QWheel only). */
+    tradius?: ASTNode;
+    /** Tick mark style (e.g. 'tick288', 'tick96'). */
+    tick?: string;
 }
 
 // ============================================================================
@@ -284,5 +297,21 @@ export interface QWedgePart extends PartBase {
     strokeColor?: ASTNode;
     fillColor?: ASTNode;
     opaque?: number;
+    update?: ASTNode;
+}
+
+// ============================================================================
+// QDayNightRing — colored wedges showing daylight hours on 24-hour dial
+// ============================================================================
+
+export interface QDayNightRingPart extends PartBase {
+    type: 'QDayNightRing';
+    outerRadius?: ASTNode;
+    innerRadius?: ASTNode;
+    numWedges?: ASTNode;
+    planetNumber?: ASTNode;
+    masterOffset?: ASTNode;
+    strokeColor?: ASTNode;
+    fillColor?: ASTNode;
     update?: ASTNode;
 }

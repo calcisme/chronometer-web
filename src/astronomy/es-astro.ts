@@ -18,7 +18,7 @@ import {
 } from './astro-constants';
 import { AstroCache, CacheSlot, AstroCachePool } from './astro-cache';
 import { julianCenturiesSince2000EpochForDateInterval } from './es-time';
-import { convertUTToGSTP03, convertGSTtoLST } from './es-sidereal';
+import { convertUTToGSTP03, convertGSTtoLST, convertGSTtoUTclosest } from './es-sidereal';
 import {
     sunRAandDecl,
     moonRAAndDecl,
@@ -235,7 +235,7 @@ export function moonAge(
 /**
  * Equation of Time in seconds.
  * EOT = apparent solar time - mean solar time.
- * Based on Sun RA and GMST.
+ * Ported from iOS ECAstronomy.m: EOT() function.
  */
 export function EOTSeconds(
     dateInterval: number,
@@ -245,28 +245,40 @@ export function EOTSeconds(
         return cache.get(CacheSlot.eotForDay);
     }
 
+    // iOS algorithm:
+    // 1. Find UT noon for this date
+    // 2. Compute longitude of mean sun from time offset
+    // 3. Use sun RA to get apparent sidereal time
+    // 4. Convert back to UT; difference is the EOT
+
+    // Noon UT: round to nearest day boundary + 12h
+    const noonD = Math.floor(dateInterval / 86400) * 86400 + 43200;
+    // If noonD is more than 12h in the future, use previous day's noon
+    const noonUT = (noonD - dateInterval > 43200) ? noonD - 86400 : noonD;
+
+    const secondsFromNoon = dateInterval - noonUT;
+    // Longitude of mean sun: if 1h after noon, sun is 15° west
+    const longitudeOfMeanSun = -secondsFromNoon * Math.PI / (12 * 3600);
+
+    // Get the actual sun RA
     const { rightAscension: sunRA } = sunRAandDecl(dateInterval, cache);
-    const gst = convertUTToGSTP03(dateInterval, cache);
 
-    // Sun hour angle = GST - Sun RA
-    let sunHA = gst - sunRA;
+    // GAST = sunRA - longitudeOfMeanSun
+    // (the sidereal time at Greenwich when the sun is at this mean position)
+    const gast = sunRA - longitudeOfMeanSun;
 
-    // Normalize to [-π, π)
-    if (sunHA > Math.PI) {
-        sunHA -= TWO_PI;
-    } else if (sunHA < -Math.PI) {
-        sunHA += TWO_PI;
-    }
+    // Convert this GAST back to UT
+    const utDate = convertGSTtoUTclosest(gast, dateInterval, null);
 
-    // Convert from UT hour-angle offset to seconds
-    // HA in radians, 1 radian = 12*3600/π seconds of time
-    const eotSeconds = -sunHA * 12 * 3600 / Math.PI;
+    // EOT in seconds = difference between actual time and the time
+    // when sun would transit if it moved at mean speed
+    const eotAsSeconds = dateInterval - utDate;
 
     if (cache) {
-        cache.set(CacheSlot.eotForDay, eotSeconds);
+        cache.set(CacheSlot.eotForDay, eotAsSeconds);
     }
 
-    return eotSeconds;
+    return eotAsSeconds;
 }
 
 // ============================================================================

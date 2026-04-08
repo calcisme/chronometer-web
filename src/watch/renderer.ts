@@ -28,6 +28,7 @@ import type {
     StaticPart,
     QRectPart,
     QWedgePart,
+    QDayNightRingPart,
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
 import type { LoadedImage } from './image-loader.js';
@@ -232,6 +233,16 @@ function renderPartsDocumentOrder(
             continue;
         }
 
+        if (part.type === 'QDayNightRing') {
+            // Flush any pending windows as borders only
+            for (const win of pendingWindows) {
+                drawWindowBorder(ctx, win, env);
+            }
+            pendingWindows.length = 0;
+            drawQDayNightRing(ctx, part, env);
+            continue;
+        }
+
         // Regular drawable part — apply pending window cutouts if any
         if (pendingWindows.length > 0) {
             renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
@@ -324,6 +335,26 @@ function drawBezel(ctx: RenderContext, watch: Watch): void {
     ctx.lineWidth = 0.4;
     ctx.stroke();
 
+    // --- 5. Solar noon indicator mark (etched line at 12 o'clock) ---
+    if (watch.bezelNoonMark) {
+        const markInner = faceRadius;
+        const markOuter = faceRadius + BEZEL_THICKNESS_XML * 0.55;
+        // Etched groove: dark line + offset highlight
+        ctx.beginPath();
+        ctx.moveTo(0, -markInner);
+        ctx.lineTo(0, -markOuter);
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+        // Slight highlight to the right (simulates 3D groove)
+        ctx.beginPath();
+        ctx.moveTo(0.5, -markInner);
+        ctx.lineTo(0.5, -markOuter);
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 0.3;
+        ctx.stroke();
+    }
+
     ctx.restore();
 }
 
@@ -385,10 +416,18 @@ function renderPartsWithWindows(
     applyTrailingCutouts: boolean = false,
 ): void {
     const pendingWindows: WindowPart[] = [];
+    // Leading windows: windows that appear before any drawable part.
+    // These cut through the entire static composite (not just the next part).
+    const leadingWindows: WindowPart[] = [];
+    let seenDrawable = false;
 
     for (const part of parts) {
         if (part.type === 'Window') {
-            pendingWindows.push(part);
+            if (!seenDrawable) {
+                leadingWindows.push(part);
+            } else {
+                pendingWindows.push(part);
+            }
             continue;
         }
 
@@ -410,6 +449,8 @@ function renderPartsWithWindows(
             continue;
         }
 
+        seenDrawable = true;
+
         if (pendingWindows.length > 0) {
             renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
             pendingWindows.length = 0;
@@ -418,12 +459,22 @@ function renderPartsWithWindows(
         }
     }
 
-    // Leftover pending windows
+    // Leftover pending windows (between-part windows with no following part)
     for (const win of pendingWindows) {
         if (applyTrailingCutouts) {
             cutWindowHole(ctx, win, env);
         }
         drawWindowBorder(ctx, win, env);
+    }
+
+    // Leading windows: draw borders first, then cut holes.
+    // The cutout erases the inner half of the border stroke,
+    // leaving only the outer half visible (matching iOS).
+    for (const win of leadingWindows) {
+        drawWindowBorder(ctx, win, env);
+    }
+    for (const win of leadingWindows) {
+        cutWindowHole(ctx, win, env);
     }
 }
 
@@ -540,6 +591,9 @@ function drawStaticPart(
             break;
         case 'QWedge':
             drawQWedge(ctx, part, env);
+            break;
+        case 'QDayNightRing':
+            drawQDayNightRing(ctx, part, env);
             break;
         case 'Window':
             // Standalone window (no following part to clip) — just draw border
@@ -906,6 +960,54 @@ function drawQHand(
             const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
             drawCenterDot(ctx, oCenter3, osc);
         }
+    } else if (handType === 'sun') {
+        // iOS ECQHandSun: sun symbol with rays
+        // length2 = distance from axis to nearest visible sun point
+        // length = distance from axis to furthest visible sun point
+        // nRays = number of rays
+        const nRays = evalAttr(part.nRays, env) || 8;
+        const oCenter2 = evalAttr(part.oCenter, env);
+
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = strokeColor;
+        ctx.fillStyle = fillColor;
+
+        // iOS: rayRad = (length-length2)/2, raysRad = (length-length2)/3
+        // cen = length2 + raysRad (center of the sun disc in the hand's coord system)
+        // In iOS, Y grows upward from the pivot; in Canvas, we've already rotated, so -Y is "toward length"
+        let rayRad = (length - length2) / 2;
+        const raysRad = (length - length2) / 3;
+        const cen = -(length2 + raysRad);  // Negate because we draw upward
+        const sunCenter = oCenter2 > 0 ? oCenter2 : raysRad / 2;
+
+        // Draw rays: triangular teeth from the sun disc
+        ctx.beginPath();
+        for (let i = 0; i < nRays; i++) {
+            const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
+            const farX = rayRad * Math.cos(theta);
+            const farY = cen + rayRad * Math.sin(theta);
+            const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
+            const cwY = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
+            const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
+            const ccwY = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
+
+            ctx.moveTo(farX, farY);
+            ctx.lineTo(cwX, cwY);
+            ctx.lineTo(ccwX, ccwY);
+            ctx.lineTo(farX, farY);
+
+            rayRad = raysRad;  // first ray is longer, rest are shorter (matching iOS)
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw central disc
+        ctx.fillStyle = fillColor;
+        ctx.strokeStyle = fillColor;
+        ctx.beginPath();
+        ctx.arc(0, cen, sunCenter, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
     } else {
         drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
 
@@ -1125,8 +1227,8 @@ function drawWheel(
     const arcSpan = angle2 - angle1;
     const step = arcSpan / n;
 
-    // tradius = text radius (same as radius if not specified)
-    const tradius = radius;
+    // tradius = text radius (separate from tick/line radius, for QWheel)
+    const tradius = part.tradius ? evalAttr(part.tradius, env) : radius;
 
     // QWheels draw their own circular background; SWheels rely on
     // the QRect behind the window for their background.
@@ -1188,6 +1290,56 @@ function drawWheel(
     }
 
     ctx.restore(); // closes ctx.save() for ctx.rotate(angle + angle1)
+
+    // Draw tick marks for QWheel (e.g. tick288, tick96)
+    if (part.tick && part.wheelVariant === 'QWheel') {
+        const tickMatch = part.tick.match(/tick(\d+)/);
+        if (tickMatch) {
+            const nTicks = parseInt(tickMatch[1], 10);
+            const tickOuter = radius; // outer edge of the dial
+            const tickGap = radius - tradius; // distance from outer edge to text
+            // Tick lengths from the outer edge inward
+            const tickLenLarge = tickGap - 2;  // hour marks: almost to the text
+            const tickLenMedium = tickGap * 0.55; // 30-min marks
+            const tickLenSmall = tickGap * 0.30;  // 5-min marks
+
+            const ticksPerHour = nTicks / 24;
+            const ticksPer30Min = ticksPerHour / 2;
+
+            ctx.save();
+            ctx.rotate(angle);
+            ctx.strokeStyle = strokeColor;
+
+            for (let i = 0; i < nTicks; i++) {
+                const th = (i / nTicks) * 2 * Math.PI - Math.PI / 2;
+                const cosT = Math.cos(th);
+                const sinT = Math.sin(th);
+
+                let tickLen: number;
+                let lw: number;
+                if (i % ticksPerHour === 0) {
+                    // Hour mark
+                    tickLen = tickLenLarge;
+                    lw = 0.7;
+                } else if (i % ticksPer30Min === 0) {
+                    // 30-minute mark
+                    tickLen = tickLenMedium;
+                    lw = 0.5;
+                } else {
+                    // 5-minute mark
+                    tickLen = tickLenSmall;
+                    lw = 0.3;
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(cosT * tickOuter, sinT * tickOuter);
+                ctx.lineTo(cosT * (tickOuter - tickLen), sinT * (tickOuter - tickLen));
+                ctx.lineWidth = lw;
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+    }
 
     // Note: iOS SWheels render text in rectangular panes — no circular border.
     // The window + QRect system handles visual framing.
@@ -1344,6 +1496,8 @@ function drawImageHand(
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);  // Negate Y
     const angle = evalAttr(part.angle, env);
+    const offsetRadius = evalAttr(part.offsetRadius, env);
+    const offsetAngle = evalAttr(part.offsetAngle, env);
 
     const { bitmap, scale: imgScale } = loaded;
     const drawW = bitmap.width * imgScale;
@@ -1351,16 +1505,35 @@ function drawImageHand(
 
     ctx.save();
     ctx.translate(x, y);
-    if (angle) {
-        ctx.rotate(angle);
+
+    if (offsetRadius > 0) {
+        // Polar offset mode (e.g. Moon hand on Mauna Kea):
+        // The image orbits the center at `offsetRadius` distance,
+        // positioned at `offsetAngle` from 12 o'clock.
+        // The `angle` expression is typically moonAgeAngle() and determines
+        // the image's own rotation (e.g. to show proper phase orientation).
+        ctx.rotate(offsetAngle);
+        ctx.translate(0, -offsetRadius);
+        // Apply the image's own rotation (moon phase rotation)
+        ctx.rotate(-offsetAngle + angle);
+        // Draw centered
+        ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else if (part.xAnchor || part.yAnchor) {
+        // Standard anchored image hand (rotating around pivot)
+        if (angle) {
+            ctx.rotate(angle);
+        }
+        const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
+        const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;  // Negate Y
+        ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
+    } else {
+        // Simple centered image (no anchor, no offset)
+        if (angle) {
+            ctx.rotate(angle);
+        }
+        ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
     }
 
-    // xAnchor: pivot X position from image's left edge (default: image center)
-    // yAnchor: pivot Y offset — image inner edge sits at this radius
-    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
-    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;  // Negate Y
-
-    ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
     ctx.restore();
 }
 
@@ -1457,6 +1630,71 @@ function drawQWedge(
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 0.3;
         ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// QDayNightRing — daylight/nighttime wedges on a 24-hour dial
+// ============================================================================
+
+function drawQDayNightRing(
+    ctx: RenderContext,
+    part: QDayNightRingPart,
+    env: Environment,
+): void {
+    const cx = evalAttr(part.x, env);
+    const cy = -evalAttr(part.y, env);  // Y-flip
+    const outerR = evalAttr(part.outerRadius, env);
+    const innerR = evalAttr(part.innerRadius, env);
+    const numWedges = evalAttr(part.numWedges, env) || 24;
+    const planetNumber = evalAttr(part.planetNumber, env);
+    const masterOffset = evalAttr(part.masterOffset, env);
+    if (outerR <= 0 || innerR <= 0) return;
+
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'black';
+    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : 'white';
+
+    // Each wedge spans a bit more than 2PI/numWedges so they overlap slightly (matching iOS)
+    const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
+
+    // Get the dayNightLeafAngle function from the environment
+    const leafAngleFn = env.functions.get('dayNightLeafAngle') as
+        ((planetNumber: number, leafNumber: number, numLeaves: number) => number) | undefined;
+    if (!leafAngleFn) return;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    for (let i = 0; i < numWedges; i++) {
+        // Compute the leaf angle for this wedge
+        const leafAngle = leafAngleFn(planetNumber, i, numWedges);
+        const angle = masterOffset + leafAngle;
+
+        ctx.save();
+        ctx.rotate(angle);
+
+        // Draw annular sector centred on -PI/2 (12 o'clock)
+        const startAngle = -Math.PI / 2 - wedgeSpan / 2;
+        const endAngle = -Math.PI / 2 + wedgeSpan / 2;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, outerR, startAngle, endAngle);
+        ctx.arc(0, 0, innerR, endAngle, startAngle, true);
+        ctx.closePath();
+
+        if (!isTransparent(fillColor)) {
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+        }
+        if (!isTransparent(strokeColor)) {
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = (fillColor === 'rgba(0,0,0,0)') ? 0.5 : 0.3;
+            ctx.stroke();
+        }
+
+        ctx.restore();
     }
 
     ctx.restore();

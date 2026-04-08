@@ -434,6 +434,7 @@
       beatsPerSecond: attr(watchEl, "beatsPerSecond") ?? "1",
       faceWidth: parseFloat(attr(watchEl, "faceWidth") ?? "290"),
       bezelColor: attr(watchEl, "bezelColor") ?? "",
+      bezelNoonMark: (attr(watchEl, "bezelNoonMark") ?? "") === "true",
       initExprs: [],
       parts: []
     };
@@ -512,6 +513,11 @@
       case "terminator":
         if (matchesMode(el, mode)) {
           parts.push(parseTerminator(el));
+        }
+        break;
+      case "qdaynightring":
+        if (matchesMode(el, mode)) {
+          parts.push(parseQDayNightRing(el));
         }
         break;
       case "tick":
@@ -607,7 +613,10 @@
       tLineWidth: attrExpr(el, "tLineWidth"),
       src: attr(el, "src"),
       xAnchor: attrExpr(el, "xAnchor"),
-      yAnchor: attrExpr(el, "yAnchor")
+      yAnchor: attrExpr(el, "yAnchor"),
+      offsetRadius: attrExpr(el, "offsetRadius"),
+      offsetAngle: attrExpr(el, "offsetAngle"),
+      nRays: attrExpr(el, "nRays")
     };
   }
   function parseWheel(el, variant) {
@@ -633,7 +642,9 @@
       animSpeed: attrExpr(el, "animSpeed"),
       dragAnimationType: attr(el, "dragAnimationType"),
       marks: attr(el, "marks"),
-      refName: attr(el, "refName")
+      refName: attr(el, "refName"),
+      tradius: attrExpr(el, "tradius"),
+      tick: attr(el, "tick")
     };
   }
   function parseQText(el) {
@@ -749,6 +760,23 @@
       strokeColor: attrExpr(el, "strokeColor"),
       fillColor: attrExpr(el, "fillColor"),
       opaque: el.getAttribute("opaque") ? Number(el.getAttribute("opaque")) : void 0,
+      update: attrExpr(el, "update")
+    };
+  }
+  function parseQDayNightRing(el) {
+    return {
+      type: "QDayNightRing",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      outerRadius: attrExpr(el, "outerRadius"),
+      innerRadius: attrExpr(el, "innerRadius"),
+      numWedges: attrExpr(el, "numWedges"),
+      planetNumber: attrExpr(el, "planetNumber"),
+      masterOffset: attrExpr(el, "masterOffset"),
+      strokeColor: attrExpr(el, "strokeColor"),
+      fillColor: attrExpr(el, "fillColor"),
       update: attrExpr(el, "update")
     };
   }
@@ -972,6 +1000,8 @@
   var kECAstroTwilightAltitude = -18 * Math.PI / 180;
   var kECGoldenHourAltitude = 6 * Math.PI / 180;
   var kECLimitingAzimuthLatitude = 89 * Math.PI / 180;
+  var kECAlwaysAboveHorizon = NaN;
+  var kECAlwaysBelowHorizon = NaN;
   var ALWAYS_ABOVE_HORIZON = 1e18;
   var ALWAYS_BELOW_HORIZON = -1e18;
   function isAlwaysAbove(value) {
@@ -1543,6 +1573,13 @@
       utD = priorUTMidnightD + utSecondsSinceMidnight;
     }
     return utD;
+  }
+  function GSTDifferenceForDate(dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const priorUTMidnightD = priorUTMidnightForDateInterval(dateInterval, cache);
+    const utRadiansSinceMidnight = (dateInterval - priorUTMidnightD) * Math.PI / (12 * 3600);
+    const gst = convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, utRadiansSinceMidnight, priorUTMidnightD);
+    return gst - utRadiansSinceMidnight;
   }
 
   // src/astronomy/planet-tables.ts
@@ -10029,6 +10066,15 @@
     const declPrime = Math.asin(C / q);
     return { Hprime, declPrime };
   }
+  function generalPrecessionSinceJ2000(julianCenturiesSince2000Epoch) {
+    const t = julianCenturiesSince2000Epoch;
+    const t2 = t * t;
+    const t3 = t * t2;
+    const t4 = t2 * t2;
+    const t5 = t2 * t3;
+    const arcSeconds = 5028.796195 * t + 1.1054348 * t2 + 7964e-8 * t3 - 23857e-9 * t4 - 383e-10 * t5;
+    return arcSeconds * Math.PI / (3600 * 180);
+  }
   function generalObliquity(julianCenturiesSince2000Epoch) {
     const t = julianCenturiesSince2000Epoch;
     const t2 = t * t;
@@ -10610,6 +10656,23 @@
       cache.set(16 /* moonPhase */, phase);
     }
     return { age, phase };
+  }
+  function EOTSeconds(dateInterval, cache) {
+    if (cache && cache.isValid(14 /* eotForDay */)) {
+      return cache.get(14 /* eotForDay */);
+    }
+    const noonD = Math.floor(dateInterval / 86400) * 86400 + 43200;
+    const noonUT = noonD - dateInterval > 43200 ? noonD - 86400 : noonD;
+    const secondsFromNoon = dateInterval - noonUT;
+    const longitudeOfMeanSun = -secondsFromNoon * Math.PI / (12 * 3600);
+    const { rightAscension: sunRA } = sunRAandDecl(dateInterval, cache);
+    const gast = sunRA - longitudeOfMeanSun;
+    const utDate = convertGSTtoUTclosest(gast, dateInterval, null);
+    const eotAsSeconds = dateInterval - utDate;
+    if (cache) {
+      cache.set(14 /* eotForDay */, eotAsSeconds);
+    }
+    return eotAsSeconds;
   }
   function positionAngle(sunRA, sunDecl, objRA, objDecl) {
     return Math.atan2(
@@ -11301,6 +11364,13 @@
     env.variables.set("updateAtNextMoonriseOrMidnight", EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
     env.variables.set("updateAtNextMoonsetOrMidnight", EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
     env.variables.set("updateAtEnvChangeOnly", EC_UPDATE_ENV_CHANGE_ONLY);
+    env.variables.set("updateAtNextSunrise", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set("updateAtNextSunset", EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
+    env.variables.set("updateAtNextSunriseOrSunset", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set("updateForTimeSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
+    env.variables.set("updateForLocSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
+    env.variables.set("planetSun", 0 /* Sun */);
+    env.variables.set("planetMoon", 1 /* Moon */);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
@@ -11348,6 +11418,13 @@
     functions.set("monthNumber", () => getNow().getMonth());
     functions.set("monthNumberAngle", () => getNow().getMonth() * 2 * Math.PI / 12);
     functions.set("weekdayNumberAngle", () => getNow().getDay() * 2 * Math.PI / 7);
+    functions.set("yearNumber", () => getNow().getFullYear());
+    functions.set("eraNumber", () => 1);
+    functions.set("hour24ValueAngle", () => {
+      const t = getNow();
+      const h24 = t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
+      return h24 * 2 * Math.PI / 24;
+    });
     functions.set("days", () => 86400);
     functions.set("hours", () => 3600);
     functions.set("minutes", () => 60);
@@ -11537,9 +11614,251 @@
     functions.set("advanceToMoonsetForDay", () => 0);
     functions.set("heading", () => 0);
     functions.set("tzOffset", () => tzOffsetSeconds);
+    functions.set("tzOffsetAngle", () => tzOffsetSeconds * Math.PI / (12 * 3600));
+    functions.set("longitude", () => OBSERVER_LON);
     functions.set("calendarWeekdayStart", () => 0);
     functions.set("terminatorAngle", terminatorAngle);
+    functions.set("EOTAngle", () => {
+      const di = dateToDateInterval(getNow());
+      const eotSec = EOTSeconds(di, null);
+      return eotSec * Math.PI / (12 * 3600);
+    });
+    functions.set("EOTSeconds", () => EOTSeconds(dateToDateInterval(getNow()), null));
+    functions.set("vernalEquinoxAngle", () => {
+      const di = dateToDateInterval(getNow());
+      return GSTDifferenceForDate(di, null);
+    });
+    functions.set("J2000RAofVernalEquinoxOfDateAngle", () => {
+      const di = dateToDateInterval(getNow());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      return -generalPrecessionSinceJ2000(julianCenturiesSince2000Epoch);
+    });
+    functions.set("sunrise24HourIndicatorAngle", () => {
+      return dayNightLeafAngle(true, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds);
+    });
+    functions.set("sunset24HourIndicatorAngle", () => {
+      return dayNightLeafAngle(false, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds);
+    });
+    functions.set("polarSummer", () => {
+      return isPolarSummer(getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds) ? 1 : 0;
+    });
+    functions.set("polarWinter", () => {
+      return isPolarWinter(getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds) ? 1 : 0;
+    });
+    functions.set("sunriseIndicatorValid", () => {
+      return isNaN(riseSetForDay(true, 0 /* Sun */)) ? 0 : 1;
+    });
+    functions.set("sunsetIndicatorValid", () => {
+      return isNaN(riseSetForDay(false, 0 /* Sun */)) ? 0 : 1;
+    });
+    functions.set("planetIsUp", (n) => {
+      const di = dateToDateInterval(getNow());
+      const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+      return alt > 0 ? 1 : 0;
+    });
+    functions.set("timeIndicatorColor", () => 0);
+    functions.set("locationIndicatorColor", () => 0);
+    functions.set("skew", () => 0);
+    functions.set("dayNightLeafAngle", (planetNumber, leafNumber, numLeaves) => {
+      return computeDayNightLeafAngle(
+        planetNumber,
+        leafNumber,
+        numLeaves,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+    });
     releaseCachePool(pool);
+  }
+  function dayNightLeafAngle(riseNotSet, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const lookahead = 3600 * 13.2;
+    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+    const searchForward = riseNotSet ? !sunIsUp : sunIsUp;
+    const eventTime = planetaryRiseSetTimeRefined(
+      searchForward ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+      observerLat,
+      observerLon,
+      riseNotSet,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const transitSearchForward = riseNotSet ? !sunIsUp : sunIsUp;
+    const now = getNow();
+    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    const noonDI = dateToDateInterval(noon);
+    const noonAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
+    if (isNoRiseSet(eventTime)) {
+      if (eventTime === kECAlwaysAboveHorizon) {
+        return fmod(noonAngle + Math.PI, 2 * Math.PI);
+      }
+      return noonAngle;
+    }
+    return angle24HourForDate(eventTime, tzOffsetSeconds);
+  }
+  function isPolarSummer(getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+    const riseTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
+      observerLat,
+      observerLon,
+      true,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const setTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
+      observerLat,
+      observerLon,
+      false,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
+      return riseTime === kECAlwaysAboveHorizon;
+    }
+    if (isNoRiseSet(riseTime) && !isNoRiseSet(setTime)) {
+      return riseTime === kECAlwaysAboveHorizon;
+    }
+    return false;
+  }
+  function isPolarWinter(getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+    const riseTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
+      observerLat,
+      observerLon,
+      true,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const setTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
+      observerLat,
+      observerLon,
+      false,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
+      return riseTime === kECAlwaysBelowHorizon;
+    }
+    if (isNoRiseSet(riseTime) && !isNoRiseSet(setTime)) {
+      return riseTime === kECAlwaysBelowHorizon;
+    }
+    return false;
+  }
+  function angle24HourForDate(dateInterval, _tzOffsetSeconds) {
+    const d = new Date((dateInterval + 978307200) * 1e3);
+    const h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    return h * Math.PI / 12;
+  }
+  function computeDayNightLeafAngle(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const lookahead = 3600 * 13.2;
+    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
+    const sunIsUp = alt > 0;
+    const riseTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+      observerLat,
+      observerLon,
+      true,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const setTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+      observerLat,
+      observerLon,
+      false,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const now = getNow();
+    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    const rTransitAngle = angle24HourForDate(dateToDateInterval(noon), tzOffsetSeconds);
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const sTransitAngle = angle24HourForDate(dateToDateInterval(midnight), tzOffsetSeconds);
+    let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
+    let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
+    if (numLeaves === 0) {
+      if (leafNumber === 0) {
+        return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
+      } else if (leafNumber === 1) {
+        return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
+      } else if (leafNumber === 2) {
+        return isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon ? 1 : 0;
+      } else if (leafNumber === 3) {
+        return isNoRiseSet(riseTime) && riseTime === kECAlwaysBelowHorizon ? 1 : 0;
+      }
+    }
+    const leafWidth = 2 * Math.PI / numLeaves;
+    let polarSummer = false;
+    let polarWinter = false;
+    if (isNaN(riseTimeAngle)) {
+      if (isNaN(setTimeAngle)) {
+        let sTA = sTransitAngle;
+        if (sTA > rTransitAngle + Math.PI) sTA -= 2 * Math.PI;
+        else if (sTA < rTransitAngle - Math.PI) sTA += 2 * Math.PI;
+        const avgTransit = (rTransitAngle + sTA) / 2;
+        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+          riseTimeAngle = avgTransit - Math.PI;
+          setTimeAngle = avgTransit + Math.PI;
+          polarSummer = true;
+        } else {
+          riseTimeAngle = avgTransit - leafWidth / 2 - 1e-5;
+          setTimeAngle = avgTransit + leafWidth / 2 + 1e-5;
+          polarWinter = true;
+        }
+      } else {
+        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+          riseTimeAngle = setTimeAngle - 2 * Math.PI;
+          polarSummer = true;
+        } else {
+          riseTimeAngle = setTimeAngle - leafWidth;
+          polarWinter = true;
+        }
+      }
+    } else if (isNaN(setTimeAngle)) {
+      if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+        setTimeAngle = riseTimeAngle + 2 * Math.PI;
+        polarSummer = true;
+      } else {
+        setTimeAngle = riseTimeAngle + leafWidth;
+        polarWinter = true;
+      }
+    }
+    riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
+    setTimeAngle = fmod(setTimeAngle, 2 * Math.PI);
+    if (setTimeAngle <= riseTimeAngle + 1e-4) {
+      setTimeAngle += 2 * Math.PI;
+    }
+    setTimeAngle -= leafWidth / 2;
+    riseTimeAngle += leafWidth / 2;
+    if (setTimeAngle < riseTimeAngle) {
+      riseTimeAngle = setTimeAngle = (riseTimeAngle + setTimeAngle) / 2;
+    }
+    let leafCenterAngle = riseTimeAngle + (setTimeAngle - riseTimeAngle) / (numLeaves - 1) * leafNumber;
+    if (leafCenterAngle > 2 * Math.PI) {
+      leafCenterAngle -= 2 * Math.PI;
+    }
+    return leafCenterAngle;
   }
 
   // src/watch/renderer.ts
@@ -11623,6 +11942,14 @@
         }
         continue;
       }
+      if (part.type === "QDayNightRing") {
+        for (const win of pendingWindows) {
+          drawWindowBorder(ctx, win, env);
+        }
+        pendingWindows.length = 0;
+        drawQDayNightRing(ctx, part, env);
+        continue;
+      }
       if (pendingWindows.length > 0) {
         renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
         pendingWindows.length = 0;
@@ -11686,6 +12013,22 @@
     ctx.strokeStyle = "rgba(255,255,255,0.15)";
     ctx.lineWidth = 0.4;
     ctx.stroke();
+    if (watch.bezelNoonMark) {
+      const markInner = faceRadius;
+      const markOuter = faceRadius + BEZEL_THICKNESS_XML * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(0, -markInner);
+      ctx.lineTo(0, -markOuter);
+      ctx.strokeStyle = "rgba(0,0,0,0.55)";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0.5, -markInner);
+      ctx.lineTo(0.5, -markOuter);
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.lineWidth = 0.3;
+      ctx.stroke();
+    }
     ctx.restore();
   }
   function parseColorComponents(color) {
@@ -11719,9 +12062,15 @@
   }
   function renderPartsWithWindows(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, applyTrailingCutouts = false) {
     const pendingWindows = [];
+    const leadingWindows = [];
+    let seenDrawable = false;
     for (const part of parts) {
       if (part.type === "Window") {
-        pendingWindows.push(part);
+        if (!seenDrawable) {
+          leadingWindows.push(part);
+        } else {
+          pendingWindows.push(part);
+        }
         continue;
       }
       if (part.type === "Button") continue;
@@ -11737,6 +12086,7 @@
         }
         continue;
       }
+      seenDrawable = true;
       if (pendingWindows.length > 0) {
         renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
         pendingWindows.length = 0;
@@ -11749,6 +12099,12 @@
         cutWindowHole(ctx, win, env);
       }
       drawWindowBorder(ctx, win, env);
+    }
+    for (const win of leadingWindows) {
+      drawWindowBorder(ctx, win, env);
+    }
+    for (const win of leadingWindows) {
+      cutWindowHole(ctx, win, env);
     }
   }
   function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale, images) {
@@ -11813,6 +12169,9 @@
         break;
       case "QWedge":
         drawQWedge(ctx, part, env);
+        break;
+      case "QDayNightRing":
+        drawQDayNightRing(ctx, part, env);
         break;
       case "Window":
         drawWindowBorder(ctx, part, env);
@@ -12057,6 +12416,39 @@
         const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
         drawCenterDot(ctx, oCenter3, osc);
       }
+    } else if (handType === "sun") {
+      const nRays = evalAttr(part.nRays, env) || 8;
+      const oCenter2 = evalAttr(part.oCenter, env);
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = strokeColor;
+      ctx.fillStyle = fillColor;
+      let rayRad = (length - length2) / 2;
+      const raysRad = (length - length2) / 3;
+      const cen = -(length2 + raysRad);
+      const sunCenter = oCenter2 > 0 ? oCenter2 : raysRad / 2;
+      ctx.beginPath();
+      for (let i = 0; i < nRays; i++) {
+        const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
+        const farX = rayRad * Math.cos(theta);
+        const farY = cen + rayRad * Math.sin(theta);
+        const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
+        const cwY = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
+        const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
+        const ccwY = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
+        ctx.moveTo(farX, farY);
+        ctx.lineTo(cwX, cwY);
+        ctx.lineTo(ccwX, ccwY);
+        ctx.lineTo(farX, farY);
+        rayRad = raysRad;
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = fillColor;
+      ctx.strokeStyle = fillColor;
+      ctx.beginPath();
+      ctx.arc(0, cen, sunCenter, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
     } else {
       drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
       const oLength = evalAttr(part.oLength, env);
@@ -12194,7 +12586,7 @@
     const angle2 = part.angle2 ? evalAttr(part.angle2, env) : 2 * Math.PI;
     const arcSpan = angle2 - angle1;
     const step = arcSpan / n;
-    const tradius = radius;
+    const tradius = part.tradius ? evalAttr(part.tradius, env) : radius;
     if (part.wheelVariant === "QWheel" && bgColor !== "rgba(0,0,0,0)") {
       ctx.fillStyle = bgColor;
       ctx.beginPath();
@@ -12237,6 +12629,45 @@
       ctx.rotate(isPartialArc ? step : -step);
     }
     ctx.restore();
+    if (part.tick && part.wheelVariant === "QWheel") {
+      const tickMatch = part.tick.match(/tick(\d+)/);
+      if (tickMatch) {
+        const nTicks = parseInt(tickMatch[1], 10);
+        const tickOuter = radius;
+        const tickGap = radius - tradius;
+        const tickLenLarge = tickGap - 2;
+        const tickLenMedium = tickGap * 0.55;
+        const tickLenSmall = tickGap * 0.3;
+        const ticksPerHour = nTicks / 24;
+        const ticksPer30Min = ticksPerHour / 2;
+        ctx.save();
+        ctx.rotate(angle);
+        ctx.strokeStyle = strokeColor;
+        for (let i = 0; i < nTicks; i++) {
+          const th = i / nTicks * 2 * Math.PI - Math.PI / 2;
+          const cosT = Math.cos(th);
+          const sinT = Math.sin(th);
+          let tickLen;
+          let lw;
+          if (i % ticksPerHour === 0) {
+            tickLen = tickLenLarge;
+            lw = 0.7;
+          } else if (i % ticksPer30Min === 0) {
+            tickLen = tickLenMedium;
+            lw = 0.5;
+          } else {
+            tickLen = tickLenSmall;
+            lw = 0.3;
+          }
+          ctx.beginPath();
+          ctx.moveTo(cosT * tickOuter, sinT * tickOuter);
+          ctx.lineTo(cosT * (tickOuter - tickLen), sinT * (tickOuter - tickLen));
+          ctx.lineWidth = lw;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
   function drawQText(ctx, part, env) {
@@ -12316,17 +12747,31 @@
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const angle = evalAttr(part.angle, env);
+    const offsetRadius = evalAttr(part.offsetRadius, env);
+    const offsetAngle = evalAttr(part.offsetAngle, env);
     const { bitmap, scale: imgScale } = loaded;
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;
     ctx.save();
     ctx.translate(x, y);
-    if (angle) {
-      ctx.rotate(angle);
+    if (offsetRadius > 0) {
+      ctx.rotate(offsetAngle);
+      ctx.translate(0, -offsetRadius);
+      ctx.rotate(-offsetAngle + angle);
+      ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else if (part.xAnchor || part.yAnchor) {
+      if (angle) {
+        ctx.rotate(angle);
+      }
+      const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
+      const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
+      ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
+    } else {
+      if (angle) {
+        ctx.rotate(angle);
+      }
+      ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
     }
-    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
-    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
-    ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
     ctx.restore();
   }
   function drawQRect(ctx, part, env) {
@@ -12388,6 +12833,46 @@
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 0.3;
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawQDayNightRing(ctx, part, env) {
+    const cx = evalAttr(part.x, env);
+    const cy = -evalAttr(part.y, env);
+    const outerR = evalAttr(part.outerRadius, env);
+    const innerR = evalAttr(part.innerRadius, env);
+    const numWedges = evalAttr(part.numWedges, env) || 24;
+    const planetNumber = evalAttr(part.planetNumber, env);
+    const masterOffset = evalAttr(part.masterOffset, env);
+    if (outerR <= 0 || innerR <= 0) return;
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
+    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "white";
+    const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
+    const leafAngleFn = env.functions.get("dayNightLeafAngle");
+    if (!leafAngleFn) return;
+    ctx.save();
+    ctx.translate(cx, cy);
+    for (let i = 0; i < numWedges; i++) {
+      const leafAngle = leafAngleFn(planetNumber, i, numWedges);
+      const angle = masterOffset + leafAngle;
+      ctx.save();
+      ctx.rotate(angle);
+      const startAngle = -Math.PI / 2 - wedgeSpan / 2;
+      const endAngle = -Math.PI / 2 + wedgeSpan / 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, outerR, startAngle, endAngle);
+      ctx.arc(0, 0, innerR, endAngle, startAngle, true);
+      ctx.closePath();
+      if (!isTransparent(fillColor)) {
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+      }
+      if (!isTransparent(strokeColor)) {
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = fillColor === "rgba(0,0,0,0)" ? 0.5 : 0.3;
+        ctx.stroke();
+      }
+      ctx.restore();
     }
     ctx.restore();
   }

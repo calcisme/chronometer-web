@@ -27,10 +27,14 @@ import {
     moonElongation as computeMoonElongation,
     closestPhaseDayNumber, planetEclipticLongitude, planetEclipticLatitude,
     planetGeocentricDistance, lunarAscendingNodeLongitude as computeLunarAscendingNode,
+    EOTSeconds,
 } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
-import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
+import { ECPlanetNumber, isNoRiseSet, kECAlwaysAboveHorizon, kECAlwaysBelowHorizon, fmod } from '../astronomy/astro-constants.js';
 import { terminatorAngle } from './terminator.js';
+import { GSTDifferenceForDate } from '../astronomy/es-sidereal.js';
+import { generalPrecessionSinceJ2000 } from '../astronomy/es-coordinates.js';
+import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
 
 // Default observer location (San Jose, CA): used if geolocation unavailable
 const DEFAULT_LAT_DEG = 37.205;    // degrees N
@@ -61,6 +65,17 @@ export function createWatchEnvironment(
     env.variables.set('updateAtNextMoonriseOrMidnight', EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
     env.variables.set('updateAtNextMoonsetOrMidnight', EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
     env.variables.set('updateAtEnvChangeOnly', EC_UPDATE_ENV_CHANGE_ONLY);
+
+    // Aliases used by Mauna Kea (shorter names without "OrMidnight")
+    env.variables.set('updateAtNextSunrise', EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set('updateAtNextSunset', EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
+    env.variables.set('updateAtNextSunriseOrSunset', EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set('updateForTimeSyncIndicator', EC_UPDATE_ENV_CHANGE_ONLY);
+    env.variables.set('updateForLocSyncIndicator', EC_UPDATE_ENV_CHANGE_ONLY);
+
+    // Planet constants used in XML expressions
+    env.variables.set('planetSun', ECPlanetNumber.Sun);
+    env.variables.set('planetMoon', ECPlanetNumber.Moon);
 
     // Register real time functions
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
@@ -145,6 +160,15 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     functions.set('monthNumber', () => getNow().getMonth());
     functions.set('monthNumberAngle', () => getNow().getMonth() * 2 * Math.PI / 12);
     functions.set('weekdayNumberAngle', () => getNow().getDay() * 2 * Math.PI / 7);
+    functions.set('yearNumber', () => getNow().getFullYear());
+    functions.set('eraNumber', () => 1); // CE = 1 (always CE for modern dates)
+
+    // --- 24-hour time (Mauna Kea) ---
+    functions.set('hour24ValueAngle', () => {
+        const t = getNow();
+        const h24 = t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
+        return h24 * 2 * Math.PI / 24;
+    });
 
     // Time-unit helpers (return value in seconds, matching iOS convention for update intervals)
     functions.set('days', () => 86400);
@@ -377,6 +401,10 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
 
     // Timezone
     functions.set('tzOffset', () => tzOffsetSeconds);
+    functions.set('tzOffsetAngle', () => tzOffsetSeconds * Math.PI / (12 * 3600));
+
+    // Observer longitude in radians (used by Mauna Kea angle expressions)
+    functions.set('longitude', () => OBSERVER_LON);
 
     // Calendar wheel helpers
     functions.set('calendarWeekdayStart', () => 0);
@@ -384,6 +412,336 @@ function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_
     // --- Terminator leaf function (5 args) ---
     functions.set('terminatorAngle', terminatorAngle);
 
+    // --- Equation of Time angle (radians) ---
+    // iOS: EOTAngle() returns [astro EOT] which is in radians
+    // EOTSeconds converts HA to seconds, we need to convert back to angle
+    functions.set('EOTAngle', () => {
+        const di = dateToDateInterval(getNow());
+        const eotSec = EOTSeconds(di, null);
+        return eotSec * Math.PI / (12 * 3600);
+    });
+    functions.set('EOTSeconds', () => EOTSeconds(dateToDateInterval(getNow()), null));
+
+    // --- Vernal equinox angle (sidereal-UT offset) ---
+    // iOS: STDifferenceForDate — the difference between GST and UT
+    functions.set('vernalEquinoxAngle', () => {
+        const di = dateToDateInterval(getNow());
+        return GSTDifferenceForDate(di, null);
+    });
+
+    // --- J2000 RA of vernal equinox of date (precession correction) ---
+    // iOS: -[astro precession] = -generalPrecessionSinceJ2000(centuriesTDT)
+    functions.set('J2000RAofVernalEquinoxOfDateAngle', () => {
+        const di = dateToDateInterval(getNow());
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        return -generalPrecessionSinceJ2000(julianCenturiesSince2000Epoch);
+    });
+
+    // --- Sunrise/sunset 24-hour indicator angles ---
+    // iOS: dayNightLeafAngleForPlanetNumber:leafNumber:numLeaves:0
+    // with leafNumber=0 (rise) or 1 (set), numLeaves=0 (special case)
+    functions.set('sunrise24HourIndicatorAngle', () => {
+        return dayNightLeafAngle(true, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds);
+    });
+    functions.set('sunset24HourIndicatorAngle', () => {
+        return dayNightLeafAngle(false, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds);
+    });
+
+    // --- Polar summer/winter detection ---
+    functions.set('polarSummer', () => {
+        return isPolarSummer(getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds) ? 1 : 0;
+    });
+    functions.set('polarWinter', () => {
+        return isPolarWinter(getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds) ? 1 : 0;
+    });
+
+    // --- Sunrise/sunset indicator validity (special ops for Mauna Kea) ---
+    functions.set('sunriseIndicatorValid', () => {
+        // iOS: sunIsUp ? prevSunriseValid : nextSunriseValid
+        // Simplified: just check if sunrise for today is valid
+        return isNaN(riseSetForDay(true, ECPlanetNumber.Sun)) ? 0 : 1;
+    });
+    functions.set('sunsetIndicatorValid', () => {
+        return isNaN(riseSetForDay(false, ECPlanetNumber.Sun)) ? 0 : 1;
+    });
+
+    // --- Sun planetIsUp check ---
+    functions.set('planetIsUp', (n: number) => {
+        const di = dateToDateInterval(getNow());
+        const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+        return alt > 0 ? 1 : 0;
+    });
+
+    // --- Time/location indicator stubs ---
+    functions.set('timeIndicatorColor', () => 0);  // stub
+    functions.set('locationIndicatorColor', () => 0);  // stub
+    functions.set('skew', () => 0);  // stub
+
+    // --- Day/night ring leaf angle function (used by QdayNightRing) ---
+    functions.set('dayNightLeafAngle', (planetNumber: number, leafNumber: number, numLeaves: number) => {
+        return computeDayNightLeafAngle(
+            planetNumber, leafNumber, numLeaves,
+            getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
+        );
+    });
+
     // Release the cache pool
     releaseCachePool(pool);
+}
+
+// ============================================================================
+// Day/night leaf angle — full iOS-faithful implementation
+// ============================================================================
+
+/**
+ * Compute the 24-hour indicator angle for sunrise or sunset.
+ * iOS: dayNightLeafAngleForPlanetNumber:ECPlanetSun leafNumber:0/1 numLeaves:0
+ *
+ * When numLeaves==0, leafNumber 0 returns rise angle, 1 returns set angle.
+ * Falls back to transit angle if rise/set is NaN.
+ */
+function dayNightLeafAngle(
+    riseNotSet: boolean,
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): number {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const lookahead = 3600 * 13.2;
+
+    // Determine if sun is currently up
+    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+
+    // Search for rise: if sun is up, search backward; if down, search forward
+    // Search for set:  if sun is up, search forward; if down, search backward
+    const searchForward = riseNotSet ? !sunIsUp : sunIsUp;
+
+    const eventTime = planetaryRiseSetTimeRefined(
+        searchForward ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+        observerLat, observerLon,
+        riseNotSet, ECPlanetNumber.Sun, NaN, pool,
+    );
+
+    // Also compute the transit angle for fallback
+    const transitSearchForward = riseNotSet ? !sunIsUp : sunIsUp;
+    // Transit is midpoint of the search — we don't have a direct transit search,
+    // so we'll use noon as transit fallback
+    const now = getNow();
+    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    const noonDI = dateToDateInterval(noon);
+    const noonAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
+
+    if (isNoRiseSet(eventTime)) {
+        // No rise/set — return transit angle (noon for sun)
+        if (eventTime === kECAlwaysAboveHorizon) {
+            // Polar summer: transit is at the high point, add PI for low transit
+            return fmod(noonAngle + Math.PI, 2 * Math.PI);
+        }
+        return noonAngle;
+    }
+
+    return angle24HourForDate(eventTime, tzOffsetSeconds);
+}
+
+/**
+ * Check if we're in polar summer (sun never sets).
+ */
+function isPolarSummer(
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): boolean {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+
+    // Search for rise
+    const riseTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
+        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+    );
+    // Search for set
+    const setTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
+        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+    );
+
+    if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
+        return riseTime === kECAlwaysAboveHorizon;
+    }
+    if (isNoRiseSet(riseTime) && !isNoRiseSet(setTime)) {
+        return riseTime === kECAlwaysAboveHorizon;
+    }
+    return false;
+}
+
+/**
+ * Check if we're in polar winter (sun never rises).
+ */
+function isPolarWinter(
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): boolean {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+
+    const riseTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
+        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+    );
+    const setTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
+        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+    );
+
+    if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
+        return riseTime === kECAlwaysBelowHorizon;
+    }
+    if (isNoRiseSet(riseTime) && !isNoRiseSet(setTime)) {
+        return riseTime === kECAlwaysBelowHorizon;
+    }
+    return false;
+}
+
+/**
+ * Convert a dateInterval to a 24-hour angle in local time.
+ * iOS: angle24HourForDateInterval:timeBaseKind:ECTimeBaseKindLT
+ */
+function angle24HourForDate(dateInterval: number, _tzOffsetSeconds: number): number {
+    const d = new Date((dateInterval + 978307200) * 1000);  // Apple epoch to JS epoch
+    const h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    return h * Math.PI / 12;  // 24h → 2π
+}
+
+/**
+ * Full day/night leaf angle computation.
+ * iOS: dayNightLeafAngleForPlanetNumber:leafNumber:numLeaves:timeBaseKind:ECTimeBaseKindLT
+ *
+ * numLeaves == 0: special indicator angles (rise/set/polar)
+ * numLeaves > 0: individual leaf positions for day/night ring
+ */
+function computeDayNightLeafAngle(
+    planetNumber: number,
+    leafNumber: number,
+    numLeaves: number,
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): number {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const lookahead = 3600 * 13.2;
+
+    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
+    const sunIsUp = alt > 0;
+
+    // Get rise time
+    const riseTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+    );
+    // Get set time
+    const setTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+    );
+
+    // Compute transit angles for fallback
+    const now = getNow();
+    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    const rTransitAngle = angle24HourForDate(dateToDateInterval(noon), tzOffsetSeconds);
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const sTransitAngle = angle24HourForDate(dateToDateInterval(midnight), tzOffsetSeconds);
+
+    let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
+    let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
+
+    // Special case: numLeaves == 0
+    if (numLeaves === 0) {
+        if (leafNumber === 0) {
+            return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
+        } else if (leafNumber === 1) {
+            return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
+        } else if (leafNumber === 2) {
+            // polarSummer
+            return (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) ? 1 : 0;
+        } else if (leafNumber === 3) {
+            // polarWinter
+            return (isNoRiseSet(riseTime) && riseTime === kECAlwaysBelowHorizon) ? 1 : 0;
+        }
+    }
+
+    const leafWidth = 2 * Math.PI / numLeaves;
+    let polarSummer = false;
+    let polarWinter = false;
+
+    // Handle NaN cases — match iOS logic exactly
+    if (isNaN(riseTimeAngle)) {
+        if (isNaN(setTimeAngle)) {
+            // Both invalid — use average transit
+            let sTA = sTransitAngle;
+            if (sTA > rTransitAngle + Math.PI) sTA -= 2 * Math.PI;
+            else if (sTA < rTransitAngle - Math.PI) sTA += 2 * Math.PI;
+            const avgTransit = (rTransitAngle + sTA) / 2;
+            if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+                riseTimeAngle = avgTransit - Math.PI;
+                setTimeAngle = avgTransit + Math.PI;
+                polarSummer = true;
+            } else {
+                riseTimeAngle = avgTransit - leafWidth / 2 - 0.00001;
+                setTimeAngle = avgTransit + leafWidth / 2 + 0.00001;
+                polarWinter = true;
+            }
+        } else {
+            if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+                riseTimeAngle = setTimeAngle - 2 * Math.PI;
+                polarSummer = true;
+            } else {
+                riseTimeAngle = setTimeAngle - leafWidth;
+                polarWinter = true;
+            }
+        }
+    } else if (isNaN(setTimeAngle)) {
+        if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+            setTimeAngle = riseTimeAngle + 2 * Math.PI;
+            polarSummer = true;
+        } else {
+            setTimeAngle = riseTimeAngle + leafWidth;
+            polarWinter = true;
+        }
+    }
+
+    // Normalize
+    riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
+    setTimeAngle = fmod(setTimeAngle, 2 * Math.PI);
+    if (setTimeAngle <= riseTimeAngle + 0.0001) {
+        setTimeAngle += 2 * Math.PI;
+    }
+
+    // Normal daytime leaf: shrink by half leaf width
+    setTimeAngle -= leafWidth / 2;
+    riseTimeAngle += leafWidth / 2;
+
+    if (setTimeAngle < riseTimeAngle) {
+        riseTimeAngle = setTimeAngle = (riseTimeAngle + setTimeAngle) / 2;
+    }
+
+    let leafCenterAngle = riseTimeAngle + (setTimeAngle - riseTimeAngle) / (numLeaves - 1) * leafNumber;
+
+    if (leafCenterAngle > 2 * Math.PI) {
+        leafCenterAngle -= 2 * Math.PI;
+    }
+
+    return leafCenterAngle;
 }

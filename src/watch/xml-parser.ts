@@ -19,6 +19,7 @@ import type {
     QRectPart,
     TerminatorPart,
     QWedgePart,
+    QDayNightRingPart,
 } from './types.js';
 import { parse } from '../expr/parser.js';
 import type { ASTNode } from '../expr/parser.js';
@@ -54,6 +55,7 @@ export function parseWatchXML(
         beatsPerSecond: attr(watchEl, 'beatsPerSecond') ?? '1',
         faceWidth: parseFloat(attr(watchEl, 'faceWidth') ?? '290'),
         bezelColor: attr(watchEl, 'bezelColor') ?? '',
+        bezelNoonMark: (attr(watchEl, 'bezelNoonMark') ?? '') === 'true',
         initExprs: [],
         parts: [],
     };
@@ -160,6 +162,12 @@ function processElement(
         case 'terminator':
             if (matchesMode(el, mode)) {
                 parts.push(parseTerminator(el));
+            }
+            break;
+
+        case 'qdaynightring':
+            if (matchesMode(el, mode)) {
+                parts.push(parseQDayNightRing(el));
             }
             break;
 
@@ -282,6 +290,9 @@ function parseQHand(el: Element): QHandPart {
         src: attr(el, 'src'),
         xAnchor: attrExpr(el, 'xAnchor'),
         yAnchor: attrExpr(el, 'yAnchor'),
+        offsetRadius: attrExpr(el, 'offsetRadius'),
+        offsetAngle: attrExpr(el, 'offsetAngle'),
+        nRays: attrExpr(el, 'nRays'),
     };
 }
 
@@ -309,6 +320,8 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel'): WheelPart {
         dragAnimationType: attr(el, 'dragAnimationType'),
         marks: attr(el, 'marks'),
         refName: attr(el, 'refName'),
+        tradius: attrExpr(el, 'tradius'),
+        tick: attr(el, 'tick'),
     };
 }
 
@@ -434,6 +447,25 @@ function parseQWedge(el: Element): QWedgePart {
         update: attrExpr(el, 'update'),
     };
 }
+
+function parseQDayNightRing(el: Element): QDayNightRingPart {
+    return {
+        type: 'QDayNightRing',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        outerRadius: attrExpr(el, 'outerRadius'),
+        innerRadius: attrExpr(el, 'innerRadius'),
+        numWedges: attrExpr(el, 'numWedges'),
+        planetNumber: attrExpr(el, 'planetNumber'),
+        masterOffset: attrExpr(el, 'masterOffset'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        fillColor: attrExpr(el, 'fillColor'),
+        update: attrExpr(el, 'update'),
+    };
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
