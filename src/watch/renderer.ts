@@ -974,27 +974,29 @@ function drawQHand(
 
         // iOS: rayRad = (length-length2)/2, raysRad = (length-length2)/3
         // cen = length2 + raysRad (center of the sun disc in the hand's coord system)
-        // In iOS, Y grows upward from the pivot; in Canvas, we've already rotated, so -Y is "toward length"
         let rayRad = (length - length2) / 2;
         const raysRad = (length - length2) / 3;
-        const cen = -(length2 + raysRad);  // Negate because we draw upward
+        const cen = length2 + raysRad;  // Positive in iOS (Y grows upward)
         const sunCenter = oCenter2 > 0 ? oCenter2 : raysRad / 2;
 
         // Draw rays: triangular teeth from the sun disc
         ctx.beginPath();
         for (let i = 0; i < nRays; i++) {
             const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
+            
+            // iOS math (Y is upward, so larger Y is further outward)
             const farX = rayRad * Math.cos(theta);
-            const farY = cen + rayRad * Math.sin(theta);
+            const farYIOS = cen + rayRad * Math.sin(theta);
             const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
-            const cwY = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
+            const cwYIOS = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
             const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
-            const ccwY = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
+            const ccwYIOS = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
 
-            ctx.moveTo(farX, farY);
-            ctx.lineTo(cwX, cwY);
-            ctx.lineTo(ccwX, ccwY);
-            ctx.lineTo(farX, farY);
+            // Canvas math: flip Y because Canvas negative Y is "outward"
+            ctx.moveTo(farX, -farYIOS);
+            ctx.lineTo(cwX, -cwYIOS);
+            ctx.lineTo(ccwX, -ccwYIOS);
+            ctx.lineTo(farX, -farYIOS);
 
             rayRad = raysRad;  // first ray is longer, rest are shorter (matching iOS)
         }
@@ -1005,7 +1007,8 @@ function drawQHand(
         ctx.fillStyle = fillColor;
         ctx.strokeStyle = fillColor;
         ctx.beginPath();
-        ctx.arc(0, cen, sunCenter, 0, 2 * Math.PI);
+        // Negative cen to place the arc center in the outward direction
+        ctx.arc(0, -cen, sunCenter, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
     } else {

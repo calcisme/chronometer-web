@@ -12424,21 +12424,21 @@
       ctx.fillStyle = fillColor;
       let rayRad = (length - length2) / 2;
       const raysRad = (length - length2) / 3;
-      const cen = -(length2 + raysRad);
+      const cen = length2 + raysRad;
       const sunCenter = oCenter2 > 0 ? oCenter2 : raysRad / 2;
       ctx.beginPath();
       for (let i = 0; i < nRays; i++) {
         const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
         const farX = rayRad * Math.cos(theta);
-        const farY = cen + rayRad * Math.sin(theta);
+        const farYIOS = cen + rayRad * Math.sin(theta);
         const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
-        const cwY = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
+        const cwYIOS = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
         const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
-        const ccwY = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
-        ctx.moveTo(farX, farY);
-        ctx.lineTo(cwX, cwY);
-        ctx.lineTo(ccwX, ccwY);
-        ctx.lineTo(farX, farY);
+        const ccwYIOS = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
+        ctx.moveTo(farX, -farYIOS);
+        ctx.lineTo(cwX, -cwYIOS);
+        ctx.lineTo(ccwX, -ccwYIOS);
+        ctx.lineTo(farX, -farYIOS);
         rayRad = raysRad;
       }
       ctx.fill();
@@ -12446,7 +12446,7 @@
       ctx.fillStyle = fillColor;
       ctx.strokeStyle = fillColor;
       ctx.beginPath();
-      ctx.arc(0, cen, sunCenter, 0, 2 * Math.PI);
+      ctx.arc(0, -cen, sunCenter, 0, 2 * Math.PI);
       ctx.fill();
       ctx.stroke();
     } else {
