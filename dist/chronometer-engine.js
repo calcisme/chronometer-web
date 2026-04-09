@@ -12970,7 +12970,6 @@
         bestRows = r;
       }
     }
-    console.log(`[grid] chose ${bestCols}x${bestRows} (size=${bestSize}) for ${count} faces in ${containerW}x${containerH}`);
     return { cols: bestCols, rows: bestRows, size: bestSize };
   }
   async function loadImagesFromFaceData(imageMap) {
