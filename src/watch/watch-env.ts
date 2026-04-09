@@ -48,11 +48,13 @@ const DEFAULT_LON_DEG = -121.954;  // degrees (west is negative)
  *
  * @param observerLatDeg - Observer latitude in degrees (positive = north). Defaults to San Jose, CA.
  * @param observerLonDeg - Observer longitude in degrees (negative = west). Defaults to San Jose, CA.
+ * @param getNow - Time source function. Defaults to () => new Date() (real time).
  */
 export function createWatchEnvironment(
     watch: Watch,
     observerLatDeg: number = DEFAULT_LAT_DEG,
     observerLonDeg: number = DEFAULT_LON_DEG,
+    getNow: () => Date = () => new Date(),
 ): Environment {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
@@ -77,8 +79,8 @@ export function createWatchEnvironment(
     env.variables.set('planetSun', ECPlanetNumber.Sun);
     env.variables.set('planetMoon', ECPlanetNumber.Moon);
 
-    // Register real time functions
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
+    // Register time functions (uses the provided getNow source)
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
@@ -123,11 +125,13 @@ function argbToCSS(argb: number): string {
 // Real time functions — computed once from Date.now()
 // ============================================================================
 
-function registerTimeFunctions(env: Environment, OBSERVER_LAT: number, OBSERVER_LON: number): void {
+function registerTimeFunctions(
+    env: Environment,
+    OBSERVER_LAT: number,
+    OBSERVER_LON: number,
+    getNow: () => Date = () => new Date(),
+): void {
     const { functions } = env;
-    // Time source — returns real time; will be overridden for
-    // user time controls (fast-forward, rewind, etc.)
-    const getNow = () => new Date();
 
     // Snapshot time for astronomy/calendar (changes at most daily)
     const now = getNow();

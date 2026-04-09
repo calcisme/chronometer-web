@@ -62,6 +62,8 @@ export interface HandState {
     nextUpdateTime: number;
     /** Animation speed multiplier from XML (default 1.0). */
     animSpeed: number;
+    /** Time source for scheduling aligned updates. */
+    getNow: () => Date;
 }
 
 // ============================================================================
@@ -76,9 +78,10 @@ export function initHandStates(
     watch: Watch,
     env: Environment,
     now: number,  // performance.now()
+    getNow?: () => Date,
 ): HandState[] {
     const states: HandState[] = [];
-    collectDynamicParts(watch.parts, env, now, states);
+    collectDynamicParts(watch.parts, env, now, states, getNow || (() => new Date()));
     return states;
 }
 
@@ -87,12 +90,13 @@ function collectDynamicParts(
     env: Environment,
     now: number,
     out: HandState[],
+    getNow: () => Date,
 ): void {
     for (const part of parts) {
         if (part.type === 'QHand' || part.type === 'Wheel') {
-            out.push(createHandState(part, env, now));
+            out.push(createHandState(part, env, now, getNow));
         } else if (part.type === 'Static') {
-            collectDynamicParts(part.children, env, now, out);
+            collectDynamicParts(part.children, env, now, out, getNow);
         }
     }
 }
@@ -101,6 +105,7 @@ function createHandState(
     part: QHandPart | WheelPart,
     env: Environment,
     now: number,
+    getNow: () => Date,
 ): HandState {
     // Evaluate the update interval. Named sentinel constants evaluate to
     // negative values; numeric values are expression strings like "1" or "60".
@@ -124,8 +129,9 @@ function createHandState(
             animating: false,
         },
         updateIntervalMs,
-        nextUpdateTime: scheduleNextUpdate(updateIntervalMs),
+        nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
         animSpeed,
+        getNow,
     };
 }
 
@@ -151,7 +157,7 @@ export function tickAnimations(
                 ? evalAttr(state.part.angle, env)
                 : 0;
             startAnimation(state, newTarget, now);
-            state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs);
+            state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
         }
 
         // Interpolate if animating
@@ -284,9 +290,9 @@ function interpolate(val: AnimatingValue, now: number): number {
  * Positive intervals use epoch-aligned boundaries.
  * Negative sentinel values are routed to event-specific scheduling.
  */
-function scheduleNextUpdate(updateIntervalMs: number): number {
+function scheduleNextUpdate(updateIntervalMs: number, getNow: () => Date): number {
     if (updateIntervalMs > 0) {
-        return nextAlignedUpdate(updateIntervalMs);
+        return nextAlignedUpdate(updateIntervalMs, getNow);
     }
 
     // Sentinel value — convert from ms back to the original constant
@@ -315,15 +321,18 @@ function scheduleNextUpdate(updateIntervalMs: number): number {
 
 /**
  * Compute the next epoch-aligned update time in performance.now() ms.
+ * Uses the display time (from getNow) so updates align to display-time
+ * second/minute/hour boundaries, not wall-clock boundaries.
  *
- * For example, with intervalMs=1000, if the wall clock is at 1616000000.350,
- * the next boundary is 1616000001.000, which is 650ms from now.
+ * For example, with intervalMs=1000, if the display time is 14:00:00.350,
+ * the next boundary is 14:00:01.000, which is 650ms from now.
  */
-function nextAlignedUpdate(intervalMs: number): number {
-    const wallNow = Date.now();  // ms since epoch
-    const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
-    // Convert wall-clock delta to performance.now() time
-    return performance.now() + (nextWall - wallNow);
+function nextAlignedUpdate(intervalMs: number, getNow: () => Date): number {
+    const displayNow = getNow().getTime();  // ms since epoch (display time)
+    const nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
+    const deltaMs = nextDisplay - displayNow;
+    // Convert display-time delta to performance.now() time
+    return performance.now() + deltaMs;
 }
 
 /**

@@ -1316,21 +1316,21 @@
   var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
   var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
   var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
-  function initHandStates(watch, env, now) {
+  function initHandStates(watch, env, now, getNow) {
     const states = [];
-    collectDynamicParts(watch.parts, env, now, states);
+    collectDynamicParts(watch.parts, env, now, states, getNow || (() => /* @__PURE__ */ new Date()));
     return states;
   }
-  function collectDynamicParts(parts, env, now, out) {
+  function collectDynamicParts(parts, env, now, out, getNow) {
     for (const part of parts) {
       if (part.type === "QHand" || part.type === "Wheel") {
-        out.push(createHandState(part, env, now));
+        out.push(createHandState(part, env, now, getNow));
       } else if (part.type === "Static") {
-        collectDynamicParts(part.children, env, now, out);
+        collectDynamicParts(part.children, env, now, out, getNow);
       }
     }
   }
-  function createHandState(part, env, now) {
+  function createHandState(part, env, now, getNow) {
     const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
     const updateIntervalMs = updateIntervalSec * 1e3;
     const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
@@ -1346,8 +1346,9 @@
         animating: false
       },
       updateIntervalMs,
-      nextUpdateTime: scheduleNextUpdate(updateIntervalMs),
-      animSpeed
+      nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
+      animSpeed,
+      getNow
     };
   }
   function tickAnimations(states, env, now) {
@@ -1355,7 +1356,7 @@
       if (now >= state.nextUpdateTime) {
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
         startAnimation(state, newTarget, now);
-        state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs);
+        state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
       }
       const angle = interpolate(state.angle, now);
       if (!state.part.dynamicState) {
@@ -1429,9 +1430,9 @@
     val.lastAnimationTime = now;
     return val.currentValue;
   }
-  function scheduleNextUpdate(updateIntervalMs) {
+  function scheduleNextUpdate(updateIntervalMs, getNow) {
     if (updateIntervalMs > 0) {
-      return nextAlignedUpdate(updateIntervalMs);
+      return nextAlignedUpdate(updateIntervalMs, getNow);
     }
     const sentinel = updateIntervalMs / 1e3;
     switch (sentinel) {
@@ -1447,10 +1448,11 @@
         return nextLocalMidnight();
     }
   }
-  function nextAlignedUpdate(intervalMs) {
-    const wallNow = Date.now();
-    const nextWall = Math.ceil(wallNow / intervalMs) * intervalMs;
-    return performance.now() + (nextWall - wallNow);
+  function nextAlignedUpdate(intervalMs, getNow) {
+    const displayNow = getNow().getTime();
+    const nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
+    const deltaMs = nextDisplay - displayNow;
+    return performance.now() + deltaMs;
   }
   function nextLocalMidnight() {
     const now = /* @__PURE__ */ new Date();
@@ -11355,7 +11357,7 @@
   // src/watch/watch-env.ts
   var DEFAULT_LAT_DEG = 37.205;
   var DEFAULT_LON_DEG = -121.954;
-  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG) {
+  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date()) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
@@ -11371,7 +11373,7 @@
     env.variables.set("updateForLocSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
     env.variables.set("planetSun", 0 /* Sun */);
     env.variables.set("planetMoon", 1 /* Moon */);
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
     }
@@ -11394,9 +11396,8 @@
     const b = v & 255;
     return `rgba(${r},${g},${b},${a.toFixed(3)})`;
   }
-  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON) {
+  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date()) {
     const { functions } = env;
-    const getNow = () => /* @__PURE__ */ new Date();
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
     const tzOffsetMinutes = now.getTimezoneOffset();
@@ -12912,6 +12913,362 @@
     ctx.restore();
   }
 
+  // src/time-controller.ts
+  var RATE_OPTIONS = [
+    { label: "10\xD7", unit: "second" },
+    { label: "10 min/s", unit: "minute" },
+    { label: "10 hr/s", unit: "hour" },
+    { label: "10 day/s", unit: "day" },
+    { label: "10 mo/s", unit: "month" },
+    { label: "10 yr/s", unit: "year" }
+  ];
+  var TICK_INTERVAL_MS = 100;
+  function advanceByUnit(date, unit, direction) {
+    const d = new Date(date.getTime());
+    switch (unit) {
+      case "second":
+        d.setSeconds(d.getSeconds() + direction);
+        break;
+      case "minute":
+        d.setMinutes(d.getMinutes() + direction);
+        break;
+      case "hour":
+        d.setHours(d.getHours() + direction);
+        break;
+      case "day":
+        d.setDate(d.getDate() + direction);
+        break;
+      case "month": {
+        const origDay = d.getDate();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + direction);
+        const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        d.setDate(Math.min(origDay, maxDay));
+        break;
+      }
+      case "year": {
+        const origDay = d.getDate();
+        const origMonth = d.getMonth();
+        d.setDate(1);
+        d.setFullYear(d.getFullYear() + direction);
+        const maxDay = new Date(d.getFullYear(), origMonth + 1, 0).getDate();
+        d.setMonth(origMonth);
+        d.setDate(Math.min(origDay, maxDay));
+        break;
+      }
+    }
+    return d;
+  }
+  function snapToUnit(date, unit, direction) {
+    const d = new Date(date.getTime());
+    switch (unit) {
+      case "second":
+        d.setMilliseconds(0);
+        if (direction > 0 && date.getMilliseconds() > 0) {
+          d.setSeconds(d.getSeconds() + 1);
+        }
+        break;
+      case "minute":
+        d.setMilliseconds(0);
+        d.setSeconds(0);
+        if (direction > 0 && (date.getSeconds() > 0 || date.getMilliseconds() > 0)) {
+          d.setMinutes(d.getMinutes() + 1);
+        }
+        break;
+      case "hour":
+        d.setMilliseconds(0);
+        d.setSeconds(0);
+        d.setMinutes(0);
+        if (direction > 0 && (date.getMinutes() > 0 || date.getSeconds() > 0 || date.getMilliseconds() > 0)) {
+          d.setHours(d.getHours() + 1);
+        }
+        break;
+      case "day":
+        d.setMilliseconds(0);
+        d.setSeconds(0);
+        d.setMinutes(0);
+        d.setHours(0);
+        if (direction > 0 && (date.getHours() > 0 || date.getMinutes() > 0 || date.getSeconds() > 0 || date.getMilliseconds() > 0)) {
+          d.setDate(d.getDate() + 1);
+        }
+        break;
+      case "month":
+        d.setMilliseconds(0);
+        d.setSeconds(0);
+        d.setMinutes(0);
+        d.setHours(0);
+        d.setDate(1);
+        if (direction > 0 && date.getDate() > 1) {
+          d.setMonth(d.getMonth() + 1);
+        }
+        break;
+      case "year":
+        d.setMilliseconds(0);
+        d.setSeconds(0);
+        d.setMinutes(0);
+        d.setHours(0);
+        d.setDate(1);
+        d.setMonth(0);
+        if (direction > 0 && (date.getMonth() > 0 || date.getDate() > 1)) {
+          d.setFullYear(d.getFullYear() + 1);
+        }
+        break;
+    }
+    return d;
+  }
+  var TimeController = class {
+    constructor() {
+      // --- Offset mode (1× with offset) ---
+      /** Millisecond offset from real time (used in 1× and -1× modes) */
+      this.offsetMs = 0;
+      // --- Quantized tick mode ---
+      /** Current rate option, or null for 1×/-1× */
+      this.rate = null;
+      /** Direction: 1 = forward, -1 = reverse */
+      this.direction = 1;
+      /** Whether time is stopped */
+      this.stopped = false;
+      /** The simulated time at the most recent tick boundary */
+      this.tickTime = /* @__PURE__ */ new Date();
+      /** The next tick target (for interpolation) */
+      this.nextTickTime = /* @__PURE__ */ new Date();
+      /** performance.now() of the most recent tick */
+      this.lastTickRealMs = 0;
+      /** Callback fired on each tick (engine rebuilds caches, renders) */
+      this.onTick = null;
+      /**
+       * Per-frame snapshot: when set, getDisplayTime() returns this value
+       * instead of recomputing, ensuring all parts in a single render frame
+       * see exactly the same time.
+       */
+      this.frameSnapshot = null;
+      // ========================================================================
+      // Internal helpers
+      // ========================================================================
+      /**
+       * Set up offset for -1× mode. In -1× mode, time runs backward:
+       * each real ms that passes subtracts 1ms from the simulated time.
+       * We represent this as an offset that decreases by 2× real elapsed
+       * (since Date.now() increases by 1ms per ms, we need -2ms offset
+       * per ms to get net -1ms/ms).
+       *
+       * Actually, simpler approach: we store an anchor and compute
+       * the simulated time as: anchor - (realNow - anchorReal).
+       * This is equivalent to offsetMs decreasing by 2 per real ms.
+       *
+       * For simplicity, we'll track the offset differently for -1×:
+       * simTime = 2 * anchorReal - realNow + originalOffset
+       * i.e. offsetMs is set to 2 * anchorReal + originalOffset - Date.now()
+       * but this drifts... Let's just use a stable anchor approach.
+       */
+      this.reverseAnchorRealMs = 0;
+      this.reverseAnchorSimMs = 0;
+    }
+    // ========================================================================
+    // Public getters
+    // ========================================================================
+    /** Is this running at real time with no offset? */
+    get isRealTime() {
+      return this.rate === null && this.direction === 1 && !this.stopped && this.offsetMs === 0;
+    }
+    /** Get the current rate option (null = 1×) */
+    get currentRate() {
+      return this.rate;
+    }
+    /** Get the current direction */
+    get currentDirection() {
+      return this.direction;
+    }
+    /** Is time stopped? */
+    get isStopped() {
+      return this.stopped;
+    }
+    /** Human-readable status label */
+    get statusLabel() {
+      if (this.stopped) return "Stopped";
+      if (this.rate === null) {
+        if (this.direction === -1) return "1\xD7 \u25C0";
+        if (this.offsetMs !== 0) return "1\xD7";
+        return "1\xD7 (real time)";
+      }
+      return `${this.rate.label} ${this.direction === 1 ? "\u25B6" : "\u25C0"}`;
+    }
+    // ========================================================================
+    // Core time computation
+    // ========================================================================
+    /**
+     * Get the current display time.
+     *
+     * If beginFrame() has been called, returns the frozen snapshot so all
+     * parts within a single render frame see exactly the same time.
+     *
+     * Otherwise computes the time:
+     * - In 1× mode: real time + offset
+     * - In -1× mode: time flows backward from an anchor
+     * - In stopped mode: frozen tickTime
+     * - In quantized mode: interpolation between tickTime and nextTickTime
+     */
+    getDisplayTime() {
+      if (this.frameSnapshot !== null) {
+        return this.frameSnapshot;
+      }
+      return this._computeDisplayTime();
+    }
+    /**
+     * Snapshot the current display time for the duration of a render frame.
+     * All calls to getDisplayTime() will return this exact value until
+     * endFrame() is called.
+     */
+    beginFrame() {
+      this.frameSnapshot = this._computeDisplayTime();
+    }
+    /**
+     * Release the per-frame snapshot, allowing getDisplayTime() to
+     * compute fresh values again.
+     */
+    endFrame() {
+      this.frameSnapshot = null;
+    }
+    /** Internal: compute the display time without snapshotting. */
+    _computeDisplayTime() {
+      if (this.rate === null && !this.stopped) {
+        if (this.direction === -1) {
+          const realNow = Date.now();
+          const elapsed = realNow - this.reverseAnchorRealMs;
+          return new Date(this.reverseAnchorSimMs - elapsed);
+        }
+        return new Date(Date.now() + this.offsetMs);
+      }
+      if (this.stopped) {
+        return new Date(this.tickTime.getTime());
+      }
+      return new Date(this.tickTime.getTime());
+    }
+    // ========================================================================
+    // Tick logic (called from RAF loop)
+    // ========================================================================
+    /**
+     * Called every animation frame. Checks if a tick boundary has been
+     * crossed and fires the tick if so. Returns true if a tick occurred.
+     */
+    checkTick(nowPerfMs) {
+      if (this.rate === null || this.stopped) return false;
+      if (nowPerfMs - this.lastTickRealMs >= TICK_INTERVAL_MS) {
+        this.tickTime = new Date(this.nextTickTime.getTime());
+        this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
+        this.lastTickRealMs = nowPerfMs;
+        this.onTick?.();
+        return true;
+      }
+      return false;
+    }
+    /**
+     * Whether the render loop should run continuously.
+     * True for quantized rates and -1×; false for stopped and real-time 1×.
+     */
+    get needsContinuousRender() {
+      if (this.stopped) return false;
+      if (this.rate !== null) return true;
+      if (this.direction === -1) return true;
+      return false;
+    }
+    // ========================================================================
+    // Rate / direction / time control
+    // ========================================================================
+    /**
+     * Set a quantized rate. Pass null for 1×.
+     * When activating a quantized rate, snaps time to the unit boundary.
+     */
+    setRate(rate) {
+      this.stopped = false;
+      const prevTime = this.getDisplayTime();
+      if (rate === null) {
+        this.rate = null;
+        this.offsetMs = prevTime.getTime() - Date.now();
+        if (this.direction === -1) {
+          this._setupReverseOneX(prevTime);
+        }
+        return;
+      }
+      this.rate = rate;
+      this.tickTime = snapToUnit(prevTime, rate.unit, this.direction);
+      this.nextTickTime = advanceByUnit(this.tickTime, rate.unit, this.direction);
+      this.lastTickRealMs = performance.now();
+      this.onTick?.();
+    }
+    /** Set direction (forward or reverse). Preserves current rate. */
+    setDirection(dir) {
+      if (dir === this.direction) return;
+      const prevTime = this.getDisplayTime();
+      this.direction = dir;
+      this.stopped = false;
+      if (this.rate === null) {
+        this._setupReverseOneX(prevTime);
+      } else {
+        this.tickTime = snapToUnit(prevTime, this.rate.unit, dir);
+        this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, dir);
+        this.lastTickRealMs = performance.now();
+      }
+      this.onTick?.();
+    }
+    /** Stop time. */
+    stop() {
+      if (this.stopped) return;
+      const prevTime = this.getDisplayTime();
+      this.stopped = true;
+      this.tickTime = prevTime;
+      this.nextTickTime = prevTime;
+      this.offsetMs = prevTime.getTime() - Date.now();
+    }
+    /**
+     * Step by one calendar unit. Works whether stopped or running.
+     * While running at a quantized rate, this is an additional jump
+     * on top of the tick rhythm.
+     */
+    step(unit, dir) {
+      const prevTime = this.getDisplayTime();
+      const newTime = advanceByUnit(prevTime, unit, dir);
+      if (this.stopped || this.rate === null) {
+        this.tickTime = newTime;
+        this.nextTickTime = newTime;
+        this.offsetMs = newTime.getTime() - Date.now();
+      } else {
+        this.tickTime = snapToUnit(newTime, this.rate.unit, this.direction);
+        this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
+        this.lastTickRealMs = performance.now();
+      }
+      this.onTick?.();
+    }
+    /** Set an exact date/time. Stops the clock. */
+    setTime(date) {
+      this.stopped = true;
+      this.tickTime = date;
+      this.nextTickTime = date;
+      this.offsetMs = date.getTime() - Date.now();
+      this.onTick?.();
+    }
+    /** Reset to real time, 1× forward. */
+    reset() {
+      this.offsetMs = 0;
+      this.rate = null;
+      this.direction = 1;
+      this.stopped = false;
+      this.tickTime = /* @__PURE__ */ new Date();
+      this.nextTickTime = /* @__PURE__ */ new Date();
+      this.lastTickRealMs = 0;
+      this.onTick?.();
+    }
+    _setupReverseOneX(prevTime) {
+      if (this.direction === -1) {
+        this.reverseAnchorRealMs = Date.now();
+        this.reverseAnchorSimMs = prevTime.getTime();
+        this.offsetMs = NaN;
+      } else {
+        this.offsetMs = prevTime.getTime() - Date.now();
+      }
+    }
+  };
+
   // src/engine-entry.ts
   var DEFAULT_LAT = 37.205;
   var DEFAULT_LON = -121.954;
@@ -13034,6 +13391,8 @@
       fd.images = null;
     }
     delete window.ChronometerFaces;
+    const timeController = new TimeController();
+    const getNow = () => timeController.getDisplayTime();
     let cols = 1, rows = 1;
     const faces = [];
     for (let i = 0; i < parsedWatches.length; i++) {
@@ -13044,7 +13403,7 @@
       cell.appendChild(canvas);
       grid.appendChild(cell);
       const watch = parsedWatches[i];
-      const env = createWatchEnvironment(watch, lat, lon);
+      const env = createWatchEnvironment(watch, lat, lon, getNow);
       const face = {
         watch,
         env,
@@ -13088,7 +13447,7 @@
       }
       buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       face.cachesBuilt = true;
-      face.handStates = initHandStates(watch, env, performance.now());
+      face.handStates = initHandStates(watch, env, performance.now(), getNow);
     }
     function buildAllCachesSequentially(facesToBuild, onDone) {
       let idx = 0;
@@ -13102,6 +13461,22 @@
       }
       buildNext();
     }
+    function rebuildAllForTime() {
+      for (const face of faces) {
+        if (!face.enabled) continue;
+        const fd = faceDataArray[face.faceDataIndex];
+        const freshWatch = parseWatchXML(fd.xml, "front");
+        face.watch.parts = freshWatch.parts;
+        face.watch.initExprs = freshWatch.initExprs;
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+        face.cachesBuilt = false;
+      }
+      for (const face of faces) {
+        if (!face.enabled) continue;
+        buildCache(face);
+      }
+    }
+    timeController.onTick = rebuildAllForTime;
     let idleTimerId = null;
     let rafId = null;
     function stopScheduler() {
@@ -13118,6 +13493,8 @@
       rafId = null;
       const now = performance.now();
       let stillAnimating = false;
+      timeController.checkTick(now);
+      timeController.beginFrame();
       for (const face of faces) {
         if (!face.enabled || !face.cachesBuilt) continue;
         tickAnimations(face.handStates, face.env, now);
@@ -13140,7 +13517,12 @@
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
         if (anyAnimating(face.handStates)) stillAnimating = true;
       }
-      if (stillAnimating) {
+      if (!timeController.isRealTime) {
+        const sim = timeController.getDisplayTime();
+        timeBarDate.textContent = formatSimTime(sim);
+      }
+      timeController.endFrame();
+      if (timeController.needsContinuousRender || stillAnimating) {
         rafId = requestAnimationFrame(frame);
       } else {
         armIdle();
@@ -13225,8 +13607,10 @@
       if (!entry) return;
       const { width } = entry.contentRect;
       const locationPanel = document.getElementById("location-panel");
+      const timeBarEl = document.getElementById("time-bar");
       const panelH = locationPanel ? locationPanel.offsetHeight : 0;
-      const height = entry.contentRect.height - panelH;
+      const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
+      const height = entry.contentRect.height - panelH - timeBarH;
       if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
       resizeDebounceTimer = setTimeout(() => {
         resizeDebounceTimer = null;
@@ -13245,7 +13629,7 @@
         const freshWatch = parseWatchXML(fd.xml, "front");
         face.watch.parts = freshWatch.parts;
         face.watch.initExprs = freshWatch.initExprs;
-        face.env = createWatchEnvironment(face.watch, newLat, newLon);
+        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow);
         face.cachesBuilt = false;
       }
       buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
@@ -13271,6 +13655,174 @@
       sourceLabel.textContent = "(Steve's house)";
       resetLink.style.display = "none";
       rebuildAllForLocation(DEFAULT_LAT, DEFAULT_LON);
+    });
+    const timeBar = document.getElementById("time-bar");
+    const timeBarLabel = document.getElementById("time-bar-label");
+    const timeBarDate = document.getElementById("time-bar-date");
+    const timeBarRate = document.getElementById("time-bar-rate");
+    const timeBarNow = document.getElementById("time-bar-now");
+    const timePopover = document.getElementById("time-popover");
+    const tpRateLabel = document.getElementById("tp-rate-label");
+    let popoverOpen = false;
+    const speedMap = {
+      "1x": null,
+      "10x": 0,
+      "10min": 1,
+      "10hr": 2,
+      "10day": 3,
+      "10mo": 4,
+      "10yr": 5
+    };
+    const stepMap = {
+      "-year": ["year", -1],
+      "-month": ["month", -1],
+      "-day": ["day", -1],
+      "-hour": ["hour", -1],
+      "-minute": ["minute", -1],
+      "+minute": ["minute", 1],
+      "+hour": ["hour", 1],
+      "+day": ["day", 1],
+      "+month": ["month", 1],
+      "+year": ["year", 1]
+    };
+    function formatSimTime(d) {
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const mo = months[d.getMonth()];
+      const day = d.getDate();
+      const yr = d.getFullYear();
+      const h = d.getHours().toString().padStart(2, "0");
+      const m = d.getMinutes().toString().padStart(2, "0");
+      const s = d.getSeconds().toString().padStart(2, "0");
+      return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
+    }
+    function updateTimeUI() {
+      const isReal = timeController.isRealTime;
+      timeBar.classList.toggle("overridden", !isReal);
+      if (!isReal) {
+        const sim2 = timeController.getDisplayTime();
+        timeBarDate.textContent = formatSimTime(sim2);
+        timeBarRate.textContent = timeController.statusLabel;
+      }
+      tpRateLabel.textContent = timeController.statusLabel;
+      const dirBtns = timePopover.querySelectorAll("[data-dir]");
+      dirBtns.forEach((btn) => {
+        const el = btn;
+        const dir = el.dataset.dir;
+        el.classList.toggle(
+          "active",
+          dir === "forward" && !timeController.isStopped && timeController.currentDirection === 1 || dir === "reverse" && !timeController.isStopped && timeController.currentDirection === -1 || dir === "stop" && timeController.isStopped
+        );
+      });
+      const speedBtns = timePopover.querySelectorAll(".tp-speed");
+      speedBtns.forEach((btn) => {
+        const el = btn;
+        const speedKey = el.dataset.speed;
+        const rateIdx = speedMap[speedKey];
+        const currentRate = timeController.currentRate;
+        const isActive = rateIdx === null && currentRate === null || rateIdx !== null && currentRate !== null && currentRate === RATE_OPTIONS[rateIdx];
+        el.classList.toggle("active", isActive);
+      });
+      const sim = timeController.getDisplayTime();
+      document.getElementById("tp-year").value = sim.getFullYear().toString();
+      document.getElementById("tp-month").value = (sim.getMonth() + 1).toString();
+      document.getElementById("tp-day").value = sim.getDate().toString();
+      document.getElementById("tp-hour").value = sim.getHours().toString();
+      document.getElementById("tp-minute").value = sim.getMinutes().toString();
+    }
+    function showPopover() {
+      popoverOpen = true;
+      timePopover.style.display = "";
+      updateTimeUI();
+    }
+    function hidePopover() {
+      popoverOpen = false;
+      timePopover.style.display = "none";
+      updateTimeUI();
+    }
+    function ensureSchedulerRunning() {
+      if (rafId === null && idleTimerId === null) {
+        startScheduler();
+      } else if (rafId === null && timeController.needsContinuousRender) {
+        stopScheduler();
+        startScheduler();
+      }
+    }
+    timeBarLabel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popoverOpen) {
+        hidePopover();
+      } else {
+        showPopover();
+      }
+    });
+    timeBarRate.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popoverOpen) {
+        hidePopover();
+      } else {
+        showPopover();
+      }
+    });
+    timeBarNow.addEventListener("click", (e) => {
+      e.stopPropagation();
+      timeController.reset();
+      hidePopover();
+      ensureSchedulerRunning();
+    });
+    timePopover.querySelectorAll("[data-dir]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const dir = btn.dataset.dir;
+        if (dir === "stop") {
+          timeController.stop();
+        } else if (dir === "forward") {
+          timeController.setDirection(1);
+        } else if (dir === "reverse") {
+          timeController.setDirection(-1);
+        }
+        updateTimeUI();
+        ensureSchedulerRunning();
+      });
+    });
+    timePopover.querySelectorAll(".tp-speed").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const speedKey = btn.dataset.speed;
+        const rateIdx = speedMap[speedKey];
+        const rate = rateIdx === null ? null : RATE_OPTIONS[rateIdx];
+        timeController.setRate(rate);
+        updateTimeUI();
+        ensureSchedulerRunning();
+      });
+    });
+    timePopover.querySelectorAll("[data-step]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const stepKey = btn.dataset.step;
+        const [unit, dir] = stepMap[stepKey];
+        timeController.step(unit, dir);
+        updateTimeUI();
+        ensureSchedulerRunning();
+      });
+    });
+    document.getElementById("tp-apply").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const yr = parseInt(document.getElementById("tp-year").value, 10);
+      const mo = parseInt(document.getElementById("tp-month").value, 10) - 1;
+      const dy = parseInt(document.getElementById("tp-day").value, 10);
+      const hr = parseInt(document.getElementById("tp-hour").value, 10);
+      const mn = parseInt(document.getElementById("tp-minute").value, 10);
+      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+      const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+      timeController.setTime(d);
+      updateTimeUI();
+      ensureSchedulerRunning();
+    });
+    document.addEventListener("click", (e) => {
+      if (!popoverOpen) return;
+      const target = e.target;
+      if (timePopover.contains(target) || timeBar.contains(target)) return;
+      hidePopover();
     });
     const initialRect = grid.getBoundingClientRect();
     if (initialRect.width > 0 && initialRect.height > 0) {

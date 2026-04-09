@@ -31,6 +31,8 @@ import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles } from './watch/terminator.js';
+import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS } from './time-controller.js';
+import type { TimeUnit } from './time-controller.js';
 
 // ============================================================================
 // Location persistence
@@ -217,6 +219,10 @@ async function main() {
     // Also release the global so the face-*.js IIFE closures can be GC'd
     delete (window as any).ChronometerFaces;
 
+    // --- Time controller ---
+    const timeController = new TimeController();
+    const getNow = () => timeController.getDisplayTime();
+
     // --- Build the DOM: one cell + canvas per face ---
     // cols/rows are recomputed on every resize via optimizeGrid
     let cols = 1, rows = 1;
@@ -233,7 +239,7 @@ async function main() {
         grid.appendChild(cell);
 
         const watch = parsedWatches[i];
-        const env = createWatchEnvironment(watch, lat, lon);
+        const env = createWatchEnvironment(watch, lat, lon, getNow);
 
         const face: FaceInstance = {
             watch,
@@ -282,7 +288,7 @@ async function main() {
         }
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         face.cachesBuilt = true;
-        face.handStates = initHandStates(watch, env, performance.now());
+        face.handStates = initHandStates(watch, env, performance.now(), getNow);
     }
 
     function buildAllCachesSequentially(facesToBuild: FaceInstance[], onDone: () => void) {
@@ -294,6 +300,32 @@ async function main() {
         }
         buildNext();
     }
+
+    // =========================================================================
+    // Time controller — tick callback
+    // =========================================================================
+    /**
+     * Rebuild all environments for the current simulated time.
+     * Called on each tick and on manual time changes.
+     */
+    function rebuildAllForTime() {
+        for (const face of faces) {
+            if (!face.enabled) continue;
+            const fd = faceDataArray[face.faceDataIndex];
+            const freshWatch = parseWatchXML(fd.xml, 'front');
+            face.watch.parts = freshWatch.parts;
+            face.watch.initExprs = freshWatch.initExprs;
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+            face.cachesBuilt = false;
+        }
+        // Rebuild caches synchronously (tight loop for responsiveness during ticking)
+        for (const face of faces) {
+            if (!face.enabled) continue;
+            buildCache(face);
+        }
+    }
+
+    timeController.onTick = rebuildAllForTime;
 
     // =========================================================================
     // Scheduler
@@ -312,6 +344,13 @@ async function main() {
         const now = performance.now();
         let stillAnimating = false;
 
+        // Check for quantized tick boundary
+        timeController.checkTick(now);
+
+        // Snapshot the time for this frame — all getNow() calls within
+        // this frame will return the exact same value.
+        timeController.beginFrame();
+
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
             tickAnimations(face.handStates, face.env, now);
@@ -329,8 +368,16 @@ async function main() {
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
             if (anyAnimating(face.handStates)) stillAnimating = true;
         }
+        // Update mini-bar time display if time is overridden
+        if (!timeController.isRealTime) {
+            const sim = timeController.getDisplayTime();
+            timeBarDate.textContent = formatSimTime(sim);
+        }
 
-        if (stillAnimating) {
+        timeController.endFrame();
+
+        // Decide whether to keep the RAF loop running
+        if (timeController.needsContinuousRender || stillAnimating) {
             rafId = requestAnimationFrame(frame);
         } else {
             armIdle();
@@ -456,10 +503,12 @@ async function main() {
         const entry = entries[0];
         if (!entry) return;
         const { width } = entry.contentRect;
-        // Subtract the location panel height from the parent's height
+        // Subtract the location panel and time bar heights from the parent's height
         const locationPanel = document.getElementById('location-panel');
+        const timeBarEl = document.getElementById('time-bar');
         const panelH = locationPanel ? locationPanel.offsetHeight : 0;
-        const height = entry.contentRect.height - panelH;
+        const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
+        const height = entry.contentRect.height - panelH - timeBarH;
         if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = setTimeout(() => {
             resizeDebounceTimer = null;
@@ -484,7 +533,7 @@ async function main() {
             const freshWatch = parseWatchXML(fd.xml, 'front');
             face.watch.parts = freshWatch.parts;
             face.watch.initExprs = freshWatch.initExprs;
-            face.env = createWatchEnvironment(face.watch, newLat, newLon);
+            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow);
             face.cachesBuilt = false;
         }
         buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
@@ -511,6 +560,220 @@ async function main() {
         resetLink.style.display = 'none';
         rebuildAllForLocation(DEFAULT_LAT, DEFAULT_LON);
     });
+
+    // =========================================================================
+    // Time Controller UI
+    // =========================================================================
+
+    const timeBar = document.getElementById('time-bar')!;
+    const timeBarLabel = document.getElementById('time-bar-label')!;
+    const timeBarDate = document.getElementById('time-bar-date')!;
+    const timeBarRate = document.getElementById('time-bar-rate')!;
+    const timeBarNow = document.getElementById('time-bar-now')!;
+    const timePopover = document.getElementById('time-popover')!;
+    const tpRateLabel = document.getElementById('tp-rate-label')!;
+
+    let popoverOpen = false;
+
+    /** Map data-speed attributes to RATE_OPTIONS indices (null = 1×) */
+    const speedMap: Record<string, number | null> = {
+        '1x': null,
+        '10x': 0,
+        '10min': 1,
+        '10hr': 2,
+        '10day': 3,
+        '10mo': 4,
+        '10yr': 5,
+    };
+
+    /** Map data-step attributes to [unit, direction] */
+    const stepMap: Record<string, [TimeUnit, 1 | -1]> = {
+        '-year': ['year', -1],
+        '-month': ['month', -1],
+        '-day': ['day', -1],
+        '-hour': ['hour', -1],
+        '-minute': ['minute', -1],
+        '+minute': ['minute', 1],
+        '+hour': ['hour', 1],
+        '+day': ['day', 1],
+        '+month': ['month', 1],
+        '+year': ['year', 1],
+    };
+
+    function formatSimTime(d: Date): string {
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const mo = months[d.getMonth()];
+        const day = d.getDate();
+        const yr = d.getFullYear();
+        const h = d.getHours().toString().padStart(2, '0');
+        const m = d.getMinutes().toString().padStart(2, '0');
+        const s = d.getSeconds().toString().padStart(2, '0');
+        return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
+    }
+
+    function updateTimeUI() {
+        const isReal = timeController.isRealTime;
+
+        // Toggle overridden class to show/hide date, rate, "Now" button
+        timeBar.classList.toggle('overridden', !isReal);
+
+        if (!isReal) {
+            const sim = timeController.getDisplayTime();
+            timeBarDate.textContent = formatSimTime(sim);
+            timeBarRate.textContent = timeController.statusLabel;
+        }
+        tpRateLabel.textContent = timeController.statusLabel;
+
+        // Update active states on direction buttons
+        const dirBtns = timePopover.querySelectorAll('[data-dir]');
+        dirBtns.forEach(btn => {
+            const el = btn as HTMLElement;
+            const dir = el.dataset.dir;
+            el.classList.toggle('active',
+                (dir === 'forward' && !timeController.isStopped && timeController.currentDirection === 1) ||
+                (dir === 'reverse' && !timeController.isStopped && timeController.currentDirection === -1) ||
+                (dir === 'stop' && timeController.isStopped)
+            );
+        });
+
+        // Update active states on speed buttons
+        const speedBtns = timePopover.querySelectorAll('.tp-speed');
+        speedBtns.forEach(btn => {
+            const el = btn as HTMLElement;
+            const speedKey = el.dataset.speed!;
+            const rateIdx = speedMap[speedKey];
+            const currentRate = timeController.currentRate;
+            const isActive = (rateIdx === null && currentRate === null) ||
+                             (rateIdx !== null && currentRate !== null && currentRate === RATE_OPTIONS[rateIdx]);
+            el.classList.toggle('active', isActive);
+        });
+
+        // Populate date inputs with current sim time
+        const sim = timeController.getDisplayTime();
+        (document.getElementById('tp-year') as HTMLInputElement).value = sim.getFullYear().toString();
+        (document.getElementById('tp-month') as HTMLInputElement).value = (sim.getMonth() + 1).toString();
+        (document.getElementById('tp-day') as HTMLInputElement).value = sim.getDate().toString();
+        (document.getElementById('tp-hour') as HTMLInputElement).value = sim.getHours().toString();
+        (document.getElementById('tp-minute') as HTMLInputElement).value = sim.getMinutes().toString();
+    }
+
+    function showPopover() {
+        popoverOpen = true;
+        timePopover.style.display = '';
+        updateTimeUI();
+    }
+
+    function hidePopover() {
+        popoverOpen = false;
+        timePopover.style.display = 'none';
+        updateTimeUI();
+    }
+
+    function ensureSchedulerRunning() {
+        // Kick the scheduler if it's idle
+        if (rafId === null && idleTimerId === null) {
+            startScheduler();
+        } else if (rafId === null && timeController.needsContinuousRender) {
+            // Idle timer is set but we need continuous render now
+            stopScheduler();
+            startScheduler();
+        }
+    }
+
+    // --- "Time control" button (opens popover) ---
+    timeBarLabel.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popoverOpen) {
+            hidePopover();
+        } else {
+            showPopover();
+        }
+    });
+
+    // --- Rate label click (opens popover when overridden) ---
+    timeBarRate.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popoverOpen) {
+            hidePopover();
+        } else {
+            showPopover();
+        }
+    });
+
+    // --- "Now" reset button ---
+    timeBarNow.addEventListener('click', (e) => {
+        e.stopPropagation();
+        timeController.reset();
+        hidePopover();
+        ensureSchedulerRunning();
+    });
+
+    // --- Direction buttons ---
+    timePopover.querySelectorAll('[data-dir]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dir = (btn as HTMLElement).dataset.dir!;
+            if (dir === 'stop') {
+                timeController.stop();
+            } else if (dir === 'forward') {
+                timeController.setDirection(1);
+            } else if (dir === 'reverse') {
+                timeController.setDirection(-1);
+            }
+            updateTimeUI();
+            ensureSchedulerRunning();
+        });
+    });
+
+    // --- Speed buttons ---
+    timePopover.querySelectorAll('.tp-speed').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const speedKey = (btn as HTMLElement).dataset.speed!;
+            const rateIdx = speedMap[speedKey];
+            const rate = rateIdx === null ? null : RATE_OPTIONS[rateIdx];
+            timeController.setRate(rate);
+            updateTimeUI();
+            ensureSchedulerRunning();
+        });
+    });
+
+    // --- Step buttons ---
+    timePopover.querySelectorAll('[data-step]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const stepKey = (btn as HTMLElement).dataset.step!;
+            const [unit, dir] = stepMap[stepKey];
+            timeController.step(unit, dir);
+            updateTimeUI();
+            ensureSchedulerRunning();
+        });
+    });
+
+    // --- Date input Apply ---
+    document.getElementById('tp-apply')!.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const yr = parseInt((document.getElementById('tp-year') as HTMLInputElement).value, 10);
+        const mo = parseInt((document.getElementById('tp-month') as HTMLInputElement).value, 10) - 1;
+        const dy = parseInt((document.getElementById('tp-day') as HTMLInputElement).value, 10);
+        const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
+        const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
+        if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+        const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+        timeController.setTime(d);
+        updateTimeUI();
+        ensureSchedulerRunning();
+    });
+
+    // --- Click outside to dismiss popover ---
+    document.addEventListener('click', (e) => {
+        if (!popoverOpen) return;
+        const target = e.target as Node;
+        if (timePopover.contains(target) || timeBar.contains(target)) return;
+        hidePopover();
+    });
+
+
 
     // =========================================================================
     // Initial build

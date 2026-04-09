@@ -87,18 +87,216 @@
             z-index: 10;
         }
         #back-link:hover { color: #99b; }
+
+        /* ============= Time Controller ============= */
+
+        /* Time bar (always visible, between watch-grid and location-panel) */
+        #time-bar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 5px 16px;
+            font-size: 13px;
+            border-top: 1px solid #2a2a3e;
+            background: rgba(25, 25, 42, 0.9);
+            color: #99b;
+            font-family: monospace;
+            user-select: none;
+        }
+        #time-bar-label {
+            background: rgba(42, 42, 62, 0.85);
+            border: 1px solid #3a3a5e;
+            border-radius: 16px;
+            color: #99b;
+            font-size: 13px;
+            padding: 4px 16px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #time-bar-label:hover { background: rgba(60, 60, 90, 0.95); color: #ccf; }
+        #time-bar.overridden #time-bar-label { display: none; }
+        #time-bar-date { color: #dde; display: none; }
+        #time-bar.overridden #time-bar-date { display: inline; }
+        #time-bar-rate { color: #8af; font-weight: 600; display: none; cursor: pointer; }
+        #time-bar.overridden #time-bar-rate { display: inline; }
+        .time-bar-btn {
+            background: #2a2a3e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #aac;
+            font-size: 12px;
+            padding: 2px 10px;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: none;
+        }
+        #time-bar.overridden .time-bar-btn { display: inline-block; }
+        .time-bar-btn:hover { background: #3a3a5e; color: #ddf; }
+
+        /* Popover */
+        #time-popover {
+            position: absolute;
+            bottom: 80px;
+            right: 16px;
+            z-index: 30;
+            min-width: 300px;
+            background: rgba(26, 26, 46, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid #3a3a5e;
+            border-radius: 14px;
+            padding: 14px 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .tp-section {
+            margin-bottom: 12px;
+        }
+        .tp-section:last-child { margin-bottom: 0; }
+        .tp-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #667;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .tp-btn-row {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 4px;
+        }
+        .tp-btn {
+            background: #2a2a3e;
+            border: 1px solid #3a3a5e;
+            border-radius: 6px;
+            color: #99b;
+            font-size: 12px;
+            padding: 5px 8px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+            min-width: 32px;
+            text-align: center;
+        }
+        .tp-btn:hover { background: #3a3a5e; color: #ccf; }
+        .tp-btn.active {
+            background: #445;
+            border-color: #8af;
+            color: #8af;
+        }
+        .tp-btn-dir {
+            font-size: 14px;
+            padding: 5px 12px;
+        }
+        #tp-rate-label {
+            font-size: 12px;
+            color: #8af;
+            text-align: center;
+            margin-top: 4px;
+        }
+        .tp-date-inputs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 6px;
+        }
+        .tp-date-inputs input {
+            width: 52px;
+            padding: 4px 5px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #2a2a3e;
+            color: #ddd;
+            font-size: 13px;
+            font-family: monospace;
+            text-align: center;
+        }
+        .tp-date-inputs input:first-child { width: 64px; }  /* YYYY */
+        #tp-apply {
+            width: 100%;
+            padding: 5px;
+            background: #335;
+            border: 1px solid #557;
+            border-radius: 6px;
+            color: #aac;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #tp-apply:hover { background: #446; color: #ddf; }
     </style>
 </head>
 <body>
     <div id="app">
         <a id="back-link" href="index.html">← Home</a>
         <div id="watch-grid"></div>
+        <div id="time-bar">
+            <button id="time-bar-label">⏱ Time control</button>
+            <span id="time-bar-date"></span>
+            <span id="time-bar-rate"></span>
+            <button class="time-bar-btn" id="time-bar-now">Now</button>
+        </div>
         <div id="location-panel">
             <label>Lat: <input id="lat-input" type="text"></label>
             <label>Lon: <input id="lon-input" type="text"></label>
             <span id="location-source"></span>
             <a id="reset-location" style="display:none">reset</a>
         </div>
+
+        <!-- Time controller popover -->
+        <div id="time-popover" style="display:none">
+            <div class="tp-section">
+                <div class="tp-label">Direction</div>
+                <div class="tp-btn-row">
+                    <button class="tp-btn tp-btn-dir" data-dir="reverse">◀</button>
+                    <button class="tp-btn tp-btn-dir" data-dir="stop">‖</button>
+                    <button class="tp-btn tp-btn-dir active" data-dir="forward">▶</button>
+                </div>
+            </div>
+            <div class="tp-section">
+                <div class="tp-label">Speed</div>
+                <div class="tp-btn-row">
+                    <button class="tp-btn tp-speed active" data-speed="1x">1×</button>
+                    <button class="tp-btn tp-speed" data-speed="10x">10×</button>
+                    <button class="tp-btn tp-speed" data-speed="10min">10 min/s</button>
+                    <button class="tp-btn tp-speed" data-speed="10hr">10 hr/s</button>
+                    <button class="tp-btn tp-speed" data-speed="10day">10 day/s</button>
+                    <button class="tp-btn tp-speed" data-speed="10mo">10 mo/s</button>
+                    <button class="tp-btn tp-speed" data-speed="10yr">10 yr/s</button>
+                </div>
+                <div id="tp-rate-label">1× (real time)</div>
+            </div>
+            <div class="tp-section">
+                <div class="tp-label">Step</div>
+                <div class="tp-btn-row">
+                    <button class="tp-btn" data-step="-year">‹1y</button>
+                    <button class="tp-btn" data-step="-month">‹1mo</button>
+                    <button class="tp-btn" data-step="-day">‹1d</button>
+                    <button class="tp-btn" data-step="-hour">‹1h</button>
+                    <button class="tp-btn" data-step="-minute">‹1m</button>
+                </div>
+                <div class="tp-btn-row">
+                    <button class="tp-btn" data-step="+minute">1m›</button>
+                    <button class="tp-btn" data-step="+hour">1h›</button>
+                    <button class="tp-btn" data-step="+day">1d›</button>
+                    <button class="tp-btn" data-step="+month">1mo›</button>
+                    <button class="tp-btn" data-step="+year">1y›</button>
+                </div>
+            </div>
+            <div class="tp-section">
+                <div class="tp-label">Set Date & Time</div>
+                <div class="tp-date-inputs">
+                    <input id="tp-year" type="number" min="1" max="2800" placeholder="YYYY">
+                    <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
+                    <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
+                    <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
+                    <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
+                </div>
+                <button id="tp-apply">Apply</button>
+            </div>
+        </div>
+
     </div>
         <script src="chronometer-engine.js"></script>
     <script src="face-hana.js"></script>
