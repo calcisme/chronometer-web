@@ -1517,8 +1517,10 @@ function drawImageHand(
         // the image's own rotation (e.g. to show proper phase orientation).
         ctx.rotate(offsetAngle);
         ctx.translate(0, -offsetRadius);
-        // Apply the image's own rotation (moon phase rotation)
-        ctx.rotate(-offsetAngle + angle);
+        // Apply the image's own rotation.
+        // In iOS, the total angle is offsetAngle + angle.
+        // Since we are already rotated by offsetAngle, we just rotate by angle.
+        ctx.rotate(angle);
         // Draw centered
         ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
     } else if (part.xAnchor || part.yAnchor) {

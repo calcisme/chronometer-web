@@ -12757,7 +12757,7 @@
     if (offsetRadius > 0) {
       ctx.rotate(offsetAngle);
       ctx.translate(0, -offsetRadius);
-      ctx.rotate(-offsetAngle + angle);
+      ctx.rotate(angle);
       ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
     } else if (part.xAnchor || part.yAnchor) {
       if (angle) {
