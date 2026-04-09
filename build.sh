@@ -54,13 +54,13 @@ for face in $FACES; do
   echo "  → $face.html"
 done
 
-# all.html — loads all 4 faces
+# all.html — loads all 5 faces
 ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
+    <script src="face-mauna-kea.js"><\/script>\
     <script src="face-haleakala.js"><\/script>\
     <script src="face-hana.js"><\/script>\
     <script src="face-chandra.js"><\/script>\
-    <script src="face-selene.js"><\/script>\
-    <script src="face-mauna-kea.js"><\/script>'
+    <script src="face-selene.js"><\/script>'
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \

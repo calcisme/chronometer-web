@@ -387,17 +387,30 @@ async function main() {
         const size = result.size;
         const cellStep = size + GAP_PX; // center-to-center distance
 
-        // Total grid dimensions
-        const gridW = cols * size + (cols - 1) * GAP_PX;
-        const gridH = rows * size + (rows - 1) * GAP_PX;
-
-        // Offset to center the grid in the container
-        const offsetX = (W - gridW) / 2;
-        const offsetY = (H - gridH) / 2;
-
         // Position each face cell absolutely.
         // The first (incomplete) row goes at the top.
         const remainder = faces.length - cols * (rows - 1); // items in short top row
+
+        // Nestling: when (cols - remainder) is odd, the short row's faces
+        // are offset by half a cellStep from the full rows.  Round faces
+        // can nestle into those gaps, reducing the vertical spacing so that
+        // the diagonal edge-to-edge distance equals GAP_PX.
+        const canNestle = rows > 1 && remainder !== cols && (cols - remainder) % 2 === 1;
+        const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
+
+        // Total grid dimensions (nestled first gap, normal for rest)
+        const gridW = cols * size + (cols - 1) * GAP_PX;
+        const gridH = size + (canNestle ? nestledStep : 0)
+                     + (rows > 1 ? (rows - 2) * cellStep : 0)
+                     + (rows > 1 ? (rows - 1) * size - (rows - 2) * size : 0);
+        // Simpler: row 0 at y=0, row 1 at y=nestledStep, row k>1 at y=nestledStep+(k-1)*cellStep
+        // Total height = last_row_y + size
+        const lastRowY = rows === 1 ? 0 : nestledStep + (rows - 2) * cellStep;
+        const totalH = lastRowY + size;
+
+        // Offset to center the grid in the container
+        const offsetX = (W - gridW) / 2;
+        const offsetY = (H - totalH) / 2;
 
         for (let i = 0; i < faces.length; i++) {
             let row: number, colIdx: number, itemsInRow: number;
@@ -420,7 +433,9 @@ async function main() {
             const rowOffsetX = (gridW - rowW) / 2;
 
             const x = offsetX + rowOffsetX + colIdx * cellStep;
-            const y = offsetY + row * cellStep;
+            // Row 0 at y=0, row 1 at y=nestledStep, row 2+ at y=nestledStep+(row-1)*cellStep
+            const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
+            const y = offsetY + rowY;
 
             const cell = faces[i].canvas.parentElement as HTMLElement;
             cell.style.position = 'absolute';

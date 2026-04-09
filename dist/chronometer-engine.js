@@ -13182,11 +13182,15 @@
       rows = result.rows;
       const size = result.size;
       const cellStep = size + GAP_PX;
-      const gridW = cols * size + (cols - 1) * GAP_PX;
-      const gridH = rows * size + (rows - 1) * GAP_PX;
-      const offsetX = (W - gridW) / 2;
-      const offsetY = (H - gridH) / 2;
       const remainder = faces.length - cols * (rows - 1);
+      const canNestle = rows > 1 && remainder !== cols && (cols - remainder) % 2 === 1;
+      const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
+      const gridW = cols * size + (cols - 1) * GAP_PX;
+      const gridH = size + (canNestle ? nestledStep : 0) + (rows > 1 ? (rows - 2) * cellStep : 0) + (rows > 1 ? (rows - 1) * size - (rows - 2) * size : 0);
+      const lastRowY = rows === 1 ? 0 : nestledStep + (rows - 2) * cellStep;
+      const totalH = lastRowY + size;
+      const offsetX = (W - gridW) / 2;
+      const offsetY = (H - totalH) / 2;
       for (let i = 0; i < faces.length; i++) {
         let row, colIdx, itemsInRow;
         if (i < remainder) {
@@ -13202,7 +13206,8 @@
         const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
         const rowOffsetX = (gridW - rowW) / 2;
         const x = offsetX + rowOffsetX + colIdx * cellStep;
-        const y = offsetY + row * cellStep;
+        const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
+        const y = offsetY + rowY;
         const cell = faces[i].canvas.parentElement;
         cell.style.position = "absolute";
         cell.style.left = `${x}px`;
