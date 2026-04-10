@@ -13663,27 +13663,23 @@
     const timeBarNow = document.getElementById("time-bar-now");
     const timePopover = document.getElementById("time-popover");
     const tpRateLabel = document.getElementById("tp-rate-label");
+    const tpPlayPause = document.getElementById("tp-playpause");
     let popoverOpen = false;
-    const speedMap = {
-      "1x": null,
-      "10x": 0,
-      "10min": 1,
-      "10hr": 2,
-      "10day": 3,
-      "10mo": 4,
-      "10yr": 5
+    const unitToRateIndex = {
+      "hour": 2,
+      // 10 hr/s
+      "day": 3,
+      // 10 day/s
+      "month": 4
+      // 10 mo/s
     };
     const stepMap = {
-      "-year": ["year", -1],
-      "-month": ["month", -1],
-      "-day": ["day", -1],
       "-hour": ["hour", -1],
-      "-minute": ["minute", -1],
-      "+minute": ["minute", 1],
+      "-day": ["day", -1],
+      "-month": ["month", -1],
       "+hour": ["hour", 1],
       "+day": ["day", 1],
-      "+month": ["month", 1],
-      "+year": ["year", 1]
+      "+month": ["month", 1]
     };
     function formatSimTime(d) {
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -13704,24 +13700,9 @@
         timeBarRate.textContent = timeController.statusLabel;
       }
       tpRateLabel.textContent = timeController.statusLabel;
-      const dirBtns = timePopover.querySelectorAll("[data-dir]");
-      dirBtns.forEach((btn) => {
-        const el = btn;
-        const dir = el.dataset.dir;
-        el.classList.toggle(
-          "active",
-          dir === "forward" && !timeController.isStopped && timeController.currentDirection === 1 || dir === "reverse" && !timeController.isStopped && timeController.currentDirection === -1 || dir === "stop" && timeController.isStopped
-        );
-      });
-      const speedBtns = timePopover.querySelectorAll(".tp-speed");
-      speedBtns.forEach((btn) => {
-        const el = btn;
-        const speedKey = el.dataset.speed;
-        const rateIdx = speedMap[speedKey];
-        const currentRate = timeController.currentRate;
-        const isActive = rateIdx === null && currentRate === null || rateIdx !== null && currentRate !== null && currentRate === RATE_OPTIONS[rateIdx];
-        el.classList.toggle("active", isActive);
-      });
+      const isStopped = timeController.isStopped;
+      tpPlayPause.textContent = isStopped ? "\u25B6" : "\u2016";
+      tpPlayPause.classList.toggle("active", !isStopped);
       const sim = timeController.getDisplayTime();
       document.getElementById("tp-year").value = sim.getFullYear().toString();
       document.getElementById("tp-month").value = (sim.getMonth() + 1).toString();
@@ -13769,40 +13750,85 @@
       hidePopover();
       ensureSchedulerRunning();
     });
-    timePopover.querySelectorAll("[data-dir]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const dir = btn.dataset.dir;
-        if (dir === "stop") {
-          timeController.stop();
-        } else if (dir === "forward") {
-          timeController.setDirection(1);
-        } else if (dir === "reverse") {
-          timeController.setDirection(-1);
-        }
+    tpPlayPause.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (timeController.isStopped) {
+        timeController.setRate(null);
+      } else {
+        timeController.stop();
+      }
+      updateTimeUI();
+      ensureSchedulerRunning();
+    });
+    const HOLD_DELAY_MS = 300;
+    let holdTimer = null;
+    let holdingBtn = null;
+    function startHold(btn, unit, dir) {
+      holdingBtn = btn;
+      btn.classList.add("holding");
+      timeController.setDirection(dir);
+      const rateIdx = unitToRateIndex[unit];
+      if (rateIdx !== void 0) {
+        timeController.setRate(RATE_OPTIONS[rateIdx]);
+      }
+      updateTimeUI();
+      ensureSchedulerRunning();
+    }
+    function endHold() {
+      if (holdTimer !== null) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (holdingBtn) {
+        holdingBtn.classList.remove("holding");
+        holdingBtn = null;
+        timeController.stop();
         updateTimeUI();
         ensureSchedulerRunning();
-      });
-    });
-    timePopover.querySelectorAll(".tp-speed").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const speedKey = btn.dataset.speed;
-        const rateIdx = speedMap[speedKey];
-        const rate = rateIdx === null ? null : RATE_OPTIONS[rateIdx];
-        timeController.setRate(rate);
-        updateTimeUI();
-        ensureSchedulerRunning();
-      });
-    });
+      }
+    }
     timePopover.querySelectorAll("[data-step]").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
+      const el = btn;
+      const stepKey = el.dataset.step;
+      const entry = stepMap[stepKey];
+      if (!entry) return;
+      const [unit, dir] = entry;
+      const unitName = el.dataset.unit || unit;
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        const stepKey = btn.dataset.step;
-        const [unit, dir] = stepMap[stepKey];
         timeController.step(unit, dir);
         updateTimeUI();
         ensureSchedulerRunning();
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          startHold(el, unitName, dir);
+        }, HOLD_DELAY_MS);
+      });
+      el.addEventListener("mouseup", (e) => {
+        e.stopPropagation();
+        endHold();
+      });
+      el.addEventListener("mouseleave", () => {
+        endHold();
+      });
+      el.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        timeController.step(unit, dir);
+        updateTimeUI();
+        ensureSchedulerRunning();
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          startHold(el, unitName, dir);
+        }, HOLD_DELAY_MS);
+      });
+      el.addEventListener("touchend", (e) => {
+        e.stopPropagation();
+        endHold();
+      });
+      el.addEventListener("touchcancel", () => {
+        endHold();
       });
     });
     document.getElementById("tp-apply").addEventListener("click", (e) => {

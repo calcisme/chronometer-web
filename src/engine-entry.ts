@@ -572,32 +572,25 @@ async function main() {
     const timeBarNow = document.getElementById('time-bar-now')!;
     const timePopover = document.getElementById('time-popover')!;
     const tpRateLabel = document.getElementById('tp-rate-label')!;
+    const tpPlayPause = document.getElementById('tp-playpause')!;
 
     let popoverOpen = false;
 
-    /** Map data-speed attributes to RATE_OPTIONS indices (null = 1×) */
-    const speedMap: Record<string, number | null> = {
-        '1x': null,
-        '10x': 0,
-        '10min': 1,
-        '10hr': 2,
-        '10day': 3,
-        '10mo': 4,
-        '10yr': 5,
+    /** Map step unit names to RATE_OPTIONS indices for hold-to-scrub */
+    const unitToRateIndex: Record<string, number> = {
+        'hour':  2,  // 10 hr/s
+        'day':   3,  // 10 day/s
+        'month': 4,  // 10 mo/s
     };
 
     /** Map data-step attributes to [unit, direction] */
     const stepMap: Record<string, [TimeUnit, 1 | -1]> = {
-        '-year': ['year', -1],
-        '-month': ['month', -1],
-        '-day': ['day', -1],
         '-hour': ['hour', -1],
-        '-minute': ['minute', -1],
-        '+minute': ['minute', 1],
+        '-day': ['day', -1],
+        '-month': ['month', -1],
         '+hour': ['hour', 1],
         '+day': ['day', 1],
         '+month': ['month', 1],
-        '+year': ['year', 1],
     };
 
     function formatSimTime(d: Date): string {
@@ -624,29 +617,10 @@ async function main() {
         }
         tpRateLabel.textContent = timeController.statusLabel;
 
-        // Update active states on direction buttons
-        const dirBtns = timePopover.querySelectorAll('[data-dir]');
-        dirBtns.forEach(btn => {
-            const el = btn as HTMLElement;
-            const dir = el.dataset.dir;
-            el.classList.toggle('active',
-                (dir === 'forward' && !timeController.isStopped && timeController.currentDirection === 1) ||
-                (dir === 'reverse' && !timeController.isStopped && timeController.currentDirection === -1) ||
-                (dir === 'stop' && timeController.isStopped)
-            );
-        });
-
-        // Update active states on speed buttons
-        const speedBtns = timePopover.querySelectorAll('.tp-speed');
-        speedBtns.forEach(btn => {
-            const el = btn as HTMLElement;
-            const speedKey = el.dataset.speed!;
-            const rateIdx = speedMap[speedKey];
-            const currentRate = timeController.currentRate;
-            const isActive = (rateIdx === null && currentRate === null) ||
-                             (rateIdx !== null && currentRate !== null && currentRate === RATE_OPTIONS[rateIdx]);
-            el.classList.toggle('active', isActive);
-        });
+        // Update play/pause button
+        const isStopped = timeController.isStopped;
+        tpPlayPause.textContent = isStopped ? '▶' : '‖';
+        tpPlayPause.classList.toggle('active', !isStopped);
 
         // Populate date inputs with current sim time
         const sim = timeController.getDisplayTime();
@@ -708,45 +682,106 @@ async function main() {
         ensureSchedulerRunning();
     });
 
-    // --- Direction buttons ---
-    timePopover.querySelectorAll('[data-dir]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const dir = (btn as HTMLElement).dataset.dir!;
-            if (dir === 'stop') {
-                timeController.stop();
-            } else if (dir === 'forward') {
-                timeController.setDirection(1);
-            } else if (dir === 'reverse') {
-                timeController.setDirection(-1);
-            }
-            updateTimeUI();
-            ensureSchedulerRunning();
-        });
+    // --- Play/Pause toggle ---
+    tpPlayPause.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (timeController.isStopped) {
+            // Resume at 1× from current position
+            timeController.setRate(null);
+        } else {
+            timeController.stop();
+        }
+        updateTimeUI();
+        ensureSchedulerRunning();
     });
 
-    // --- Speed buttons ---
-    timePopover.querySelectorAll('.tp-speed').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const speedKey = (btn as HTMLElement).dataset.speed!;
-            const rateIdx = speedMap[speedKey];
-            const rate = rateIdx === null ? null : RATE_OPTIONS[rateIdx];
-            timeController.setRate(rate);
+    // --- Step buttons with hold-to-scrub ---
+    const HOLD_DELAY_MS = 300;
+    let holdTimer: ReturnType<typeof setTimeout> | null = null;
+    let holdingBtn: HTMLElement | null = null;
+
+    function startHold(btn: HTMLElement, unit: string, dir: 1 | -1) {
+        holdingBtn = btn;
+        btn.classList.add('holding');
+
+        // Set direction and start the corresponding rate
+        timeController.setDirection(dir);
+        const rateIdx = unitToRateIndex[unit];
+        if (rateIdx !== undefined) {
+            timeController.setRate(RATE_OPTIONS[rateIdx]);
+        }
+        updateTimeUI();
+        ensureSchedulerRunning();
+    }
+
+    function endHold() {
+        if (holdTimer !== null) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+        }
+        if (holdingBtn) {
+            holdingBtn.classList.remove('holding');
+            holdingBtn = null;
+
+            // Stop at current position
+            timeController.stop();
             updateTimeUI();
             ensureSchedulerRunning();
-        });
-    });
+        }
+    }
 
-    // --- Step buttons ---
     timePopover.querySelectorAll('[data-step]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        const el = btn as HTMLElement;
+        const stepKey = el.dataset.step!;
+        const entry = stepMap[stepKey];
+        if (!entry) return;
+        const [unit, dir] = entry;
+        const unitName = el.dataset.unit || unit;
+
+        // Mouse events
+        el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            const stepKey = (btn as HTMLElement).dataset.step!;
-            const [unit, dir] = stepMap[stepKey];
+            // Immediate single step
             timeController.step(unit, dir);
             updateTimeUI();
             ensureSchedulerRunning();
+            // Start hold timer
+            holdTimer = setTimeout(() => {
+                holdTimer = null;
+                startHold(el, unitName, dir);
+            }, HOLD_DELAY_MS);
+        });
+
+        el.addEventListener('mouseup', (e) => {
+            e.stopPropagation();
+            endHold();
+        });
+
+        el.addEventListener('mouseleave', () => {
+            endHold();
+        });
+
+        // Touch events
+        el.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            timeController.step(unit, dir);
+            updateTimeUI();
+            ensureSchedulerRunning();
+            holdTimer = setTimeout(() => {
+                holdTimer = null;
+                startHold(el, unitName, dir);
+            }, HOLD_DELAY_MS);
+        });
+
+        el.addEventListener('touchend', (e) => {
+            e.stopPropagation();
+            endHold();
+        });
+
+        el.addEventListener('touchcancel', () => {
+            endHold();
         });
     });
 

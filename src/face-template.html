@@ -141,17 +141,17 @@
             bottom: 80px;
             right: 16px;
             z-index: 30;
-            min-width: 300px;
+            min-width: 200px;
             background: rgba(26, 26, 46, 0.96);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid #3a3a5e;
             border-radius: 14px;
-            padding: 14px 16px;
+            padding: 12px 14px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
         .tp-section {
-            margin-bottom: 12px;
+            margin-bottom: 10px;
         }
         .tp-section:last-child { margin-bottom: 0; }
         .tp-label {
@@ -159,12 +159,11 @@
             text-transform: uppercase;
             color: #667;
             letter-spacing: 0.5px;
-            margin-bottom: 6px;
+            margin-bottom: 5px;
         }
         .tp-btn-row {
             display: flex;
             gap: 4px;
-            flex-wrap: wrap;
             margin-bottom: 4px;
         }
         .tp-btn {
@@ -179,6 +178,8 @@
             white-space: nowrap;
             min-width: 32px;
             text-align: center;
+            user-select: none;
+            -webkit-user-select: none;
         }
         .tp-btn:hover { background: #3a3a5e; color: #ccf; }
         .tp-btn.active {
@@ -186,9 +187,18 @@
             border-color: #8af;
             color: #8af;
         }
-        .tp-btn-dir {
+        /* Step buttons expand to fill row equally */
+        .tp-step-row { display: flex; gap: 4px; margin-bottom: 4px; }
+        .tp-step-row .tp-btn { flex: 1; }
+        .tp-btn.holding {
+            background: #556;
+            border-color: #8af;
+            color: #ccf;
+        }
+        /* Play/pause toggle */
+        #tp-playpause {
             font-size: 14px;
-            padding: 5px 12px;
+            padding: 5px 14px;
         }
         #tp-rate-label {
             font-size: 12px;
@@ -199,7 +209,7 @@
         .tp-date-inputs {
             display: flex;
             gap: 4px;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         .tp-date-inputs input {
             width: 52px;
@@ -212,7 +222,7 @@
             font-family: monospace;
             text-align: center;
         }
-        .tp-date-inputs input:first-child { width: 64px; }  /* YYYY */
+        .tp-date-inputs input:first-child { width: 58px; }  /* YYYY */
         #tp-apply {
             width: 100%;
             padding: 5px;
@@ -247,53 +257,36 @@
         <!-- Time controller popover -->
         <div id="time-popover" style="display:none">
             <div class="tp-section">
-                <div class="tp-label">Direction</div>
                 <div class="tp-btn-row">
-                    <button class="tp-btn tp-btn-dir" data-dir="reverse">◀</button>
-                    <button class="tp-btn tp-btn-dir" data-dir="stop">‖</button>
-                    <button class="tp-btn tp-btn-dir active" data-dir="forward">▶</button>
-                </div>
-            </div>
-            <div class="tp-section">
-                <div class="tp-label">Speed</div>
-                <div class="tp-btn-row">
-                    <button class="tp-btn tp-speed active" data-speed="1x">1×</button>
-                    <button class="tp-btn tp-speed" data-speed="10x">10×</button>
-                    <button class="tp-btn tp-speed" data-speed="10min">10 min/s</button>
-                    <button class="tp-btn tp-speed" data-speed="10hr">10 hr/s</button>
-                    <button class="tp-btn tp-speed" data-speed="10day">10 day/s</button>
-                    <button class="tp-btn tp-speed" data-speed="10mo">10 mo/s</button>
-                    <button class="tp-btn tp-speed" data-speed="10yr">10 yr/s</button>
+                    <button class="tp-btn active" id="tp-playpause">▶</button>
                 </div>
                 <div id="tp-rate-label">1× (real time)</div>
             </div>
             <div class="tp-section">
-                <div class="tp-label">Step</div>
-                <div class="tp-btn-row">
-                    <button class="tp-btn" data-step="-year">‹1y</button>
-                    <button class="tp-btn" data-step="-month">‹1mo</button>
-                    <button class="tp-btn" data-step="-day">‹1d</button>
-                    <button class="tp-btn" data-step="-hour">‹1h</button>
-                    <button class="tp-btn" data-step="-minute">‹1m</button>
+                <div class="tp-label">Step (hold to scrub)</div>
+                <div class="tp-step-row">
+                    <button class="tp-btn" data-step="-hour" data-unit="hour">◀ 1h</button>
+                    <button class="tp-btn" data-step="-day" data-unit="day">◀ 1d</button>
+                    <button class="tp-btn" data-step="-month" data-unit="month">◀ 1mo</button>
                 </div>
-                <div class="tp-btn-row">
-                    <button class="tp-btn" data-step="+minute">1m›</button>
-                    <button class="tp-btn" data-step="+hour">1h›</button>
-                    <button class="tp-btn" data-step="+day">1d›</button>
-                    <button class="tp-btn" data-step="+month">1mo›</button>
-                    <button class="tp-btn" data-step="+year">1y›</button>
+                <div class="tp-step-row">
+                    <button class="tp-btn" data-step="+hour" data-unit="hour">1h ▶</button>
+                    <button class="tp-btn" data-step="+day" data-unit="day">1d ▶</button>
+                    <button class="tp-btn" data-step="+month" data-unit="month">1mo ▶</button>
                 </div>
             </div>
             <div class="tp-section">
-                <div class="tp-label">Set Date & Time</div>
+                <div class="tp-label">Set Date &amp; Time</div>
                 <div class="tp-date-inputs">
-                    <input id="tp-year" type="number" min="1" max="2800" placeholder="YYYY">
+                    <input id="tp-year" type="number" min="-4000" max="2800" placeholder="YYYY">
                     <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
                     <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
+                </div>
+                <div class="tp-date-inputs">
                     <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
                     <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
+                    <button id="tp-apply">Apply</button>
                 </div>
-                <button id="tp-apply">Apply</button>
             </div>
         </div>
 
