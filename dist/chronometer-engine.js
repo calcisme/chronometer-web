@@ -13755,7 +13755,7 @@
     let resizeDebounceTimer = null;
     let lastContainerW = 0;
     let lastContainerH = 0;
-    function computeFaceCenters(nFaces, gridCols, gridRows, size, containerW, containerH) {
+    function computeFaceCenters(nFaces, gridCols, gridRows, size, containerW, containerH, offsetAdjustX = 0, offsetAdjustY = 0) {
       const cellStep = size + GAP_PX;
       const remainder = nFaces - gridCols * (gridRows - 1);
       const canNestle = gridRows > 1 && remainder !== gridCols && (gridCols - remainder) % 2 === 1;
@@ -13763,8 +13763,8 @@
       const gridW = gridCols * size + (gridCols - 1) * GAP_PX;
       const lastRowY = gridRows === 1 ? 0 : nestledStep + (gridRows - 2) * cellStep;
       const totalH = lastRowY + size;
-      const offsetX = (containerW - gridW) / 2;
-      const offsetY = (containerH - totalH) / 2;
+      const offsetX = (containerW - gridW) / 2 + offsetAdjustX;
+      const offsetY = (containerH - totalH) / 2 + offsetAdjustY;
       const centers = [];
       for (let i = 0; i < nFaces; i++) {
         let row, colIdx, itemsInRow;
@@ -13805,6 +13805,8 @@
       const result = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
       if (result.size <= 0) return;
       let size = result.size;
+      let gridShiftX = 0, gridShiftY = 0;
+      let useTopLeftAlign = false;
       if (popoverOpen) {
         const gridRect = grid.getBoundingClientRect();
         const popRect = timePopover.getBoundingClientRect();
@@ -13812,7 +13814,34 @@
         const pTop = popRect.top - gridRect.top;
         const pRight = popRect.right - gridRect.left;
         const pBottom = popRect.bottom - gridRect.top;
-        let centers = computeFaceCenters(
+        const configFits = (cols2, s) => {
+          const rows2 = Math.ceil(faces.length / cols2);
+          const cellStep = s + GAP_PX;
+          const remainder = faces.length - cols2 * (rows2 - 1);
+          const r = s / 2;
+          const hasNestle = remainder > 0 && remainder < cols2;
+          const nestleOffset = hasNestle ? cellStep / 2 : 0;
+          const gridW = cols2 * s + (cols2 - 1) * GAP_PX + 2 * PADDING_PX;
+          const gridH = (rows2 - 1) * cellStep + s + 2 * PADDING_PX;
+          if (gridW > W || gridH > H) return false;
+          for (let i = 0; i < faces.length; i++) {
+            const row = Math.floor(i / cols2);
+            const col = i % cols2;
+            const isShortCol = col >= remainder;
+            const ny = isShortCol ? nestleOffset : 0;
+            const cx = PADDING_PX + col * cellStep + r;
+            const cy = PADDING_PX + row * cellStep + ny + r;
+            const nearX = Math.max(pLeft, Math.min(cx, pRight));
+            const nearY = Math.max(pTop, Math.min(cy, pBottom));
+            const dx = cx - nearX;
+            const dy = cy - nearY;
+            if (dx * dx + dy * dy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+              return false;
+            }
+          }
+          return true;
+        };
+        const centers = computeFaceCenters(
           faces.length,
           result.cols,
           result.rows,
@@ -13822,34 +13851,69 @@
         );
         if (anyFaceOverlapsRect(centers, size / 2, pLeft, pTop, pRight, pBottom)) {
           let lo = 0, hi = size;
-          for (let iter = 0; iter < 20; iter++) {
+          let bestCols = result.cols;
+          for (let iter = 0; iter < 25; iter++) {
             const mid = Math.floor((lo + hi) / 2);
             if (mid <= 0) break;
-            const trial = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
-            const trialSize = Math.min(trial.size, mid);
-            const trialCenters = computeFaceCenters(
-              faces.length,
-              trial.cols,
-              trial.rows,
-              trialSize,
-              W,
-              H
-            );
-            if (anyFaceOverlapsRect(
-              trialCenters,
-              trialSize / 2,
-              pLeft,
-              pTop,
-              pRight,
-              pBottom
-            )) {
-              hi = mid;
-            } else {
+            let anyWorks = false;
+            for (let c = 1; c <= faces.length; c++) {
+              if (configFits(c, mid)) {
+                anyWorks = true;
+                break;
+              }
+            }
+            if (anyWorks) {
               lo = mid;
+            } else {
+              hi = mid;
             }
           }
           size = lo;
+          let bestConfig = result.cols;
+          for (let c = 1; c <= faces.length; c++) {
+            if (configFits(c, size)) {
+              bestConfig = c;
+              break;
+            }
+          }
+          result.cols = bestConfig;
+          result.rows = Math.ceil(faces.length / bestConfig);
+          useTopLeftAlign = true;
           if (size <= 0) return;
+          const cellStep = size + GAP_PX;
+          const gridW = bestConfig * size + (bestConfig - 1) * GAP_PX;
+          const centeredX = (W - gridW) / 2 - PADDING_PX;
+          const remainder = faces.length - bestConfig * (result.rows - 1);
+          const hasNestle = remainder > 0 && remainder < bestConfig;
+          const nestleOff = hasNestle ? cellStep / 2 : 0;
+          const r = size / 2;
+          const shiftFits = (dx) => {
+            for (let i = 0; i < faces.length; i++) {
+              const row = Math.floor(i / bestConfig);
+              const col = i % bestConfig;
+              const isShort = col >= remainder;
+              const cx = PADDING_PX + dx + col * cellStep + r;
+              const cy = PADDING_PX + row * cellStep + (isShort ? nestleOff : 0) + r;
+              const nearX = Math.max(pLeft, Math.min(cx, pRight));
+              const nearY = Math.max(pTop, Math.min(cy, pBottom));
+              const ddx = cx - nearX;
+              const ddy = cy - nearY;
+              if (ddx * ddx + ddy * ddy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+                return false;
+              }
+            }
+            return true;
+          };
+          let sLo = 0, sHi = Math.max(0, centeredX);
+          for (let iter = 0; iter < 20; iter++) {
+            const sMid = (sLo + sHi) / 2;
+            if (shiftFits(sMid)) {
+              sLo = sMid;
+            } else {
+              sHi = sMid;
+            }
+          }
+          gridShiftX = sLo;
         }
       }
       const dpr = window.devicePixelRatio || 1;
@@ -13858,38 +13922,58 @@
       stopScheduler();
       cols = result.cols;
       rows = result.rows;
-      const cellStep = size + GAP_PX;
-      const remainder = faces.length - cols * (rows - 1);
-      const canNestle = rows > 1 && remainder !== cols && (cols - remainder) % 2 === 1;
-      const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
-      const gridW = cols * size + (cols - 1) * GAP_PX;
-      const lastRowY = rows === 1 ? 0 : nestledStep + (rows - 2) * cellStep;
-      const totalH = lastRowY + size;
-      const offsetX = (W - gridW) / 2;
-      const offsetY = (H - totalH) / 2;
-      for (let i = 0; i < faces.length; i++) {
-        let row, colIdx, itemsInRow;
-        if (i < remainder) {
-          row = 0;
-          colIdx = i;
-          itemsInRow = remainder;
-        } else {
-          const j = i - remainder;
-          row = 1 + Math.floor(j / cols);
-          colIdx = j % cols;
-          itemsInRow = cols;
+      if (useTopLeftAlign) {
+        const cellStep = size + GAP_PX;
+        const remainder = faces.length - cols * (rows - 1);
+        const hasNestle = remainder > 0 && remainder < cols;
+        const nestleOffset = hasNestle ? cellStep / 2 : 0;
+        for (let i = 0; i < faces.length; i++) {
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          const isShortCol = col >= remainder;
+          const x = PADDING_PX + gridShiftX + col * cellStep;
+          const y = PADDING_PX + row * cellStep + (isShortCol ? nestleOffset : 0);
+          const cell = faces[i].canvas.parentElement;
+          cell.style.position = "absolute";
+          cell.style.left = `${x}px`;
+          cell.style.top = `${y}px`;
+          cell.style.width = `${size}px`;
+          cell.style.height = `${size}px`;
         }
-        const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
-        const rowOffsetX = (gridW - rowW) / 2;
-        const x = offsetX + rowOffsetX + colIdx * cellStep;
-        const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
-        const y = offsetY + rowY;
-        const cell = faces[i].canvas.parentElement;
-        cell.style.position = "absolute";
-        cell.style.left = `${x}px`;
-        cell.style.top = `${y}px`;
-        cell.style.width = `${size}px`;
-        cell.style.height = `${size}px`;
+      } else {
+        const cellStep = size + GAP_PX;
+        const remainder = faces.length - cols * (rows - 1);
+        const canNestle = rows > 1 && remainder !== cols && (cols - remainder) % 2 === 1;
+        const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
+        const gridW = cols * size + (cols - 1) * GAP_PX;
+        const lastRowY = rows === 1 ? 0 : nestledStep + (rows - 2) * cellStep;
+        const totalH = lastRowY + size;
+        const offsetX = (W - gridW) / 2 + gridShiftX;
+        const offsetY = (H - totalH) / 2 + gridShiftY;
+        for (let i = 0; i < faces.length; i++) {
+          let row, colIdx, itemsInRow;
+          if (i < remainder) {
+            row = 0;
+            colIdx = i;
+            itemsInRow = remainder;
+          } else {
+            const j = i - remainder;
+            row = 1 + Math.floor(j / cols);
+            colIdx = j % cols;
+            itemsInRow = cols;
+          }
+          const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
+          const rowOffsetX = (gridW - rowW) / 2;
+          const x = offsetX + rowOffsetX + colIdx * cellStep;
+          const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
+          const y = offsetY + rowY;
+          const cell = faces[i].canvas.parentElement;
+          cell.style.position = "absolute";
+          cell.style.left = `${x}px`;
+          cell.style.top = `${y}px`;
+          cell.style.width = `${size}px`;
+          cell.style.height = `${size}px`;
+        }
       }
       for (const face of faces) {
         applySize(face, size);
