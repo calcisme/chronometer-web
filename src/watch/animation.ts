@@ -1,15 +1,21 @@
 /**
  * Animation system for watch hands and wheels.
  *
- * Each dynamic part (QHand, Wheel) has an update interval (how often its
- * angle expression is re-evaluated) and an optional animSpeed (how fast
- * it animates from its old angle to the new one).
+ * Two-time-base architecture (see planning/2026-04-10-animation-strategy.md):
  *
- * The animation loop calls `tickAnimations` each frame, which:
- *   1. Checks if each part's update interval has elapsed
- *   2. If so, re-evaluates the angle expression to get a new target
- *   3. Starts a linear animation from old → new angle
- *   4. On subsequent frames, interpolates toward the target
+ * - **Display time** (getNow) is used to evaluate angle expressions,
+ *   determining WHAT the target angle should be.
+ * - **Real time** (performance.now) is used for animation interpolation,
+ *   determining WHERE the hand is drawn right now.
+ *
+ * At quantized rates (10 hr/s etc.), display time jumps discretely on
+ * each tick. The animation system smoothly interpolates hand positions
+ * at up to 240fps between ticks using real time.
+ *
+ * Animation duration is adaptive:
+ * - If the normal speed-based duration would exceed the tick interval,
+ *   compress the animation to fit within one tick (fast parts).
+ * - Otherwise, use the normal speed-based duration (slow parts).
  */
 
 import type { Watch, WatchPart, QHandPart, WheelPart } from './types.js';
@@ -27,7 +33,7 @@ export const SCHEDULER_LOOKAHEAD_MS = 50; // arm setTimeout this many ms early t
 const kECGLAngleAnimationSpeed = 2.0;
 
 /** Minimum animation duration; below this, snap directly. */
-const kECGLFrameRate = 1.0 / 120;
+const kECGLFrameRate = 1.0 / 240;
 
 // --- Named update interval sentinels (matching iOS ECConstants.h) ---
 // Negative values that the animation system interprets specially.
@@ -143,12 +149,21 @@ function createHandState(
  * Tick all hand animations for one frame.
  * Call this from requestAnimationFrame before rendering.
  *
+ * @param tickIntervalMs  When non-null, indicates quantized mode.
+ *   The animation system uses this to:
+ *   - Compress fast-part animations to fit within one tick
+ *   - Schedule slow-part re-evaluation to skip unnecessary ticks
+ * @param displayDeltaPerTickSec  Display seconds advanced per tick (e.g. 3600 for 10hr/s).
+ *   Only used when tickIntervalMs is non-null.
+ *
  * Updates each part's `dynamicState.currentAngle` in place.
  */
 export function tickAnimations(
     states: HandState[],
     env: Environment,
     now: number,   // performance.now()
+    tickIntervalMs: number | null = null,
+    displayDeltaPerTickSec: number = 0,
 ): void {
     for (const state of states) {
         // Check if it's time to re-evaluate
@@ -156,11 +171,48 @@ export function tickAnimations(
             const newTarget = state.part.angle
                 ? evalAttr(state.part.angle, env)
                 : 0;
-            startAnimation(state, newTarget, now);
-            state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
+
+            if (tickIntervalMs !== null && tickIntervalMs > 0) {
+                // --- Quantized mode ---
+
+                // Compute how many ticks until this part's next re-evaluation
+                let ticksUntilUpdate = 1;
+                if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
+                    const updateIntervalSec = state.updateIntervalMs / 1000;
+                    ticksUntilUpdate = Math.max(1, Math.ceil(updateIntervalSec / displayDeltaPerTickSec));
+                }
+                const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+
+                // Adaptive duration: use normal speed unless it wouldn't
+                // finish before the next re-evaluation
+                const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+                const normalizedTarget = fmod(newTarget, 2 * Math.PI);
+                const normalizedCurrent = fmod(state.angle.currentValue, 2 * Math.PI);
+                let delta = Math.abs(normalizedTarget - normalizedCurrent);
+                if (delta > Math.PI) delta = 2 * Math.PI - delta;
+                const normalDurationMs = (animateSpeed > 0)
+                    ? (delta / animateSpeed) * 1000
+                    : 0;
+
+                if (normalDurationMs > timeUntilNextUpdateMs) {
+                    // Animation wouldn't finish before next re-eval:
+                    // compress to fit within the available time
+                    startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+                } else {
+                    // Animation finishes in time: use normal speed
+                    startAnimation(state, newTarget, now);
+                }
+
+                // Schedule next re-evaluation
+                state.nextUpdateTime = now + timeUntilNextUpdateMs;
+            } else {
+                // --- 1× mode (normal) ---
+                startAnimation(state, newTarget, now);
+                state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
+            }
         }
 
-        // Interpolate if animating
+        // Interpolate if animating (uses real time for smooth rendering)
         const angle = interpolate(state.angle, now);
 
         // Write to part's dynamicState
@@ -233,10 +285,18 @@ export function resetHandSchedules(states: HandState[]): void {
 // Animation logic (ported from ECGLPart.m)
 // ============================================================================
 
+/**
+ * Start (or restart) an animation from the current position to a new target.
+ *
+ * @param durationOverrideMs  When provided, use this fixed duration instead of
+ *   computing from angular distance / animation speed. Used for tick-interval
+ *   compression and single-tap steps.
+ */
 function startAnimation(
     state: HandState,
     newTarget: number,
     now: number,
+    durationOverrideMs?: number,
 ): void {
     const val = state.angle;
     const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
@@ -252,7 +312,12 @@ function startAnimation(
         return;
     }
 
-    // If mid-animation, snapshot the current interpolated position first
+    // If already animating toward this same target, let it continue
+    if (val.animating && val.targetValue === newTarget) {
+        return;
+    }
+
+    // If mid-animation toward a DIFFERENT target, snapshot current position
     if (val.animating) {
         interpolate(val, now);
     }
@@ -276,9 +341,16 @@ function startAnimation(
         }
     }
 
-    const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
+    // Compute animation duration
+    let durationMs: number;
+    if (durationOverrideMs !== undefined) {
+        durationMs = durationOverrideMs;
+    } else {
+        const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
+        durationMs = deltaTime * 1000;
+    }
 
-    if (deltaTime < kECGLFrameRate) {
+    if (durationMs < kECGLFrameRate * 1000) {
         // Too small to animate — snap
         val.currentValue = val.targetValue;
         val.animating = false;
@@ -288,7 +360,7 @@ function startAnimation(
     // Start (or restart) animation from current position
     val.lastAnimationTime = now;
     val.animating = true;
-    val.animationStopTime = now + deltaTime * 1000;  // convert to ms
+    val.animationStopTime = now + durationMs;
 }
 
 function interpolate(val: AnimatingValue, now: number): number {
@@ -318,6 +390,9 @@ function interpolate(val: AnimatingValue, now: number): number {
  * Schedule the next update time based on the update interval.
  * Positive intervals use epoch-aligned boundaries.
  * Negative sentinel values are routed to event-specific scheduling.
+ *
+ * Used only in 1× mode. Quantized mode computes schedules directly
+ * in tickAnimations based on tick intervals and display-delta-per-tick.
  */
 function scheduleNextUpdate(updateIntervalMs: number, getNow: () => Date): number {
     if (updateIntervalMs > 0) {

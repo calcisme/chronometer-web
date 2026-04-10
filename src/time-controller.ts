@@ -38,6 +38,21 @@ export const RATE_OPTIONS: RateOption[] = [
 /** Tick interval in milliseconds (10 Hz) */
 export const TICK_INTERVAL_MS = 100;
 
+/**
+ * Approximate display-time seconds advanced per tick for a given unit.
+ * Used by the animation system to decide fast vs slow part scheduling.
+ */
+export function displaySecondsPerTick(unit: TimeUnit): number {
+    switch (unit) {
+        case 'second': return 1;
+        case 'minute': return 60;
+        case 'hour':   return 3600;
+        case 'day':    return 86400;
+        case 'month':  return 30 * 86400;  // approximate
+        case 'year':   return 365 * 86400; // approximate
+    }
+}
+
 // ============================================================================
 // Calendar-aware time arithmetic
 // ============================================================================
@@ -294,7 +309,11 @@ export class TimeController {
             this.tickTime = new Date(this.nextTickTime.getTime());
             this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
             this.lastTickRealMs = nowPerfMs;
-            this.onTick?.();
+            // NOTE: Do NOT call onTick() here. The env functions are live
+            // closures that call getNow(), so they automatically see the
+            // new tickTime via the frame snapshot. Calling onTick() would
+            // trigger rebuildAllForTime() which re-initializes hand states
+            // and destroys animation state.
             return true;
         }
         return false;

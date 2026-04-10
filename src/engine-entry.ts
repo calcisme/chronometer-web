@@ -31,7 +31,7 @@ import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles } from './watch/terminator.js';
-import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS } from './time-controller.js';
+import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 
 // ============================================================================
@@ -304,9 +304,43 @@ async function main() {
     // =========================================================================
     // Time controller — tick callback
     // =========================================================================
+
     /**
-     * Rebuild all environments for the current simulated time.
-     * Called on each tick and on manual time changes.
+     * Rebuild environments and static caches for the current simulated time,
+     * preserving existing part objects and hand states so animations
+     * continue smoothly. Used for step events where only the time changes.
+     *
+     * The env functions (hour12ValueAngle, etc.) are live closures over
+     * getNow(), so they automatically see the new time. But calendar-
+     * dependent init expressions and terminator computations need
+     * a fresh environment.
+     */
+    function rebuildEnvironments() {
+        for (const face of faces) {
+            if (!face.enabled) continue;
+            // Rebuild the environment but keep the same watch/parts
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+            // Rebuild static caches (terminators, static block images)
+            const { canvas, watch, env, images, scale } = face;
+            face.terminatorLeaves = [];
+            for (const part of watch.parts) {
+                if (part.type === 'Terminator') {
+                    face.terminatorLeaves.push(...expandTerminatorToLeaves(part, env));
+                }
+            }
+            if (face.terminatorLeaves.length > 0) {
+                updateLeafAngles(face.terminatorLeaves, face.env);
+            }
+            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+            // Hand states are preserved — their angle expressions will
+            // be re-evaluated by tickAnimations using the fresh env
+        }
+    }
+
+    /**
+     * Full rebuild including fresh hand states.
+     * Only used for major time changes (setTime, location change)
+     * where animation continuity doesn't matter.
      */
     function rebuildAllForTime() {
         for (const face of faces) {
@@ -325,7 +359,7 @@ async function main() {
         }
     }
 
-    timeController.onTick = rebuildAllForTime;
+    timeController.onTick = rebuildEnvironments;
 
     // =========================================================================
     // Scheduler
@@ -351,12 +385,22 @@ async function main() {
         // this frame will return the exact same value.
         timeController.beginFrame();
 
+        // Compute tick parameters for the animation system
+        const rate = timeController.currentRate;
+        const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
+        const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
+
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
-            tickAnimations(face.handStates, face.env, now);
+            tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
             if (face.terminatorLeaves.length > 0) {
-                const intervalMs = Math.min(...face.terminatorLeaves.map(l => l.updateIntervalSec)) * 1000;
-                if (now - face.lastTerminatorRebuild > intervalMs) {
+                // In quantized mode, display time jumps by large amounts per tick,
+                // so update terminators every tick (every 100ms real time).
+                // In 1× mode, use the part's real-time update interval.
+                const effectiveIntervalMs = tickMs !== null
+                    ? tickMs
+                    : Math.min(...face.terminatorLeaves.map(l => l.updateIntervalSec)) * 1000;
+                if (now - face.lastTerminatorRebuild > effectiveIntervalMs) {
                     updateLeafAngles(face.terminatorLeaves, face.env);
                     buildStaticBlockCaches(
                         face.watch, face.env, face.canvas.width, face.canvas.height,
@@ -812,8 +856,18 @@ async function main() {
         el.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            // Immediate single step
+            // Immediate single step with smooth animation
             timeController.step(unit, dir);
+            // One-shot: re-evaluate all hands with tick-interval animation
+            const stepDeltaSec = displaySecondsPerTick(unit);
+            timeController.beginFrame();
+            const stepNow = performance.now();
+            for (const face of faces) {
+                if (!face.enabled || !face.cachesBuilt) continue;
+                resetHandSchedules(face.handStates);
+                tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+            }
+            timeController.endFrame();
             updateTimeUI();
             ensureSchedulerRunning();
             // Start hold timer
@@ -836,7 +890,17 @@ async function main() {
         el.addEventListener('touchstart', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            // Immediate single step with smooth animation
             timeController.step(unit, dir);
+            const stepDeltaSec = displaySecondsPerTick(unit);
+            timeController.beginFrame();
+            const stepNow = performance.now();
+            for (const face of faces) {
+                if (!face.enabled || !face.cachesBuilt) continue;
+                resetHandSchedules(face.handStates);
+                tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+            }
+            timeController.endFrame();
             updateTimeUI();
             ensureSchedulerRunning();
             holdTimer = setTimeout(() => {

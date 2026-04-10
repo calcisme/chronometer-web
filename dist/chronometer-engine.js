@@ -1310,7 +1310,7 @@
   // src/watch/animation.ts
   var SCHEDULER_LOOKAHEAD_MS = 50;
   var kECGLAngleAnimationSpeed = 2;
-  var kECGLFrameRate = 1 / 120;
+  var kECGLFrameRate = 1 / 240;
   var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
   var EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT = -1006;
   var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
@@ -1351,12 +1351,33 @@
       getNow
     };
   }
-  function tickAnimations(states, env, now) {
+  function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0) {
     for (const state of states) {
       if (now >= state.nextUpdateTime) {
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
-        startAnimation(state, newTarget, now);
-        state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
+        if (tickIntervalMs !== null && tickIntervalMs > 0) {
+          let ticksUntilUpdate = 1;
+          if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
+            const updateIntervalSec = state.updateIntervalMs / 1e3;
+            ticksUntilUpdate = Math.max(1, Math.ceil(updateIntervalSec / displayDeltaPerTickSec));
+          }
+          const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+          const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+          const normalizedTarget = fmod2(newTarget, 2 * Math.PI);
+          const normalizedCurrent = fmod2(state.angle.currentValue, 2 * Math.PI);
+          let delta = Math.abs(normalizedTarget - normalizedCurrent);
+          if (delta > Math.PI) delta = 2 * Math.PI - delta;
+          const normalDurationMs = animateSpeed > 0 ? delta / animateSpeed * 1e3 : 0;
+          if (normalDurationMs > timeUntilNextUpdateMs) {
+            startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+          } else {
+            startAnimation(state, newTarget, now);
+          }
+          state.nextUpdateTime = now + timeUntilNextUpdateMs;
+        } else {
+          startAnimation(state, newTarget, now);
+          state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
+        }
       }
       const angle = interpolate(state.angle, now);
       if (!state.part.dynamicState) {
@@ -1397,7 +1418,7 @@
       s.nextUpdateTime = 0;
     }
   }
-  function startAnimation(state, newTarget, now) {
+  function startAnimation(state, newTarget, now, durationOverrideMs) {
     const val = state.angle;
     const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
     newTarget = fmod2(newTarget, 2 * Math.PI);
@@ -1405,6 +1426,9 @@
       val.currentValue = newTarget;
       val.targetValue = newTarget;
       val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) {
       return;
     }
     if (val.animating) {
@@ -1424,15 +1448,21 @@
         val.currentValue -= 2 * Math.PI;
       }
     }
-    const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
-    if (deltaTime < kECGLFrameRate) {
+    let durationMs;
+    if (durationOverrideMs !== void 0) {
+      durationMs = durationOverrideMs;
+    } else {
+      const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
+      durationMs = deltaTime * 1e3;
+    }
+    if (durationMs < kECGLFrameRate * 1e3) {
       val.currentValue = val.targetValue;
       val.animating = false;
       return;
     }
     val.lastAnimationTime = now;
     val.animating = true;
-    val.animationStopTime = now + deltaTime * 1e3;
+    val.animationStopTime = now + durationMs;
   }
   function interpolate(val, now) {
     if (!val.animating) {
@@ -12581,7 +12611,7 @@
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const radius = evalAttr(part.radius, env);
-    const angle = evalAttr(part.angle, env);
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
     if (radius <= 0) return;
     const labels = part.text?.split(",") || [];
     const n = labels.length;
@@ -12765,7 +12795,7 @@
     if (!loaded) return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
-    const angle = evalAttr(part.angle, env);
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
     const offsetRadius = evalAttr(part.offsetRadius, env);
     const offsetAngle = evalAttr(part.offsetAngle, env);
     const { bitmap, scale: imgScale } = loaded;
@@ -12941,6 +12971,23 @@
     { label: "10 yr/s", unit: "year" }
   ];
   var TICK_INTERVAL_MS = 100;
+  function displaySecondsPerTick(unit) {
+    switch (unit) {
+      case "second":
+        return 1;
+      case "minute":
+        return 60;
+      case "hour":
+        return 3600;
+      case "day":
+        return 86400;
+      case "month":
+        return 30 * 86400;
+      // approximate
+      case "year":
+        return 365 * 86400;
+    }
+  }
   function advanceByUnit(date, unit, direction) {
     const d = new Date(date.getTime());
     switch (unit) {
@@ -13175,7 +13222,6 @@
         this.tickTime = new Date(this.nextTickTime.getTime());
         this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
         this.lastTickRealMs = nowPerfMs;
-        this.onTick?.();
         return true;
       }
       return false;
@@ -13479,6 +13525,23 @@
       }
       buildNext();
     }
+    function rebuildEnvironments() {
+      for (const face of faces) {
+        if (!face.enabled) continue;
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+        const { canvas, watch, env, images, scale } = face;
+        face.terminatorLeaves = [];
+        for (const part of watch.parts) {
+          if (part.type === "Terminator") {
+            face.terminatorLeaves.push(...expandTerminatorToLeaves(part, env));
+          }
+        }
+        if (face.terminatorLeaves.length > 0) {
+          updateLeafAngles(face.terminatorLeaves, face.env);
+        }
+        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+      }
+    }
     function rebuildAllForTime() {
       for (const face of faces) {
         if (!face.enabled) continue;
@@ -13494,7 +13557,7 @@
         buildCache(face);
       }
     }
-    timeController.onTick = rebuildAllForTime;
+    timeController.onTick = rebuildEnvironments;
     let idleTimerId = null;
     let rafId = null;
     function stopScheduler() {
@@ -13513,12 +13576,15 @@
       let stillAnimating = false;
       timeController.checkTick(now);
       timeController.beginFrame();
+      const rate = timeController.currentRate;
+      const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
+      const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
       for (const face of faces) {
         if (!face.enabled || !face.cachesBuilt) continue;
-        tickAnimations(face.handStates, face.env, now);
+        tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
         if (face.terminatorLeaves.length > 0) {
-          const intervalMs = Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
-          if (now - face.lastTerminatorRebuild > intervalMs) {
+          const effectiveIntervalMs = tickMs !== null ? tickMs : Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
+          if (now - face.lastTerminatorRebuild > effectiveIntervalMs) {
             updateLeafAngles(face.terminatorLeaves, face.env);
             buildStaticBlockCaches(
               face.watch,
@@ -13878,6 +13944,15 @@
         e.preventDefault();
         e.stopPropagation();
         timeController.step(unit, dir);
+        const stepDeltaSec = displaySecondsPerTick(unit);
+        timeController.beginFrame();
+        const stepNow = performance.now();
+        for (const face of faces) {
+          if (!face.enabled || !face.cachesBuilt) continue;
+          resetHandSchedules(face.handStates);
+          tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+        }
+        timeController.endFrame();
         updateTimeUI();
         ensureSchedulerRunning();
         holdTimer = setTimeout(() => {
@@ -13896,6 +13971,15 @@
         e.preventDefault();
         e.stopPropagation();
         timeController.step(unit, dir);
+        const stepDeltaSec = displaySecondsPerTick(unit);
+        timeController.beginFrame();
+        const stepNow = performance.now();
+        for (const face of faces) {
+          if (!face.enabled || !face.cachesBuilt) continue;
+          resetHandSchedules(face.handStates);
+          tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+        }
+        timeController.endFrame();
         updateTimeUI();
         ensureSchedulerRunning();
         holdTimer = setTimeout(() => {

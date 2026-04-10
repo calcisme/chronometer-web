@@ -1197,7 +1197,10 @@ function drawWheel(
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const radius = evalAttr(part.radius, env);
-    const angle = evalAttr(part.angle, env);
+    // Use pre-computed animated angle if available, otherwise evaluate expression
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
     if (radius <= 0) return;
 
     const labels = part.text?.split(',') || [];
@@ -1498,7 +1501,10 @@ function drawImageHand(
 
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);  // Negate Y
-    const angle = evalAttr(part.angle, env);
+    // Use pre-computed animated angle if available, otherwise evaluate expression
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
     const offsetRadius = evalAttr(part.offsetRadius, env);
     const offsetAngle = evalAttr(part.offsetAngle, env);
 
