@@ -13751,23 +13751,118 @@
     }
     const GAP_PX = 12;
     const PADDING_PX = 12;
+    const POPOVER_GAP = 8;
     let resizeDebounceTimer = null;
+    let lastContainerW = 0;
+    let lastContainerH = 0;
+    function computeFaceCenters(nFaces, gridCols, gridRows, size, containerW, containerH) {
+      const cellStep = size + GAP_PX;
+      const remainder = nFaces - gridCols * (gridRows - 1);
+      const canNestle = gridRows > 1 && remainder !== gridCols && (gridCols - remainder) % 2 === 1;
+      const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
+      const gridW = gridCols * size + (gridCols - 1) * GAP_PX;
+      const lastRowY = gridRows === 1 ? 0 : nestledStep + (gridRows - 2) * cellStep;
+      const totalH = lastRowY + size;
+      const offsetX = (containerW - gridW) / 2;
+      const offsetY = (containerH - totalH) / 2;
+      const centers = [];
+      for (let i = 0; i < nFaces; i++) {
+        let row, colIdx, itemsInRow;
+        if (i < remainder) {
+          row = 0;
+          colIdx = i;
+          itemsInRow = remainder;
+        } else {
+          const j = i - remainder;
+          row = 1 + Math.floor(j / gridCols);
+          colIdx = j % gridCols;
+          itemsInRow = gridCols;
+        }
+        const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
+        const rowOffsetX = (gridW - rowW) / 2;
+        const x = offsetX + rowOffsetX + colIdx * cellStep;
+        const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
+        const y = offsetY + rowY;
+        centers.push({ cx: x + size / 2, cy: y + size / 2 });
+      }
+      return centers;
+    }
+    function anyFaceOverlapsRect(centers, radius, rectLeft, rectTop, rectRight, rectBottom) {
+      for (const { cx, cy } of centers) {
+        const nearX = Math.max(rectLeft, Math.min(cx, rectRight));
+        const nearY = Math.max(rectTop, Math.min(cy, rectBottom));
+        const dx = cx - nearX;
+        const dy = cy - nearY;
+        if (dx * dx + dy * dy < (radius + POPOVER_GAP) * (radius + POPOVER_GAP)) {
+          return true;
+        }
+      }
+      return false;
+    }
     function onGridResize(W, H) {
+      lastContainerW = W;
+      lastContainerH = H;
       const result = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
       if (result.size <= 0) return;
+      let size = result.size;
+      if (popoverOpen) {
+        const gridRect = grid.getBoundingClientRect();
+        const popRect = timePopover.getBoundingClientRect();
+        const pLeft = popRect.left - gridRect.left;
+        const pTop = popRect.top - gridRect.top;
+        const pRight = popRect.right - gridRect.left;
+        const pBottom = popRect.bottom - gridRect.top;
+        let centers = computeFaceCenters(
+          faces.length,
+          result.cols,
+          result.rows,
+          size,
+          W,
+          H
+        );
+        if (anyFaceOverlapsRect(centers, size / 2, pLeft, pTop, pRight, pBottom)) {
+          let lo = 0, hi = size;
+          for (let iter = 0; iter < 20; iter++) {
+            const mid = Math.floor((lo + hi) / 2);
+            if (mid <= 0) break;
+            const trial = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
+            const trialSize = Math.min(trial.size, mid);
+            const trialCenters = computeFaceCenters(
+              faces.length,
+              trial.cols,
+              trial.rows,
+              trialSize,
+              W,
+              H
+            );
+            if (anyFaceOverlapsRect(
+              trialCenters,
+              trialSize / 2,
+              pLeft,
+              pTop,
+              pRight,
+              pBottom
+            )) {
+              hi = mid;
+            } else {
+              lo = mid;
+            }
+          }
+          size = lo;
+          if (size <= 0) return;
+        }
+      }
       const dpr = window.devicePixelRatio || 1;
-      const newPhys = Math.round(result.size * dpr);
+      const newPhys = Math.round(size * dpr);
       if (newPhys === faces[0]?.canvas.width) return;
       stopScheduler();
       cols = result.cols;
       rows = result.rows;
-      const size = result.size;
       const cellStep = size + GAP_PX;
       const remainder = faces.length - cols * (rows - 1);
       const canNestle = rows > 1 && remainder !== cols && (cols - remainder) % 2 === 1;
       const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
       const gridW = cols * size + (cols - 1) * GAP_PX;
-      const gridH = size + (canNestle ? nestledStep : 0) + (rows > 1 ? (rows - 2) * cellStep : 0) + (rows > 1 ? (rows - 1) * size - (rows - 2) * size : 0);
       const lastRowY = rows === 1 ? 0 : nestledStep + (rows - 2) * cellStep;
       const totalH = lastRowY + size;
       const offsetX = (W - gridW) / 2;
@@ -14037,6 +14132,9 @@
       timeBarLabel.textContent = "\u23F1 Hide time controller";
       timeBarLabel.classList.add("active");
       updateTimeUI();
+      if (lastContainerW > 0) {
+        onGridResize(lastContainerW, lastContainerH);
+      }
     }
     function hidePopover() {
       popoverOpen = false;
@@ -14044,6 +14142,9 @@
       timeBarLabel.textContent = "\u23F1 Show time controller";
       timeBarLabel.classList.remove("active");
       updateTimeUI();
+      if (lastContainerW > 0) {
+        onGridResize(lastContainerW, lastContainerH);
+      }
     }
     function ensureSchedulerRunning() {
       if (rafId === null && idleTimerId === null) {
