@@ -13688,6 +13688,7 @@
       let stillAnimating = false;
       timeController.checkTick(now);
       timeController.beginFrame();
+      const frameRealTime = /* @__PURE__ */ new Date();
       const rate = timeController.currentRate;
       const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
       const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
@@ -13713,9 +13714,12 @@
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
         if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
       }
-      if (!timeController.isRealTime) {
+      {
         const sim = timeController.getDisplayTime();
         timeBarDate.textContent = formatSimTime(sim);
+        if (!timeController.isRealTime) {
+          timeBarOffset.textContent = formatOffset(sim, frameRealTime);
+        }
       }
       timeController.endFrame();
       if (timeController.needsContinuousRender || stillAnimating) {
@@ -13855,11 +13859,13 @@
     const timeBar = document.getElementById("time-bar");
     const timeBarLabel = document.getElementById("time-bar-label");
     const timeBarDate = document.getElementById("time-bar-date");
+    const timeBarOffset = document.getElementById("time-bar-offset");
     const timeBarRate = document.getElementById("time-bar-rate");
     const timeBarNow = document.getElementById("time-bar-now");
     const timePopover = document.getElementById("time-popover");
     const tpRateLabel = document.getElementById("tp-rate-label");
     const tpTransport = document.getElementById("tp-transport");
+    const tpClose = document.getElementById("tp-close");
     let popoverOpen = false;
     const unitToRateIndex = {
       "minute": 1,
@@ -13950,28 +13956,93 @@
     function updateTimeUI() {
       const isReal = timeController.isRealTime;
       timeBar.classList.toggle("overridden", !isReal);
+      const sim = timeController.getDisplayTime();
+      timeBarDate.textContent = formatSimTime(sim);
       if (!isReal) {
-        const sim2 = timeController.getDisplayTime();
-        timeBarDate.textContent = formatSimTime(sim2);
         timeBarRate.textContent = timeController.statusLabel;
+        timeBarOffset.textContent = formatOffset(sim, /* @__PURE__ */ new Date());
       }
       tpRateLabel.textContent = timeController.statusLabel;
       renderTransport();
-      const sim = timeController.getDisplayTime();
       document.getElementById("tp-year").value = sim.getFullYear().toString();
       document.getElementById("tp-month").value = (sim.getMonth() + 1).toString();
       document.getElementById("tp-day").value = sim.getDate().toString();
       document.getElementById("tp-hour").value = sim.getHours().toString();
       document.getElementById("tp-minute").value = sim.getMinutes().toString();
     }
+    function formatOffset(sim, real) {
+      const ms = sim.getTime() - real.getTime();
+      const sign = ms < 0 ? "-" : "+";
+      if (Math.abs(ms) < 2e3) return "";
+      const fromMs = (ms < 0 ? sim : real).getTime();
+      const toMs = (ms < 0 ? real : sim).getTime();
+      const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
+      const to = new Date(Math.floor(toMs / 1e3) * 1e3);
+      let years = to.getFullYear() - from.getFullYear();
+      let months = to.getMonth() - from.getMonth();
+      let cursor = new Date(from);
+      cursor.setFullYear(cursor.getFullYear() + years);
+      cursor.setMonth(cursor.getMonth() + months);
+      if (cursor > to) {
+        months--;
+        if (months < 0) {
+          years--;
+          months += 12;
+        }
+        cursor = new Date(from);
+        cursor.setFullYear(cursor.getFullYear() + years);
+        cursor.setMonth(cursor.getMonth() + months);
+      }
+      let remainSec = Math.round((to.getTime() - cursor.getTime()) / 1e3);
+      let days, hrs, mins, sec;
+      if (years > 0 || months > 0) {
+        remainSec = Math.round(remainSec / 3600) * 3600;
+        days = Math.floor(remainSec / 86400);
+        remainSec %= 86400;
+        hrs = Math.floor(remainSec / 3600);
+        mins = 0;
+        sec = 0;
+      } else if (remainSec >= 86400) {
+        remainSec = Math.round(remainSec / 60) * 60;
+        days = Math.floor(remainSec / 86400);
+        remainSec %= 86400;
+        hrs = Math.floor(remainSec / 3600);
+        remainSec %= 3600;
+        mins = Math.floor(remainSec / 60);
+        sec = 0;
+      } else {
+        days = 0;
+        hrs = Math.floor(remainSec / 3600);
+        remainSec %= 3600;
+        mins = Math.floor(remainSec / 60);
+        remainSec %= 60;
+        sec = remainSec;
+      }
+      if (hrs >= 24) {
+        days += Math.floor(hrs / 24);
+        hrs %= 24;
+      }
+      const parts = [];
+      if (years > 0) parts.push(`${years}y`);
+      if (months > 0) parts.push(`${months}mo`);
+      if (days > 0) parts.push(`${days}d`);
+      if (hrs > 0) parts.push(`${hrs}h`);
+      if (mins > 0) parts.push(`${mins}m`);
+      if (sec > 0) parts.push(`${sec}s`);
+      return parts.length > 0 ? `(${sign}${parts.join(" ")})` : "";
+    }
     function showPopover() {
       popoverOpen = true;
       timePopover.style.display = "";
+      timeBarLabel.textContent = "\u23F1 Hide time controller";
+      timeBarLabel.classList.add("active");
       updateTimeUI();
     }
     function hidePopover() {
       popoverOpen = false;
       timePopover.style.display = "none";
+      timeBarLabel.textContent = "\u23F1 Show time controller";
+      timeBarLabel.classList.remove("active");
       updateTimeUI();
     }
     function ensureSchedulerRunning() {
@@ -14014,7 +14085,7 @@
       timeController.reset();
       finishAllAnimations();
       resetAllSchedules();
-      hidePopover();
+      updateTimeUI();
       stopScheduler();
       startScheduler();
     }
@@ -14130,12 +14201,18 @@
       updateTimeUI();
       ensureSchedulerRunning();
     });
-    document.addEventListener("click", (e) => {
-      if (!popoverOpen) return;
-      const target = e.target;
-      if (timePopover.contains(target) || timeBar.contains(target)) return;
+    tpClose.addEventListener("click", (e) => {
+      e.stopPropagation();
       hidePopover();
     });
+    function tickTimeBarClock() {
+      if (timeController.isRealTime) {
+        timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
+      }
+      const msUntilNextSecond = 1e3 - Date.now() % 1e3;
+      setTimeout(tickTimeBarClock, msUntilNextSecond);
+    }
+    tickTimeBarClock();
     const initialRect = grid.getBoundingClientRect();
     if (initialRect.width > 0 && initialRect.height > 0) {
       onGridResize(initialRect.width, initialRect.height);

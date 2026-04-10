@@ -378,6 +378,7 @@ async function main() {
         // Snapshot the time for this frame — all getNow() calls within
         // this frame will return the exact same value.
         timeController.beginFrame();
+        const frameRealTime = new Date();  // capture real time at same instant as sim
 
         // Compute tick parameters for the animation system
         const rate = timeController.currentRate;
@@ -409,10 +410,13 @@ async function main() {
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
             if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
         }
-        // Update mini-bar time display if time is overridden
-        if (!timeController.isRealTime) {
+        // Update mini-bar time display (using frameRealTime captured at beginFrame)
+        {
             const sim = timeController.getDisplayTime();
             timeBarDate.textContent = formatSimTime(sim);
+            if (!timeController.isRealTime) {
+                timeBarOffset.textContent = formatOffset(sim, frameRealTime);
+            }
         }
 
         timeController.endFrame();
@@ -609,11 +613,13 @@ async function main() {
     const timeBar = document.getElementById('time-bar')!;
     const timeBarLabel = document.getElementById('time-bar-label')!;
     const timeBarDate = document.getElementById('time-bar-date')!;
+    const timeBarOffset = document.getElementById('time-bar-offset')!;
     const timeBarRate = document.getElementById('time-bar-rate')!;
     const timeBarNow = document.getElementById('time-bar-now')!;
     const timePopover = document.getElementById('time-popover')!;
     const tpRateLabel = document.getElementById('tp-rate-label')!;
     const tpTransport = document.getElementById('tp-transport')!;
+    const tpClose = document.getElementById('tp-close')!;
 
     let popoverOpen = false;
 
@@ -715,13 +721,16 @@ async function main() {
     function updateTimeUI() {
         const isReal = timeController.isRealTime;
 
-        // Toggle overridden class to show/hide date, rate, "Now" button
+        // Toggle overridden class to show/hide offset, rate, "Now" button
         timeBar.classList.toggle('overridden', !isReal);
 
+        // Always update the displayed time
+        const sim = timeController.getDisplayTime();
+        timeBarDate.textContent = formatSimTime(sim);
+
         if (!isReal) {
-            const sim = timeController.getDisplayTime();
-            timeBarDate.textContent = formatSimTime(sim);
             timeBarRate.textContent = timeController.statusLabel;
+            timeBarOffset.textContent = formatOffset(sim, new Date());
         }
         tpRateLabel.textContent = timeController.statusLabel;
 
@@ -729,7 +738,6 @@ async function main() {
         renderTransport();
 
         // Populate date inputs with current sim time
-        const sim = timeController.getDisplayTime();
         (document.getElementById('tp-year') as HTMLInputElement).value = sim.getFullYear().toString();
         (document.getElementById('tp-month') as HTMLInputElement).value = (sim.getMonth() + 1).toString();
         (document.getElementById('tp-day') as HTMLInputElement).value = sim.getDate().toString();
@@ -737,15 +745,88 @@ async function main() {
         (document.getElementById('tp-minute') as HTMLInputElement).value = sim.getMinutes().toString();
     }
 
+    /** Format the difference between sim and real time as a human-readable string.
+     *  Uses calendar-based differencing for years and months. */
+    function formatOffset(sim: Date, real: Date): string {
+        const ms = sim.getTime() - real.getTime();
+        const sign = ms < 0 ? '-' : '+';
+        if (Math.abs(ms) < 2000) return '';
+
+        // Truncate to whole seconds to avoid sub-second jitter
+        // between sim capture time and new Date() call
+        const fromMs = (ms < 0 ? sim : real).getTime();
+        const toMs   = (ms < 0 ? real : sim).getTime();
+        const from = new Date(Math.floor(fromMs / 1000) * 1000);
+        const to   = new Date(Math.floor(toMs / 1000) * 1000);
+
+        // Calendar difference: years, months
+        let years = to.getFullYear() - from.getFullYear();
+        let months = to.getMonth() - from.getMonth();
+        let cursor = new Date(from);
+        cursor.setFullYear(cursor.getFullYear() + years);
+        cursor.setMonth(cursor.getMonth() + months);
+        if (cursor > to) {
+            months--;
+            if (months < 0) { years--; months += 12; }
+            cursor = new Date(from);
+            cursor.setFullYear(cursor.getFullYear() + years);
+            cursor.setMonth(cursor.getMonth() + months);
+        }
+
+        // Remaining difference in seconds
+        let remainSec = Math.round((to.getTime() - cursor.getTime()) / 1000);
+
+        // Round to the least significant displayed unit:
+        //   years shown → round to nearest hour
+        //   months/days shown → round to nearest minute
+        //   otherwise → show exact seconds
+        let days: number, hrs: number, mins: number, sec: number;
+        if (years > 0 || months > 0) {
+            // Round to nearest hour
+            remainSec = Math.round(remainSec / 3600) * 3600;
+            days = Math.floor(remainSec / 86400); remainSec %= 86400;
+            hrs  = Math.floor(remainSec / 3600);
+            mins = 0; sec = 0;
+        } else if (remainSec >= 86400) {
+            // Round to nearest minute
+            remainSec = Math.round(remainSec / 60) * 60;
+            days = Math.floor(remainSec / 86400); remainSec %= 86400;
+            hrs  = Math.floor(remainSec / 3600);  remainSec %= 3600;
+            mins = Math.floor(remainSec / 60);
+            sec  = 0;
+        } else {
+            days = 0;
+            hrs  = Math.floor(remainSec / 3600);  remainSec %= 3600;
+            mins = Math.floor(remainSec / 60);     remainSec %= 60;
+            sec  = remainSec;
+        }
+
+        // Handle rounding overflow (e.g. 23.5h rounds to 24h → +1 day)
+        if (hrs >= 24) { days += Math.floor(hrs / 24); hrs %= 24; }
+
+        const parts = [];
+        if (years > 0)  parts.push(`${years}y`);
+        if (months > 0) parts.push(`${months}mo`);
+        if (days > 0)   parts.push(`${days}d`);
+        if (hrs > 0)    parts.push(`${hrs}h`);
+        if (mins > 0)   parts.push(`${mins}m`);
+        if (sec > 0)    parts.push(`${sec}s`);
+        return parts.length > 0 ? `(${sign}${parts.join(' ')})` : '';
+    }
+
     function showPopover() {
         popoverOpen = true;
         timePopover.style.display = '';
+        timeBarLabel.textContent = '⏱ Hide time controller';
+        timeBarLabel.classList.add('active');
         updateTimeUI();
     }
 
     function hidePopover() {
         popoverOpen = false;
         timePopover.style.display = 'none';
+        timeBarLabel.textContent = '⏱ Show time controller';
+        timeBarLabel.classList.remove('active');
         updateTimeUI();
     }
 
@@ -801,7 +882,7 @@ async function main() {
         timeController.reset();
         finishAllAnimations();
         resetAllSchedules();
-        hidePopover();
+        updateTimeUI();
         stopScheduler();
         startScheduler();
     }
@@ -943,15 +1024,28 @@ async function main() {
         ensureSchedulerRunning();
     });
 
-    // --- Click outside to dismiss popover ---
-    document.addEventListener('click', (e) => {
-        if (!popoverOpen) return;
-        const target = e.target as Node;
-        if (timePopover.contains(target) || timeBar.contains(target)) return;
+    // --- Close button in popover ---
+    tpClose.addEventListener('click', (e) => {
+        e.stopPropagation();
         hidePopover();
     });
 
 
+
+    // =========================================================================
+    // Time bar clock — update at the top of each second
+    // =========================================================================
+    function tickTimeBarClock() {
+        // Only update here when in real-time mode — when overridden,
+        // the frame loop handles all time bar updates with properly
+        // paired sim/real timestamps to avoid offset jitter.
+        if (timeController.isRealTime) {
+            timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
+        }
+        const msUntilNextSecond = 1000 - (Date.now() % 1000);
+        setTimeout(tickTimeBarClock, msUntilNextSecond);
+    }
+    tickTimeBarClock();
 
     // =========================================================================
     // Initial build

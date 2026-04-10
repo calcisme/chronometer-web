@@ -116,10 +116,25 @@
             transition: background 0.15s, color 0.15s;
         }
         #time-bar-label:hover { background: rgba(60, 60, 90, 0.95); color: #ccf; }
-        #time-bar.overridden #time-bar-label { display: none; }
-        #time-bar-date { color: #dde; display: none; }
-        #time-bar.overridden #time-bar-date { display: inline; }
-        #time-bar-rate { color: #8af; font-weight: 600; display: none; cursor: pointer; }
+        #time-bar-label.active {
+            background: #99b;
+            color: #1a1a2e;
+            border-color: #99b;
+        }
+        #time-bar-label.active:hover {
+            background: #bbf;
+            color: #1a1a2e;
+        }
+        #time-bar-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #time-bar-date { color: #99b; }
+        #time-bar.overridden #time-bar-date { color: #f66; font-weight: 600; }
+        #time-bar-offset { color: #f99; font-size: 12px; display: none; }
+        #time-bar.overridden #time-bar-offset { display: inline; }
+        #time-bar-rate { color: #f88; font-weight: 600; cursor: pointer; display: none; }
         #time-bar.overridden #time-bar-rate { display: inline; }
         .time-bar-btn {
             background: #2a2a3e;
@@ -150,6 +165,20 @@
             padding: 12px 14px;
             box-shadow: 0 -4px 32px rgba(0,0,0,0.5);
         }
+        #tp-close {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            background: none;
+            border: none;
+            color: #667;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 2px 6px;
+            line-height: 1;
+            transition: color 0.15s;
+        }
+        #tp-close:hover { color: #ccf; }
         .tp-section {
             margin-bottom: 10px;
         }
@@ -243,9 +272,12 @@
         <a id="back-link" href="index.html">← Home</a>
         <div id="watch-grid"></div>
         <div id="time-bar">
-            <button id="time-bar-label">⏱ Time control</button>
-            <span id="time-bar-date"></span>
-            <span id="time-bar-rate"></span>
+            <button id="time-bar-label">⏱ Show time controller</button>
+            <span id="time-bar-info">
+                <span id="time-bar-date"></span>
+                <span id="time-bar-offset"></span>
+                <span id="time-bar-rate"></span>
+            </span>
             <button class="time-bar-btn" id="time-bar-now">Now</button>
         </div>
         <div id="location-panel">
@@ -257,6 +289,7 @@
 
         <!-- Time controller popover -->
         <div id="time-popover" style="display:none">
+            <button id="tp-close">&times;</button>
             <div class="tp-section">
                 <div class="tp-transport" id="tp-transport"></div>
                 <div id="tp-rate-label">1× (real time)</div>
