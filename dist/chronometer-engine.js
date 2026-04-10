@@ -14142,7 +14142,8 @@
       if (!timeController.isRealTime) {
         const nowBtn = document.createElement("button");
         nowBtn.className = "tp-btn";
-        nowBtn.textContent = "Now \u25B6";
+        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
+        nowBtn.style.padding = "5px 4px";
         nowBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           nowClicked();

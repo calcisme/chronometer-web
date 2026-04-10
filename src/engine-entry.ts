@@ -969,7 +969,8 @@ async function main() {
         if (!timeController.isRealTime) {
             const nowBtn = document.createElement('button');
             nowBtn.className = 'tp-btn';
-            nowBtn.textContent = 'Now ▶';
+            nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">▶</span>';
+            nowBtn.style.padding = '5px 4px';
             nowBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 nowClicked();
