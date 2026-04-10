@@ -320,17 +320,11 @@ async function main() {
             if (!face.enabled) continue;
             // Rebuild the environment but keep the same watch/parts
             face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
-            // Rebuild static caches (terminators, static block images)
+            // Preserve terminator leaves — their expressions are evaluated
+            // against the env each frame by tickLeafAnimations, so they
+            // don't need recreating. Recreating them would destroy animation state.
+            // Just update the static caches with current leaf positions.
             const { canvas, watch, env, images, scale } = face;
-            face.terminatorLeaves = [];
-            for (const part of watch.parts) {
-                if (part.type === 'Terminator') {
-                    face.terminatorLeaves.push(...expandTerminatorToLeaves(part, env));
-                }
-            }
-            if (face.terminatorLeaves.length > 0) {
-                updateLeafAngles(face.terminatorLeaves, face.env);
-            }
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
             // Hand states are preserved — their angle expressions will
             // be re-evaluated by tickAnimations using the fresh env
@@ -712,9 +706,7 @@ async function main() {
             nowBtn.textContent = 'Now ▶';
             nowBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                timeController.reset();
-                updateTimeUI();
-                ensureSchedulerRunning();
+                nowClicked();
             });
             tpTransport.appendChild(nowBtn);
         }
@@ -804,12 +796,20 @@ async function main() {
         }
     });
 
-    // --- "Now" reset button ---
+    /** Reset to real time — shared by both Now buttons. */
+    function nowClicked() {
+        timeController.reset();
+        finishAllAnimations();
+        resetAllSchedules();
+        hidePopover();
+        stopScheduler();
+        startScheduler();
+    }
+
+    // --- "Now" reset button (time-bar version) ---
     timeBarNow.addEventListener('click', (e) => {
         e.stopPropagation();
-        timeController.reset();
-        hidePopover();
-        ensureSchedulerRunning();
+        nowClicked();
     });
 
     // --- Step buttons with hold-to-scrub ---

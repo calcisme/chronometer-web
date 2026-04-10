@@ -13643,15 +13643,6 @@
         if (!face.enabled) continue;
         face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
         const { canvas, watch, env, images, scale } = face;
-        face.terminatorLeaves = [];
-        for (const part of watch.parts) {
-          if (part.type === "Terminator") {
-            face.terminatorLeaves.push(...expandTerminatorToLeaves(part, env));
-          }
-        }
-        if (face.terminatorLeaves.length > 0) {
-          updateLeafAngles(face.terminatorLeaves, face.env);
-        }
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
     }
@@ -13943,9 +13934,7 @@
         nowBtn.textContent = "Now \u25B6";
         nowBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          timeController.reset();
-          updateTimeUI();
-          ensureSchedulerRunning();
+          nowClicked();
         });
         tpTransport.appendChild(nowBtn);
       }
@@ -14013,11 +14002,17 @@
         showPopover();
       }
     });
+    function nowClicked() {
+      timeController.reset();
+      finishAllAnimations();
+      resetAllSchedules();
+      hidePopover();
+      stopScheduler();
+      startScheduler();
+    }
     timeBarNow.addEventListener("click", (e) => {
       e.stopPropagation();
-      timeController.reset();
-      hidePopover();
-      ensureSchedulerRunning();
+      nowClicked();
     });
     const HOLD_DELAY_MS = 300;
     let holdTimer = null;
