@@ -252,6 +252,11 @@ function startAnimation(
         return;
     }
 
+    // If mid-animation, snapshot the current interpolated position first
+    if (val.animating) {
+        interpolate(val, now);
+    }
+
     if (val.currentValue === newTarget) {
         val.animating = false;
         return;
@@ -280,13 +285,7 @@ function startAnimation(
         return;
     }
 
-    if (val.animating) {
-        // Already animating — update target but keep the stop time
-        // (this matches the original iOS behavior)
-        return;
-    }
-
-    // Start new animation
+    // Start (or restart) animation from current position
     val.lastAnimationTime = now;
     val.animating = true;
     val.animationStopTime = now + deltaTime * 1000;  // convert to ms

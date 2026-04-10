@@ -1407,6 +1407,9 @@
       val.animating = false;
       return;
     }
+    if (val.animating) {
+      interpolate(val, now);
+    }
     if (val.currentValue === newTarget) {
       val.animating = false;
       return;
@@ -1425,9 +1428,6 @@
     if (deltaTime < kECGLFrameRate) {
       val.currentValue = val.targetValue;
       val.animating = false;
-      return;
-    }
-    if (val.animating) {
       return;
     }
     val.lastAnimationTime = now;
