@@ -199,6 +199,36 @@ export function anyAnimating(states: HandState[]): boolean {
     return false;
 }
 
+/**
+ * Snap all in-flight animations to their target values immediately,
+ * and freeze all schedules so no re-evaluation happens while stopped.
+ * Call this when pausing so hands don't freeze mid-sweep.
+ */
+export function finishAnimations(states: HandState[]): void {
+    for (const s of states) {
+        const val = s.angle;
+        if (val.animating) {
+            val.currentValue = fmod(val.targetValue, 2 * Math.PI);
+            val.animating = false;
+            if (s.part.dynamicState) {
+                s.part.dynamicState.currentAngle = val.currentValue;
+            }
+        }
+        // Prevent the scheduler from re-evaluating while stopped
+        s.nextUpdateTime = Infinity;
+    }
+}
+
+/**
+ * Unfreeze hand schedules so expressions re-evaluate on the very next frame.
+ * Call when resuming playback after a finishAnimations() pause.
+ */
+export function resetHandSchedules(states: HandState[]): void {
+    for (const s of states) {
+        s.nextUpdateTime = 0;
+    }
+}
+
 // ============================================================================
 // Animation logic (ported from ECGLPart.m)
 // ============================================================================

@@ -25,7 +25,7 @@ import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment } from './watch/watch-env.js';
 import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
-import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
+import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
 import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
@@ -624,6 +624,7 @@ async function main() {
                 e.stopPropagation();
                 timeController.setDirection(-1);
                 timeController.setRate(null);
+                resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
             });
@@ -635,6 +636,7 @@ async function main() {
                 e.stopPropagation();
                 timeController.setDirection(1);
                 timeController.setRate(null);
+                resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
             });
@@ -649,10 +651,25 @@ async function main() {
             pauseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 timeController.stop();
+                finishAllAnimations();
                 updateTimeUI();
                 ensureSchedulerRunning();
             });
             tpTransport.appendChild(pauseBtn);
+        }
+
+        // Add "Now ▶" button when time is overridden
+        if (!timeController.isRealTime) {
+            const nowBtn = document.createElement('button');
+            nowBtn.className = 'tp-btn';
+            nowBtn.textContent = 'Now ▶';
+            nowBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                timeController.reset();
+                updateTimeUI();
+                ensureSchedulerRunning();
+            });
+            tpTransport.appendChild(nowBtn);
         }
     }
 
@@ -704,6 +721,20 @@ async function main() {
         }
     }
 
+    /** Snap all in-flight hand animations to their targets across all faces. */
+    function finishAllAnimations() {
+        for (const face of faces) {
+            finishAnimations(face.handStates);
+        }
+    }
+
+    /** Unfreeze hand schedules on all faces after a pause. */
+    function resetAllSchedules() {
+        for (const face of faces) {
+            resetHandSchedules(face.handStates);
+        }
+    }
+
     // --- "Time control" button (opens popover) ---
     timeBarLabel.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -747,6 +778,7 @@ async function main() {
         if (rateIdx !== undefined) {
             timeController.setRate(RATE_OPTIONS[rateIdx]);
         }
+        resetAllSchedules();
         updateTimeUI();
         ensureSchedulerRunning();
     }
@@ -760,8 +792,9 @@ async function main() {
             holdingBtn.classList.remove('holding');
             holdingBtn = null;
 
-            // Stop at current position
+            // Stop at current position and snap animations
             timeController.stop();
+            finishAllAnimations();
             updateTimeUI();
             ensureSchedulerRunning();
         }

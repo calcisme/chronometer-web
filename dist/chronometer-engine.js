@@ -1379,6 +1379,24 @@
     }
     return false;
   }
+  function finishAnimations(states) {
+    for (const s of states) {
+      const val = s.angle;
+      if (val.animating) {
+        val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
+        val.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentAngle = val.currentValue;
+        }
+      }
+      s.nextUpdateTime = Infinity;
+    }
+  }
+  function resetHandSchedules(states) {
+    for (const s of states) {
+      s.nextUpdateTime = 0;
+    }
+  }
   function startAnimation(state, newTarget, now) {
     const val = state.angle;
     const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
@@ -13710,6 +13728,7 @@
           e.stopPropagation();
           timeController.setDirection(-1);
           timeController.setRate(null);
+          resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
         });
@@ -13720,6 +13739,7 @@
           e.stopPropagation();
           timeController.setDirection(1);
           timeController.setRate(null);
+          resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
         });
@@ -13732,10 +13752,23 @@
         pauseBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           timeController.stop();
+          finishAllAnimations();
           updateTimeUI();
           ensureSchedulerRunning();
         });
         tpTransport.appendChild(pauseBtn);
+      }
+      if (!timeController.isRealTime) {
+        const nowBtn = document.createElement("button");
+        nowBtn.className = "tp-btn";
+        nowBtn.textContent = "Now \u25B6";
+        nowBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.reset();
+          updateTimeUI();
+          ensureSchedulerRunning();
+        });
+        tpTransport.appendChild(nowBtn);
       }
     }
     function updateTimeUI() {
@@ -13773,6 +13806,16 @@
         startScheduler();
       }
     }
+    function finishAllAnimations() {
+      for (const face of faces) {
+        finishAnimations(face.handStates);
+      }
+    }
+    function resetAllSchedules() {
+      for (const face of faces) {
+        resetHandSchedules(face.handStates);
+      }
+    }
     timeBarLabel.addEventListener("click", (e) => {
       e.stopPropagation();
       if (popoverOpen) {
@@ -13806,6 +13849,7 @@
       if (rateIdx !== void 0) {
         timeController.setRate(RATE_OPTIONS[rateIdx]);
       }
+      resetAllSchedules();
       updateTimeUI();
       ensureSchedulerRunning();
     }
@@ -13818,6 +13862,7 @@
         holdingBtn.classList.remove("holding");
         holdingBtn = null;
         timeController.stop();
+        finishAllAnimations();
         updateTimeUI();
         ensureSchedulerRunning();
       }
