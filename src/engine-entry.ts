@@ -572,25 +572,31 @@ async function main() {
     const timeBarNow = document.getElementById('time-bar-now')!;
     const timePopover = document.getElementById('time-popover')!;
     const tpRateLabel = document.getElementById('tp-rate-label')!;
-    const tpPlayPause = document.getElementById('tp-playpause')!;
+    const tpTransport = document.getElementById('tp-transport')!;
 
     let popoverOpen = false;
 
     /** Map step unit names to RATE_OPTIONS indices for hold-to-scrub */
     const unitToRateIndex: Record<string, number> = {
-        'hour':  2,  // 10 hr/s
-        'day':   3,  // 10 day/s
-        'month': 4,  // 10 mo/s
+        'minute': 1, // 10 min/s
+        'hour':   2, // 10 hr/s
+        'day':    3, // 10 day/s
+        'month':  4, // 10 mo/s
+        'year':   5, // 10 yr/s
     };
 
     /** Map data-step attributes to [unit, direction] */
     const stepMap: Record<string, [TimeUnit, 1 | -1]> = {
-        '-hour': ['hour', -1],
-        '-day': ['day', -1],
+        '-year': ['year', -1],
         '-month': ['month', -1],
+        '-day': ['day', -1],
+        '-hour': ['hour', -1],
+        '-minute': ['minute', -1],
+        '+minute': ['minute', 1],
         '+hour': ['hour', 1],
         '+day': ['day', 1],
         '+month': ['month', 1],
+        '+year': ['year', 1],
     };
 
     function formatSimTime(d: Date): string {
@@ -602,6 +608,52 @@ async function main() {
         const m = d.getMinutes().toString().padStart(2, '0');
         const s = d.getSeconds().toString().padStart(2, '0');
         return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
+    }
+
+    /** Rebuild the transport bar buttons based on current state. */
+    function renderTransport() {
+        tpTransport.innerHTML = '';
+        const isStopped = timeController.isStopped;
+
+        if (isStopped) {
+            // Show play-reverse and play-forward buttons
+            const revBtn = document.createElement('button');
+            revBtn.className = 'tp-btn';
+            revBtn.textContent = '◀';
+            revBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                timeController.setDirection(-1);
+                timeController.setRate(null);
+                updateTimeUI();
+                ensureSchedulerRunning();
+            });
+
+            const fwdBtn = document.createElement('button');
+            fwdBtn.className = 'tp-btn';
+            fwdBtn.textContent = '▶';
+            fwdBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                timeController.setDirection(1);
+                timeController.setRate(null);
+                updateTimeUI();
+                ensureSchedulerRunning();
+            });
+
+            tpTransport.appendChild(revBtn);
+            tpTransport.appendChild(fwdBtn);
+        } else {
+            // Show pause button
+            const pauseBtn = document.createElement('button');
+            pauseBtn.className = 'tp-btn active';
+            pauseBtn.textContent = '‖';
+            pauseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                timeController.stop();
+                updateTimeUI();
+                ensureSchedulerRunning();
+            });
+            tpTransport.appendChild(pauseBtn);
+        }
     }
 
     function updateTimeUI() {
@@ -617,10 +669,8 @@ async function main() {
         }
         tpRateLabel.textContent = timeController.statusLabel;
 
-        // Update play/pause button
-        const isStopped = timeController.isStopped;
-        tpPlayPause.textContent = isStopped ? '▶' : '‖';
-        tpPlayPause.classList.toggle('active', !isStopped);
+        // Rebuild transport bar
+        renderTransport();
 
         // Populate date inputs with current sim time
         const sim = timeController.getDisplayTime();
@@ -679,19 +729,6 @@ async function main() {
         e.stopPropagation();
         timeController.reset();
         hidePopover();
-        ensureSchedulerRunning();
-    });
-
-    // --- Play/Pause toggle ---
-    tpPlayPause.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (timeController.isStopped) {
-            // Resume at 1× from current position
-            timeController.setRate(null);
-        } else {
-            timeController.stop();
-        }
-        updateTimeUI();
         ensureSchedulerRunning();
     });
 

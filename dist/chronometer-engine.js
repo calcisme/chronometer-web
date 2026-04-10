@@ -13663,23 +13663,31 @@
     const timeBarNow = document.getElementById("time-bar-now");
     const timePopover = document.getElementById("time-popover");
     const tpRateLabel = document.getElementById("tp-rate-label");
-    const tpPlayPause = document.getElementById("tp-playpause");
+    const tpTransport = document.getElementById("tp-transport");
     let popoverOpen = false;
     const unitToRateIndex = {
+      "minute": 1,
+      // 10 min/s
       "hour": 2,
       // 10 hr/s
       "day": 3,
       // 10 day/s
-      "month": 4
+      "month": 4,
       // 10 mo/s
+      "year": 5
+      // 10 yr/s
     };
     const stepMap = {
-      "-hour": ["hour", -1],
-      "-day": ["day", -1],
+      "-year": ["year", -1],
       "-month": ["month", -1],
+      "-day": ["day", -1],
+      "-hour": ["hour", -1],
+      "-minute": ["minute", -1],
+      "+minute": ["minute", 1],
       "+hour": ["hour", 1],
       "+day": ["day", 1],
-      "+month": ["month", 1]
+      "+month": ["month", 1],
+      "+year": ["year", 1]
     };
     function formatSimTime(d) {
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -13691,6 +13699,45 @@
       const s = d.getSeconds().toString().padStart(2, "0");
       return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
     }
+    function renderTransport() {
+      tpTransport.innerHTML = "";
+      const isStopped = timeController.isStopped;
+      if (isStopped) {
+        const revBtn = document.createElement("button");
+        revBtn.className = "tp-btn";
+        revBtn.textContent = "\u25C0";
+        revBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.setDirection(-1);
+          timeController.setRate(null);
+          updateTimeUI();
+          ensureSchedulerRunning();
+        });
+        const fwdBtn = document.createElement("button");
+        fwdBtn.className = "tp-btn";
+        fwdBtn.textContent = "\u25B6";
+        fwdBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.setDirection(1);
+          timeController.setRate(null);
+          updateTimeUI();
+          ensureSchedulerRunning();
+        });
+        tpTransport.appendChild(revBtn);
+        tpTransport.appendChild(fwdBtn);
+      } else {
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "tp-btn active";
+        pauseBtn.textContent = "\u2016";
+        pauseBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.stop();
+          updateTimeUI();
+          ensureSchedulerRunning();
+        });
+        tpTransport.appendChild(pauseBtn);
+      }
+    }
     function updateTimeUI() {
       const isReal = timeController.isRealTime;
       timeBar.classList.toggle("overridden", !isReal);
@@ -13700,9 +13747,7 @@
         timeBarRate.textContent = timeController.statusLabel;
       }
       tpRateLabel.textContent = timeController.statusLabel;
-      const isStopped = timeController.isStopped;
-      tpPlayPause.textContent = isStopped ? "\u25B6" : "\u2016";
-      tpPlayPause.classList.toggle("active", !isStopped);
+      renderTransport();
       const sim = timeController.getDisplayTime();
       document.getElementById("tp-year").value = sim.getFullYear().toString();
       document.getElementById("tp-month").value = (sim.getMonth() + 1).toString();
@@ -13748,16 +13793,6 @@
       e.stopPropagation();
       timeController.reset();
       hidePopover();
-      ensureSchedulerRunning();
-    });
-    tpPlayPause.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (timeController.isStopped) {
-        timeController.setRate(null);
-      } else {
-        timeController.stop();
-      }
-      updateTimeUI();
       ensureSchedulerRunning();
     });
     const HOLD_DELAY_MS = 300;

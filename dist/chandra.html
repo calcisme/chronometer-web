@@ -138,17 +138,17 @@
         /* Popover */
         #time-popover {
             position: absolute;
-            bottom: 80px;
-            right: 16px;
+            bottom: 0;
+            right: 0;
             z-index: 30;
             min-width: 200px;
             background: rgba(26, 26, 46, 0.96);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid #3a3a5e;
-            border-radius: 14px;
+            border-radius: 14px 0 0 0;
             padding: 12px 14px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            box-shadow: 0 -4px 32px rgba(0,0,0,0.5);
         }
         .tp-section {
             margin-bottom: 10px;
@@ -189,14 +189,15 @@
         }
         /* Step buttons expand to fill row equally */
         .tp-step-row { display: flex; gap: 4px; margin-bottom: 4px; }
-        .tp-step-row .tp-btn { flex: 1; }
+        .tp-step-row .tp-btn { flex: 1; font-size: 11px; padding: 5px 4px; }
         .tp-btn.holding {
             background: #556;
             border-color: #8af;
             color: #ccf;
         }
-        /* Play/pause toggle */
-        #tp-playpause {
+        /* Transport bar (play/pause) */
+        .tp-transport { display: flex; gap: 4px; justify-content: center; }
+        .tp-transport .tp-btn {
             font-size: 14px;
             padding: 5px 14px;
         }
@@ -257,22 +258,28 @@
         <!-- Time controller popover -->
         <div id="time-popover" style="display:none">
             <div class="tp-section">
-                <div class="tp-btn-row">
-                    <button class="tp-btn active" id="tp-playpause">▶</button>
-                </div>
+                <div class="tp-transport" id="tp-transport"></div>
                 <div id="tp-rate-label">1× (real time)</div>
             </div>
             <div class="tp-section">
                 <div class="tp-label">Step (hold to scrub)</div>
                 <div class="tp-step-row">
-                    <button class="tp-btn" data-step="-hour" data-unit="hour">◀ 1h</button>
-                    <button class="tp-btn" data-step="-day" data-unit="day">◀ 1d</button>
-                    <button class="tp-btn" data-step="-month" data-unit="month">◀ 1mo</button>
+                    <button class="tp-btn" data-step="-year" data-unit="year">◀1y</button>
+                    <button class="tp-btn" data-step="-month" data-unit="month">◀1mo</button>
+                    <button class="tp-btn" data-step="-day" data-unit="day">◀1d</button>
                 </div>
                 <div class="tp-step-row">
+                    <button class="tp-btn" data-step="-hour" data-unit="hour">◀1h</button>
+                    <button class="tp-btn" data-step="-minute" data-unit="minute">◀1m</button>
+                </div>
+                <div class="tp-step-row">
+                    <button class="tp-btn" data-step="+minute" data-unit="minute">1m ▶</button>
                     <button class="tp-btn" data-step="+hour" data-unit="hour">1h ▶</button>
+                </div>
+                <div class="tp-step-row">
                     <button class="tp-btn" data-step="+day" data-unit="day">1d ▶</button>
                     <button class="tp-btn" data-step="+month" data-unit="month">1mo ▶</button>
+                    <button class="tp-btn" data-step="+year" data-unit="year">1y ▶</button>
                 </div>
             </div>
             <div class="tp-section">
