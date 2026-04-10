@@ -1316,6 +1316,15 @@
   var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
   var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
   var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
+  function makeAnimatingValue(initial, now) {
+    return {
+      currentValue: initial,
+      targetValue: initial,
+      lastAnimationTime: now,
+      animationStopTime: now,
+      animating: false
+    };
+  }
   function initHandStates(watch, env, now, getNow) {
     const states = [];
     collectDynamicParts(watch.parts, env, now, states, getNow || (() => /* @__PURE__ */ new Date()));
@@ -1419,10 +1428,12 @@
     }
   }
   function startAnimation(state, newTarget, now, durationOverrideMs) {
-    const val = state.angle;
-    const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+    startAnimationRaw(state.angle, newTarget, now, state.animSpeed, durationOverrideMs);
+  }
+  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
+    const animateSpeed = kECGLAngleAnimationSpeed * animSpeed;
     newTarget = fmod2(newTarget, 2 * Math.PI);
-    if (animateSpeed === 0 || state.animSpeed === 0) {
+    if (animateSpeed === 0 || animSpeed === 0) {
       val.currentValue = newTarget;
       val.targetValue = newTarget;
       val.animating = false;
@@ -1432,7 +1443,7 @@
       return;
     }
     if (val.animating) {
-      interpolate(val, now);
+      interpolateRaw(val, now);
     }
     if (val.currentValue === newTarget) {
       val.animating = false;
@@ -1465,6 +1476,9 @@
     val.animationStopTime = now + durationMs;
   }
   function interpolate(val, now) {
+    return interpolateRaw(val, now);
+  }
+  function interpolateRaw(val, now) {
     if (!val.animating) {
       return val.currentValue;
     }
@@ -11262,6 +11276,17 @@
       for (let q = 0; q < 4; q++) {
         const quadrant = quadrantOrder(i, q);
         const baseOffsetAngle = isUpper(quadrant) ? 0 : Math.PI;
+        const initialPhase = part.phaseAngle ? evaluate(part.phaseAngle, env) : 0;
+        const initialRotation = part.rotation ? evaluate(part.rotation, env) : 0;
+        let initialAngle = terminatorAngle(
+          initialPhase,
+          quadrant,
+          i,
+          leavesPerQuadrant,
+          incremental ? 1 : 0
+        );
+        if (!isUpper(quadrant)) initialAngle += Math.PI;
+        const now = performance.now();
         leaves.push({
           quadrant,
           indexWithinQuadrant: i,
@@ -11275,11 +11300,15 @@
           centerY,
           baseOffsetAngle,
           offsetRadius,
-          currentAngle: 0,
-          currentRotation: 0,
+          currentAngle: initialAngle,
+          currentRotation: initialRotation,
           phaseExpr: part.phaseAngle,
           rotationExpr: part.rotation,
-          updateIntervalSec
+          updateIntervalSec,
+          angleAnim: makeAnimatingValue(initialAngle, now),
+          rotationAnim: makeAnimatingValue(initialRotation, now),
+          nextUpdateTime: 0
+          // Force immediate evaluation on first frame
         });
       }
     }
@@ -11303,6 +11332,90 @@
       leaf.currentAngle = angle;
       leaf.currentRotation = rotation;
     }
+  }
+  var kECGLAngleAnimationSpeed2 = 2;
+  function tickLeafAnimations(leaves, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0) {
+    if (leaves.length === 0) return;
+    let phase = null;
+    let rotation = null;
+    for (const leaf of leaves) {
+      if (now >= leaf.nextUpdateTime) {
+        if (phase === null) {
+          phase = leaf.phaseExpr ? evaluate(leaf.phaseExpr, env) : 0;
+          rotation = leaf.rotationExpr ? evaluate(leaf.rotationExpr, env) : 0;
+        }
+        let newAngle = terminatorAngle(
+          phase,
+          leaf.quadrant,
+          leaf.indexWithinQuadrant,
+          leaf.leavesPerQuadrant,
+          leaf.incremental ? 1 : 0
+        );
+        if (!isUpper(leaf.quadrant)) newAngle += Math.PI;
+        const newRotation = rotation;
+        if (tickIntervalMs !== null && tickIntervalMs > 0) {
+          let ticksUntilUpdate = 1;
+          if (displayDeltaPerTickSec > 0 && leaf.updateIntervalSec > 0) {
+            ticksUntilUpdate = Math.max(1, Math.ceil(leaf.updateIntervalSec / displayDeltaPerTickSec));
+          }
+          const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+          const angleDelta = shortestPathDelta(leaf.angleAnim.currentValue, newAngle);
+          const angleNormalDur = angleDelta / kECGLAngleAnimationSpeed2 * 1e3;
+          if (angleNormalDur > timeUntilNextUpdateMs) {
+            startAnimationRaw(leaf.angleAnim, newAngle, now, 1, timeUntilNextUpdateMs);
+          } else {
+            startAnimationRaw(leaf.angleAnim, newAngle, now);
+          }
+          const rotDelta = shortestPathDelta(leaf.rotationAnim.currentValue, newRotation);
+          const rotNormalDur = rotDelta / kECGLAngleAnimationSpeed2 * 1e3;
+          if (rotNormalDur > timeUntilNextUpdateMs) {
+            startAnimationRaw(leaf.rotationAnim, newRotation, now, 1, timeUntilNextUpdateMs);
+          } else {
+            startAnimationRaw(leaf.rotationAnim, newRotation, now);
+          }
+          leaf.nextUpdateTime = now + timeUntilNextUpdateMs;
+        } else {
+          startAnimationRaw(leaf.angleAnim, newAngle, now);
+          startAnimationRaw(leaf.rotationAnim, newRotation, now);
+          leaf.nextUpdateTime = now + leaf.updateIntervalSec * 1e3;
+        }
+      }
+      leaf.currentAngle = interpolateRaw(leaf.angleAnim, now);
+      leaf.currentRotation = interpolateRaw(leaf.rotationAnim, now);
+    }
+  }
+  function shortestPathDelta(current, target) {
+    const a = fmod3(current, 2 * Math.PI);
+    const b = fmod3(target, 2 * Math.PI);
+    let d = Math.abs(b - a);
+    if (d > Math.PI) d = 2 * Math.PI - d;
+    return d;
+  }
+  function finishLeafAnimations(leaves) {
+    for (const leaf of leaves) {
+      if (leaf.angleAnim.animating) {
+        leaf.angleAnim.currentValue = fmod3(leaf.angleAnim.targetValue, 2 * Math.PI);
+        leaf.angleAnim.animating = false;
+      }
+      if (leaf.rotationAnim.animating) {
+        leaf.rotationAnim.currentValue = fmod3(leaf.rotationAnim.targetValue, 2 * Math.PI);
+        leaf.rotationAnim.animating = false;
+      }
+      leaf.currentAngle = leaf.angleAnim.currentValue;
+      leaf.currentRotation = leaf.rotationAnim.currentValue;
+      leaf.nextUpdateTime = Infinity;
+    }
+  }
+  function resetLeafSchedules(leaves) {
+    for (const leaf of leaves) {
+      leaf.nextUpdateTime = 0;
+    }
+  }
+  function anyLeafAnimating(leaves) {
+    for (const leaf of leaves) {
+      if (leaf.angleAnim.animating || leaf.rotationAnim.animating) return true;
+    }
+    return false;
   }
   function terminatorArcPoint(i, n, xsign, ysign, xcenter, ycenter, radius, phase) {
     const th = Math.PI / 2 * (i / n);
@@ -13583,9 +13696,9 @@
         if (!face.enabled || !face.cachesBuilt) continue;
         tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
         if (face.terminatorLeaves.length > 0) {
-          const effectiveIntervalMs = tickMs !== null ? tickMs : Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
-          if (now - face.lastTerminatorRebuild > effectiveIntervalMs) {
-            updateLeafAngles(face.terminatorLeaves, face.env);
+          tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
+          const cacheIntervalMs = tickMs !== null ? tickMs : Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
+          if (now - face.lastTerminatorRebuild > cacheIntervalMs) {
             buildStaticBlockCaches(
               face.watch,
               face.env,
@@ -13599,7 +13712,7 @@
           }
         }
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
-        if (anyAnimating(face.handStates)) stillAnimating = true;
+        if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
       }
       if (!timeController.isRealTime) {
         const sim = timeController.getDisplayTime();
@@ -13875,11 +13988,13 @@
     function finishAllAnimations() {
       for (const face of faces) {
         finishAnimations(face.handStates);
+        finishLeafAnimations(face.terminatorLeaves);
       }
     }
     function resetAllSchedules() {
       for (const face of faces) {
         resetHandSchedules(face.handStates);
+        resetLeafSchedules(face.terminatorLeaves);
       }
     }
     timeBarLabel.addEventListener("click", (e) => {
@@ -13950,7 +14065,9 @@
         for (const face of faces) {
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
+          resetLeafSchedules(face.terminatorLeaves);
           tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
         }
         timeController.endFrame();
         updateTimeUI();
@@ -13977,7 +14094,9 @@
         for (const face of faces) {
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
+          resetLeafSchedules(face.terminatorLeaves);
           tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
         }
         timeController.endFrame();
         updateTimeUI();

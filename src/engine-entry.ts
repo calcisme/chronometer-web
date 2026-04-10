@@ -30,7 +30,7 @@ import type { HandState } from './watch/animation.js';
 import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
-import { expandTerminatorToLeaves, updateLeafAngles } from './watch/terminator.js';
+import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 
@@ -394,14 +394,17 @@ async function main() {
             if (!face.enabled || !face.cachesBuilt) continue;
             tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
             if (face.terminatorLeaves.length > 0) {
-                // In quantized mode, display time jumps by large amounts per tick,
-                // so update terminators every tick (every 100ms real time).
-                // In 1× mode, use the part's real-time update interval.
-                const effectiveIntervalMs = tickMs !== null
+                // Animate leaf angles and rotations using the same system
+                // as hands/wheels (adaptive duration, interpolation at 240fps)
+                tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
+
+                // Rebuild static caches periodically (they include terminator
+                // for the background layer). In quantized mode, rebuild every tick.
+                // In 1× mode, use the part's own update interval.
+                const cacheIntervalMs = tickMs !== null
                     ? tickMs
                     : Math.min(...face.terminatorLeaves.map(l => l.updateIntervalSec)) * 1000;
-                if (now - face.lastTerminatorRebuild > effectiveIntervalMs) {
-                    updateLeafAngles(face.terminatorLeaves, face.env);
+                if (now - face.lastTerminatorRebuild > cacheIntervalMs) {
                     buildStaticBlockCaches(
                         face.watch, face.env, face.canvas.width, face.canvas.height,
                         face.scale, face.images, face.terminatorLeaves
@@ -410,7 +413,7 @@ async function main() {
                 }
             }
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
-            if (anyAnimating(face.handStates)) stillAnimating = true;
+            if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
         }
         // Update mini-bar time display if time is overridden
         if (!timeController.isRealTime) {
@@ -769,6 +772,7 @@ async function main() {
     function finishAllAnimations() {
         for (const face of faces) {
             finishAnimations(face.handStates);
+            finishLeafAnimations(face.terminatorLeaves);
         }
     }
 
@@ -776,6 +780,7 @@ async function main() {
     function resetAllSchedules() {
         for (const face of faces) {
             resetHandSchedules(face.handStates);
+            resetLeafSchedules(face.terminatorLeaves);
         }
     }
 
@@ -865,7 +870,9 @@ async function main() {
             for (const face of faces) {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
+                resetLeafSchedules(face.terminatorLeaves);
                 tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
             }
             timeController.endFrame();
             updateTimeUI();
@@ -898,7 +905,9 @@ async function main() {
             for (const face of faces) {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
+                resetLeafSchedules(face.terminatorLeaves);
                 tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
             }
             timeController.endFrame();
             updateTimeUI();

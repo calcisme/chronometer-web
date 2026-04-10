@@ -48,12 +48,23 @@ export const EC_UPDATE_ENV_CHANGE_ONLY           = -1013;
 // ============================================================================
 
 /** Per-value animation state. */
-interface AnimatingValue {
+export interface AnimatingValue {
     currentValue: number;
     targetValue: number;
     lastAnimationTime: number;   // performance.now() in ms
     animationStopTime: number;   // performance.now() in ms
     animating: boolean;
+}
+
+/** Create a fresh AnimatingValue initialized to the given value. */
+export function makeAnimatingValue(initial: number, now: number): AnimatingValue {
+    return {
+        currentValue: initial,
+        targetValue: initial,
+        lastAnimationTime: now,
+        animationStopTime: now,
+        animating: false,
+    };
 }
 
 /** Per-part state tracked by the animation system. */
@@ -298,13 +309,26 @@ function startAnimation(
     now: number,
     durationOverrideMs?: number,
 ): void {
-    const val = state.angle;
-    const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+    startAnimationRaw(state.angle, newTarget, now, state.animSpeed, durationOverrideMs);
+}
+
+/**
+ * Core animation start logic, usable by any AnimatingValue.
+ * Exported for use by the terminator leaf animation system.
+ */
+export function startAnimationRaw(
+    val: AnimatingValue,
+    newTarget: number,
+    now: number,
+    animSpeed: number = 1.0,
+    durationOverrideMs?: number,
+): void {
+    const animateSpeed = kECGLAngleAnimationSpeed * animSpeed;
 
     // Normalize target to [0, 2π)
     newTarget = fmod(newTarget, 2 * Math.PI);
 
-    if (animateSpeed === 0 || state.animSpeed === 0) {
+    if (animateSpeed === 0 || animSpeed === 0) {
         // No animation — snap directly
         val.currentValue = newTarget;
         val.targetValue = newTarget;
@@ -319,7 +343,7 @@ function startAnimation(
 
     // If mid-animation toward a DIFFERENT target, snapshot current position
     if (val.animating) {
-        interpolate(val, now);
+        interpolateRaw(val, now);
     }
 
     if (val.currentValue === newTarget) {
@@ -364,6 +388,14 @@ function startAnimation(
 }
 
 function interpolate(val: AnimatingValue, now: number): number {
+    return interpolateRaw(val, now);
+}
+
+/**
+ * Core interpolation logic, usable by any AnimatingValue.
+ * Exported for use by the terminator leaf animation system.
+ */
+export function interpolateRaw(val: AnimatingValue, now: number): number {
     if (!val.animating) {
         return val.currentValue;
     }

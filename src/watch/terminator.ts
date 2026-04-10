@@ -24,6 +24,12 @@ import type { TerminatorPart } from './types.js';
 import type { ASTNode } from '../expr/parser.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evaluate } from '../expr/evaluator.js';
+import {
+    type AnimatingValue,
+    makeAnimatingValue,
+    startAnimationRaw,
+    interpolateRaw,
+} from './animation.js';
 
 // ============================================================================
 // Quadrant enum
@@ -236,6 +242,12 @@ export interface TerminatorLeafState {
     rotationExpr: ASTNode | undefined;
     /** Update interval in seconds (from XML update attr) */
     updateIntervalSec: number;
+    /** Animated leaf angle (interpolated via animation system). */
+    angleAnim: AnimatingValue;
+    /** Animated system rotation (interpolated via animation system). */
+    rotationAnim: AnimatingValue;
+    /** Next time to re-evaluate expressions (performance.now()). */
+    nextUpdateTime: number;
 }
 
 /**
@@ -268,6 +280,17 @@ export function expandTerminatorToLeaves(
             // (plus rotation expression, which is applied at draw time)
             const baseOffsetAngle = isUpper(quadrant) ? 0 : Math.PI;
 
+            // Compute initial values for animation state
+            const initialPhase = part.phaseAngle ? evaluate(part.phaseAngle, env) : 0;
+            const initialRotation = part.rotation ? evaluate(part.rotation, env) : 0;
+            let initialAngle = terminatorAngle(
+                initialPhase, quadrant, i, leavesPerQuadrant,
+                incremental ? 1 : 0,
+            );
+            if (!isUpper(quadrant)) initialAngle += Math.PI;
+
+            const now = performance.now();
+
             leaves.push({
                 quadrant,
                 indexWithinQuadrant: i,
@@ -281,11 +304,14 @@ export function expandTerminatorToLeaves(
                 centerY,
                 baseOffsetAngle,
                 offsetRadius,
-                currentAngle: 0,
-                currentRotation: 0,
+                currentAngle: initialAngle,
+                currentRotation: initialRotation,
                 phaseExpr: part.phaseAngle,
                 rotationExpr: part.rotation,
                 updateIntervalSec,
+                angleAnim: makeAnimatingValue(initialAngle, now),
+                rotationAnim: makeAnimatingValue(initialRotation, now),
+                nextUpdateTime: 0,  // Force immediate evaluation on first frame
             });
         }
     }
@@ -295,14 +321,11 @@ export function expandTerminatorToLeaves(
 
 /**
  * Update all leaf angles based on current phase and rotation.
- *
- * iOS model:
- *   angleStream = terminatorAngle(phase, quad, idx, lpq, incr) [+ pi for lower]
- *   offsetAngleStream = (0|pi) + rotation
+ * Legacy function — sets currentAngle/currentRotation directly
+ * (no animation). Used by static cache building.
  */
 export function updateLeafAngles(leaves: TerminatorLeafState[], env: Environment): void {
     if (leaves.length === 0) return;
-    // Evaluate phase and rotation once (shared across all leaves)
     const phase = leaves[0].phaseExpr ? evaluate(leaves[0].phaseExpr, env) : 0;
     const rotation = leaves[0].rotationExpr ? evaluate(leaves[0].rotationExpr, env) : 0;
 
@@ -314,13 +337,138 @@ export function updateLeafAngles(leaves: TerminatorLeafState[], env: Environment
             leaf.leavesPerQuadrant,
             leaf.incremental ? 1 : 0,
         );
-        // iOS: for lower quadrants, angleExpression += "+pi"
         if (!isUpper(leaf.quadrant)) {
             angle += Math.PI;
         }
         leaf.currentAngle = angle;
         leaf.currentRotation = rotation;
     }
+}
+
+// ============================================================================
+// Leaf animation system (mirrors hand/wheel animation)
+// ============================================================================
+
+const kECGLAngleAnimationSpeed = 2.0;
+
+/**
+ * Tick all leaf animations for one frame.
+ * Mirrors tickAnimations() from animation.ts.
+ *
+ * Each leaf's angle and rotation are independently animated using the
+ * same adaptive-duration logic as hands and wheels.
+ */
+export function tickLeafAnimations(
+    leaves: TerminatorLeafState[],
+    env: Environment,
+    now: number,
+    tickIntervalMs: number | null = null,
+    displayDeltaPerTickSec: number = 0,
+): void {
+    if (leaves.length === 0) return;
+
+    // Evaluate phase and rotation once (shared across all leaves)
+    let phase: number | null = null;
+    let rotation: number | null = null;
+
+    for (const leaf of leaves) {
+        if (now >= leaf.nextUpdateTime) {
+            // Lazily evaluate shared expressions
+            if (phase === null) {
+                phase = leaf.phaseExpr ? evaluate(leaf.phaseExpr, env) : 0;
+                rotation = leaf.rotationExpr ? evaluate(leaf.rotationExpr, env) : 0;
+            }
+
+            // Compute this leaf's target angle from phase
+            let newAngle = terminatorAngle(
+                phase, leaf.quadrant, leaf.indexWithinQuadrant,
+                leaf.leavesPerQuadrant, leaf.incremental ? 1 : 0,
+            );
+            if (!isUpper(leaf.quadrant)) newAngle += Math.PI;
+
+            const newRotation = rotation!;
+
+            if (tickIntervalMs !== null && tickIntervalMs > 0) {
+                // --- Quantized mode ---
+                let ticksUntilUpdate = 1;
+                if (displayDeltaPerTickSec > 0 && leaf.updateIntervalSec > 0) {
+                    ticksUntilUpdate = Math.max(1, Math.ceil(leaf.updateIntervalSec / displayDeltaPerTickSec));
+                }
+                const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+
+                // Adaptive duration for leaf angle
+                const angleDelta = shortestPathDelta(leaf.angleAnim.currentValue, newAngle);
+                const angleNormalDur = (angleDelta / kECGLAngleAnimationSpeed) * 1000;
+                if (angleNormalDur > timeUntilNextUpdateMs) {
+                    startAnimationRaw(leaf.angleAnim, newAngle, now, 1.0, timeUntilNextUpdateMs);
+                } else {
+                    startAnimationRaw(leaf.angleAnim, newAngle, now);
+                }
+
+                // Adaptive duration for rotation
+                const rotDelta = shortestPathDelta(leaf.rotationAnim.currentValue, newRotation);
+                const rotNormalDur = (rotDelta / kECGLAngleAnimationSpeed) * 1000;
+                if (rotNormalDur > timeUntilNextUpdateMs) {
+                    startAnimationRaw(leaf.rotationAnim, newRotation, now, 1.0, timeUntilNextUpdateMs);
+                } else {
+                    startAnimationRaw(leaf.rotationAnim, newRotation, now);
+                }
+
+                leaf.nextUpdateTime = now + timeUntilNextUpdateMs;
+            } else {
+                // --- 1× mode ---
+                startAnimationRaw(leaf.angleAnim, newAngle, now);
+                startAnimationRaw(leaf.rotationAnim, newRotation, now);
+                // Schedule based on real-time update interval
+                leaf.nextUpdateTime = now + leaf.updateIntervalSec * 1000;
+            }
+        }
+
+        // Interpolate animated values (every frame for smooth rendering)
+        leaf.currentAngle = interpolateRaw(leaf.angleAnim, now);
+        leaf.currentRotation = interpolateRaw(leaf.rotationAnim, now);
+    }
+}
+
+/** Compute shortest-path angular delta (always positive, ≤ π). */
+function shortestPathDelta(current: number, target: number): number {
+    const a = fmod(current, 2 * Math.PI);
+    const b = fmod(target, 2 * Math.PI);
+    let d = Math.abs(b - a);
+    if (d > Math.PI) d = 2 * Math.PI - d;
+    return d;
+}
+
+/** Snap all leaf animations to targets and freeze schedules. */
+export function finishLeafAnimations(leaves: TerminatorLeafState[]): void {
+    for (const leaf of leaves) {
+        if (leaf.angleAnim.animating) {
+            leaf.angleAnim.currentValue = fmod(leaf.angleAnim.targetValue, 2 * Math.PI);
+            leaf.angleAnim.animating = false;
+        }
+        if (leaf.rotationAnim.animating) {
+            leaf.rotationAnim.currentValue = fmod(leaf.rotationAnim.targetValue, 2 * Math.PI);
+            leaf.rotationAnim.animating = false;
+        }
+        leaf.currentAngle = leaf.angleAnim.currentValue;
+        leaf.currentRotation = leaf.rotationAnim.currentValue;
+        leaf.nextUpdateTime = Infinity;
+    }
+}
+
+/** Reset leaf schedules to force immediate re-evaluation. */
+export function resetLeafSchedules(leaves: TerminatorLeafState[]): void {
+    for (const leaf of leaves) {
+        leaf.nextUpdateTime = 0;
+    }
+}
+
+/** Returns true if any leaf is mid-animation. */
+export function anyLeafAnimating(leaves: TerminatorLeafState[]): boolean {
+    for (const leaf of leaves) {
+        if (leaf.angleAnim.animating || leaf.rotationAnim.animating) return true;
+    }
+    return false;
 }
 
 // ============================================================================
