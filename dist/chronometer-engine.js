@@ -11602,11 +11602,19 @@
       return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     function riseSetForDay(riseNotSet, planetNumber) {
-      const fudgeSeconds = -5;
-      const lookahead = 3600 * 13.2;
-      const calcDate = dateToDateInterval(getNow());
+      const now2 = getNow();
+      const calcDate = dateToDateInterval(now2);
+      const localNoon = new Date(
+        now2.getFullYear(),
+        now2.getMonth(),
+        now2.getDate(),
+        12,
+        0,
+        0
+      );
+      const noonDI = dateToDateInterval(localNoon);
       const fwdResult = planetaryRiseSetTimeRefined(
-        calcDate + fudgeSeconds,
+        noonDI,
         OBSERVER_LAT,
         OBSERVER_LON,
         riseNotSet,
@@ -11618,7 +11626,7 @@
         return fwdResult;
       }
       const bwdResult = planetaryRiseSetTimeRefined(
-        calcDate - fudgeSeconds - lookahead,
+        noonDI - 24 * 3600,
         OBSERVER_LAT,
         OBSERVER_LON,
         riseNotSet,

@@ -202,22 +202,30 @@ function registerTimeFunctions(
         riseNotSet: boolean,
         planetNumber: ECPlanetNumber,
     ): number {
-        const fudgeSeconds = -5;  // match iOS: fudge backward slightly
-        const lookahead = 3600 * 13.2;
-        const calcDate = dateToDateInterval(getNow());
+        const now = getNow();
+        const calcDate = dateToDateInterval(now);
 
-        // Search forward
+        // Compute LOCAL noon of the user's calendar day.
+        // We must use local time (not UT) because isSameLocalDay
+        // compares results in the user's timezone.
+        const localNoon = new Date(
+            now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0,
+        );
+        const noonDI = dateToDateInterval(localNoon);
+
+        // Search from local noon — both sunrise (~6h before) and sunset
+        // (~6h after) are within the solver's convergence radius.
         const fwdResult = planetaryRiseSetTimeRefined(
-            calcDate + fudgeSeconds, OBSERVER_LAT, OBSERVER_LON,
+            noonDI, OBSERVER_LAT, OBSERVER_LON,
             riseNotSet, planetNumber, NaN, pool,
         );
         if (!isNoRiseSet(fwdResult) && isSameLocalDay(fwdResult, calcDate)) {
             return fwdResult;
         }
 
-        // Forward wasn't today — search backward
+        // Backward: search from previous local noon (24h earlier)
         const bwdResult = planetaryRiseSetTimeRefined(
-            calcDate - fudgeSeconds - lookahead, OBSERVER_LAT, OBSERVER_LON,
+            noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON,
             riseNotSet, planetNumber, NaN, pool,
         );
         if (!isNoRiseSet(bwdResult) && isSameLocalDay(bwdResult, calcDate)) {
