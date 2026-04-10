@@ -543,6 +543,21 @@ async function main() {
         let gridShiftX = 0, gridShiftY = 0;
         let useTopLeftAlign = false;
 
+        // Compute X position for column c with hex close-pack at the
+        // long/short boundary.  Long columns use normal cellStep spacing,
+        // and the first short column is placed hexStep from the last long
+        // column. Subsequent short columns use normal cellStep.
+        const hexColX = (
+            col: number, remainder: number, nCols: number,
+            cellStep: number, hasNestle: boolean,
+        ): number => {
+            if (!hasNestle || col < remainder) {
+                return col * cellStep;
+            }
+            const hexStep = cellStep * Math.sqrt(3) / 2;
+            return (remainder - 1) * cellStep + hexStep + (col - remainder) * cellStep;
+        };
+
         // If the popover is open, find the largest face size where some
         // grid configuration (column count) places the grid top-left-aligned
         // without the bottom-right face overlapping the popover.
@@ -557,19 +572,17 @@ async function main() {
             // Check whether a grid with `cols` columns at face `size`
             // fits without any face overlapping the popover.
             // The grid is pinned to top-left (PADDING offset).
-            // Short columns (fewer items) are nestled down by half a cell step.
             const configFits = (cols: number, s: number): boolean => {
                 const rows = Math.ceil(faces.length / cols);
                 const cellStep = s + GAP_PX;
                 const remainder = faces.length - cols * (rows - 1);
                 const r = s / 2;
 
-                // Short columns nestle down by half a cell step
                 const hasNestle = remainder > 0 && remainder < cols;
-                const nestleOffset = hasNestle ? cellStep / 2 : 0;
 
                 // Check grid fits in container at all
-                const gridW = cols * s + (cols - 1) * GAP_PX + 2 * PADDING_PX;
+                const lastColX = hexColX(cols - 1, remainder, cols, cellStep, hasNestle);
+                const gridW = lastColX + s + 2 * PADDING_PX;
                 const gridH = (rows - 1) * cellStep + s + 2 * PADDING_PX;
                 if (gridW > W || gridH > H) return false;
 
@@ -578,8 +591,8 @@ async function main() {
                     const row = Math.floor(i / cols);
                     const col = i % cols;
                     const isShortCol = col >= remainder;
-                    const ny = isShortCol ? nestleOffset : 0;
-                    const cx = PADDING_PX + col * cellStep + r;
+                    const ny = isShortCol && hasNestle ? cellStep / 2 : 0;
+                    const cx = PADDING_PX + hexColX(col, remainder, cols, cellStep, hasNestle) + r;
                     const cy = PADDING_PX + row * cellStep + ny + r;
 
                     const nearX = Math.max(pLeft, Math.min(cx, pRight));
@@ -600,7 +613,9 @@ async function main() {
 
                 // Binary search for the largest face size that works
                 // with some grid configuration, pinned top-left.
-                let lo = 0, hi = size;
+                // Use max(W,H) as upper bound since hex packing allows
+                // larger faces than optimizeGrid's uniform-spacing estimate.
+                let lo = 0, hi = Math.max(W, H);
                 let bestCols = result.cols;
 
                 for (let iter = 0; iter < 25; iter++) {
@@ -639,23 +654,24 @@ async function main() {
                 useTopLeftAlign = true;
                 if (size <= 0) return;
 
-                // Now find the furthest-right position that doesn't overlap.
-                // Binary search between left edge (0) and centered position.
+                // Now find the best position that doesn't overlap.
                 const cellStep = size + GAP_PX;
-                const gridW = bestConfig * size + (bestConfig - 1) * GAP_PX;
-                const centeredX = (W - gridW) / 2 - PADDING_PX;  // max additional shift
                 const remainder = faces.length - bestConfig * (result.rows - 1);
                 const hasNestle = remainder > 0 && remainder < bestConfig;
-                const nestleOff = hasNestle ? cellStep / 2 : 0;
+                const lastColX = hexColX(bestConfig - 1, remainder, bestConfig, cellStep, hasNestle);
+                const gridW = lastColX + size;
+                const gridH = (result.rows - 1) * cellStep + size;
+                const centeredX = (W - gridW) / 2 - PADDING_PX;
+                const centeredY = (H - gridH) / 2 - PADDING_PX;
                 const r = size / 2;
 
-                const shiftFits = (dx: number): boolean => {
+                const shiftFits = (dx: number, dy: number): boolean => {
                     for (let i = 0; i < faces.length; i++) {
                         const row = Math.floor(i / bestConfig);
                         const col = i % bestConfig;
                         const isShort = col >= remainder;
-                        const cx = PADDING_PX + dx + col * cellStep + r;
-                        const cy = PADDING_PX + row * cellStep + (isShort ? nestleOff : 0) + r;
+                        const cx = PADDING_PX + dx + hexColX(col, remainder, bestConfig, cellStep, hasNestle) + r;
+                        const cy = PADDING_PX + dy + row * cellStep + (isShort && hasNestle ? cellStep / 2 : 0) + r;
                         const nearX = Math.max(pLeft, Math.min(cx, pRight));
                         const nearY = Math.max(pTop, Math.min(cy, pBottom));
                         const ddx = cx - nearX;
@@ -667,16 +683,29 @@ async function main() {
                     return true;
                 };
 
+                // Step 1: find best horizontal position
                 let sLo = 0, sHi = Math.max(0, centeredX);
                 for (let iter = 0; iter < 20; iter++) {
                     const sMid = (sLo + sHi) / 2;
-                    if (shiftFits(sMid)) {
+                    if (shiftFits(sMid, 0)) {
                         sLo = sMid;
                     } else {
                         sHi = sMid;
                     }
                 }
                 gridShiftX = sLo;
+
+                // Step 2: at that horizontal position, find best vertical position
+                let vLo = 0, vHi = Math.max(0, centeredY);
+                for (let iter = 0; iter < 20; iter++) {
+                    const vMid = (vLo + vHi) / 2;
+                    if (shiftFits(gridShiftX, vMid)) {
+                        vLo = vMid;
+                    } else {
+                        vHi = vMid;
+                    }
+                }
+                gridShiftY = vLo;
             }
         }
 
@@ -690,18 +719,17 @@ async function main() {
         rows = result.rows;
 
         if (useTopLeftAlign) {
-            // Top-left-aligned grid with nestling (matches configFits() geometry)
+            // Top-left-aligned grid with hex close-pack (matches configFits() geometry)
             const cellStep = size + GAP_PX;
             const remainder = faces.length - cols * (rows - 1);
             const hasNestle = remainder > 0 && remainder < cols;
-            const nestleOffset = hasNestle ? cellStep / 2 : 0;
 
             for (let i = 0; i < faces.length; i++) {
                 const row = Math.floor(i / cols);
                 const col = i % cols;
                 const isShortCol = col >= remainder;
-                const x = PADDING_PX + gridShiftX + col * cellStep;
-                const y = PADDING_PX + row * cellStep + (isShortCol ? nestleOffset : 0);
+                const x = PADDING_PX + gridShiftX + hexColX(col, remainder, cols, cellStep, hasNestle);
+                const y = PADDING_PX + gridShiftY + row * cellStep + (isShortCol && hasNestle ? cellStep / 2 : 0);
                 const cell = faces[i].canvas.parentElement as HTMLElement;
                 cell.style.position = 'absolute';
                 cell.style.left = `${x}px`;

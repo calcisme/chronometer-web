@@ -13807,6 +13807,13 @@
       let size = result.size;
       let gridShiftX = 0, gridShiftY = 0;
       let useTopLeftAlign = false;
+      const hexColX = (col, remainder, nCols, cellStep, hasNestle) => {
+        if (!hasNestle || col < remainder) {
+          return col * cellStep;
+        }
+        const hexStep = cellStep * Math.sqrt(3) / 2;
+        return (remainder - 1) * cellStep + hexStep + (col - remainder) * cellStep;
+      };
       if (popoverOpen) {
         const gridRect = grid.getBoundingClientRect();
         const popRect = timePopover.getBoundingClientRect();
@@ -13820,16 +13827,16 @@
           const remainder = faces.length - cols2 * (rows2 - 1);
           const r = s / 2;
           const hasNestle = remainder > 0 && remainder < cols2;
-          const nestleOffset = hasNestle ? cellStep / 2 : 0;
-          const gridW = cols2 * s + (cols2 - 1) * GAP_PX + 2 * PADDING_PX;
+          const lastColX = hexColX(cols2 - 1, remainder, cols2, cellStep, hasNestle);
+          const gridW = lastColX + s + 2 * PADDING_PX;
           const gridH = (rows2 - 1) * cellStep + s + 2 * PADDING_PX;
           if (gridW > W || gridH > H) return false;
           for (let i = 0; i < faces.length; i++) {
             const row = Math.floor(i / cols2);
             const col = i % cols2;
             const isShortCol = col >= remainder;
-            const ny = isShortCol ? nestleOffset : 0;
-            const cx = PADDING_PX + col * cellStep + r;
+            const ny = isShortCol && hasNestle ? cellStep / 2 : 0;
+            const cx = PADDING_PX + hexColX(col, remainder, cols2, cellStep, hasNestle) + r;
             const cy = PADDING_PX + row * cellStep + ny + r;
             const nearX = Math.max(pLeft, Math.min(cx, pRight));
             const nearY = Math.max(pTop, Math.min(cy, pBottom));
@@ -13850,7 +13857,7 @@
           H
         );
         if (anyFaceOverlapsRect(centers, size / 2, pLeft, pTop, pRight, pBottom)) {
-          let lo = 0, hi = size;
+          let lo = 0, hi = Math.max(W, H);
           let bestCols = result.cols;
           for (let iter = 0; iter < 25; iter++) {
             const mid = Math.floor((lo + hi) / 2);
@@ -13881,19 +13888,21 @@
           useTopLeftAlign = true;
           if (size <= 0) return;
           const cellStep = size + GAP_PX;
-          const gridW = bestConfig * size + (bestConfig - 1) * GAP_PX;
-          const centeredX = (W - gridW) / 2 - PADDING_PX;
           const remainder = faces.length - bestConfig * (result.rows - 1);
           const hasNestle = remainder > 0 && remainder < bestConfig;
-          const nestleOff = hasNestle ? cellStep / 2 : 0;
+          const lastColX = hexColX(bestConfig - 1, remainder, bestConfig, cellStep, hasNestle);
+          const gridW = lastColX + size;
+          const gridH = (result.rows - 1) * cellStep + size;
+          const centeredX = (W - gridW) / 2 - PADDING_PX;
+          const centeredY = (H - gridH) / 2 - PADDING_PX;
           const r = size / 2;
-          const shiftFits = (dx) => {
+          const shiftFits = (dx, dy) => {
             for (let i = 0; i < faces.length; i++) {
               const row = Math.floor(i / bestConfig);
               const col = i % bestConfig;
               const isShort = col >= remainder;
-              const cx = PADDING_PX + dx + col * cellStep + r;
-              const cy = PADDING_PX + row * cellStep + (isShort ? nestleOff : 0) + r;
+              const cx = PADDING_PX + dx + hexColX(col, remainder, bestConfig, cellStep, hasNestle) + r;
+              const cy = PADDING_PX + dy + row * cellStep + (isShort && hasNestle ? cellStep / 2 : 0) + r;
               const nearX = Math.max(pLeft, Math.min(cx, pRight));
               const nearY = Math.max(pTop, Math.min(cy, pBottom));
               const ddx = cx - nearX;
@@ -13907,13 +13916,23 @@
           let sLo = 0, sHi = Math.max(0, centeredX);
           for (let iter = 0; iter < 20; iter++) {
             const sMid = (sLo + sHi) / 2;
-            if (shiftFits(sMid)) {
+            if (shiftFits(sMid, 0)) {
               sLo = sMid;
             } else {
               sHi = sMid;
             }
           }
           gridShiftX = sLo;
+          let vLo = 0, vHi = Math.max(0, centeredY);
+          for (let iter = 0; iter < 20; iter++) {
+            const vMid = (vLo + vHi) / 2;
+            if (shiftFits(gridShiftX, vMid)) {
+              vLo = vMid;
+            } else {
+              vHi = vMid;
+            }
+          }
+          gridShiftY = vLo;
         }
       }
       const dpr = window.devicePixelRatio || 1;
@@ -13926,13 +13945,12 @@
         const cellStep = size + GAP_PX;
         const remainder = faces.length - cols * (rows - 1);
         const hasNestle = remainder > 0 && remainder < cols;
-        const nestleOffset = hasNestle ? cellStep / 2 : 0;
         for (let i = 0; i < faces.length; i++) {
           const row = Math.floor(i / cols);
           const col = i % cols;
           const isShortCol = col >= remainder;
-          const x = PADDING_PX + gridShiftX + col * cellStep;
-          const y = PADDING_PX + row * cellStep + (isShortCol ? nestleOffset : 0);
+          const x = PADDING_PX + gridShiftX + hexColX(col, remainder, cols, cellStep, hasNestle);
+          const y = PADDING_PX + gridShiftY + row * cellStep + (isShortCol && hasNestle ? cellStep / 2 : 0);
           const cell = faces[i].canvas.parentElement;
           cell.style.position = "absolute";
           cell.style.left = `${x}px`;
