@@ -13650,10 +13650,7 @@
         resolve();
         return;
       }
-      const script = document.createElement("script");
-      script.src = "cities-data.js";
-      script.onload = () => {
-        const data = window.ChronometerCities;
+      window._chronCitiesCallback = (data) => {
         if (data) {
           TZ = data.TZ;
           CC = data.CC;
@@ -13662,15 +13659,34 @@
           AIRPORTS = data.AIRPORTS;
           loaded = true;
           console.log(`[CitySearch] Loaded ${CITIES.length} cities, ${AIRPORTS.length} airports`);
+        }
+      };
+      const script = document.createElement("script");
+      script.src = "cities-data.js?v=" + Date.now();
+      const errorHandler = (evt) => {
+        if (evt.filename && evt.filename.includes("cities-data")) {
+          window.removeEventListener("error", errorHandler);
+          loadError = `JS error in cities-data.js: ${evt.message} (line ${evt.lineno})`;
+          console.error(`[CitySearch] ${loadError}`);
+          reject(new Error(loadError));
+        }
+      };
+      window.addEventListener("error", errorHandler);
+      script.onload = () => {
+        window.removeEventListener("error", errorHandler);
+        delete window._chronCitiesCallback;
+        if (loaded) {
           resolve();
         } else {
-          loadError = "cities-data.js loaded but data not found";
+          loadError = "cities-data.js loaded but data callback was not invoked";
           console.error(`[CitySearch] ${loadError}`);
           reject(new Error(loadError));
         }
       };
       script.onerror = (evt) => {
-        loadError = `Failed to load cities-data.js (${script.src})`;
+        window.removeEventListener("error", errorHandler);
+        delete window._chronCitiesCallback;
+        loadError = `Failed to download cities-data.js`;
         console.error(`[CitySearch] ${loadError}`, evt);
         reject(new Error(loadError));
       };

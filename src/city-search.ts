@@ -75,10 +75,10 @@ export function loadCityData(): Promise<void> {
             return;
         }
 
-        const script = document.createElement('script');
-        script.src = 'cities-data.js';
-        script.onload = () => {
-            const data = (window as any).ChronometerCities;
+        // Register a callback that the data file will invoke on execution.
+        // This is more reliable than checking a global after onload,
+        // because script.onload fires on download success — not execution success.
+        (window as any)._chronCitiesCallback = (data: any) => {
             if (data) {
                 TZ = data.TZ;
                 CC = data.CC;
@@ -87,15 +87,39 @@ export function loadCityData(): Promise<void> {
                 AIRPORTS = data.AIRPORTS;
                 loaded = true;
                 console.log(`[CitySearch] Loaded ${CITIES.length} cities, ${AIRPORTS.length} airports`);
+            }
+        };
+
+        const script = document.createElement('script');
+        script.src = 'cities-data.js?v=' + Date.now();
+
+        // Catch JS parse/runtime errors from the script
+        const errorHandler = (evt: ErrorEvent) => {
+            if (evt.filename && evt.filename.includes('cities-data')) {
+                window.removeEventListener('error', errorHandler);
+                loadError = `JS error in cities-data.js: ${evt.message} (line ${evt.lineno})`;
+                console.error(`[CitySearch] ${loadError}`);
+                reject(new Error(loadError));
+            }
+        };
+        window.addEventListener('error', errorHandler);
+
+        script.onload = () => {
+            window.removeEventListener('error', errorHandler);
+            delete (window as any)._chronCitiesCallback;
+            if (loaded) {
                 resolve();
             } else {
-                loadError = 'cities-data.js loaded but data not found';
+                // Callback was never invoked — script parsed but didn't execute properly
+                loadError = 'cities-data.js loaded but data callback was not invoked';
                 console.error(`[CitySearch] ${loadError}`);
                 reject(new Error(loadError));
             }
         };
         script.onerror = (evt) => {
-            loadError = `Failed to load cities-data.js (${script.src})`;
+            window.removeEventListener('error', errorHandler);
+            delete (window as any)._chronCitiesCallback;
+            loadError = `Failed to download cities-data.js`;
             console.error(`[CitySearch] ${loadError}`, evt);
             reject(new Error(loadError));
         };
