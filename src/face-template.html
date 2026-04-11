@@ -1,14 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="apple-touch-icon" href="{{ICON}}">
     <title>Chronometer — {{TITLE}}</title>
     <style>
-        *, *::before, *::after { box-sizing: border-box; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
 
-        html, body {
+        html,
+        body {
             margin: 0;
             padding: 0;
             width: 100%;
@@ -43,7 +49,7 @@
 
         .face-cell canvas {
             border-radius: 50%;
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
             display: block;
         }
 
@@ -54,13 +60,21 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            margin: 0 5px;
+            margin: 0 20px;
             padding: 8px 16px;
             font-size: 13px;
             border-top: 1px solid #2a2a3e;
         }
-        #location-display { color: #888; }
-        #location-source { color: #666; font-style: italic; }
+
+        #location-display {
+            color: #888;
+        }
+
+        #location-source {
+            color: #666;
+            font-style: italic;
+        }
+
         #set-location-btn {
             background: #2a2a3e;
             border: 1px solid #444;
@@ -71,10 +85,17 @@
             cursor: pointer;
             transition: background 0.15s;
         }
-        #set-location-btn:hover { background: #3a3a5e; color: #ddf; }
+
+        #set-location-btn:hover {
+            background: #3a3a5e;
+            color: #ddf;
+        }
 
         /* Grid blur when location prompt is up */
-        #watch-grid.blurred { filter: blur(8px); pointer-events: none; }
+        #watch-grid.blurred {
+            filter: blur(8px);
+            pointer-events: none;
+        }
 
         /* Location prompt overlay */
         #location-prompt {
@@ -85,11 +106,13 @@
             align-items: center;
             justify-content: center;
         }
+
         #location-prompt .lp-backdrop {
             position: absolute;
             inset: 0;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
         }
+
         #location-prompt .lp-dialog {
             position: relative;
             background: rgba(26, 26, 46, 0.98);
@@ -100,30 +123,35 @@
             padding: 28px 32px;
             min-width: 300px;
             max-width: 400px;
-            box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
             text-align: center;
         }
+
         #location-prompt .lp-title {
             font-size: 16px;
             color: #e0d8c8;
             margin: 0 0 6px;
             font-weight: 400;
         }
+
         #location-prompt .lp-subtitle {
             font-size: 13px;
             color: #776;
             margin: 0 0 20px;
         }
+
         #location-prompt .lp-inputs {
             display: flex;
             gap: 12px;
             justify-content: center;
             margin-bottom: 16px;
         }
+
         #location-prompt .lp-inputs label {
             color: #888;
             font-size: 13px;
         }
+
         #location-prompt .lp-inputs input {
             width: 90px;
             padding: 4px 6px;
@@ -134,11 +162,13 @@
             font-size: 13px;
             font-family: monospace;
         }
+
         #location-prompt .lp-buttons {
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
+
         #location-prompt .lp-btn {
             background: #2a2a4e;
             border: 1px solid #3a3a5e;
@@ -149,25 +179,39 @@
             cursor: pointer;
             transition: background 0.15s;
         }
-        #location-prompt .lp-btn:hover { background: #3a3a6e; color: #ddf; }
+
+        #location-prompt .lp-btn:hover {
+            background: #3a3a6e;
+            color: #ddf;
+        }
+
         #location-prompt .lp-btn.primary {
             background: #3a3a6e;
             border-color: #5566aa;
             color: #ddf;
         }
-        #location-prompt .lp-btn.primary:hover { background: #4a4a8e; }
+
+        #location-prompt .lp-btn.primary:hover {
+            background: #4a4a8e;
+        }
+
         #location-prompt .lp-btn:disabled {
             background: #2a2a3e !important;
             border-color: #333 !important;
             color: #556 !important;
             cursor: not-allowed;
         }
+
         #location-prompt .lp-btn:disabled:hover {
             background: #2a2a3e !important;
             color: #556 !important;
         }
+
         /* Instant tooltip on disabled buttons */
-        #location-prompt .lp-btn[data-tooltip] { position: relative; }
+        #location-prompt .lp-btn[data-tooltip] {
+            position: relative;
+        }
+
         #location-prompt .lp-btn:disabled[data-tooltip]:hover::after {
             content: attr(data-tooltip);
             position: absolute;
@@ -184,6 +228,7 @@
             pointer-events: none;
             z-index: 10;
         }
+
         #back-link {
             position: absolute;
             top: 28px;
@@ -193,7 +238,10 @@
             font-size: 28px;
             z-index: 10;
         }
-        #back-link:hover { color: #99b; }
+
+        #back-link:hover {
+            color: #99b;
+        }
 
         /* ============= Time Controller ============= */
 
@@ -212,6 +260,7 @@
             font-family: monospace;
             user-select: none;
         }
+
         #time-bar-label {
             background: rgba(42, 42, 62, 0.85);
             border: 1px solid #3a3a5e;
@@ -222,27 +271,59 @@
             cursor: pointer;
             transition: background 0.15s, color 0.15s;
         }
-        #time-bar-label:hover { background: rgba(60, 60, 90, 0.95); color: #ccf; }
+
+        #time-bar-label:hover {
+            background: rgba(60, 60, 90, 0.95);
+            color: #ccf;
+        }
+
         #time-bar-label.active {
             background: #99b;
             color: #1a1a2e;
             border-color: #99b;
         }
+
         #time-bar-label.active:hover {
             background: #bbf;
             color: #1a1a2e;
         }
+
         #time-bar-info {
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        #time-bar-date { color: #99b; }
-        #time-bar.overridden #time-bar-date { color: #f66; font-weight: 600; }
-        #time-bar-offset { color: #f99; font-size: 12px; display: none; }
-        #time-bar.overridden #time-bar-offset { display: inline; }
-        #time-bar-rate { color: #f88; font-weight: 600; cursor: pointer; display: none; }
-        #time-bar.overridden #time-bar-rate { display: inline; }
+
+        #time-bar-date {
+            color: #99b;
+        }
+
+        #time-bar.overridden #time-bar-date {
+            color: #f66;
+            font-weight: 600;
+        }
+
+        #time-bar-offset {
+            color: #f99;
+            font-size: 12px;
+            display: none;
+        }
+
+        #time-bar.overridden #time-bar-offset {
+            display: inline;
+        }
+
+        #time-bar-rate {
+            color: #f88;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+        }
+
+        #time-bar.overridden #time-bar-rate {
+            display: inline;
+        }
+
         .time-bar-btn {
             background: #2a2a3e;
             border: 1px solid #444;
@@ -254,8 +335,15 @@
             transition: background 0.15s;
             display: none;
         }
-        #time-bar.overridden .time-bar-btn { display: inline-block; }
-        .time-bar-btn:hover { background: #3a3a5e; color: #ddf; }
+
+        #time-bar.overridden .time-bar-btn {
+            display: inline-block;
+        }
+
+        .time-bar-btn:hover {
+            background: #3a3a5e;
+            color: #ddf;
+        }
 
         /* Popover */
         #time-popover {
@@ -270,8 +358,9 @@
             border: 1px solid #3a3a5e;
             border-radius: 14px 0 0 0;
             padding: 12px 14px;
-            box-shadow: 0 -4px 32px rgba(0,0,0,0.5);
+            box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
         }
+
         #tp-close {
             position: absolute;
             top: 4px;
@@ -285,11 +374,19 @@
             line-height: 1;
             transition: color 0.15s;
         }
-        #tp-close:hover { color: #ccf; }
+
+        #tp-close:hover {
+            color: #ccf;
+        }
+
         .tp-section {
             margin-bottom: 10px;
         }
-        .tp-section:last-child { margin-bottom: 0; }
+
+        .tp-section:last-child {
+            margin-bottom: 0;
+        }
+
         .tp-label {
             font-size: 11px;
             text-transform: uppercase;
@@ -297,11 +394,13 @@
             letter-spacing: 0.5px;
             margin-bottom: 5px;
         }
+
         .tp-btn-row {
             display: flex;
             gap: 4px;
             margin-bottom: 4px;
         }
+
         .tp-btn {
             background: #2a2a3e;
             border: 1px solid #3a3a5e;
@@ -317,37 +416,62 @@
             user-select: none;
             -webkit-user-select: none;
         }
-        .tp-btn:hover { background: #3a3a5e; color: #ccf; }
+
+        .tp-btn:hover {
+            background: #3a3a5e;
+            color: #ccf;
+        }
+
         .tp-btn.active {
             background: #445;
             border-color: #8af;
             color: #8af;
         }
+
         /* Step buttons expand to fill row equally */
-        .tp-step-row { display: flex; gap: 4px; margin-bottom: 4px; }
-        .tp-step-row .tp-btn { flex: 1; font-size: 11px; padding: 5px 4px; }
+        .tp-step-row {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 4px;
+        }
+
+        .tp-step-row .tp-btn {
+            flex: 1;
+            font-size: 11px;
+            padding: 5px 4px;
+        }
+
         .tp-btn.holding {
             background: #556;
             border-color: #8af;
             color: #ccf;
         }
+
         /* Transport bar (play/pause) */
-        .tp-transport { display: flex; gap: 4px; justify-content: center; }
+        .tp-transport {
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+        }
+
         .tp-transport .tp-btn {
             font-size: 14px;
             padding: 5px 14px;
         }
+
         #tp-rate-label {
             font-size: 12px;
             color: #8af;
             text-align: center;
             margin-top: 4px;
         }
+
         .tp-date-inputs {
             display: flex;
             gap: 4px;
             margin-bottom: 4px;
         }
+
         .tp-date-inputs input {
             width: 52px;
             padding: 4px 5px;
@@ -359,7 +483,12 @@
             font-family: monospace;
             text-align: center;
         }
-        .tp-date-inputs input:first-child { width: 58px; }  /* YYYY */
+
+        .tp-date-inputs input:first-child {
+            width: 58px;
+        }
+
+        /* YYYY */
         #tp-apply {
             width: 100%;
             padding: 5px;
@@ -371,9 +500,14 @@
             cursor: pointer;
             transition: background 0.15s;
         }
-        #tp-apply:hover { background: #446; color: #ddf; }
+
+        #tp-apply:hover {
+            background: #446;
+            color: #ddf;
+        }
     </style>
 </head>
+
 <body>
     <div id="app">
         <a id="back-link" href="index.html">← Home</a>
@@ -458,4 +592,5 @@
     {{SCRIPTS}}
     <!-- Link preservation now handled by url-state.ts via initNavigationLinks() -->
 </body>
+
 </html>
