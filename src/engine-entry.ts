@@ -181,7 +181,7 @@ async function main() {
     if (urlState.lat !== null && urlState.lon !== null) {
         lat = urlState.lat;
         lon = urlState.lon;
-        locationSource = '';
+        locationSource = urlState.city || '';
         // We haven't tried geolocation — check the Permissions API if available
         if (navigator.permissions) {
             try {
@@ -193,7 +193,7 @@ async function main() {
         const loc = await requestBrowserLocation();
         if (loc) {
             lat = loc.lat; lon = loc.lon;
-            locationSource = '(from browser)';
+            locationSource = 'from browser';
             geoPermission = 'granted';
         } else {
             // No location available — render at 0,0 with blur, show prompt
@@ -923,15 +923,27 @@ async function main() {
         grid.classList.remove('blurred');
     }
 
+    const isFileProtocol = window.location.protocol === 'file:';
+
     /** Update the map preview in the dialog to show the given location. */
     function updateMapPreview(mapLat: number, mapLon: number, label: string) {
         // Globe always renders
         renderGlobe(lpGlobe, mapLat, mapLon);
-        // OSM tile — best-effort
-        lpOsmOffline.style.display = 'none';
-        loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then(ok => {
-            lpOsmOffline.style.display = ok ? 'none' : '';
-        });
+        // OSM tiles require a Referer header, which file:// URLs can't provide
+        if (isFileProtocol) {
+            lpOsmContainer.style.display = 'none';
+            // Enlarge globe when it's the only map
+            lpGlobe.width = 160;
+            lpGlobe.height = 160;
+            lpGlobe.style.width = '160px';
+            lpGlobe.style.height = '160px';
+        } else {
+            lpOsmContainer.style.display = '';
+            lpOsmOffline.style.display = 'none';
+            loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then(ok => {
+                lpOsmOffline.style.display = ok ? 'none' : '';
+            });
+        }
         lpMapLabel.textContent = label;
     }
 
@@ -940,7 +952,7 @@ async function main() {
         locationSource = source;
         rebuildAllForLocation(newLat, newLon);
         if (writeToUrl) {
-            writeUrlState({ lat: newLat, lon: newLon });
+            writeUrlState({ lat: newLat, lon: newLon, city: source || null });
         }
         // Update the map preview if the dialog is still open
         if (locationPrompt.style.display !== 'none') {
@@ -964,7 +976,7 @@ async function main() {
         const loc = await requestBrowserLocation();
         lpUseBrowser.textContent = 'Use browser location';
         if (loc) {
-            applyLocation(loc.lat, loc.lon, '(from browser)', false);
+            applyLocation(loc.lat, loc.lon, 'from browser', false);
         }
     });
 
@@ -1018,7 +1030,7 @@ async function main() {
                 div.textContent = r.label;
             }
             div.addEventListener('click', () => {
-                applyLocation(r.lat, r.lon, `(${r.shortLabel})`, true);
+                applyLocation(r.lat, r.lon, r.shortLabel, true);
                 lpCityInput.value = '';
                 lpCityResults.innerHTML = '';
                 // Update lat/lon inputs to reflect selection

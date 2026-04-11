@@ -13512,6 +13512,7 @@
     const lonStr = params.get("lon") || params.get("long");
     const lat = latStr !== null ? parseFloat(latStr) : NaN;
     const lon = lonStr !== null ? parseFloat(lonStr) : NaN;
+    const city = params.get("city");
     const tcStr = params.get("tc");
     const tStr = params.get("t");
     const offStr = params.get("off");
@@ -13522,6 +13523,7 @@
     return {
       lat: !isNaN(lat) ? lat : null,
       lon: !isNaN(lon) ? lon : null,
+      city: city || null,
       tc: tcStr === "1",
       t: tStr !== null ? parseInt(tStr, 10) : null,
       off: offStr !== null ? parseInt(offStr, 10) : null,
@@ -13542,6 +13544,13 @@
         params.set("lon", changes.lon.toFixed(3));
       } else {
         params.delete("lon");
+      }
+    }
+    if ("city" in changes) {
+      if (changes.city) {
+        params.set("city", changes.city);
+      } else {
+        params.delete("city");
       }
     }
     if ("tc" in changes) {
@@ -14007,7 +14016,7 @@
     if (urlState.lat !== null && urlState.lon !== null) {
       lat = urlState.lat;
       lon = urlState.lon;
-      locationSource = "";
+      locationSource = urlState.city || "";
       if (navigator.permissions) {
         try {
           const status = await navigator.permissions.query({ name: "geolocation" });
@@ -14020,7 +14029,7 @@
       if (loc) {
         lat = loc.lat;
         lon = loc.lon;
-        locationSource = "(from browser)";
+        locationSource = "from browser";
         geoPermission = "granted";
       } else {
         lat = 0;
@@ -14553,19 +14562,29 @@
       locationPrompt.style.display = "none";
       grid.classList.remove("blurred");
     }
+    const isFileProtocol = window.location.protocol === "file:";
     function updateMapPreview(mapLat, mapLon, label) {
       renderGlobe(lpGlobe, mapLat, mapLon);
-      lpOsmOffline.style.display = "none";
-      loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then((ok) => {
-        lpOsmOffline.style.display = ok ? "none" : "";
-      });
+      if (isFileProtocol) {
+        lpOsmContainer.style.display = "none";
+        lpGlobe.width = 160;
+        lpGlobe.height = 160;
+        lpGlobe.style.width = "160px";
+        lpGlobe.style.height = "160px";
+      } else {
+        lpOsmContainer.style.display = "";
+        lpOsmOffline.style.display = "none";
+        loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then((ok) => {
+          lpOsmOffline.style.display = ok ? "none" : "";
+        });
+      }
       lpMapLabel.textContent = label;
     }
     function applyLocation(newLat, newLon, source, writeToUrl) {
       locationSource = source;
       rebuildAllForLocation(newLat, newLon);
       if (writeToUrl) {
-        writeUrlState({ lat: newLat, lon: newLon });
+        writeUrlState({ lat: newLat, lon: newLon, city: source || null });
       }
       if (locationPrompt.style.display !== "none") {
         updateMapPreview(newLat, newLon, source);
@@ -14583,7 +14602,7 @@
       const loc = await requestBrowserLocation();
       lpUseBrowser.textContent = "Use browser location";
       if (loc) {
-        applyLocation(loc.lat, loc.lon, "(from browser)", false);
+        applyLocation(loc.lat, loc.lon, "from browser", false);
       }
     });
     setLocationBtn.addEventListener("click", () => {
@@ -14621,7 +14640,7 @@
           div.textContent = r.label;
         }
         div.addEventListener("click", () => {
-          applyLocation(r.lat, r.lon, `(${r.shortLabel})`, true);
+          applyLocation(r.lat, r.lon, r.shortLabel, true);
           lpCityInput.value = "";
           lpCityResults.innerHTML = "";
           lpLatInput.value = r.lat.toFixed(3);

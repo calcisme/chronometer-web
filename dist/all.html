@@ -342,6 +342,7 @@
             display: flex;
             gap: 8px;
             align-items: center;
+            justify-content: center;
         }
 
         #lp-globe {
@@ -349,6 +350,12 @@
             flex-shrink: 0;
             width: 100px;
             height: 100px;
+        }
+
+        /* When globe is the only visible child, make it bigger */
+        #lp-globe:only-child {
+            width: 160px;
+            height: 160px;
         }
 
         .lp-osm-container {
@@ -745,7 +752,7 @@
                     <div class="lp-map-row">
                         <canvas id="lp-globe" width="100" height="100"></canvas>
                         <div class="lp-osm-container" id="lp-osm-container">
-                            <img id="lp-osm-tile" crossorigin="anonymous" alt="">
+                            <img id="lp-osm-tile" alt="">
                             <div class="lp-map-marker" id="lp-map-marker"></div>
                             <div class="lp-osm-offline" id="lp-osm-offline" style="display:none">(offline)</div>
                         </div>
