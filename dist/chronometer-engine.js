@@ -14457,6 +14457,11 @@
       if (citySearchDebounce) clearTimeout(citySearchDebounce);
       citySearchDebounce = setTimeout(onCityInput, 150);
     });
+    lpCityInput.addEventListener("focus", () => {
+      setTimeout(() => {
+        lpCityInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    });
     lpCityInput.addEventListener("keydown", (e) => {
       const items = lpCityResults.querySelectorAll(".lp-city-item");
       if (items.length === 0) return;

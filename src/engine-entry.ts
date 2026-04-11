@@ -1008,6 +1008,14 @@ async function main() {
         citySearchDebounce = setTimeout(onCityInput, 150);
     });
 
+    // On iOS, when the keyboard opens the viewport shrinks.
+    // Scroll the input into view so the results below it stay visible.
+    lpCityInput.addEventListener('focus', () => {
+        setTimeout(() => {
+            lpCityInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);  // delay lets iOS keyboard animation finish
+    });
+
     // Keyboard navigation in results
     lpCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
         const items = lpCityResults.querySelectorAll('.lp-city-item');
