@@ -193,7 +193,7 @@ async function main() {
     }
 
     function updateLocationDisplay() {
-        locationDisplay.innerHTML = `Latitude <span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&nbsp;Longitude <span style="font-family:monospace">${lon.toFixed(3)}</span>`;
+        locationDisplay.innerHTML = `Latitude&nbsp;<span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude&nbsp;<span style="font-family:monospace">${lon.toFixed(3)}</span>`;
         sourceLabel.textContent = locationSource;
     }
     updateLocationDisplay();
