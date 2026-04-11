@@ -1307,6 +1307,118 @@
     return date.getTime() / 1e3 - 978307200;
   }
 
+  // src/astronomy/es-calendar.ts
+  var kECJulianDayOf1990Epoch = 24478915e-1;
+  var kEC1990Epoch2 = -347241600;
+  var kECAverageDaysInGregorianYear = 365.2425;
+  var kECDaysInGregorianCycle = kECAverageDaysInGregorianYear * 400;
+  var kECDaysInJulianCycle = 365.25 * 4;
+  var kECDaysInNonLeapCentury = 36525;
+  var kECJulianGregorianSwitchoverTimeInterval = -131976e5;
+  function utcComponentsFromTimeInterval(timeInterval) {
+    let xRemainder;
+    let signedYear;
+    let x0;
+    if (timeInterval < kECJulianGregorianSwitchoverTimeInterval) {
+      const x1F = 730793 + timeInterval / (24 * 3600);
+      const x1 = Math.floor(x1F);
+      xRemainder = x1F - x1;
+      signedYear = Math.floor((4 * x1 + 3) / kECDaysInJulianCycle);
+      x0 = x1 - Math.floor(kECDaysInJulianCycle * signedYear / 4);
+    } else {
+      const x2F = 730791 + timeInterval / (24 * 3600);
+      const x2 = Math.floor(x2F);
+      xRemainder = x2F - x2;
+      const century = Math.floor((4 * x2 + 3) / kECDaysInGregorianCycle);
+      const x1 = x2 - Math.floor(kECDaysInGregorianCycle * century / 4);
+      const yearWithinCentury = Math.floor((100 * x1 + 99) / kECDaysInNonLeapCentury);
+      signedYear = 100 * century + yearWithinCentury;
+      x0 = x1 - Math.floor(kECDaysInNonLeapCentury * yearWithinCentury / 100);
+    }
+    let monthI = Math.floor((5 * x0 + 461) / 153);
+    let month;
+    if (monthI > 12) {
+      month = monthI - 12;
+      signedYear++;
+    } else {
+      month = monthI;
+    }
+    let era;
+    let year;
+    if (signedYear <= 0) {
+      era = 0;
+      year = 1 - signedYear;
+    } else {
+      era = 1;
+      year = signedYear;
+    }
+    const dayF = x0 - Math.floor((153 * monthI - 457) / 5) + 1;
+    const day = Math.round(dayF);
+    const hoursF = xRemainder * 24;
+    const hoursI = Math.floor(hoursF);
+    const minutesF = (hoursF - hoursI) * 60;
+    const minutesI = Math.floor(minutesF);
+    const seconds = (minutesF - minutesI) * 60;
+    return { era, year, month, day, hour: hoursI, minute: minutesI, seconds };
+  }
+  function timeIntervalFromUTCComponents(era, year, month, day, hour, minute, seconds) {
+    let signedYear = era === 0 ? 1 - year : year;
+    let monthI;
+    if (month < 3) {
+      monthI = month + 12;
+      signedYear--;
+    } else {
+      monthI = month;
+    }
+    let J;
+    if (era === 0 || year < 1582 || year === 1582 && (month < 10 || month === 10 && day < 15)) {
+      J = 17211165e-1 + Math.floor(1461 * signedYear / 4);
+    } else {
+      const c = Math.floor(signedYear / 100);
+      const x = signedYear - 100 * c;
+      J = 17211185e-1 + Math.floor(146097 * c / 4) + Math.floor(36525 * x / 100);
+    }
+    J += Math.floor((153 * monthI - 457) / 5) + day;
+    return (J - kECJulianDayOf1990Epoch) * 24 * 3600 + kEC1990Epoch2 + hour * 3600 + minute * 60 + seconds;
+  }
+  function daysInMonth(eraNumber, yearNumber, monthNumber) {
+    switch (monthNumber) {
+      case 1:
+        return 31;
+      // Jan
+      case 2: {
+        const firstOfFeb = timeIntervalFromUTCComponents(eraNumber, yearNumber, 2, 1, 0, 0, 0);
+        const firstOfMar = timeIntervalFromUTCComponents(eraNumber, yearNumber, 3, 1, 0, 0, 0);
+        return Math.round((firstOfMar - firstOfFeb) / (24 * 3600));
+      }
+      case 3:
+        return 31;
+      case 4:
+        return 30;
+      case 5:
+        return 31;
+      case 6:
+        return 30;
+      case 7:
+        return 31;
+      case 8:
+        return 31;
+      case 9:
+        return 30;
+      case 10:
+        return 31;
+      case 11:
+        return 30;
+      case 12:
+        return 31;
+      default:
+        return 0;
+    }
+  }
+  function localComponentsFromTimeInterval(timeInterval, tzOffsetSeconds) {
+    return utcComponentsFromTimeInterval(timeInterval + tzOffsetSeconds);
+  }
+
   // src/watch/animation.ts
   var SCHEDULER_LOOKAHEAD_MS = 50;
   var kECGLAngleAnimationSpeed = 2;
@@ -11612,17 +11724,81 @@
     functions.set("secondNumberAngle", () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
     functions.set("secondValue", () => liveTime().s);
     functions.set("hour24Number", () => liveTime().h24);
-    functions.set("dayNumber", () => getNow().getDate() - 1);
-    functions.set("monthNumber", () => getNow().getMonth());
-    functions.set("monthNumberAngle", () => getNow().getMonth() * 2 * Math.PI / 12);
+    const getLocalComponents = () => {
+      const di = dateToDateInterval(getNow());
+      return localComponentsFromTimeInterval(di, tzOffsetSeconds);
+    };
+    functions.set("dayNumber", () => getLocalComponents().day - 1);
+    functions.set("dayNumberAngle", () => {
+      const cs = getLocalComponents();
+      return (cs.day - 1) * 2 * Math.PI / 31;
+    });
+    functions.set("monthNumber", () => getLocalComponents().month - 1);
+    functions.set("monthNumberAngle", () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
     functions.set("weekdayNumberAngle", () => getNow().getDay() * 2 * Math.PI / 7);
-    functions.set("yearNumber", () => getNow().getFullYear());
-    functions.set("eraNumber", () => 1);
+    functions.set("yearNumber", () => {
+      const cs = getLocalComponents();
+      return cs.era === 0 ? -cs.year : cs.year;
+    });
+    functions.set("eraNumber", () => getLocalComponents().era);
+    functions.set("GregorianEra", () => {
+      const di = dateToDateInterval(getNow());
+      return di > kECJulianGregorianSwitchoverTimeInterval ? 1 : 0;
+    });
+    functions.set("DSTNumber", () => {
+      const now2 = getNow();
+      const jan = new Date(now2.getFullYear(), 0, 1);
+      const jul = new Date(now2.getFullYear(), 6, 1);
+      const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+      return now2.getTimezoneOffset() < stdOffset ? 1 : 0;
+    });
+    functions.set("monthLen", () => {
+      const cs = getLocalComponents();
+      return daysInMonth(cs.era, cs.year, cs.month);
+    });
+    functions.set("yearNumberCEMonotonic", () => {
+      const cs = getLocalComponents();
+      return cs.era === 0 ? 1 - cs.year : cs.year;
+    });
+    functions.set("leapYearIndicatorAngle", () => {
+      const cs = getLocalComponents();
+      const yearNumber = cs.year;
+      const eraNumber = cs.era;
+      if (eraNumber && yearNumber >= 1582) {
+        return Math.PI + (yearNumber % 400 === 0 ? 3 * Math.PI / 4 : yearNumber % 100 === 0 ? 5 * Math.PI / 4 : yearNumber % 4 === 0 ? Math.PI / 4 : (yearNumber % 4 * 2 + 17) * Math.PI / 12);
+      } else if (eraNumber) {
+        return Math.PI + (yearNumber % 4 === 0 ? Math.PI / 4 : (yearNumber % 4 * 2 + 17) * Math.PI / 12);
+      } else {
+        const adjustedYear = yearNumber - 1;
+        return Math.PI + (adjustedYear % 4 === 0 ? Math.PI / 4 : (adjustedYear % 4 * 2 + 17) * Math.PI / 12);
+      }
+    });
+    functions.set("season", () => {
+      const north = OBSERVER_LAT >= 0;
+      const di = dateToDateInterval(getNow());
+      const sunLong = planetEclipticLongitude(0 /* Sun */, di, null);
+      if (sunLong > Math.PI * 3 / 2) return north ? 3 : 1;
+      else if (sunLong > Math.PI) return north ? 2 : 0;
+      else if (sunLong > Math.PI / 2) return north ? 1 : 3;
+      else return north ? 0 : 2;
+    });
+    functions.set("offsetOfWinterSolsticeFromDec31Midnight", () => {
+      const di = dateToDateInterval(getNow());
+      const todaysLongitude = planetEclipticLongitude(0 /* Sun */, di, null);
+      const cs = utcComponentsFromTimeInterval(di);
+      const thisDay2001 = timeIntervalFromUTCComponents(1, 2001, cs.month, cs.day, cs.hour, cs.minute, cs.seconds);
+      const year2001Longitude = planetEclipticLongitude(0 /* Sun */, thisDay2001, null);
+      const calendarError = year2001Longitude - todaysLongitude;
+      const northSouthOffset = OBSERVER_LAT >= 0 ? 0 : Math.PI;
+      return calendarError - 10.25 / 365.25 * 2 * Math.PI + northSouthOffset;
+    });
     functions.set("hour24ValueAngle", () => {
       const t = getNow();
       const h24 = t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
       return h24 * 2 * Math.PI / 24;
     });
+    functions.set("years", () => 365.25 * 86400);
+    functions.set("weeks", () => 7 * 86400);
     functions.set("days", () => 86400);
     functions.set("hours", () => 3600);
     functions.set("minutes", () => 60);
@@ -11730,6 +11906,12 @@
       const di = dateToDateInterval(getNow());
       return moonRelativeAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
+    functions.set("realMoonAgeAngle", () => {
+      const di = dateToDateInterval(getNow());
+      const ageRadians = moonAge(di, null).age;
+      const kECLunarCycleInDays = 29.530588;
+      return ageRadians / (2 * Math.PI) * kECLunarCycleInDays;
+    });
     functions.set("moonElongation", () => {
       const di = dateToDateInterval(getNow());
       return moonElongation(di, OBSERVER_LAT, OBSERVER_LON, null);
@@ -11818,6 +12000,11 @@
     functions.set("advanceToSunsetForDay", () => 0);
     functions.set("advanceToMoonriseForDay", () => 0);
     functions.set("advanceToMoonsetForDay", () => 0);
+    functions.set("advanceYear", () => 0);
+    functions.set("advanceYears", (_n) => 0);
+    functions.set("advanceToNextMoonPhase", () => 0);
+    functions.set("batteryLevel", () => 1);
+    functions.set("goodAccuracy", () => 1);
     functions.set("heading", () => 0);
     functions.set("tzOffset", () => tzOffsetSeconds);
     functions.set("tzOffsetAngle", () => tzOffsetSeconds * Math.PI / (12 * 3600));

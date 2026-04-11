@@ -14,6 +14,11 @@ import type { ASTNode } from '../expr/parser.js';
 import type { Watch } from './types.js';
 import { dateToDateInterval } from '../astronomy/es-time.js';
 import {
+    utcComponentsFromTimeInterval, localComponentsFromTimeInterval,
+    daysInMonth as calendarDaysInMonth, kECJulianGregorianSwitchoverTimeInterval,
+    timeIntervalFromUTCComponents,
+} from '../astronomy/es-calendar.js';
+import {
     EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT,
     EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT,
     EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT,
@@ -159,13 +164,103 @@ function registerTimeFunctions(
     functions.set('secondValue', () => liveTime().s);
     functions.set('hour24Number', () => liveTime().h24);
 
-    // --- Calendar (LIVE — recompute from getNow()) ---
-    functions.set('dayNumber', () => getNow().getDate() - 1);  // 0-indexed for wheel math
-    functions.set('monthNumber', () => getNow().getMonth());
-    functions.set('monthNumberAngle', () => getNow().getMonth() * 2 * Math.PI / 12);
+    // --- Calendar (LIVE — uses hybrid Julian/Gregorian calendar) ---
+    // Helper: get local calendar components using the hybrid calendar system.
+    // This correctly handles the Julian/Gregorian switchover at Oct 15, 1582
+    // and BCE dates with proleptic Julian calendar.
+    const getLocalComponents = () => {
+        const di = dateToDateInterval(getNow());
+        return localComponentsFromTimeInterval(di, tzOffsetSeconds);
+    };
+
+    functions.set('dayNumber', () => getLocalComponents().day - 1);  // 0-indexed for wheel math
+    functions.set('dayNumberAngle', () => {
+        const cs = getLocalComponents();
+        return (cs.day - 1) * 2 * Math.PI / 31;
+    });
+    functions.set('monthNumber', () => getLocalComponents().month - 1);  // 0-indexed to match JS convention
+    functions.set('monthNumberAngle', () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
     functions.set('weekdayNumberAngle', () => getNow().getDay() * 2 * Math.PI / 7);
-    functions.set('yearNumber', () => getNow().getFullYear());
-    functions.set('eraNumber', () => 1); // CE = 1 (always CE for modern dates)
+    functions.set('yearNumber', () => {
+        const cs = getLocalComponents();
+        return cs.era === 0 ? -cs.year : cs.year;  // negative for BCE
+    });
+    functions.set('eraNumber', () => getLocalComponents().era);
+
+    // --- Geneva I calendar functions ---
+    functions.set('GregorianEra', () => {
+        const di = dateToDateInterval(getNow());
+        return di > kECJulianGregorianSwitchoverTimeInterval ? 1 : 0;
+    });
+    functions.set('DSTNumber', () => {
+        const now = getNow();
+        // Compare January offset to current offset — if different, DST is active
+        const jan = new Date(now.getFullYear(), 0, 1);
+        const jul = new Date(now.getFullYear(), 6, 1);
+        const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
+        return now.getTimezoneOffset() < stdOffset ? 1 : 0;
+    });
+    functions.set('monthLen', () => {
+        const cs = getLocalComponents();
+        return calendarDaysInMonth(cs.era, cs.year, cs.month);
+    });
+    functions.set('yearNumberCEMonotonic', () => {
+        // Continuous year numbering: 2 BCE=−1, 1 BCE=0, 1 CE=1, 2 CE=2, ...
+        const cs = getLocalComponents();
+        return cs.era === 0 ? 1 - cs.year : cs.year;
+    });
+    functions.set('leapYearIndicatorAngle', () => {
+        // Ported from ECVirtualMachineOps.m line 4159
+        const cs = getLocalComponents();
+        const yearNumber = cs.year;
+        const eraNumber = cs.era;
+        if (eraNumber && yearNumber >= 1582) {
+            // Gregorian: accounts for 100/400 year exceptions
+            return Math.PI + (yearNumber % 400 === 0 ? 3 * Math.PI / 4
+                : yearNumber % 100 === 0 ? 5 * Math.PI / 4
+                : yearNumber % 4 === 0 ? Math.PI / 4
+                : ((yearNumber % 4) * 2 + 17) * Math.PI / 12);
+        } else if (eraNumber) {
+            // Julian CE
+            return Math.PI + (yearNumber % 4 === 0 ? Math.PI / 4
+                : ((yearNumber % 4) * 2 + 17) * Math.PI / 12);
+        } else {
+            // Proleptic Julian BCE (leap years on 1 BCE, 5 BCE, etc.)
+            const adjustedYear = yearNumber - 1;
+            return Math.PI + (adjustedYear % 4 === 0 ? Math.PI / 4
+                : ((adjustedYear % 4) * 2 + 17) * Math.PI / 12);
+        }
+    });
+    functions.set('season', () => {
+        // Ported from ECVirtualMachineOps.m line 2367
+        // 0=spring, 1=summer, 2=fall, 3=winter
+        const north = OBSERVER_LAT >= 0;  // equator counts as north
+        const di = dateToDateInterval(getNow());
+        const sunLong = planetEclipticLongitude(ECPlanetNumber.Sun, di, null);
+        if (sunLong > Math.PI * 3 / 2) return north ? 3 : 1;      // winter/summer
+        else if (sunLong > Math.PI) return north ? 2 : 0;          // fall/spring
+        else if (sunLong > Math.PI / 2) return north ? 1 : 3;      // summer/winter
+        else return north ? 0 : 2;                                  // spring/fall
+    });
+    functions.set('offsetOfWinterSolsticeFromDec31Midnight', () => {
+        // Ported from ECVirtualMachineOps.m line 1858
+        // calendarErrorVsTropicalYear = sunLong(sameDay2001) - sunLong(today)
+        const di = dateToDateInterval(getNow());
+        const todaysLongitude = planetEclipticLongitude(ECPlanetNumber.Sun, di, null);
+
+        // Get the same month/day but in year 2001 (Gregorian reference)
+        const cs = utcComponentsFromTimeInterval(di);
+        const thisDay2001 = timeIntervalFromUTCComponents(1, 2001, cs.month, cs.day, cs.hour, cs.minute, cs.seconds);
+        const year2001Longitude = planetEclipticLongitude(ECPlanetNumber.Sun, thisDay2001, null);
+
+        const calendarError = year2001Longitude - todaysLongitude;
+
+        // North/south hemisphere offset
+        const northSouthOffset = OBSERVER_LAT >= 0 ? 0 : Math.PI;
+
+        // Subtract 10.25/365.25 * 2π to move winter solstice back to ~Dec 21
+        return calendarError - 10.25 / 365.25 * 2 * Math.PI + northSouthOffset;
+    });
 
     // --- 24-hour time (Mauna Kea) ---
     functions.set('hour24ValueAngle', () => {
@@ -175,6 +270,8 @@ function registerTimeFunctions(
     });
 
     // Time-unit helpers (return value in seconds, matching iOS convention for update intervals)
+    functions.set('years', () => 365.25 * 86400);
+    functions.set('weeks', () => 7 * 86400);
     functions.set('days', () => 86400);
     functions.set('hours', () => 3600);
     functions.set('minutes', () => 60);
@@ -300,6 +397,15 @@ function registerTimeFunctions(
         const di = dateToDateInterval(getNow());
         return computeMoonRelativeAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
+    // realMoonAgeAngle: actual elapsed days since last new moon (not radians).
+    // iOS: finds nearest new moon and returns (now - newMoon) / 86400.
+    // Simplified: use moonAge (radians) * lunarCycle / 2π.
+    functions.set('realMoonAgeAngle', () => {
+        const di = dateToDateInterval(getNow());
+        const ageRadians = moonAge(di, null).age;
+        const kECLunarCycleInDays = 29.530588;
+        return ageRadians / (2 * Math.PI) * kECLunarCycleInDays;
+    });
 
     // --- Moon elongation (angular separation Sun–Moon) ---
     functions.set('moonElongation', () => {
@@ -409,6 +515,11 @@ function registerTimeFunctions(
     functions.set('advanceToSunsetForDay', () => 0);
     functions.set('advanceToMoonriseForDay', () => 0);
     functions.set('advanceToMoonsetForDay', () => 0);
+    functions.set('advanceYear', () => 0);
+    functions.set('advanceYears', (_n: number) => 0);
+    functions.set('advanceToNextMoonPhase', () => 0);
+    functions.set('batteryLevel', () => 1.0);  // always full
+    functions.set('goodAccuracy', () => 1);
     functions.set('heading', () => 0);
 
     // Timezone
