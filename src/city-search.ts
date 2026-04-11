@@ -53,9 +53,14 @@ function toASCII(s: string): string {
  * Load the city database. Must be called before search().
  * Loads cities-data.js via a script tag (works from file:// too).
  */
+/** Error message from last load attempt, if any. */
+export let loadError: string = '';
+
 export function loadCityData(): Promise<void> {
     if (loaded) return Promise.resolve();
-    return new Promise((resolve) => {
+    if (loadError) return Promise.reject(new Error(loadError));
+
+    return new Promise((resolve, reject) => {
         // Check if already loaded (e.g., bundled in standalone HTML)
         const existing = (window as any).ChronometerCities;
         if (existing) {
@@ -82,14 +87,17 @@ export function loadCityData(): Promise<void> {
                 AIRPORTS = data.AIRPORTS;
                 loaded = true;
                 console.log(`[CitySearch] Loaded ${CITIES.length} cities, ${AIRPORTS.length} airports`);
+                resolve();
             } else {
-                console.error('[CitySearch] cities-data.js loaded but ChronometerCities not found');
+                loadError = 'cities-data.js loaded but data not found';
+                console.error(`[CitySearch] ${loadError}`);
+                reject(new Error(loadError));
             }
-            resolve();
         };
-        script.onerror = () => {
-            console.error('[CitySearch] Failed to load cities-data.js');
-            resolve();
+        script.onerror = (evt) => {
+            loadError = `Failed to load cities-data.js (${script.src})`;
+            console.error(`[CitySearch] ${loadError}`, evt);
+            reject(new Error(loadError));
         };
         document.head.appendChild(script);
     });

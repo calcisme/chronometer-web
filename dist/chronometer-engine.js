@@ -13633,9 +13633,11 @@
   function toASCII(s) {
     return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   }
+  var loadError = "";
   function loadCityData() {
     if (loaded) return Promise.resolve();
-    return new Promise((resolve) => {
+    if (loadError) return Promise.reject(new Error(loadError));
+    return new Promise((resolve, reject) => {
       const existing = window.ChronometerCities;
       if (existing) {
         TZ = existing.TZ;
@@ -13660,14 +13662,17 @@
           AIRPORTS = data.AIRPORTS;
           loaded = true;
           console.log(`[CitySearch] Loaded ${CITIES.length} cities, ${AIRPORTS.length} airports`);
+          resolve();
         } else {
-          console.error("[CitySearch] cities-data.js loaded but ChronometerCities not found");
+          loadError = "cities-data.js loaded but data not found";
+          console.error(`[CitySearch] ${loadError}`);
+          reject(new Error(loadError));
         }
-        resolve();
       };
-      script.onerror = () => {
-        console.error("[CitySearch] Failed to load cities-data.js");
-        resolve();
+      script.onerror = (evt) => {
+        loadError = `Failed to load cities-data.js (${script.src})`;
+        console.error(`[CitySearch] ${loadError}`, evt);
+        reject(new Error(loadError));
       };
       document.head.appendChild(script);
     });
@@ -14434,6 +14439,7 @@
         lpCityResults.appendChild(div);
       }
     }
+    let cityDataFailed = false;
     async function onCityInput() {
       try {
         let query = lpCityInput.value.trim();
@@ -14441,11 +14447,22 @@
           lpCityResults.innerHTML = "";
           return;
         }
+        if (cityDataFailed) {
+          lpCityResults.innerHTML = `<div class="lp-city-loading">City search unavailable: ${loadError || "unknown error"}</div>`;
+          return;
+        }
         if (!isCityDataLoaded()) {
           if (!cityDataLoading) {
             cityDataLoading = true;
             lpCityResults.innerHTML = '<div class="lp-city-loading">Loading city database\u2026</div>';
-            await loadCityData();
+            try {
+              await loadCityData();
+            } catch (err) {
+              cityDataLoading = false;
+              cityDataFailed = true;
+              lpCityResults.innerHTML = `<div class="lp-city-loading">Failed to load city data: ${err.message}</div>`;
+              return;
+            }
             cityDataLoading = false;
             query = lpCityInput.value.trim();
             if (query.length < 2) {
@@ -14460,7 +14477,7 @@
         renderCityResults(results);
       } catch (err) {
         console.error("[CitySearch] Error:", err);
-        lpCityResults.innerHTML = '<div class="lp-city-loading">Error loading city data</div>';
+        lpCityResults.innerHTML = `<div class="lp-city-loading">Error: ${err.message}</div>`;
       }
     }
     function debounceCitySearch() {

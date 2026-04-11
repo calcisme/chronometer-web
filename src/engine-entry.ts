@@ -34,7 +34,7 @@ import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishL
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js';
-import { loadCityData, searchCities, isCityDataLoaded } from './city-search.js';
+import { loadCityData, searchCities, isCityDataLoaded, loadError } from './city-search.js';
 import type { CityResult } from './city-search.js';
 
 // ============================================================================
@@ -981,6 +981,8 @@ async function main() {
         }
     }
 
+    let cityDataFailed = false;
+
     async function onCityInput() {
         try {
             let query = lpCityInput.value.trim();
@@ -989,11 +991,24 @@ async function main() {
                 return;
             }
 
+            // If a previous load failed, show the error
+            if (cityDataFailed) {
+                lpCityResults.innerHTML = `<div class="lp-city-loading">City search unavailable: ${loadError || 'unknown error'}</div>`;
+                return;
+            }
+
             if (!isCityDataLoaded()) {
                 if (!cityDataLoading) {
                     cityDataLoading = true;
                     lpCityResults.innerHTML = '<div class="lp-city-loading">Loading city database…</div>';
-                    await loadCityData();
+                    try {
+                        await loadCityData();
+                    } catch (err) {
+                        cityDataLoading = false;
+                        cityDataFailed = true;
+                        lpCityResults.innerHTML = `<div class="lp-city-loading">Failed to load city data: ${(err as Error).message}</div>`;
+                        return;
+                    }
                     cityDataLoading = false;
                     // Re-read value — user may have typed more while loading
                     query = lpCityInput.value.trim();
@@ -1002,7 +1017,7 @@ async function main() {
                         return;
                     }
                 } else {
-                    return;  // still loading
+                    return;  // still loading, keep "Loading…" message visible
                 }
             }
 
@@ -1010,7 +1025,7 @@ async function main() {
             renderCityResults(results);
         } catch (err) {
             console.error('[CitySearch] Error:', err);
-            lpCityResults.innerHTML = '<div class="lp-city-loading">Error loading city data</div>';
+            lpCityResults.innerHTML = `<div class="lp-city-loading">Error: ${(err as Error).message}</div>`;
         }
     }
 
