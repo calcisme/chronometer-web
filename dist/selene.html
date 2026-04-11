@@ -51,10 +51,13 @@
         #location-panel {
             flex: 0 0 auto;
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            padding: 8px 16px;
+            gap: 4px 12px;
+            margin: 0 5px;
+            padding: 8px max(16px, env(safe-area-inset-left)) 8px max(16px, env(safe-area-inset-right));
+            padding-bottom: max(8px, env(safe-area-inset-bottom));
             font-size: 13px;
             border-top: 1px solid #2a2a3e;
         }
