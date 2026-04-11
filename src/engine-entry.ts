@@ -982,31 +982,48 @@ async function main() {
     }
 
     async function onCityInput() {
-        const query = lpCityInput.value.trim();
-        if (query.length < 2) {
-            lpCityResults.innerHTML = '';
-            return;
-        }
-
-        if (!isCityDataLoaded()) {
-            if (!cityDataLoading) {
-                cityDataLoading = true;
-                lpCityResults.innerHTML = '<div class="lp-city-loading">Loading city database…</div>';
-                await loadCityData();
-                cityDataLoading = false;
-            } else {
-                return;  // still loading
+        try {
+            let query = lpCityInput.value.trim();
+            if (query.length < 2) {
+                lpCityResults.innerHTML = '';
+                return;
             }
-        }
 
-        const results = searchCities(query, 20);
-        renderCityResults(results);
+            if (!isCityDataLoaded()) {
+                if (!cityDataLoading) {
+                    cityDataLoading = true;
+                    lpCityResults.innerHTML = '<div class="lp-city-loading">Loading city database…</div>';
+                    await loadCityData();
+                    cityDataLoading = false;
+                    // Re-read value — user may have typed more while loading
+                    query = lpCityInput.value.trim();
+                    if (query.length < 2) {
+                        lpCityResults.innerHTML = '';
+                        return;
+                    }
+                } else {
+                    return;  // still loading
+                }
+            }
+
+            const results = searchCities(query, 20);
+            renderCityResults(results);
+        } catch (err) {
+            console.error('[CitySearch] Error:', err);
+            lpCityResults.innerHTML = '<div class="lp-city-loading">Error loading city data</div>';
+        }
     }
 
-    lpCityInput.addEventListener('input', () => {
+    function debounceCitySearch() {
         if (citySearchDebounce) clearTimeout(citySearchDebounce);
         citySearchDebounce = setTimeout(onCityInput, 150);
-    });
+    }
+
+    // Listen on multiple events for iOS compatibility.
+    // iOS Safari may not fire 'input' during autocorrect/compose.
+    lpCityInput.addEventListener('input', debounceCitySearch);
+    lpCityInput.addEventListener('keyup', debounceCitySearch);
+    lpCityInput.addEventListener('compositionend', debounceCitySearch);
 
     // On iOS, when the keyboard opens the viewport shrinks.
     // Scroll the input into view so the results below it stay visible.
