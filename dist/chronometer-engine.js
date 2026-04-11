@@ -13454,39 +13454,104 @@
     }
   };
 
-  // src/engine-entry.ts
-  var DEFAULT_LAT = 37.205;
-  var DEFAULT_LON = -121.954;
-  var STORAGE_KEY = "chronometer-location";
-  function getQueryLocation() {
-    if (typeof window === "undefined") return null;
+  // src/url-state.ts
+  function readUrlState() {
     const params = new URLSearchParams(window.location.search);
     const latStr = params.get("lat");
     const lonStr = params.get("lon") || params.get("long");
-    const lat = parseFloat(latStr || "");
-    const lon = parseFloat(lonStr || "");
-    if (!isNaN(lat) && !isNaN(lon)) {
-      return { lat, lon, name: params.get("loc") || "(from URL)" };
-    }
-    return null;
+    const lat = latStr !== null ? parseFloat(latStr) : NaN;
+    const lon = lonStr !== null ? parseFloat(lonStr) : NaN;
+    const tcStr = params.get("tc");
+    const tStr = params.get("t");
+    const dirStr = params.get("dir");
+    let dir = 1;
+    if (dirStr === "-1") dir = -1;
+    else if (dirStr === "0") dir = 0;
+    return {
+      lat: !isNaN(lat) ? lat : null,
+      lon: !isNaN(lon) ? lon : null,
+      tc: tcStr === "1",
+      t: tStr !== null ? parseInt(tStr, 10) : null,
+      dir
+    };
   }
-  function loadStoredLocation() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return null;
-      const { lat, lon } = JSON.parse(raw);
-      if (typeof lat === "number" && typeof lon === "number") return { lat, lon };
-    } catch {
+  function writeUrlState(changes) {
+    const params = new URLSearchParams(window.location.search);
+    if ("lat" in changes) {
+      if (changes.lat !== null && changes.lat !== void 0) {
+        params.set("lat", changes.lat.toFixed(3));
+      } else {
+        params.delete("lat");
+      }
     }
-    return null;
-  }
-  function saveStoredLocation(lat, lon) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ lat, lon }));
-    } catch {
+    if ("lon" in changes) {
+      if (changes.lon !== null && changes.lon !== void 0) {
+        params.set("lon", changes.lon.toFixed(3));
+      } else {
+        params.delete("lon");
+      }
     }
+    if ("tc" in changes) {
+      if (changes.tc) {
+        params.set("tc", "1");
+      } else {
+        params.delete("tc");
+      }
+    }
+    if ("t" in changes) {
+      if (changes.t !== null && changes.t !== void 0) {
+        params.set("t", changes.t.toString());
+      } else {
+        params.delete("t");
+      }
+    }
+    if ("dir" in changes) {
+      if (changes.dir !== void 0 && changes.dir !== 1) {
+        params.set("dir", changes.dir.toString());
+      } else {
+        params.delete("dir");
+      }
+    }
+    params.delete("long");
+    params.delete("loc");
+    const qs = params.toString();
+    const newUrl = window.location.pathname + (qs ? "?" + qs : "");
+    history.replaceState(null, "", newUrl);
+    updateNavigationLinks();
   }
-  function requestLocation() {
+  function updateNavigationLinks() {
+    const search = window.location.search;
+    const backLink = document.getElementById("back-link");
+    if (backLink) {
+      const url = new URL(backLink.getAttribute("data-base-href") || "index.html", window.location.href);
+      url.search = search;
+      backLink.href = url.toString();
+    }
+    document.querySelectorAll("a.face-card").forEach((a) => {
+      const anchor = a;
+      const url = new URL(anchor.getAttribute("data-base-href") || anchor.getAttribute("href"), window.location.href);
+      url.search = search;
+      anchor.href = url.toString();
+    });
+  }
+  function initNavigationLinks() {
+    const backLink = document.getElementById("back-link");
+    if (backLink && !backLink.hasAttribute("data-base-href")) {
+      backLink.setAttribute("data-base-href", backLink.getAttribute("href") || "index.html");
+    }
+    document.querySelectorAll("a.face-card").forEach((a) => {
+      const anchor = a;
+      if (!anchor.hasAttribute("data-base-href")) {
+        anchor.setAttribute("data-base-href", anchor.getAttribute("href"));
+      }
+    });
+    updateNavigationLinks();
+  }
+
+  // src/engine-entry.ts
+  var DEMO_LAT = 37.3349;
+  var DEMO_LON = -122.009;
+  function requestBrowserLocation() {
     if (!navigator.geolocation) return Promise.resolve(null);
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
@@ -13537,37 +13602,52 @@
       return;
     }
     const grid = document.getElementById("watch-grid");
-    const latInput = document.getElementById("lat-input");
-    const lonInput = document.getElementById("lon-input");
+    const locationDisplay = document.getElementById("location-display");
     const sourceLabel = document.getElementById("location-source");
-    const resetLink = document.getElementById("reset-location");
+    const setLocationBtn = document.getElementById("set-location-btn");
+    const locationPrompt = document.getElementById("location-prompt");
+    const lpLatInput = document.getElementById("lp-lat");
+    const lpLonInput = document.getElementById("lp-lon");
+    const lpUseCoords = document.getElementById("lp-use-coords");
+    const lpUseBrowser = document.getElementById("lp-use-browser");
+    const lpUseDemo = document.getElementById("lp-use-demo");
+    initNavigationLinks();
+    const urlState = readUrlState();
     let lat, lon;
-    const queryLoc = getQueryLocation();
-    if (queryLoc) {
-      lat = queryLoc.lat;
-      lon = queryLoc.lon;
-      sourceLabel.textContent = queryLoc.name || "(from URL)";
+    let locationSource = "";
+    let needsPrompt = false;
+    let geoPermission = "unknown";
+    if (urlState.lat !== null && urlState.lon !== null) {
+      lat = urlState.lat;
+      lon = urlState.lon;
+      locationSource = "";
+      if (navigator.permissions) {
+        try {
+          const status = await navigator.permissions.query({ name: "geolocation" });
+          geoPermission = status.state === "granted" ? "granted" : status.state === "denied" ? "denied" : "unknown";
+        } catch {
+        }
+      }
     } else {
-      const loc = await requestLocation();
+      const loc = await requestBrowserLocation();
       if (loc) {
         lat = loc.lat;
         lon = loc.lon;
-        sourceLabel.textContent = "(from browser)";
+        locationSource = "(from browser)";
+        geoPermission = "granted";
       } else {
-        const stored = loadStoredLocation();
-        if (stored) {
-          lat = stored.lat;
-          lon = stored.lon;
-          sourceLabel.textContent = "(saved)";
-        } else {
-          lat = DEFAULT_LAT;
-          lon = DEFAULT_LON;
-          sourceLabel.textContent = "(Steve's house)";
-        }
+        lat = 0;
+        lon = 0;
+        locationSource = "";
+        needsPrompt = true;
+        geoPermission = "denied";
       }
     }
-    latInput.value = lat.toFixed(3);
-    lonInput.value = lon.toFixed(3);
+    function updateLocationDisplay() {
+      locationDisplay.innerHTML = `Latitude <span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude <span style="font-family:monospace">${lon.toFixed(3)}</span>`;
+      sourceLabel.textContent = locationSource;
+    }
+    updateLocationDisplay();
     const parsedWatches = [];
     const allImages = [];
     for (const fd of faceDataArray) {
@@ -13577,6 +13657,16 @@
     }
     delete window.ChronometerFaces;
     const timeController = new TimeController();
+    if (urlState.t !== null && !isNaN(urlState.t)) {
+      timeController.setTime(new Date(urlState.t));
+      if (urlState.dir === 1) {
+        timeController.setDirection(1);
+        timeController.setRate(null);
+      } else if (urlState.dir === -1) {
+        timeController.setDirection(-1);
+        timeController.setRate(null);
+      }
+    }
     const getNow = () => timeController.getDisplayTime();
     let cols = 1, rows = 1;
     const faces = [];
@@ -14015,12 +14105,10 @@
       }, 150);
     });
     resizeObserver.observe(grid.parentElement);
-    function showResetIfSaved() {
-      resetLink.style.display = loadStoredLocation() ? "inline" : "none";
-    }
-    showResetIfSaved();
     function rebuildAllForLocation(newLat, newLon) {
       stopScheduler();
+      lat = newLat;
+      lon = newLon;
       for (const face of faces) {
         const fd = faceDataArray[face.faceDataIndex];
         const freshWatch = parseWatchXML(fd.xml, "front");
@@ -14029,29 +14117,72 @@
         face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow);
         face.cachesBuilt = false;
       }
+      updateLocationDisplay();
       buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
     }
-    function onLocationChange() {
-      const newLat = parseFloat(latInput.value);
-      const newLon = parseFloat(lonInput.value);
-      if (isNaN(newLat) || isNaN(newLon)) return;
-      saveStoredLocation(newLat, newLon);
-      sourceLabel.textContent = "(saved)";
-      showResetIfSaved();
-      rebuildAllForLocation(newLat, newLon);
-    }
-    latInput.addEventListener("change", onLocationChange);
-    lonInput.addEventListener("change", onLocationChange);
-    resetLink.addEventListener("click", () => {
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch {
+    function showLocationPrompt(blur) {
+      locationPrompt.style.display = "";
+      if (blur) grid.classList.add("blurred");
+      lpLatInput.value = lat !== 0 || lon !== 0 ? lat.toFixed(3) : "";
+      lpLonInput.value = lat !== 0 || lon !== 0 ? lon.toFixed(3) : "";
+      const btn = lpUseBrowser;
+      const isFileUrl = window.location.protocol === "file:";
+      const deniedTooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
+      if (geoPermission === "granted") {
+        btn.disabled = false;
+        delete btn.dataset.tooltip;
+        btn.textContent = "Use browser location";
+      } else {
+        btn.disabled = true;
+        btn.dataset.tooltip = deniedTooltip;
+        btn.textContent = "Use browser location (unavailable)";
       }
-      latInput.value = DEFAULT_LAT.toFixed(3);
-      lonInput.value = DEFAULT_LON.toFixed(3);
-      sourceLabel.textContent = "(Steve's house)";
-      resetLink.style.display = "none";
-      rebuildAllForLocation(DEFAULT_LAT, DEFAULT_LON);
+      const coordsBtn = lpUseCoords;
+      function validateCoordInputs() {
+        const validLat = !isNaN(parseFloat(lpLatInput.value));
+        const validLon = !isNaN(parseFloat(lpLonInput.value));
+        coordsBtn.disabled = !(validLat && validLon);
+      }
+      validateCoordInputs();
+      lpLatInput.oninput = validateCoordInputs;
+      lpLonInput.oninput = validateCoordInputs;
+    }
+    function dismissLocationPrompt() {
+      locationPrompt.style.display = "none";
+      grid.classList.remove("blurred");
+    }
+    function applyLocation(newLat, newLon, source, writeToUrl) {
+      locationSource = source;
+      dismissLocationPrompt();
+      rebuildAllForLocation(newLat, newLon);
+      if (writeToUrl) {
+        writeUrlState({ lat: newLat, lon: newLon });
+      }
+    }
+    lpUseCoords.addEventListener("click", () => {
+      const newLat = parseFloat(lpLatInput.value);
+      const newLon = parseFloat(lpLonInput.value);
+      if (isNaN(newLat) || isNaN(newLon)) return;
+      applyLocation(newLat, newLon, "", true);
+    });
+    lpUseBrowser.addEventListener("click", async () => {
+      lpUseBrowser.textContent = "Requesting\u2026";
+      const loc = await requestBrowserLocation();
+      lpUseBrowser.textContent = "Use browser location";
+      if (loc) {
+        applyLocation(loc.lat, loc.lon, "(from browser)", false);
+      }
+    });
+    lpUseDemo.addEventListener("click", () => {
+      applyLocation(DEMO_LAT, DEMO_LON, "(Cupertino, CA)", true);
+    });
+    setLocationBtn.addEventListener("click", () => {
+      showLocationPrompt(false);
+    });
+    locationPrompt.querySelector(".lp-backdrop").addEventListener("click", () => {
+      if (!needsPrompt || (lat !== 0 || lon !== 0)) {
+        dismissLocationPrompt();
+      }
     });
     const timeBar = document.getElementById("time-bar");
     const timeBarLabel = document.getElementById("time-bar-label");
@@ -14112,6 +14243,7 @@
           resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
+          writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: -1 });
         });
         const fwdBtn = document.createElement("button");
         fwdBtn.className = "tp-btn";
@@ -14123,6 +14255,7 @@
           resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
+          writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 1 });
         });
         tpTransport.appendChild(revBtn);
         tpTransport.appendChild(fwdBtn);
@@ -14136,6 +14269,7 @@
           finishAllAnimations();
           updateTimeUI();
           ensureSchedulerRunning();
+          writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 0 });
         });
         tpTransport.appendChild(pauseBtn);
       }
@@ -14235,6 +14369,7 @@
       timeBarLabel.textContent = "\u23F1 Hide time controller";
       timeBarLabel.classList.add("active");
       updateTimeUI();
+      writeUrlState({ tc: true });
       if (lastContainerW > 0) {
         onGridResize(lastContainerW, lastContainerH);
       }
@@ -14245,6 +14380,7 @@
       timeBarLabel.textContent = "\u23F1 Show time controller";
       timeBarLabel.classList.remove("active");
       updateTimeUI();
+      writeUrlState({ tc: false });
       if (lastContainerW > 0) {
         onGridResize(lastContainerW, lastContainerH);
       }
@@ -14292,6 +14428,7 @@
       updateTimeUI();
       stopScheduler();
       startScheduler();
+      writeUrlState({ t: null, dir: 1 });
     }
     timeBarNow.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -14324,6 +14461,10 @@
         finishAllAnimations();
         updateTimeUI();
         ensureSchedulerRunning();
+        writeUrlState({
+          t: timeController.getDisplayTime().getTime(),
+          dir: 0
+        });
       }
     }
     timePopover.querySelectorAll("[data-step]").forEach((btn) => {
@@ -14358,6 +14499,10 @@
       el.addEventListener("mouseup", (e) => {
         e.stopPropagation();
         endHold();
+        writeUrlState({
+          t: timeController.getDisplayTime().getTime(),
+          dir: timeController.isStopped ? 0 : timeController.currentDirection
+        });
       });
       el.addEventListener("mouseleave", () => {
         endHold();
@@ -14387,6 +14532,10 @@
       el.addEventListener("touchend", (e) => {
         e.stopPropagation();
         endHold();
+        writeUrlState({
+          t: timeController.getDisplayTime().getTime(),
+          dir: timeController.isStopped ? 0 : timeController.currentDirection
+        });
       });
       el.addEventListener("touchcancel", () => {
         endHold();
@@ -14404,6 +14553,25 @@
       timeController.setTime(d);
       updateTimeUI();
       ensureSchedulerRunning();
+      writeUrlState({
+        t: d.getTime(),
+        dir: 0
+      });
+    });
+    ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", () => {
+        const yr = parseInt(document.getElementById("tp-year").value, 10);
+        const mo = parseInt(document.getElementById("tp-month").value, 10) - 1;
+        const dy = parseInt(document.getElementById("tp-day").value, 10);
+        const hr = parseInt(document.getElementById("tp-hour").value, 10);
+        const mn = parseInt(document.getElementById("tp-minute").value, 10);
+        if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+        const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+        timeController.setTime(d);
+        updateTimeUI();
+        ensureSchedulerRunning();
+        writeUrlState({ t: d.getTime(), dir: 0 });
+      });
     });
     tpClose.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -14417,9 +14585,23 @@
       setTimeout(tickTimeBarClock, msUntilNextSecond);
     }
     tickTimeBarClock();
+    setInterval(() => {
+      if (!timeController.isRealTime && !timeController.isStopped && timeController.currentRate === null) {
+        writeUrlState({
+          t: timeController.getDisplayTime().getTime(),
+          dir: timeController.currentDirection
+        });
+      }
+    }, 6e4);
     const initialRect = grid.getBoundingClientRect();
     if (initialRect.width > 0 && initialRect.height > 0) {
       onGridResize(initialRect.width, initialRect.height);
+    }
+    if (urlState.tc) {
+      showPopover();
+    }
+    if (needsPrompt) {
+      showLocationPrompt(true);
     }
   }
   window.Chronometer = {

@@ -101,6 +101,114 @@
         .face-card .thumb.thumb-square {
             border-radius: 12px;
         }
+
+        /* Location prompt overlay */
+        #location-prompt {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #location-prompt .lp-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+        }
+        #location-prompt .lp-dialog {
+            position: relative;
+            background: rgba(26, 26, 46, 0.98);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid #3a3a5e;
+            border-radius: 14px;
+            padding: 28px 32px;
+            min-width: 300px;
+            max-width: 400px;
+            box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+            text-align: center;
+        }
+        #location-prompt .lp-title {
+            font-size: 16px;
+            color: #e0d8c8;
+            margin: 0 0 6px;
+            font-weight: 400;
+        }
+        #location-prompt .lp-subtitle {
+            font-size: 13px;
+            color: #776;
+            margin: 0 0 20px;
+        }
+        #location-prompt .lp-inputs {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        #location-prompt .lp-inputs label {
+            color: #888;
+            font-size: 13px;
+        }
+        #location-prompt .lp-inputs input {
+            width: 90px;
+            padding: 4px 6px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #2a2a3e;
+            color: #ddd;
+            font-size: 13px;
+            font-family: monospace;
+        }
+        #location-prompt .lp-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #location-prompt .lp-btn {
+            background: #2a2a4e;
+            border: 1px solid #3a3a5e;
+            border-radius: 6px;
+            color: #aac;
+            font-size: 13px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #location-prompt .lp-btn:hover { background: #3a3a6e; color: #ddf; }
+        #location-prompt .lp-btn.primary {
+            background: #3a3a6e;
+            border-color: #5566aa;
+            color: #ddf;
+        }
+        #location-prompt .lp-btn.primary:hover { background: #4a4a8e; }
+        #location-prompt .lp-btn:disabled {
+            background: #2a2a3e !important;
+            border-color: #333 !important;
+            color: #556 !important;
+            cursor: not-allowed;
+        }
+        #location-prompt .lp-btn:disabled:hover {
+            background: #2a2a3e !important;
+            color: #556 !important;
+        }
+        #location-prompt .lp-btn[data-tooltip] { position: relative; }
+        #location-prompt .lp-btn:disabled[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #111122;
+            border: 1px solid #3a3a5e;
+            border-radius: 4px;
+            padding: 5px 12px;
+            font-size: 11px;
+            color: #aa9;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 10;
+        }
     </style>
 </head>
 
@@ -147,15 +255,132 @@
             <p class="desc">View all watch faces together</p>
         </a>
     </div>
+
+    <!-- Location prompt overlay (same as face pages) -->
+    <div id="location-prompt" style="display:none">
+        <div class="lp-backdrop"></div>
+        <div class="lp-dialog">
+            <h3 class="lp-title">Set Location</h3>
+            <p class="lp-subtitle">Enter coordinates or use one of the options below</p>
+            <div class="lp-inputs">
+                <label>Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"></label>
+                <label>Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"></label>
+            </div>
+            <div class="lp-buttons">
+                <button class="lp-btn primary" id="lp-use-coords">Use location above</button>
+                <button class="lp-btn" id="lp-use-browser">Use browser location</button>
+                <button class="lp-btn" id="lp-use-demo">Demo — Cupertino, CA</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Pass along query parameters (like ?lat=...&lon=...) when clicking links
-        if (window.location.search) {
+        const DEMO_LAT = 37.3349;
+        const DEMO_LON = -122.0090;
+
+        function updateLinks() {
+            const search = window.location.search;
             document.querySelectorAll('a.face-card').forEach(a => {
-                const url = new URL(a.href, window.location.href);
-                url.search = window.location.search;
+                const baseHref = a.getAttribute('data-base-href') || a.getAttribute('href');
+                if (!a.hasAttribute('data-base-href')) a.setAttribute('data-base-href', baseHref);
+                const url = new URL(baseHref, window.location.href);
+                url.search = search;
                 a.href = url.toString();
             });
         }
+
+        function writeUrlState(changes) {
+            const params = new URLSearchParams(window.location.search);
+            if ('lat' in changes) {
+                if (changes.lat != null) params.set('lat', changes.lat.toFixed(3));
+                else params.delete('lat');
+            }
+            if ('lon' in changes) {
+                if (changes.lon != null) params.set('lon', changes.lon.toFixed(3));
+                else params.delete('lon');
+            }
+            params.delete('long'); params.delete('loc');
+            const qs = params.toString();
+            history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+            updateLinks();
+        }
+
+        function showPrompt(geoDenied) {
+            document.getElementById('location-prompt').style.display = '';
+            const browserBtn = document.getElementById('lp-use-browser');
+            if (geoDenied) {
+                browserBtn.disabled = true;
+                const isFileUrl = window.location.protocol === 'file:';
+                browserBtn.dataset.tooltip = isFileUrl
+                    ? 'Not all browsers support location access from file:// URLs'
+                    : 'Browser location was not granted — check your browser settings to allow it';
+                browserBtn.textContent = 'Use browser location (unavailable)';
+            }
+            // Disable "Use this location" until inputs have valid numbers
+            const coordsBtn = document.getElementById('lp-use-coords');
+            const latIn = document.getElementById('lp-lat');
+            const lonIn = document.getElementById('lp-lon');
+            function validateInputs() {
+                const ok = !isNaN(parseFloat(latIn.value)) && !isNaN(parseFloat(lonIn.value));
+                coordsBtn.disabled = !ok;
+            }
+            validateInputs();
+            latIn.oninput = validateInputs;
+            lonIn.oninput = validateInputs;
+        }
+        function hidePrompt() { document.getElementById('location-prompt').style.display = 'none'; }
+
+        function applyLocation(lat, lon, writeToUrl) {
+            hidePrompt();
+            if (writeToUrl) writeUrlState({ lat, lon });
+            updateLinks();
+        }
+
+        // Check if we need to prompt
+        const params = new URLSearchParams(window.location.search);
+        const hasLat = params.has('lat') && !isNaN(parseFloat(params.get('lat')));
+        const hasLon = (params.has('lon') || params.has('long')) && !isNaN(parseFloat(params.get('lon') || params.get('long')));
+
+        if (hasLat && hasLon) {
+            // Already have location from URL
+            updateLinks();
+        } else {
+            // Try browser geolocation
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    pos => { updateLinks(); },
+                    () => { showPrompt(true); },  // denied
+                    { timeout: 5000 }
+                );
+            } else {
+                showPrompt(true);  // no API = denied
+            }
+            updateLinks();
+        }
+
+        // Prompt button handlers
+        document.getElementById('lp-use-coords').addEventListener('click', () => {
+            const lat = parseFloat(document.getElementById('lp-lat').value);
+            const lon = parseFloat(document.getElementById('lp-lon').value);
+            if (isNaN(lat) || isNaN(lon)) return;
+            applyLocation(lat, lon, true);
+        });
+        document.getElementById('lp-use-browser').addEventListener('click', () => {
+            const btn = document.getElementById('lp-use-browser');
+            if (btn.disabled) return;
+            btn.textContent = 'Requesting…';
+            navigator.geolocation.getCurrentPosition(
+                pos => { btn.textContent = 'Use browser location'; applyLocation(pos.coords.latitude, pos.coords.longitude, false); },
+                () => { btn.textContent = 'Use browser location'; },
+                { timeout: 5000 }
+            );
+        });
+        document.getElementById('lp-use-demo').addEventListener('click', () => {
+            applyLocation(DEMO_LAT, DEMO_LON, true);
+        });
+        document.querySelector('#location-prompt .lp-backdrop').addEventListener('click', () => {
+            if (hasLat && hasLon) hidePrompt();
+        });
     </script>
 </body>
 

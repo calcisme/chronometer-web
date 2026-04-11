@@ -33,45 +33,16 @@ import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
+import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js';
 
 // ============================================================================
-// Location persistence
+// Location helpers
 // ============================================================================
 
-const DEFAULT_LAT = 37.205;
-const DEFAULT_LON = -121.954;
-const STORAGE_KEY = 'chronometer-location';
+const DEMO_LAT = 37.3349;   // Apple Park, Cupertino
+const DEMO_LON = -122.0090;
 
-function getQueryLocation(): { lat: number; lon: number; name?: string } | null {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    const latStr = params.get('lat');
-    const lonStr = params.get('lon') || params.get('long');
-    const lat = parseFloat(latStr || '');
-    const lon = parseFloat(lonStr || '');
-    if (!isNaN(lat) && !isNaN(lon)) {
-        return { lat, lon, name: params.get('loc') || '(from URL)' };
-    }
-    return null;
-}
-
-function loadStoredLocation(): { lat: number; lon: number } | null {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return null;
-        const { lat, lon } = JSON.parse(raw);
-        if (typeof lat === 'number' && typeof lon === 'number') return { lat, lon };
-    } catch { /* ignore */ }
-    return null;
-}
-
-function saveStoredLocation(lat: number, lon: number): void {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ lat, lon }));
-    } catch { /* ignore — may fail in some file:// contexts */ }
-}
-
-function requestLocation(): Promise<{ lat: number; lon: number } | null> {
+function requestBrowserLocation(): Promise<{ lat: number; lon: number } | null> {
     if (!navigator.geolocation) return Promise.resolve(null);
     return new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
@@ -173,37 +144,59 @@ async function main() {
 
     // --- UI elements ---
     const grid = document.getElementById('watch-grid') as HTMLDivElement;
-    const latInput = document.getElementById('lat-input') as HTMLInputElement;
-    const lonInput = document.getElementById('lon-input') as HTMLInputElement;
+    const locationDisplay = document.getElementById('location-display')!;
     const sourceLabel = document.getElementById('location-source')!;
-    const resetLink = document.getElementById('reset-location')!;
+    const setLocationBtn = document.getElementById('set-location-btn')!;
+    const locationPrompt = document.getElementById('location-prompt')!;
+    const lpLatInput = document.getElementById('lp-lat') as HTMLInputElement;
+    const lpLonInput = document.getElementById('lp-lon') as HTMLInputElement;
+    const lpUseCoords = document.getElementById('lp-use-coords')!;
+    const lpUseBrowser = document.getElementById('lp-use-browser')!;
+    const lpUseDemo = document.getElementById('lp-use-demo')!;
+
+    // Initialize link preservation
+    initNavigationLinks();
 
     // --- Resolve location ---
+    const urlState = readUrlState();
     let lat: number, lon: number;
-    const queryLoc = getQueryLocation();
+    let locationSource = '';
+    let needsPrompt = false;
+    // Track whether browser geolocation is available
+    // 'granted' = we got a position, 'denied' = user rejected or unavailable, 'unknown' = never tried
+    let geoPermission: 'granted' | 'denied' | 'unknown' = 'unknown';
 
-    if (queryLoc) {
-        lat = queryLoc.lat;
-        lon = queryLoc.lon;
-        sourceLabel.textContent = queryLoc.name || '(from URL)';
+    if (urlState.lat !== null && urlState.lon !== null) {
+        lat = urlState.lat;
+        lon = urlState.lon;
+        locationSource = '';
+        // We haven't tried geolocation — check the Permissions API if available
+        if (navigator.permissions) {
+            try {
+                const status = await navigator.permissions.query({ name: 'geolocation' });
+                geoPermission = status.state === 'granted' ? 'granted' : status.state === 'denied' ? 'denied' : 'unknown';
+            } catch { /* ignore — not all browsers support this */ }
+        }
     } else {
-        const loc = await requestLocation();
+        const loc = await requestBrowserLocation();
         if (loc) {
             lat = loc.lat; lon = loc.lon;
-            sourceLabel.textContent = '(from browser)';
+            locationSource = '(from browser)';
+            geoPermission = 'granted';
         } else {
-            const stored = loadStoredLocation();
-            if (stored) {
-                lat = stored.lat; lon = stored.lon;
-                sourceLabel.textContent = '(saved)';
-            } else {
-                lat = DEFAULT_LAT; lon = DEFAULT_LON;
-                sourceLabel.textContent = "(Steve's house)";
-            }
+            // No location available — render at 0,0 with blur, show prompt
+            lat = 0; lon = 0;
+            locationSource = '';
+            needsPrompt = true;
+            geoPermission = 'denied';
         }
     }
-    latInput.value = lat.toFixed(3);
-    lonInput.value = lon.toFixed(3);
+
+    function updateLocationDisplay() {
+        locationDisplay.innerHTML = `Latitude <span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude <span style="font-family:monospace">${lon.toFixed(3)}</span>`;
+        sourceLabel.textContent = locationSource;
+    }
+    updateLocationDisplay();
 
     // --- Load per-face images and parse watches ---
     const parsedWatches: Watch[] = [];
@@ -221,6 +214,22 @@ async function main() {
 
     // --- Time controller ---
     const timeController = new TimeController();
+
+    // Restore time state from URL
+    if (urlState.t !== null && !isNaN(urlState.t)) {
+        timeController.setTime(new Date(urlState.t));
+        if (urlState.dir === 1) {
+            // Resume forward at 1×
+            timeController.setDirection(1);
+            timeController.setRate(null);
+        } else if (urlState.dir === -1) {
+            // Resume reverse at 1×
+            timeController.setDirection(-1);
+            timeController.setRate(null);
+        }
+        // dir === 0 stays stopped (setTime already stops)
+    }
+
     const getNow = () => timeController.getDisplayTime();
 
     // --- Build the DOM: one cell + canvas per face ---
@@ -823,16 +832,13 @@ async function main() {
     resizeObserver.observe(grid.parentElement!);
 
     // =========================================================================
-    // Location change
+    // Location change / prompt
     // =========================================================================
-
-    function showResetIfSaved() {
-        resetLink.style.display = loadStoredLocation() ? 'inline' : 'none';
-    }
-    showResetIfSaved();
 
     function rebuildAllForLocation(newLat: number, newLon: number) {
         stopScheduler();
+        lat = newLat;
+        lon = newLon;
         for (const face of faces) {
             const fd = faceDataArray[face.faceDataIndex];
             const freshWatch = parseWatchXML(fd.xml, 'front');
@@ -841,29 +847,94 @@ async function main() {
             face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow);
             face.cachesBuilt = false;
         }
+        updateLocationDisplay();
         buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
     }
 
-    function onLocationChange() {
-        const newLat = parseFloat(latInput.value);
-        const newLon = parseFloat(lonInput.value);
-        if (isNaN(newLat) || isNaN(newLon)) return;
-        saveStoredLocation(newLat, newLon);
-        sourceLabel.textContent = '(saved)';
-        showResetIfSaved();
-        rebuildAllForLocation(newLat, newLon);
+    function showLocationPrompt(blur: boolean) {
+        locationPrompt.style.display = '';
+        if (blur) grid.classList.add('blurred');
+        // Pre-fill with current values (always, for manual invocation)
+        lpLatInput.value = (lat !== 0 || lon !== 0) ? lat.toFixed(3) : '';
+        lpLonInput.value = (lat !== 0 || lon !== 0) ? lon.toFixed(3) : '';
+
+        // Configure browser location button based on permission state
+        const btn = lpUseBrowser as HTMLButtonElement;
+        const isFileUrl = window.location.protocol === 'file:';
+        const deniedTooltip = isFileUrl
+            ? 'Not all browsers support location access from file:// URLs'
+            : 'Browser location was not granted — check your browser settings to allow it';
+
+        if (geoPermission === 'granted') {
+            btn.disabled = false;
+            delete btn.dataset.tooltip;
+            btn.textContent = 'Use browser location';
+        } else {
+            btn.disabled = true;
+            btn.dataset.tooltip = deniedTooltip;
+            btn.textContent = 'Use browser location (unavailable)';
+        }
+
+        // Disable "Use this location" until inputs have valid numbers
+        const coordsBtn = lpUseCoords as HTMLButtonElement;
+        function validateCoordInputs() {
+            const validLat = !isNaN(parseFloat(lpLatInput.value));
+            const validLon = !isNaN(parseFloat(lpLonInput.value));
+            coordsBtn.disabled = !(validLat && validLon);
+        }
+        validateCoordInputs();
+        lpLatInput.oninput = validateCoordInputs;
+        lpLonInput.oninput = validateCoordInputs;
     }
 
-    latInput.addEventListener('change', onLocationChange);
-    lonInput.addEventListener('change', onLocationChange);
+    function dismissLocationPrompt() {
+        locationPrompt.style.display = 'none';
+        grid.classList.remove('blurred');
+    }
 
-    resetLink.addEventListener('click', () => {
-        try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
-        latInput.value = DEFAULT_LAT.toFixed(3);
-        lonInput.value = DEFAULT_LON.toFixed(3);
-        sourceLabel.textContent = "(Steve's house)";
-        resetLink.style.display = 'none';
-        rebuildAllForLocation(DEFAULT_LAT, DEFAULT_LON);
+    function applyLocation(newLat: number, newLon: number, source: string, writeToUrl: boolean) {
+        locationSource = source;
+        dismissLocationPrompt();
+        rebuildAllForLocation(newLat, newLon);
+        if (writeToUrl) {
+            writeUrlState({ lat: newLat, lon: newLon });
+        }
+    }
+
+    // "Use this location" button in prompt
+    lpUseCoords.addEventListener('click', () => {
+        const newLat = parseFloat(lpLatInput.value);
+        const newLon = parseFloat(lpLonInput.value);
+        if (isNaN(newLat) || isNaN(newLon)) return;
+        applyLocation(newLat, newLon, '', true);
+    });
+
+    // "Use browser location" button in prompt
+    lpUseBrowser.addEventListener('click', async () => {
+        lpUseBrowser.textContent = 'Requesting…';
+        const loc = await requestBrowserLocation();
+        lpUseBrowser.textContent = 'Use browser location';
+        if (loc) {
+            applyLocation(loc.lat, loc.lon, '(from browser)', false);
+        }
+    });
+
+    // "Demo — Cupertino" button in prompt
+    lpUseDemo.addEventListener('click', () => {
+        applyLocation(DEMO_LAT, DEMO_LON, '(Cupertino, CA)', true);
+    });
+
+    // "Set location" button on the location bar
+    setLocationBtn.addEventListener('click', () => {
+        showLocationPrompt(false);  // no blur when opened manually
+    });
+
+    // Close prompt when clicking backdrop
+    locationPrompt.querySelector('.lp-backdrop')!.addEventListener('click', () => {
+        // Only allow closing if we have a real location (not 0,0 from startup)
+        if (!needsPrompt || (lat !== 0 || lon !== 0)) {
+            dismissLocationPrompt();
+        }
     });
 
     // =========================================================================
@@ -934,6 +1005,7 @@ async function main() {
                 resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
+                writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: -1 });
             });
 
             const fwdBtn = document.createElement('button');
@@ -946,6 +1018,7 @@ async function main() {
                 resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
+                writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 1 });
             });
 
             tpTransport.appendChild(revBtn);
@@ -961,6 +1034,7 @@ async function main() {
                 finishAllAnimations();
                 updateTimeUI();
                 ensureSchedulerRunning();
+                writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 0 });
             });
             tpTransport.appendChild(pauseBtn);
         }
@@ -1081,6 +1155,7 @@ async function main() {
         timeBarLabel.textContent = '⏱ Hide time controller';
         timeBarLabel.classList.add('active');
         updateTimeUI();
+        writeUrlState({ tc: true });
         // Re-layout to shrink faces if popover overlaps
         if (lastContainerW > 0) {
             onGridResize(lastContainerW, lastContainerH);
@@ -1093,6 +1168,7 @@ async function main() {
         timeBarLabel.textContent = '⏱ Show time controller';
         timeBarLabel.classList.remove('active');
         updateTimeUI();
+        writeUrlState({ tc: false });
         // Re-layout to restore full-size faces
         if (lastContainerW > 0) {
             onGridResize(lastContainerW, lastContainerH);
@@ -1154,6 +1230,7 @@ async function main() {
         updateTimeUI();
         stopScheduler();
         startScheduler();
+        writeUrlState({ t: null, dir: 1 });
     }
 
     // --- "Now" reset button (time-bar version) ---
@@ -1196,6 +1273,11 @@ async function main() {
             finishAllAnimations();
             updateTimeUI();
             ensureSchedulerRunning();
+            // Write time state to URL on button release
+            writeUrlState({
+                t: timeController.getDisplayTime().getTime(),
+                dir: 0,
+            });
         }
     }
 
@@ -1237,6 +1319,11 @@ async function main() {
         el.addEventListener('mouseup', (e) => {
             e.stopPropagation();
             endHold();
+            // Write current time state after step tap or hold release
+            writeUrlState({
+                t: timeController.getDisplayTime().getTime(),
+                dir: timeController.isStopped ? 0 : timeController.currentDirection,
+            });
         });
 
         el.addEventListener('mouseleave', () => {
@@ -1271,6 +1358,11 @@ async function main() {
         el.addEventListener('touchend', (e) => {
             e.stopPropagation();
             endHold();
+            // Write current time state after step tap or hold release
+            writeUrlState({
+                t: timeController.getDisplayTime().getTime(),
+                dir: timeController.isStopped ? 0 : timeController.currentDirection,
+            });
         });
 
         el.addEventListener('touchcancel', () => {
@@ -1291,6 +1383,28 @@ async function main() {
         timeController.setTime(d);
         updateTimeUI();
         ensureSchedulerRunning();
+        writeUrlState({
+            t: d.getTime(),
+            dir: 0,
+        });
+    });
+
+    // Auto-apply when any date/time input changes (not just via Apply button)
+    ['tp-year', 'tp-month', 'tp-day', 'tp-hour', 'tp-minute'].forEach(id => {
+        document.getElementById(id)!.addEventListener('change', () => {
+            // Trigger the same logic as the Apply button
+            const yr = parseInt((document.getElementById('tp-year') as HTMLInputElement).value, 10);
+            const mo = parseInt((document.getElementById('tp-month') as HTMLInputElement).value, 10) - 1;
+            const dy = parseInt((document.getElementById('tp-day') as HTMLInputElement).value, 10);
+            const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
+            const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
+            if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+            const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+            timeController.setTime(d);
+            updateTimeUI();
+            ensureSchedulerRunning();
+            writeUrlState({ t: d.getTime(), dir: 0 });
+        });
     });
 
     // --- Close button in popover ---
@@ -1316,12 +1430,32 @@ async function main() {
     }
     tickTimeBarClock();
 
+    // Periodic URL time capture — every 60s when running at 1× or -1×
+    setInterval(() => {
+        if (!timeController.isRealTime && !timeController.isStopped && timeController.currentRate === null) {
+            writeUrlState({
+                t: timeController.getDisplayTime().getTime(),
+                dir: timeController.currentDirection,
+            });
+        }
+    }, 60_000);
+
     // =========================================================================
     // Initial build
     // =========================================================================
     const initialRect = grid.getBoundingClientRect();
     if (initialRect.width > 0 && initialRect.height > 0) {
         onGridResize(initialRect.width, initialRect.height);
+    }
+
+    // Show time controller if URL says so
+    if (urlState.tc) {
+        showPopover();
+    }
+
+    // Show location prompt if no location was available
+    if (needsPrompt) {
+        showLocationPrompt(true);  // with blur
     }
 }
 

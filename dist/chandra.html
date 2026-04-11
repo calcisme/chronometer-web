@@ -47,7 +47,7 @@
             display: block;
         }
 
-        /* Location controls strip at the bottom */
+        /* Location display strip at the bottom */
         #location-panel {
             flex: 0 0 auto;
             display: flex;
@@ -58,10 +58,74 @@
             font-size: 13px;
             border-top: 1px solid #2a2a3e;
         }
-        #location-panel label { color: #888; }
-        #location-panel input {
-            width: 80px;
-            padding: 3px 6px;
+        #location-display { color: #888; }
+        #location-source { color: #666; font-style: italic; }
+        #set-location-btn {
+            background: #2a2a3e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #aac;
+            font-size: 12px;
+            padding: 2px 10px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #set-location-btn:hover { background: #3a3a5e; color: #ddf; }
+
+        /* Grid blur when location prompt is up */
+        #watch-grid.blurred { filter: blur(8px); pointer-events: none; }
+
+        /* Location prompt overlay */
+        #location-prompt {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #location-prompt .lp-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+        }
+        #location-prompt .lp-dialog {
+            position: relative;
+            background: rgba(26, 26, 46, 0.98);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid #3a3a5e;
+            border-radius: 14px;
+            padding: 28px 32px;
+            min-width: 300px;
+            max-width: 400px;
+            box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+            text-align: center;
+        }
+        #location-prompt .lp-title {
+            font-size: 16px;
+            color: #e0d8c8;
+            margin: 0 0 6px;
+            font-weight: 400;
+        }
+        #location-prompt .lp-subtitle {
+            font-size: 13px;
+            color: #776;
+            margin: 0 0 20px;
+        }
+        #location-prompt .lp-inputs {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        #location-prompt .lp-inputs label {
+            color: #888;
+            font-size: 13px;
+        }
+        #location-prompt .lp-inputs input {
+            width: 90px;
+            padding: 4px 6px;
             border: 1px solid #444;
             border-radius: 4px;
             background: #2a2a3e;
@@ -69,14 +133,56 @@
             font-size: 13px;
             font-family: monospace;
         }
-        #location-source { color: #666; font-style: italic; }
-        #reset-location {
-            color: #557;
-            cursor: pointer;
-            text-decoration: underline;
-            font-size: 12px;
+        #location-prompt .lp-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
-        #reset-location:hover { color: #88a; }
+        #location-prompt .lp-btn {
+            background: #2a2a4e;
+            border: 1px solid #3a3a5e;
+            border-radius: 6px;
+            color: #aac;
+            font-size: 13px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #location-prompt .lp-btn:hover { background: #3a3a6e; color: #ddf; }
+        #location-prompt .lp-btn.primary {
+            background: #3a3a6e;
+            border-color: #5566aa;
+            color: #ddf;
+        }
+        #location-prompt .lp-btn.primary:hover { background: #4a4a8e; }
+        #location-prompt .lp-btn:disabled {
+            background: #2a2a3e !important;
+            border-color: #333 !important;
+            color: #556 !important;
+            cursor: not-allowed;
+        }
+        #location-prompt .lp-btn:disabled:hover {
+            background: #2a2a3e !important;
+            color: #556 !important;
+        }
+        /* Instant tooltip on disabled buttons */
+        #location-prompt .lp-btn[data-tooltip] { position: relative; }
+        #location-prompt .lp-btn:disabled[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #111122;
+            border: 1px solid #3a3a5e;
+            border-radius: 4px;
+            padding: 5px 12px;
+            font-size: 11px;
+            color: #aa9;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 10;
+        }
         #back-link {
             position: absolute;
             top: 28px;
@@ -281,10 +387,27 @@
             <button class="time-bar-btn" id="time-bar-now">Now</button>
         </div>
         <div id="location-panel">
-            <label>Lat: <input id="lat-input" type="text"></label>
-            <label>Lon: <input id="lon-input" type="text"></label>
+            <span id="location-display"></span>
             <span id="location-source"></span>
-            <a id="reset-location" style="display:none">reset</a>
+            <button id="set-location-btn">Set location</button>
+        </div>
+
+        <!-- Location prompt overlay (hidden by default) -->
+        <div id="location-prompt" style="display:none">
+            <div class="lp-backdrop"></div>
+            <div class="lp-dialog">
+                <h3 class="lp-title">Set Location</h3>
+                <p class="lp-subtitle">Enter coordinates or use one of the options below</p>
+                <div class="lp-inputs">
+                    <label>Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"></label>
+                    <label>Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"></label>
+                </div>
+                <div class="lp-buttons">
+                    <button class="lp-btn primary" id="lp-use-coords">Use location above</button>
+                    <button class="lp-btn" id="lp-use-browser">Use browser location</button>
+                    <button class="lp-btn" id="lp-use-demo">Demo — Cupertino, CA</button>
+                </div>
+            </div>
         </div>
 
         <!-- Time controller popover -->
@@ -333,16 +456,6 @@
     </div>
         <script src="chronometer-engine.js"></script>
     <script src="face-chandra.js"></script>
-    <script>
-        // Pass along query parameters (like ?lat=...&lon=...) when going back home
-        if (window.location.search) {
-            const backLink = document.getElementById('back-link');
-            if (backLink) {
-                const url = new URL(backLink.href, window.location.href);
-                url.search = window.location.search;
-                backLink.href = url.toString();
-            }
-        }
-    </script>
+    <!-- Link preservation now handled by url-state.ts via initNavigationLinks() -->
 </body>
 </html>
