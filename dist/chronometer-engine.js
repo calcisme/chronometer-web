@@ -13784,8 +13784,6 @@
   }
 
   // src/engine-entry.ts
-  var DEMO_LAT = 37.3349;
-  var DEMO_LON = -122.009;
   function requestBrowserLocation() {
     if (!navigator.geolocation) return Promise.resolve(null);
     return new Promise((resolve) => {
@@ -13845,7 +13843,6 @@
     const lpLonInput = document.getElementById("lp-lon");
     const lpUseCoords = document.getElementById("lp-use-coords");
     const lpUseBrowser = document.getElementById("lp-use-browser");
-    const lpUseDemo = document.getElementById("lp-use-demo");
     const lpCityInput = document.getElementById("lp-city-input");
     const lpCityResults = document.getElementById("lp-city-results");
     initNavigationLinks();
@@ -14372,6 +14369,7 @@
       if (lpCityResults) {
         lpCityResults.innerHTML = "";
       }
+      setTimeout(() => lpCityInput?.focus(), 50);
       const btn = lpUseBrowser;
       const isFileUrl = window.location.protocol === "file:";
       const deniedTooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
@@ -14419,9 +14417,6 @@
       if (loc) {
         applyLocation(loc.lat, loc.lon, "(from browser)", false);
       }
-    });
-    lpUseDemo.addEventListener("click", () => {
-      applyLocation(DEMO_LAT, DEMO_LON, "(Cupertino, CA)", true);
     });
     setLocationBtn.addEventListener("click", () => {
       showLocationPrompt(false);

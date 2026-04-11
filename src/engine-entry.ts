@@ -154,7 +154,7 @@ async function main() {
     const lpLonInput = document.getElementById('lp-lon') as HTMLInputElement;
     const lpUseCoords = document.getElementById('lp-use-coords')!;
     const lpUseBrowser = document.getElementById('lp-use-browser')!;
-    const lpUseDemo = document.getElementById('lp-use-demo')!;
+
     const lpCityInput = document.getElementById('lp-city-input') as HTMLInputElement;
     const lpCityResults = document.getElementById('lp-city-results')!;
 
@@ -867,9 +867,11 @@ async function main() {
         // Pre-fill with current values (always, for manual invocation)
         lpLatInput.value = (lat !== 0 || lon !== 0) ? lat.toFixed(3) : '';
         lpLonInput.value = (lat !== 0 || lon !== 0) ? lon.toFixed(3) : '';
-        // Clear city search
+        // Clear city search and autofocus
         if (lpCityInput) { lpCityInput.value = ''; }
         if (lpCityResults) { lpCityResults.innerHTML = ''; }
+        // Autofocus the search input after dialog renders
+        setTimeout(() => lpCityInput?.focus(), 50);
 
         // Configure browser location button based on permission state
         const btn = lpUseBrowser as HTMLButtonElement;
@@ -930,11 +932,6 @@ async function main() {
         if (loc) {
             applyLocation(loc.lat, loc.lon, '(from browser)', false);
         }
-    });
-
-    // "Demo — Cupertino" button in prompt
-    lpUseDemo.addEventListener('click', () => {
-        applyLocation(DEMO_LAT, DEMO_LON, '(Cupertino, CA)', true);
     });
 
     // "Set location" button on the location bar

@@ -235,6 +235,10 @@
 
         /* City search */
         #location-prompt .lp-search-section {
+            margin-bottom: 12px;
+        }
+
+        #location-prompt .lp-manual-section {
             margin-top: 12px;
             border-top: 1px solid #2a2a3e;
             padding-top: 10px;
@@ -250,18 +254,37 @@
 
         #lp-city-input {
             width: 100%;
-            padding: 6px 10px;
-            background: #1a1a2e;
-            border: 1px solid #3a3a5e;
-            border-radius: 4px;
-            color: #ddd;
+            padding: 10px 12px 10px 36px;
+            background: #222240;
+            border: 1px solid #4a4a6e;
+            border-radius: 8px;
+            color: #eee;
             font-size: 16px;
             outline: none;
             box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
         }
 
         #lp-city-input:focus {
-            border-color: #5566aa;
+            border-color: #6677bb;
+            box-shadow: 0 0 0 2px rgba(102, 119, 187, 0.25);
+        }
+
+        .lp-search-input-wrap {
+            position: relative;
+        }
+
+        .lp-search-input-wrap::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23778' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E") center/contain no-repeat;
+            pointer-events: none;
+            z-index: 1;
         }
 
         #lp-city-input::placeholder {
@@ -611,20 +634,24 @@
             <div class="lp-backdrop"></div>
             <div class="lp-dialog">
                 <h3 class="lp-title">Set Location</h3>
-                <p class="lp-subtitle">Enter coordinates or use one of the options below</p>
-                <div class="lp-inputs">
-                    <label>Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"></label>
-                    <label>Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"></label>
+                <div class="lp-search-section">
+                    <div class="lp-search-input-wrap">
+                        <input type="text" id="lp-city-input" placeholder="Search city or airport code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <div id="lp-city-results"></div>
                 </div>
                 <div class="lp-buttons">
-                    <button class="lp-btn" id="lp-use-coords">Use location above</button>
                     <button class="lp-btn" id="lp-use-browser">Use browser location</button>
-                    <button class="lp-btn" id="lp-use-demo">Demo — Cupertino, CA</button>
                 </div>
-                <div class="lp-search-section">
-                    <div class="lp-search-label">Search by city or airport</div>
-                    <input type="text" id="lp-city-input" placeholder="Type a city name or airport code…" autocomplete="off" autocorrect="off" spellcheck="false">
-                    <div id="lp-city-results"></div>
+                <div class="lp-manual-section">
+                    <div class="lp-search-label">Manual coordinates</div>
+                    <div class="lp-inputs">
+                        <label>Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"></label>
+                        <label>Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"></label>
+                    </div>
+                    <div class="lp-buttons">
+                        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
+                    </div>
                 </div>
             </div>
         </div>
