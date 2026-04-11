@@ -36,6 +36,7 @@ import type { TimeUnit } from './time-controller.js';
 import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js';
 import { loadCityData, searchCities, isCityDataLoaded, loadError } from './city-search.js';
 import type { CityResult } from './city-search.js';
+import { renderGlobe, loadOSMTile } from './mini-map.js';
 
 // ============================================================================
 // Location helpers
@@ -157,6 +158,13 @@ async function main() {
 
     const lpCityInput = document.getElementById('lp-city-input') as HTMLInputElement;
     const lpCityResults = document.getElementById('lp-city-results')!;
+    const lpGlobe = document.getElementById('lp-globe') as HTMLCanvasElement;
+    const lpOsmContainer = document.getElementById('lp-osm-container')!;
+    const lpOsmTile = document.getElementById('lp-osm-tile') as HTMLImageElement;
+    const lpMapMarker = document.getElementById('lp-map-marker')!;
+    const lpOsmOffline = document.getElementById('lp-osm-offline')!;
+    const lpMapLabel = document.getElementById('lp-map-label')!;
+    const lpDoneBtn = document.getElementById('lp-done')!;
 
     // Initialize link preservation
     initNavigationLinks();
@@ -873,6 +881,14 @@ async function main() {
         // Autofocus the search input after dialog renders
         setTimeout(() => lpCityInput?.focus(), 50);
 
+        // Show map for current location
+        if (lat !== 0 || lon !== 0) {
+            updateMapPreview(lat, lon, locationSource || `${lat.toFixed(3)}, ${lon.toFixed(3)}`);
+        }
+
+        // Show Done button when user can dismiss (has a real location)
+        lpDoneBtn.style.display = (!needsPrompt || (lat !== 0 || lon !== 0)) ? '' : 'none';
+
         // Configure browser location button based on permission state
         const btn = lpUseBrowser as HTMLButtonElement;
         const isFileUrl = window.location.protocol === 'file:';
@@ -907,12 +923,30 @@ async function main() {
         grid.classList.remove('blurred');
     }
 
+    /** Update the map preview in the dialog to show the given location. */
+    function updateMapPreview(mapLat: number, mapLon: number, label: string) {
+        // Globe always renders
+        renderGlobe(lpGlobe, mapLat, mapLon);
+        // OSM tile — best-effort
+        lpOsmOffline.style.display = 'none';
+        loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then(ok => {
+            lpOsmOffline.style.display = ok ? 'none' : '';
+        });
+        lpMapLabel.textContent = label;
+    }
+
+    /** Apply location to the watch AND update the map preview (dialog stays open). */
     function applyLocation(newLat: number, newLon: number, source: string, writeToUrl: boolean) {
         locationSource = source;
-        dismissLocationPrompt();
         rebuildAllForLocation(newLat, newLon);
         if (writeToUrl) {
             writeUrlState({ lat: newLat, lon: newLon });
+        }
+        // Update the map preview if the dialog is still open
+        if (locationPrompt.style.display !== 'none') {
+            updateMapPreview(newLat, newLon, source);
+            // Now that user has a location, show Done button
+            lpDoneBtn.style.display = '';
         }
     }
 
@@ -947,6 +981,20 @@ async function main() {
         }
     });
 
+    // Close prompt with Escape key (same condition as backdrop)
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && locationPrompt.style.display !== 'none') {
+            if (!needsPrompt || (lat !== 0 || lon !== 0)) {
+                dismissLocationPrompt();
+            }
+        }
+    });
+
+    // "Done" button in map footer
+    lpDoneBtn.addEventListener('click', () => {
+        dismissLocationPrompt();
+    });
+
     // =========================================================================
     // City search autocomplete
     // =========================================================================
@@ -973,6 +1021,9 @@ async function main() {
                 applyLocation(r.lat, r.lon, `(${r.shortLabel})`, true);
                 lpCityInput.value = '';
                 lpCityResults.innerHTML = '';
+                // Update lat/lon inputs to reflect selection
+                lpLatInput.value = r.lat.toFixed(3);
+                lpLonInput.value = r.lon.toFixed(3);
             });
             lpCityResults.appendChild(div);
         }
