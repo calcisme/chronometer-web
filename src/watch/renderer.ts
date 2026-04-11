@@ -1506,7 +1506,10 @@ function drawImageHand(
         ? part.dynamicState.currentAngle
         : evalAttr(part.angle, env);
     const offsetRadius = evalAttr(part.offsetRadius, env);
-    const offsetAngle = evalAttr(part.offsetAngle, env);
+    // Use pre-computed animated offsetAngle if available (keeps in sync with animated angle)
+    const offsetAngle = (part.dynamicState && part.dynamicState.currentOffsetAngle !== undefined)
+        ? part.dynamicState.currentOffsetAngle
+        : evalAttr(part.offsetAngle, env);
 
     const { bitmap, scale: imgScale } = loaded;
     const drawW = bitmap.width * imgScale;

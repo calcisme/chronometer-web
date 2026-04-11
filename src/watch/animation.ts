@@ -73,6 +73,8 @@ export interface HandState {
     part: QHandPart | WheelPart;
     /** The angle being animated. */
     angle: AnimatingValue;
+    /** The offsetAngle being animated (only for offset-orbit hands like Moon). */
+    offsetAngle: AnimatingValue | null;
     /** Update interval in milliseconds. */
     updateIntervalMs: number;
     /** Next time to re-evaluate the expression (performance.now()). */
@@ -134,7 +136,13 @@ function createHandState(
 
     // Evaluate initial angle and write to part's dynamicState
     const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
-    part.dynamicState = { currentAngle: initialAngle };
+    // Evaluate initial offsetAngle if present (e.g. Moon orbit position)
+    const hasOffsetAngle = part.type === 'QHand' && part.offsetAngle;
+    const initialOffsetAngle = hasOffsetAngle ? evalAttr((part as QHandPart).offsetAngle!, env) : 0;
+    part.dynamicState = {
+        currentAngle: initialAngle,
+        ...(hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}),
+    };
 
     return {
         part,
@@ -145,6 +153,13 @@ function createHandState(
             animationStopTime: now,
             animating: false,
         },
+        offsetAngle: hasOffsetAngle ? {
+            currentValue: initialOffsetAngle,
+            targetValue: initialOffsetAngle,
+            lastAnimationTime: now,
+            animationStopTime: now,
+            animating: false,
+        } : null,
         updateIntervalMs,
         nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
         animSpeed,
@@ -183,6 +198,11 @@ export function tickAnimations(
                 ? evalAttr(state.part.angle, env)
                 : 0;
 
+            // Also evaluate offsetAngle if this hand has one
+            const newOffsetTarget = state.offsetAngle && state.part.type === 'QHand' && (state.part as QHandPart).offsetAngle
+                ? evalAttr((state.part as QHandPart).offsetAngle!, env)
+                : null;
+
             if (tickIntervalMs !== null && tickIntervalMs > 0) {
                 // --- Quantized mode ---
 
@@ -209,9 +229,15 @@ export function tickAnimations(
                     // Animation wouldn't finish before next re-eval:
                     // compress to fit within the available time
                     startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+                    if (newOffsetTarget !== null && state.offsetAngle) {
+                        startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
+                    }
                 } else {
                     // Animation finishes in time: use normal speed
                     startAnimation(state, newTarget, now);
+                    if (newOffsetTarget !== null && state.offsetAngle) {
+                        startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
+                    }
                 }
 
                 // Schedule next re-evaluation
@@ -219,6 +245,9 @@ export function tickAnimations(
             } else {
                 // --- 1× mode (normal) ---
                 startAnimation(state, newTarget, now);
+                if (newOffsetTarget !== null && state.offsetAngle) {
+                    startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
+                }
                 state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
             }
         }
@@ -231,6 +260,14 @@ export function tickAnimations(
             state.part.dynamicState = { currentAngle: angle };
         } else {
             state.part.dynamicState.currentAngle = angle;
+        }
+
+        // Interpolate offsetAngle if present
+        if (state.offsetAngle) {
+            const oa = interpolateRaw(state.offsetAngle, now);
+            if (state.part.dynamicState) {
+                state.part.dynamicState.currentOffsetAngle = oa;
+            }
         }
     }
 }
@@ -258,6 +295,7 @@ export function nextWakeupTime(states: HandState[]): number {
 export function anyAnimating(states: HandState[]): boolean {
     for (const s of states) {
         if (s.angle.animating) return true;
+        if (s.offsetAngle && s.offsetAngle.animating) return true;
     }
     return false;
 }
@@ -275,6 +313,13 @@ export function finishAnimations(states: HandState[]): void {
             val.animating = false;
             if (s.part.dynamicState) {
                 s.part.dynamicState.currentAngle = val.currentValue;
+            }
+        }
+        if (s.offsetAngle && s.offsetAngle.animating) {
+            s.offsetAngle.currentValue = fmod(s.offsetAngle.targetValue, 2 * Math.PI);
+            s.offsetAngle.animating = false;
+            if (s.part.dynamicState) {
+                s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
             }
         }
         // Prevent the scheduler from re-evaluating while stopped

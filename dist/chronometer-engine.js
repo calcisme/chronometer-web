@@ -1344,7 +1344,12 @@
     const updateIntervalMs = updateIntervalSec * 1e3;
     const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
     const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
-    part.dynamicState = { currentAngle: initialAngle };
+    const hasOffsetAngle = part.type === "QHand" && part.offsetAngle;
+    const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle, env) : 0;
+    part.dynamicState = {
+      currentAngle: initialAngle,
+      ...hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}
+    };
     return {
       part,
       angle: {
@@ -1354,6 +1359,13 @@
         animationStopTime: now,
         animating: false
       },
+      offsetAngle: hasOffsetAngle ? {
+        currentValue: initialOffsetAngle,
+        targetValue: initialOffsetAngle,
+        lastAnimationTime: now,
+        animationStopTime: now,
+        animating: false
+      } : null,
       updateIntervalMs,
       nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
       animSpeed,
@@ -1364,6 +1376,7 @@
     for (const state of states) {
       if (now >= state.nextUpdateTime) {
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
+        const newOffsetTarget = state.offsetAngle && state.part.type === "QHand" && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
           let ticksUntilUpdate = 1;
           if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
@@ -1379,12 +1392,21 @@
           const normalDurationMs = animateSpeed > 0 ? delta / animateSpeed * 1e3 : 0;
           if (normalDurationMs > timeUntilNextUpdateMs) {
             startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+            if (newOffsetTarget !== null && state.offsetAngle) {
+              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
+            }
           } else {
             startAnimation(state, newTarget, now);
+            if (newOffsetTarget !== null && state.offsetAngle) {
+              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
+            }
           }
           state.nextUpdateTime = now + timeUntilNextUpdateMs;
         } else {
           startAnimation(state, newTarget, now);
+          if (newOffsetTarget !== null && state.offsetAngle) {
+            startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
+          }
           state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
         }
       }
@@ -1393,6 +1415,12 @@
         state.part.dynamicState = { currentAngle: angle };
       } else {
         state.part.dynamicState.currentAngle = angle;
+      }
+      if (state.offsetAngle) {
+        const oa = interpolateRaw(state.offsetAngle, now);
+        if (state.part.dynamicState) {
+          state.part.dynamicState.currentOffsetAngle = oa;
+        }
       }
     }
   }
@@ -1406,6 +1434,7 @@
   function anyAnimating(states) {
     for (const s of states) {
       if (s.angle.animating) return true;
+      if (s.offsetAngle && s.offsetAngle.animating) return true;
     }
     return false;
   }
@@ -1417,6 +1446,13 @@
         val.animating = false;
         if (s.part.dynamicState) {
           s.part.dynamicState.currentAngle = val.currentValue;
+        }
+      }
+      if (s.offsetAngle && s.offsetAngle.animating) {
+        s.offsetAngle.currentValue = fmod2(s.offsetAngle.targetValue, 2 * Math.PI);
+        s.offsetAngle.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
         }
       }
       s.nextUpdateTime = Infinity;
@@ -12918,7 +12954,7 @@
     const y = -evalAttr(part.y, env);
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
     const offsetRadius = evalAttr(part.offsetRadius, env);
-    const offsetAngle = evalAttr(part.offsetAngle, env);
+    const offsetAngle = part.dynamicState && part.dynamicState.currentOffsetAngle !== void 0 ? part.dynamicState.currentOffsetAngle : evalAttr(part.offsetAngle, env);
     const { bitmap, scale: imgScale } = loaded;
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;

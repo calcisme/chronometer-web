@@ -56,6 +56,8 @@ export type WatchPart =
 export interface DynamicState {
     /** Current interpolated angle (radians), set by the animation system. */
     currentAngle: number;
+    /** Current interpolated offsetAngle (radians), for offset-orbit hands like the Moon. */
+    currentOffsetAngle?: number;
     // Future: currentX, currentY for linear animation
 }
 
