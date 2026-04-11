@@ -473,6 +473,7 @@ async function main() {
     let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     let lastContainerW = 0;
     let lastContainerH = 0;
+    let wasShifted = false;  // tracks if face is currently in a popover-dodged position
 
     /**
      * Compute face center positions (relative to the grid container)
@@ -625,7 +626,6 @@ async function main() {
                 // Use max(W,H) as upper bound since hex packing allows
                 // larger faces than optimizeGrid's uniform-spacing estimate.
                 let lo = 0, hi = Math.max(W, H);
-                let bestCols = result.cols;
 
                 for (let iter = 0; iter < 25; iter++) {
                     const mid = Math.floor((lo + hi) / 2);
@@ -720,7 +720,10 @@ async function main() {
 
         const dpr = window.devicePixelRatio || 1;
         const newPhys = Math.round(size * dpr);
-        if (newPhys === faces[0]?.canvas.width) return;
+        // Skip if size hasn't changed AND layout position hasn't changed
+        const positionChanged = useTopLeftAlign !== wasShifted;
+        if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
+        wasShifted = useTopLeftAlign;
 
         stopScheduler();
 
@@ -1156,10 +1159,13 @@ async function main() {
         timeBarLabel.classList.add('active');
         updateTimeUI();
         writeUrlState({ tc: true });
-        // Re-layout to shrink faces if popover overlaps
-        if (lastContainerW > 0) {
-            onGridResize(lastContainerW, lastContainerH);
-        }
+        // Defer resize to next frame so the popover has been laid out
+        // (getBoundingClientRect needs the element to be rendered first)
+        requestAnimationFrame(() => {
+            if (lastContainerW > 0) {
+                onGridResize(lastContainerW, lastContainerH);
+            }
+        });
     }
 
     function hidePopover() {

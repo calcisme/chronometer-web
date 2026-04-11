@@ -13881,6 +13881,7 @@
     let resizeDebounceTimer = null;
     let lastContainerW = 0;
     let lastContainerH = 0;
+    let wasShifted = false;
     function computeFaceCenters(nFaces, gridCols, gridRows, size, containerW, containerH, offsetAdjustX = 0, offsetAdjustY = 0) {
       const cellStep = size + GAP_PX;
       const remainder = nFaces - gridCols * (gridRows - 1);
@@ -13984,7 +13985,6 @@
         );
         if (anyFaceOverlapsRect(centers, size / 2, pLeft, pTop, pRight, pBottom)) {
           let lo = 0, hi = Math.max(W, H);
-          let bestCols = result.cols;
           for (let iter = 0; iter < 25; iter++) {
             const mid = Math.floor((lo + hi) / 2);
             if (mid <= 0) break;
@@ -14063,7 +14063,9 @@
       }
       const dpr = window.devicePixelRatio || 1;
       const newPhys = Math.round(size * dpr);
-      if (newPhys === faces[0]?.canvas.width) return;
+      const positionChanged = useTopLeftAlign !== wasShifted;
+      if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
+      wasShifted = useTopLeftAlign;
       stopScheduler();
       cols = result.cols;
       rows = result.rows;
@@ -14406,9 +14408,11 @@
       timeBarLabel.classList.add("active");
       updateTimeUI();
       writeUrlState({ tc: true });
-      if (lastContainerW > 0) {
-        onGridResize(lastContainerW, lastContainerH);
-      }
+      requestAnimationFrame(() => {
+        if (lastContainerW > 0) {
+          onGridResize(lastContainerW, lastContainerH);
+        }
+      });
     }
     function hidePopover() {
       popoverOpen = false;
