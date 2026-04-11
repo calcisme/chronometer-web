@@ -13305,6 +13305,10 @@
     get isStopped() {
       return this.stopped;
     }
+    /** Millisecond offset from real time (used in 1× mode). */
+    get timeOffset() {
+      return this.offsetMs;
+    }
     /** Human-readable status label */
     get statusLabel() {
       if (this.stopped) return "Stopped";
@@ -13401,8 +13405,8 @@
      * When activating a quantized rate, snaps time to the unit boundary.
      */
     setRate(rate) {
-      this.stopped = false;
       const prevTime = this.getDisplayTime();
+      this.stopped = false;
       if (rate === null) {
         this.rate = null;
         this.offsetMs = prevTime.getTime() - Date.now();
@@ -13479,6 +13483,17 @@
       this.lastTickRealMs = 0;
       this.onTick?.();
     }
+    /** Set millisecond offset from real time, running 1× forward. */
+    setOffset(ms) {
+      this.offsetMs = ms;
+      this.rate = null;
+      this.direction = 1;
+      this.stopped = false;
+      this.tickTime = new Date(Date.now() + ms);
+      this.nextTickTime = new Date(Date.now() + ms);
+      this.lastTickRealMs = 0;
+      this.onTick?.();
+    }
     _setupReverseOneX(prevTime) {
       if (this.direction === -1) {
         this.reverseAnchorRealMs = Date.now();
@@ -13499,6 +13514,7 @@
     const lon = lonStr !== null ? parseFloat(lonStr) : NaN;
     const tcStr = params.get("tc");
     const tStr = params.get("t");
+    const offStr = params.get("off");
     const dirStr = params.get("dir");
     let dir = 1;
     if (dirStr === "-1") dir = -1;
@@ -13508,6 +13524,7 @@
       lon: !isNaN(lon) ? lon : null,
       tc: tcStr === "1",
       t: tStr !== null ? parseInt(tStr, 10) : null,
+      off: offStr !== null ? parseInt(offStr, 10) : null,
       dir
     };
   }
@@ -13539,6 +13556,13 @@
         params.set("t", changes.t.toString());
       } else {
         params.delete("t");
+      }
+    }
+    if ("off" in changes) {
+      if (changes.off !== null && changes.off !== void 0) {
+        params.set("off", changes.off.toString());
+      } else {
+        params.delete("off");
       }
     }
     if ("dir" in changes) {
@@ -13693,7 +13717,9 @@
     }
     delete window.ChronometerFaces;
     const timeController = new TimeController();
-    if (urlState.t !== null && !isNaN(urlState.t)) {
+    if (urlState.off !== null && !isNaN(urlState.off)) {
+      timeController.setOffset(urlState.off);
+    } else if (urlState.t !== null && !isNaN(urlState.t)) {
       timeController.setTime(new Date(urlState.t));
       if (urlState.dir === 1) {
         timeController.setDirection(1);
@@ -14281,7 +14307,7 @@
           resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
-          writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: -1 });
+          writeTimeState();
         });
         const fwdBtn = document.createElement("button");
         fwdBtn.className = "tp-btn";
@@ -14293,7 +14319,7 @@
           resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
-          writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 1 });
+          writeTimeState();
         });
         tpTransport.appendChild(revBtn);
         tpTransport.appendChild(fwdBtn);
@@ -14307,7 +14333,7 @@
           finishAllAnimations();
           updateTimeUI();
           ensureSchedulerRunning();
-          writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 0 });
+          writeTimeState();
         });
         tpTransport.appendChild(pauseBtn);
       }
@@ -14445,6 +14471,20 @@
         resetLeafSchedules(face.terminatorLeaves);
       }
     }
+    function writeTimeState() {
+      if (timeController.isRealTime) {
+        writeUrlState({ t: null, off: null, dir: 1 });
+      } else if (!timeController.isStopped && timeController.currentRate === null && timeController.currentDirection === 1) {
+        writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
+      } else {
+        const dir = timeController.isStopped ? 0 : timeController.currentDirection;
+        writeUrlState({
+          t: timeController.getDisplayTime().getTime(),
+          off: null,
+          dir
+        });
+      }
+    }
     timeBarLabel.addEventListener("click", (e) => {
       e.stopPropagation();
       if (popoverOpen) {
@@ -14468,7 +14508,7 @@
       updateTimeUI();
       stopScheduler();
       startScheduler();
-      writeUrlState({ t: null, dir: 1 });
+      writeTimeState();
     }
     timeBarNow.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -14501,10 +14541,7 @@
         finishAllAnimations();
         updateTimeUI();
         ensureSchedulerRunning();
-        writeUrlState({
-          t: timeController.getDisplayTime().getTime(),
-          dir: 0
-        });
+        writeTimeState();
       }
     }
     timePopover.querySelectorAll("[data-step]").forEach((btn) => {
@@ -14539,10 +14576,7 @@
       el.addEventListener("mouseup", (e) => {
         e.stopPropagation();
         endHold();
-        writeUrlState({
-          t: timeController.getDisplayTime().getTime(),
-          dir: timeController.isStopped ? 0 : timeController.currentDirection
-        });
+        writeTimeState();
       });
       el.addEventListener("mouseleave", () => {
         endHold();
@@ -14572,10 +14606,7 @@
       el.addEventListener("touchend", (e) => {
         e.stopPropagation();
         endHold();
-        writeUrlState({
-          t: timeController.getDisplayTime().getTime(),
-          dir: timeController.isStopped ? 0 : timeController.currentDirection
-        });
+        writeTimeState();
       });
       el.addEventListener("touchcancel", () => {
         endHold();
@@ -14593,10 +14624,7 @@
       timeController.setTime(d);
       updateTimeUI();
       ensureSchedulerRunning();
-      writeUrlState({
-        t: d.getTime(),
-        dir: 0
-      });
+      writeTimeState();
     });
     ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
       document.getElementById(id).addEventListener("change", () => {
@@ -14610,7 +14638,7 @@
         timeController.setTime(d);
         updateTimeUI();
         ensureSchedulerRunning();
-        writeUrlState({ t: d.getTime(), dir: 0 });
+        writeTimeState();
       });
     });
     tpClose.addEventListener("click", (e) => {
@@ -14627,10 +14655,7 @@
     tickTimeBarClock();
     setInterval(() => {
       if (!timeController.isRealTime && !timeController.isStopped && timeController.currentRate === null) {
-        writeUrlState({
-          t: timeController.getDisplayTime().getTime(),
-          dir: timeController.currentDirection
-        });
+        writeTimeState();
       }
     }, 6e4);
     const initialRect = grid.getBoundingClientRect();

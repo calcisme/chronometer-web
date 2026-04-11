@@ -215,6 +215,9 @@ export class TimeController {
     /** Is time stopped? */
     get isStopped(): boolean { return this.stopped; }
 
+    /** Millisecond offset from real time (used in 1× mode). */
+    get timeOffset(): number { return this.offsetMs; }
+
     /** Human-readable status label */
     get statusLabel(): string {
         if (this.stopped) return 'Stopped';
@@ -339,8 +342,8 @@ export class TimeController {
      * When activating a quantized rate, snaps time to the unit boundary.
      */
     setRate(rate: RateOption | null): void {
-        this.stopped = false;
         const prevTime = this.getDisplayTime();
+        this.stopped = false;
 
         if (rate === null) {
             // Switching to 1×/-1× mode: capture current sim time as offset
@@ -433,6 +436,18 @@ export class TimeController {
         this.stopped = false;
         this.tickTime = new Date();
         this.nextTickTime = new Date();
+        this.lastTickRealMs = 0;
+        this.onTick?.();
+    }
+
+    /** Set millisecond offset from real time, running 1× forward. */
+    setOffset(ms: number): void {
+        this.offsetMs = ms;
+        this.rate = null;
+        this.direction = 1;
+        this.stopped = false;
+        this.tickTime = new Date(Date.now() + ms);
+        this.nextTickTime = new Date(Date.now() + ms);
         this.lastTickRealMs = 0;
         this.onTick?.();
     }

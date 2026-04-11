@@ -216,7 +216,10 @@ async function main() {
     const timeController = new TimeController();
 
     // Restore time state from URL
-    if (urlState.t !== null && !isNaN(urlState.t)) {
+    if (urlState.off !== null && !isNaN(urlState.off)) {
+        // Offset mode: 1× forward with a fixed offset from real time
+        timeController.setOffset(urlState.off);
+    } else if (urlState.t !== null && !isNaN(urlState.t)) {
         timeController.setTime(new Date(urlState.t));
         if (urlState.dir === 1) {
             // Resume forward at 1×
@@ -1008,7 +1011,7 @@ async function main() {
                 resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
-                writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: -1 });
+                writeTimeState();
             });
 
             const fwdBtn = document.createElement('button');
@@ -1021,7 +1024,7 @@ async function main() {
                 resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
-                writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 1 });
+                writeTimeState();
             });
 
             tpTransport.appendChild(revBtn);
@@ -1037,7 +1040,7 @@ async function main() {
                 finishAllAnimations();
                 updateTimeUI();
                 ensureSchedulerRunning();
-                writeUrlState({ t: timeController.getDisplayTime().getTime(), dir: 0 });
+                writeTimeState();
             });
             tpTransport.appendChild(pauseBtn);
         }
@@ -1208,6 +1211,33 @@ async function main() {
         }
     }
 
+    /**
+     * Write the current time state to the URL.
+     * Uses 'off' for 1× forward with offset (stays valid as real time advances),
+     * and 't'+'dir' for all other modes (stopped, reverse, accelerated).
+     */
+    function writeTimeState() {
+        if (timeController.isRealTime) {
+            // Real time — clear all time params
+            writeUrlState({ t: null, off: null, dir: 1 });
+        } else if (
+            !timeController.isStopped &&
+            timeController.currentRate === null &&
+            timeController.currentDirection === 1
+        ) {
+            // 1× forward with offset — store offset, clear absolute time
+            writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
+        } else {
+            // Stopped, reverse, or accelerated — store absolute time
+            const dir = timeController.isStopped ? 0 : timeController.currentDirection;
+            writeUrlState({
+                t: timeController.getDisplayTime().getTime(),
+                off: null,
+                dir: dir as 0 | 1 | -1,
+            });
+        }
+    }
+
     // --- "Time control" button (opens popover) ---
     timeBarLabel.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1236,7 +1266,7 @@ async function main() {
         updateTimeUI();
         stopScheduler();
         startScheduler();
-        writeUrlState({ t: null, dir: 1 });
+        writeTimeState();
     }
 
     // --- "Now" reset button (time-bar version) ---
@@ -1280,10 +1310,7 @@ async function main() {
             updateTimeUI();
             ensureSchedulerRunning();
             // Write time state to URL on button release
-            writeUrlState({
-                t: timeController.getDisplayTime().getTime(),
-                dir: 0,
-            });
+            writeTimeState();
         }
     }
 
@@ -1326,10 +1353,7 @@ async function main() {
             e.stopPropagation();
             endHold();
             // Write current time state after step tap or hold release
-            writeUrlState({
-                t: timeController.getDisplayTime().getTime(),
-                dir: timeController.isStopped ? 0 : timeController.currentDirection,
-            });
+            writeTimeState();
         });
 
         el.addEventListener('mouseleave', () => {
@@ -1365,10 +1389,7 @@ async function main() {
             e.stopPropagation();
             endHold();
             // Write current time state after step tap or hold release
-            writeUrlState({
-                t: timeController.getDisplayTime().getTime(),
-                dir: timeController.isStopped ? 0 : timeController.currentDirection,
-            });
+            writeTimeState();
         });
 
         el.addEventListener('touchcancel', () => {
@@ -1389,10 +1410,7 @@ async function main() {
         timeController.setTime(d);
         updateTimeUI();
         ensureSchedulerRunning();
-        writeUrlState({
-            t: d.getTime(),
-            dir: 0,
-        });
+        writeTimeState();
     });
 
     // Auto-apply when any date/time input changes (not just via Apply button)
@@ -1409,7 +1427,7 @@ async function main() {
             timeController.setTime(d);
             updateTimeUI();
             ensureSchedulerRunning();
-            writeUrlState({ t: d.getTime(), dir: 0 });
+            writeTimeState();
         });
     });
 
@@ -1439,10 +1457,7 @@ async function main() {
     // Periodic URL time capture — every 60s when running at 1× or -1×
     setInterval(() => {
         if (!timeController.isRealTime && !timeController.isStopped && timeController.currentRate === null) {
-            writeUrlState({
-                t: timeController.getDisplayTime().getTime(),
-                dir: timeController.currentDirection,
-            });
+            writeTimeState();
         }
     }, 60_000);
 

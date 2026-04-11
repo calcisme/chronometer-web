@@ -9,6 +9,7 @@
  *   lon  - Observer longitude (degrees, negative = west)
  *   tc   - Time controller popover visible (1 = shown, absent = hidden)
  *   t    - Display time as Unix ms (absent = real time)
+ *   off  - Millisecond offset from real time (used for 1× forward with offset)
  *   dir  - Time direction: 1=forward, -1=reverse, 0=stopped (absent = 1)
  */
 
@@ -17,6 +18,7 @@ export interface UrlState {
     lon: number | null;
     tc: boolean;
     t: number | null;
+    off: number | null;
     dir: 1 | -1 | 0;
 }
 
@@ -31,6 +33,7 @@ export function readUrlState(): UrlState {
 
     const tcStr = params.get('tc');
     const tStr = params.get('t');
+    const offStr = params.get('off');
     const dirStr = params.get('dir');
 
     let dir: 1 | -1 | 0 = 1;
@@ -42,6 +45,7 @@ export function readUrlState(): UrlState {
         lon: !isNaN(lon) ? lon : null,
         tc: tcStr === '1',
         t: tStr !== null ? parseInt(tStr, 10) : null,
+        off: offStr !== null ? parseInt(offStr, 10) : null,
         dir,
     };
 }
@@ -83,6 +87,13 @@ export function writeUrlState(changes: Partial<UrlState>): void {
             params.set('t', changes.t.toString());
         } else {
             params.delete('t');
+        }
+    }
+    if ('off' in changes) {
+        if (changes.off !== null && changes.off !== undefined) {
+            params.set('off', changes.off.toString());
+        } else {
+            params.delete('off');
         }
     }
     if ('dir' in changes) {
