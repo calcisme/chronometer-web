@@ -15,6 +15,8 @@ let loaded = false;
 export interface CityResult {
     /** Display label: "City, State, Country" or "IATA CityName airport" */
     label: string;
+    /** Short label for the location bar, e.g. "San Francisco" */
+    shortLabel: string;
     lat: number;
     lon: number;
     timezone: string;
@@ -118,6 +120,7 @@ export function searchCities(query: string, limit: number = 20): CityResult[] {
             results.push({
                 result: {
                     label: `${iata}  ${a[A_CITY]} airport`,
+                    shortLabel: `${iata} ${a[A_CITY]} airport`,
                     lat: a[A_LAT],
                     lon: a[A_LON],
                     timezone: TZ[a[A_TZ]] || '',
@@ -186,6 +189,7 @@ export function searchCities(query: string, limit: number = 20): CityResult[] {
             results.push({
                 result: {
                     label,
+                    shortLabel: name,
                     lat: c[C_LAT],
                     lon: c[C_LON],
                     timezone: TZ[c[C_TZ]] || '',

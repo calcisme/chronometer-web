@@ -68,6 +68,16 @@ for (const line of readTSV('admin1CodesASCII.txt')) {
 }
 console.log(`  ${admin1Map.size} admin1 codes loaded`);
 
+// Also load admin2 codes for disambiguation
+const admin2Map = new Map();  // "CC.admin1.admin2" -> "County Name"
+for (const line of readTSV('admin2Codes.txt')) {
+    const parts = line.split('\t');
+    if (parts.length >= 2) {
+        admin2Map.set(parts[0], parts[1]);  // e.g. "US.CA.085" -> "Santa Clara County"
+    }
+}
+console.log(`  ${admin2Map.size} admin2 codes loaded`);
+
 // ---------------------------------------------------------------------------
 // 2. Parse cities1000
 // ---------------------------------------------------------------------------
@@ -95,6 +105,10 @@ for (const line of readTSV('cities1000.txt')) {
     const admin1Key = `${countryCode}.${admin1Code}`;
     const admin1Name = admin1Map.get(admin1Key) || admin1Code || '';
 
+    // Resolve admin2 code to name
+    const admin2Key = `${countryCode}.${admin1Code}.${admin2Code}`;
+    const admin2Name = admin2Map.get(admin2Key) || admin2Code || '';
+
     const city = {
         geonameid,
         name,
@@ -104,7 +118,7 @@ for (const line of readTSV('cities1000.txt')) {
         lon: Math.round(lon * 1000) / 1000,
         countryCode,
         admin1Name,
-        admin2Code,
+        admin2Name,
         population,
         timezone,
     };
@@ -130,7 +144,7 @@ for (const c of cities) {
 let disambiguated = 0;
 for (const [, group] of groups) {
     if (group.length > 1) {
-        const admin2s = new Set(group.map(c => c.admin2Code));
+        const admin2s = new Set(group.map(c => c.admin2Name));
         if (admin2s.size > 1) {
             // Need admin2 for disambiguation
             for (const c of group) {
@@ -347,8 +361,8 @@ const cityRows = cities.map(c => {
     if (filteredAlts || c.needsAdmin2) {
         row.push(filteredAlts || '');
     }
-    if (c.needsAdmin2 && c.admin2Code) {
-        row.push(c.admin2Code);
+    if (c.needsAdmin2 && c.admin2Name) {
+        row.push(c.admin2Name);
     }
     return row;
 });

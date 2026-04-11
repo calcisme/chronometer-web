@@ -13687,6 +13687,7 @@
         results.push({
           result: {
             label: `${iata}  ${a[A_CITY]} airport`,
+            shortLabel: `${iata} ${a[A_CITY]} airport`,
             lat: a[A_LAT],
             lon: a[A_LON],
             timezone: TZ[a[A_TZ]] || "",
@@ -13743,6 +13744,7 @@
         results.push({
           result: {
             label,
+            shortLabel: name,
             lat: c[C_LAT],
             lon: c[C_LON],
             timezone: TZ[c[C_TZ]] || "",
@@ -14425,7 +14427,7 @@
           div.textContent = r.label;
         }
         div.addEventListener("click", () => {
-          applyLocation(r.lat, r.lon, "", true);
+          applyLocation(r.lat, r.lon, `(${r.shortLabel})`, true);
           lpCityInput.value = "";
           lpCityResults.innerHTML = "";
         });

@@ -973,7 +973,7 @@ async function main() {
                 div.textContent = r.label;
             }
             div.addEventListener('click', () => {
-                applyLocation(r.lat, r.lon, '', true);
+                applyLocation(r.lat, r.lon, `(${r.shortLabel})`, true);
                 lpCityInput.value = '';
                 lpCityResults.innerHTML = '';
             });
