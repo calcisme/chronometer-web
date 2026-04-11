@@ -71,6 +71,12 @@ echo "  → all.html"
 cp "$SRC/index.html" "$DIST/index.html"
 echo "  → index.html"
 
+# cities-data.js — city database for location picker (if generated)
+if [ -f "$SRC/cities-data.js" ]; then
+  cp "$SRC/cities-data.js" "$DIST/cities-data.js"
+  echo "  → cities-data.js ($(du -h "$DIST/cities-data.js" | cut -f1))"
+fi
+
 # Also copy thumbnail images and app icon if they exist
 for f in "$SRC"/thumb-*.png "$SRC"/apple-touch-icon.png; do
   [ -f "$f" ] && cp "$f" "$DIST/" && echo "  → $(basename "$f")"

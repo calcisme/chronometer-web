@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
+    "allowJs": true,
     "sourceMap": true
   },
   "include": ["src/**/*"],

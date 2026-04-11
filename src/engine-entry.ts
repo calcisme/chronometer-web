@@ -34,6 +34,8 @@ import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishL
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js';
+import { loadCityData, searchCities, isCityDataLoaded } from './city-search.js';
+import type { CityResult } from './city-search.js';
 
 // ============================================================================
 // Location helpers
@@ -153,6 +155,8 @@ async function main() {
     const lpUseCoords = document.getElementById('lp-use-coords')!;
     const lpUseBrowser = document.getElementById('lp-use-browser')!;
     const lpUseDemo = document.getElementById('lp-use-demo')!;
+    const lpCityInput = document.getElementById('lp-city-input') as HTMLInputElement;
+    const lpCityResults = document.getElementById('lp-city-results')!;
 
     // Initialize link preservation
     initNavigationLinks();
@@ -863,6 +867,9 @@ async function main() {
         // Pre-fill with current values (always, for manual invocation)
         lpLatInput.value = (lat !== 0 || lon !== 0) ? lat.toFixed(3) : '';
         lpLonInput.value = (lat !== 0 || lon !== 0) ? lon.toFixed(3) : '';
+        // Clear city search
+        if (lpCityInput) { lpCityInput.value = ''; }
+        if (lpCityResults) { lpCityResults.innerHTML = ''; }
 
         // Configure browser location button based on permission state
         const btn = lpUseBrowser as HTMLButtonElement;
@@ -942,6 +949,90 @@ async function main() {
             dismissLocationPrompt();
         }
     });
+
+    // =========================================================================
+    // City search autocomplete
+    // =========================================================================
+
+    let citySearchDebounce: ReturnType<typeof setTimeout> | null = null;
+    let cityDataLoading = false;
+    let selectedCityIndex = -1;
+
+    function renderCityResults(results: CityResult[]) {
+        lpCityResults.innerHTML = '';
+        selectedCityIndex = -1;
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            const div = document.createElement('div');
+            div.className = 'lp-city-item';
+            if (r.isAirport) {
+                // "SFO  San Francisco airport" — split IATA from rest
+                const parts = r.label.split('  ');
+                div.innerHTML = `<span class="iata-tag">${parts[0]}</span>${parts.slice(1).join('  ')}`;
+            } else {
+                div.textContent = r.label;
+            }
+            div.addEventListener('click', () => {
+                applyLocation(r.lat, r.lon, '', true);
+                lpCityInput.value = '';
+                lpCityResults.innerHTML = '';
+            });
+            lpCityResults.appendChild(div);
+        }
+    }
+
+    async function onCityInput() {
+        const query = lpCityInput.value.trim();
+        if (query.length < 2) {
+            lpCityResults.innerHTML = '';
+            return;
+        }
+
+        if (!isCityDataLoaded()) {
+            if (!cityDataLoading) {
+                cityDataLoading = true;
+                lpCityResults.innerHTML = '<div class="lp-city-loading">Loading city database…</div>';
+                await loadCityData();
+                cityDataLoading = false;
+            } else {
+                return;  // still loading
+            }
+        }
+
+        const results = searchCities(query, 20);
+        renderCityResults(results);
+    }
+
+    lpCityInput.addEventListener('input', () => {
+        if (citySearchDebounce) clearTimeout(citySearchDebounce);
+        citySearchDebounce = setTimeout(onCityInput, 150);
+    });
+
+    // Keyboard navigation in results
+    lpCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
+        const items = lpCityResults.querySelectorAll('.lp-city-item');
+        if (items.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedCityIndex = Math.min(selectedCityIndex + 1, items.length - 1);
+            items.forEach((el, i) => el.classList.toggle('selected', i === selectedCityIndex));
+            (items[selectedCityIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedCityIndex = Math.max(selectedCityIndex - 1, 0);
+            items.forEach((el, i) => el.classList.toggle('selected', i === selectedCityIndex));
+            (items[selectedCityIndex] as HTMLElement).scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && selectedCityIndex >= 0) {
+            e.preventDefault();
+            (items[selectedCityIndex] as HTMLElement).click();
+        } else if (e.key === 'Escape') {
+            lpCityResults.innerHTML = '';
+            lpCityInput.value = '';
+        }
+    });
+
+
 
     // =========================================================================
     // Time Controller UI

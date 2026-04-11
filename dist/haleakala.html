@@ -221,6 +221,80 @@
             z-index: 10;
         }
 
+        /* City search */
+        #location-prompt .lp-search-section {
+            margin-top: 12px;
+            border-top: 1px solid #2a2a3e;
+            padding-top: 10px;
+        }
+
+        #location-prompt .lp-search-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #776;
+            margin-bottom: 5px;
+        }
+
+        #lp-city-input {
+            width: 100%;
+            padding: 6px 10px;
+            background: #1a1a2e;
+            border: 1px solid #3a3a5e;
+            border-radius: 4px;
+            color: #ddd;
+            font-size: 14px;
+            outline: none;
+        }
+
+        #lp-city-input:focus {
+            border-color: #5566aa;
+        }
+
+        #lp-city-input::placeholder {
+            color: #556;
+        }
+
+        #lp-city-results {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 4px;
+        }
+
+        .lp-city-item {
+            padding: 6px 10px;
+            color: #bbc;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.1s;
+        }
+
+        .lp-city-item:hover,
+        .lp-city-item.selected {
+            background: #2a2a4e;
+            color: #ddf;
+        }
+
+        .lp-city-item .iata-tag {
+            display: inline-block;
+            background: #3a3a5e;
+            color: #aac;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-right: 6px;
+            font-family: monospace;
+        }
+
+        .lp-city-loading {
+            color: #666;
+            font-size: 12px;
+            padding: 8px 10px;
+            font-style: italic;
+        }
+
         #back-link {
             position: absolute;
             top: 28px;
@@ -533,6 +607,11 @@
                     <button class="lp-btn" id="lp-use-coords">Use location above</button>
                     <button class="lp-btn" id="lp-use-browser">Use browser location</button>
                     <button class="lp-btn" id="lp-use-demo">Demo — Cupertino, CA</button>
+                </div>
+                <div class="lp-search-section">
+                    <div class="lp-search-label">Search by city or airport</div>
+                    <input type="text" id="lp-city-input" placeholder="Type a city name or airport code…" autocomplete="off" autocorrect="off" spellcheck="false">
+                    <div id="lp-city-results"></div>
                 </div>
             </div>
         </div>

@@ -12931,12 +12931,12 @@
   }
   function drawImage(ctx, part, env, images) {
     if (!part.src || !images) return;
-    const loaded = images.get(part.src);
-    if (!loaded) return;
+    const loaded2 = images.get(part.src);
+    if (!loaded2) return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const alpha = part.alpha !== void 0 ? evalAttr(part.alpha, env) : 1;
-    const { bitmap, scale: imgScale } = loaded;
+    const { bitmap, scale: imgScale } = loaded2;
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;
     ctx.save();
@@ -12948,14 +12948,14 @@
   }
   function drawImageHand(ctx, part, env, images) {
     if (!part.src || !images) return;
-    const loaded = images.get(part.src);
-    if (!loaded) return;
+    const loaded2 = images.get(part.src);
+    if (!loaded2) return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
     const offsetRadius = evalAttr(part.offsetRadius, env);
     const offsetAngle = part.dynamicState && part.dynamicState.currentOffsetAngle !== void 0 ? part.dynamicState.currentOffsetAngle : evalAttr(part.offsetAngle, env);
-    const { bitmap, scale: imgScale } = loaded;
+    const { bitmap, scale: imgScale } = loaded2;
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;
     ctx.save();
@@ -13608,6 +13608,158 @@
     updateNavigationLinks();
   }
 
+  // src/city-search.ts
+  var TZ = [];
+  var CC = [];
+  var AD = [];
+  var CITIES = [];
+  var AIRPORTS = [];
+  var loaded = false;
+  var C_NAME = 0;
+  var C_ASCII = 1;
+  var C_CC = 2;
+  var C_AD1 = 3;
+  var C_LAT = 4;
+  var C_LON = 5;
+  var C_TZ = 6;
+  var C_POP = 7;
+  var C_ALT = 8;
+  var C_AD2 = 9;
+  var A_IATA = 0;
+  var A_CITY = 1;
+  var A_LAT = 2;
+  var A_LON = 3;
+  var A_TZ = 4;
+  function toASCII(s) {
+    return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  }
+  function loadCityData() {
+    if (loaded) return Promise.resolve();
+    return new Promise((resolve) => {
+      const existing = window.ChronometerCities;
+      if (existing) {
+        TZ = existing.TZ;
+        CC = existing.CC;
+        AD = existing.AD;
+        CITIES = existing.CITIES;
+        AIRPORTS = existing.AIRPORTS;
+        loaded = true;
+        console.log(`[CitySearch] Loaded ${CITIES.length} cities, ${AIRPORTS.length} airports`);
+        resolve();
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "cities-data.js";
+      script.onload = () => {
+        const data = window.ChronometerCities;
+        if (data) {
+          TZ = data.TZ;
+          CC = data.CC;
+          AD = data.AD;
+          CITIES = data.CITIES;
+          AIRPORTS = data.AIRPORTS;
+          loaded = true;
+          console.log(`[CitySearch] Loaded ${CITIES.length} cities, ${AIRPORTS.length} airports`);
+        } else {
+          console.error("[CitySearch] cities-data.js loaded but ChronometerCities not found");
+        }
+        resolve();
+      };
+      script.onerror = () => {
+        console.error("[CitySearch] Failed to load cities-data.js");
+        resolve();
+      };
+      document.head.appendChild(script);
+    });
+  }
+  function isCityDataLoaded() {
+    return loaded;
+  }
+  function searchCities(query, limit = 20) {
+    if (!loaded || !query || query.length < 2) return [];
+    const q = toASCII(query.trim());
+    if (!q) return [];
+    const qUpper = query.trim().toUpperCase();
+    const results = [];
+    for (const a of AIRPORTS) {
+      const iata = a[A_IATA];
+      if (iata.startsWith(qUpper) || iata === qUpper) {
+        results.push({
+          result: {
+            label: `${iata}  ${a[A_CITY]} airport`,
+            lat: a[A_LAT],
+            lon: a[A_LON],
+            timezone: TZ[a[A_TZ]] || "",
+            isAirport: true
+          },
+          priority: iata === qUpper ? 0 : 1,
+          // exact match first
+          pop: 0
+        });
+      }
+    }
+    for (const c of CITIES) {
+      const asciiName = c[C_ASCII];
+      const name = c[C_NAME];
+      const pop = c[C_POP];
+      let matched = false;
+      let priority = 3;
+      if (asciiName.startsWith(q)) {
+        matched = true;
+        priority = asciiName === q ? 0 : 1;
+      }
+      if (!matched) {
+        const nameLower = name.toLowerCase();
+        if (nameLower.startsWith(q) || toASCII(name).startsWith(q)) {
+          matched = true;
+          priority = 2;
+        }
+      }
+      if (!matched && c[C_ALT]) {
+        const alts = c[C_ALT];
+        if (alts.includes(q)) {
+          for (const alt of alts.split(",")) {
+            if (alt.startsWith(q)) {
+              matched = true;
+              priority = 3;
+              break;
+            }
+          }
+        }
+      }
+      if (matched) {
+        const cc = CC[c[C_CC]] || "";
+        const admin1 = AD[c[C_AD1]] || "";
+        let label = name;
+        if (c[C_AD2]) {
+          label += ` (${c[C_AD2]})`;
+        }
+        if (admin1) {
+          label += `, ${admin1}`;
+        }
+        if (cc) {
+          label += `, ${cc}`;
+        }
+        results.push({
+          result: {
+            label,
+            lat: c[C_LAT],
+            lon: c[C_LON],
+            timezone: TZ[c[C_TZ]] || "",
+            isAirport: false
+          },
+          priority,
+          pop
+        });
+      }
+    }
+    results.sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return b.pop - a.pop;
+    });
+    return results.slice(0, limit).map((r) => r.result);
+  }
+
   // src/engine-entry.ts
   var DEMO_LAT = 37.3349;
   var DEMO_LON = -122.009;
@@ -13671,6 +13823,8 @@
     const lpUseCoords = document.getElementById("lp-use-coords");
     const lpUseBrowser = document.getElementById("lp-use-browser");
     const lpUseDemo = document.getElementById("lp-use-demo");
+    const lpCityInput = document.getElementById("lp-city-input");
+    const lpCityResults = document.getElementById("lp-city-results");
     initNavigationLinks();
     const urlState = readUrlState();
     let lat, lon;
@@ -14189,6 +14343,12 @@
       if (blur) grid.classList.add("blurred");
       lpLatInput.value = lat !== 0 || lon !== 0 ? lat.toFixed(3) : "";
       lpLonInput.value = lat !== 0 || lon !== 0 ? lon.toFixed(3) : "";
+      if (lpCityInput) {
+        lpCityInput.value = "";
+      }
+      if (lpCityResults) {
+        lpCityResults.innerHTML = "";
+      }
       const btn = lpUseBrowser;
       const isFileUrl = window.location.protocol === "file:";
       const deniedTooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
@@ -14246,6 +14406,74 @@
     locationPrompt.querySelector(".lp-backdrop").addEventListener("click", () => {
       if (!needsPrompt || (lat !== 0 || lon !== 0)) {
         dismissLocationPrompt();
+      }
+    });
+    let citySearchDebounce = null;
+    let cityDataLoading = false;
+    let selectedCityIndex = -1;
+    function renderCityResults(results) {
+      lpCityResults.innerHTML = "";
+      selectedCityIndex = -1;
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const div = document.createElement("div");
+        div.className = "lp-city-item";
+        if (r.isAirport) {
+          const parts = r.label.split("  ");
+          div.innerHTML = `<span class="iata-tag">${parts[0]}</span>${parts.slice(1).join("  ")}`;
+        } else {
+          div.textContent = r.label;
+        }
+        div.addEventListener("click", () => {
+          applyLocation(r.lat, r.lon, "", true);
+          lpCityInput.value = "";
+          lpCityResults.innerHTML = "";
+        });
+        lpCityResults.appendChild(div);
+      }
+    }
+    async function onCityInput() {
+      const query = lpCityInput.value.trim();
+      if (query.length < 2) {
+        lpCityResults.innerHTML = "";
+        return;
+      }
+      if (!isCityDataLoaded()) {
+        if (!cityDataLoading) {
+          cityDataLoading = true;
+          lpCityResults.innerHTML = '<div class="lp-city-loading">Loading city database\u2026</div>';
+          await loadCityData();
+          cityDataLoading = false;
+        } else {
+          return;
+        }
+      }
+      const results = searchCities(query, 20);
+      renderCityResults(results);
+    }
+    lpCityInput.addEventListener("input", () => {
+      if (citySearchDebounce) clearTimeout(citySearchDebounce);
+      citySearchDebounce = setTimeout(onCityInput, 150);
+    });
+    lpCityInput.addEventListener("keydown", (e) => {
+      const items = lpCityResults.querySelectorAll(".lp-city-item");
+      if (items.length === 0) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        selectedCityIndex = Math.min(selectedCityIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle("selected", i === selectedCityIndex));
+        items[selectedCityIndex].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        selectedCityIndex = Math.max(selectedCityIndex - 1, 0);
+        items.forEach((el, i) => el.classList.toggle("selected", i === selectedCityIndex));
+        items[selectedCityIndex].scrollIntoView({ block: "nearest" });
+      } else if (e.key === "Enter" && selectedCityIndex >= 0) {
+        e.preventDefault();
+        items[selectedCityIndex].click();
+      } else if (e.key === "Escape") {
+        lpCityResults.innerHTML = "";
+        lpCityInput.value = "";
       }
     });
     const timeBar = document.getElementById("time-bar");

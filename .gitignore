@@ -3,4 +3,6 @@
 node_modules
 package-lock.json
 .DS_Store
-
+scripts/geonames-data/*.txt
+scripts/geonames-data/*.zip
+src/cities-data.js
