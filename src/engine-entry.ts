@@ -1454,6 +1454,9 @@ async function main() {
         onGridResize(initialRect.width, initialRect.height);
     }
 
+    // Apply initial time bar styling (red text if URL set a non-real-time state)
+    updateTimeUI();
+
     // Show time controller if URL says so
     if (urlState.tc) {
         showPopover();

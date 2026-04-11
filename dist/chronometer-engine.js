@@ -14637,6 +14637,7 @@
     if (initialRect.width > 0 && initialRect.height > 0) {
       onGridResize(initialRect.width, initialRect.height);
     }
+    updateTimeUI();
     if (urlState.tc) {
       showPopover();
     }
