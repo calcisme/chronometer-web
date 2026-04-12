@@ -1501,9 +1501,18 @@
           const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
           const normalizedTarget = fmod2(newTarget, 2 * Math.PI);
           const normalizedCurrent = fmod2(state.angle.currentValue, 2 * Math.PI);
-          let delta = Math.abs(normalizedTarget - normalizedCurrent);
-          if (delta > Math.PI) delta = 2 * Math.PI - delta;
-          const normalDurationMs = animateSpeed > 0 ? delta / animateSpeed * 1e3 : 0;
+          let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+          if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
+          const angleDurationMs = animateSpeed > 0 ? angleDelta / animateSpeed * 1e3 : 0;
+          let offsetDurationMs = 0;
+          if (newOffsetTarget !== null && state.offsetAngle) {
+            const normOffTarget = fmod2(newOffsetTarget, 2 * Math.PI);
+            const normOffCurrent = fmod2(state.offsetAngle.currentValue, 2 * Math.PI);
+            let offDelta = Math.abs(normOffTarget - normOffCurrent);
+            if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
+            offsetDurationMs = animateSpeed > 0 ? offDelta / animateSpeed * 1e3 : 0;
+          }
+          const normalDurationMs = Math.max(angleDurationMs, offsetDurationMs);
           if (normalDurationMs > timeUntilNextUpdateMs) {
             startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
             if (newOffsetTarget !== null && state.offsetAngle) {
@@ -1600,15 +1609,10 @@
       return;
     }
     val.targetValue = newTarget;
-    if (newTarget > val.currentValue) {
-      if (newTarget - val.currentValue > Math.PI) {
-        val.currentValue += 2 * Math.PI;
-      }
-    } else {
-      if (val.currentValue - newTarget > Math.PI) {
-        val.currentValue -= 2 * Math.PI;
-      }
-    }
+    const TWO_PI5 = 2 * Math.PI;
+    let delta = newTarget - val.currentValue;
+    delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
+    val.currentValue = newTarget - delta;
     let durationMs;
     if (durationOverrideMs !== void 0) {
       durationMs = durationOverrideMs;
@@ -15003,12 +15007,6 @@
         face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-        for (const hs of face.handStates) {
-          hs.nextUpdateTime = 0;
-        }
-        if (face.terminatorLeaves.length > 0) {
-          resetLeafSchedules(face.terminatorLeaves);
-        }
       }
     }
     function rebuildAllForTime() {

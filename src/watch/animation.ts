@@ -215,15 +215,32 @@ export function tickAnimations(
                 const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
 
                 // Adaptive duration: use normal speed unless it wouldn't
-                // finish before the next re-evaluation
+                // finish before the next re-evaluation.
+                // Check BOTH angle and offsetAngle to decide compression.
                 const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+
+                // Angle duration
                 const normalizedTarget = fmod(newTarget, 2 * Math.PI);
                 const normalizedCurrent = fmod(state.angle.currentValue, 2 * Math.PI);
-                let delta = Math.abs(normalizedTarget - normalizedCurrent);
-                if (delta > Math.PI) delta = 2 * Math.PI - delta;
-                const normalDurationMs = (animateSpeed > 0)
-                    ? (delta / animateSpeed) * 1000
+                let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+                if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
+                const angleDurationMs = (animateSpeed > 0)
+                    ? (angleDelta / animateSpeed) * 1000
                     : 0;
+
+                // OffsetAngle duration (may be the dominant animation)
+                let offsetDurationMs = 0;
+                if (newOffsetTarget !== null && state.offsetAngle) {
+                    const normOffTarget = fmod(newOffsetTarget, 2 * Math.PI);
+                    const normOffCurrent = fmod(state.offsetAngle.currentValue, 2 * Math.PI);
+                    let offDelta = Math.abs(normOffTarget - normOffCurrent);
+                    if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
+                    offsetDurationMs = (animateSpeed > 0)
+                        ? (offDelta / animateSpeed) * 1000
+                        : 0;
+                }
+
+                const normalDurationMs = Math.max(angleDurationMs, offsetDurationMs);
 
                 if (normalDurationMs > timeUntilNextUpdateMs) {
                     // Animation wouldn't finish before next re-eval:
@@ -398,17 +415,15 @@ export function startAnimationRaw(
 
     val.targetValue = newTarget;
 
-    // Animation direction: always take the shortest path (ECAnimationDirClosest)
-    // Adjust currentValue so the delta is ≤ π
-    if (newTarget > val.currentValue) {
-        if (newTarget - val.currentValue > Math.PI) {
-            val.currentValue += 2 * Math.PI;
-        }
-    } else {
-        if (val.currentValue - newTarget > Math.PI) {
-            val.currentValue -= 2 * Math.PI;
-        }
-    }
+    // Unwrap currentValue so |currentValue - targetValue| ≤ π.
+    // This avoids the animation flipping direction when crossing 0°/360°.
+    // In both normal and compressed modes, we want the shortest angular path.
+    const TWO_PI = 2 * Math.PI;
+    let delta = newTarget - val.currentValue;
+    // Normalize delta to [-π, π]
+    delta = delta - TWO_PI * Math.round(delta / TWO_PI);
+    // Set currentValue so that (currentValue + delta) == newTarget
+    val.currentValue = newTarget - delta;
 
     // Compute animation duration
     let durationMs: number;
