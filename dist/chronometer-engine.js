@@ -11856,6 +11856,9 @@
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
+    for (const expr of watch.initExprs) {
+      evaluate(expr, env);
+    }
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const bodyParam = params.get("body");
@@ -11875,11 +11878,11 @@
         const planet = bodyMap[bodyParam.toLowerCase()];
         if (planet !== void 0) {
           env.variables.set("body", planet);
+          const body = planet;
+          const bodySlot = body === 1 /* Moon */ ? 0 : body === 2 /* Mercury */ ? 1 : body === 3 /* Venus */ ? 2 : body === 5 /* Mars */ ? 3 : body === 6 /* Jupiter */ ? 4 : body === 7 /* Saturn */ ? 5 : body === 8 /* Uranus */ ? 6 : body === 9 /* Neptune */ ? 7 : body === 0 /* Sun */ ? 8 : 0.5;
+          env.variables.set("bodySlot", bodySlot);
         }
       }
-    }
-    for (const expr of watch.initExprs) {
-      evaluate(expr, env);
     }
     return env;
   }
@@ -14875,8 +14878,39 @@
     updateLocationDisplay();
     const parsedWatches = [];
     const allImages = [];
+    const planetIconDataUrls = /* @__PURE__ */ new Map();
+    const planetIconKeys = [
+      "moon",
+      "mercury",
+      "venus",
+      "mars",
+      "jupiter",
+      "saturn",
+      "uranus",
+      "neptune",
+      "sun"
+    ];
+    const planetIconSrcMap = {
+      moon: "../partsBin/moonES36.png",
+      mercury: "../partsBin/planets/mercury36.png",
+      venus: "../partsBin/planets/venus36.png",
+      mars: "../partsBin/planets/mars36.png",
+      jupiter: "../partsBin/planets/jupiter36.png",
+      saturn: "../partsBin/planets/saturn36.png",
+      uranus: "../partsBin/planets/uranus36.png",
+      neptune: "../partsBin/planets/neptune36.png",
+      sun: "../partsBin/planets/sun36.png"
+    };
     for (const fd of faceDataArray) {
       parsedWatches.push(parseWatchXML(fd.xml, "front"));
+      if (fd.images) {
+        for (const [key, src] of Object.entries(planetIconSrcMap)) {
+          const entry = fd.images[src];
+          if (entry && !planetIconDataUrls.has(key)) {
+            planetIconDataUrls.set(key, entry.dataUrl);
+          }
+        }
+      }
       allImages.push(await loadImagesFromFaceData(fd.images));
       fd.images = null;
     }
@@ -15324,9 +15358,11 @@
       const { width } = entry.contentRect;
       const locationPanel = document.getElementById("location-panel");
       const timeBarEl = document.getElementById("time-bar");
+      const planetSelectorEl = document.getElementById("planet-selector");
       const panelH = locationPanel ? locationPanel.offsetHeight : 0;
       const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
-      const height = entry.contentRect.height - panelH - timeBarH;
+      const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
+      const height = entry.contentRect.height - panelH - timeBarH - planetSelH;
       if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
       resizeDebounceTimer = setTimeout(() => {
         resizeDebounceTimer = null;
@@ -15962,6 +15998,80 @@
         writeTimeState();
       }
     }, 6e4);
+    const isSingleFace = faceDataArray.length === 1;
+    const isVenezia = isSingleFace && faceDataArray[0].name === "Venezia";
+    if (isVenezia) {
+      const selectorEl = document.getElementById("planet-selector");
+      const iconsContainer = document.getElementById("planet-icons");
+      const nameLabel = document.getElementById("planet-name");
+      const prevBtn = document.getElementById("planet-prev");
+      const nextBtn = document.getElementById("planet-next");
+      if (selectorEl && iconsContainer && nameLabel && prevBtn && nextBtn) {
+        let selectPlanet2 = function(idx) {
+          selectedIdx = idx;
+          const p = planetOrder[idx];
+          iconBtns.forEach((b, i) => b.classList.toggle("selected", i === idx));
+          nameLabel.textContent = p.name;
+          const url = new URL(window.location.href);
+          url.searchParams.set("body", p.param);
+          window.history.replaceState({}, "", url.toString());
+          stopScheduler();
+          for (const face of faces) {
+            const fd = faceDataArray[face.faceDataIndex];
+            const freshWatch = parseWatchXML(fd.xml, "front");
+            face.watch.parts = freshWatch.parts;
+            face.watch.initExprs = freshWatch.initExprs;
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+            face.cachesBuilt = false;
+          }
+          buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
+        };
+        var selectPlanet = selectPlanet2;
+        selectorEl.style.display = "flex";
+        const planetOrder = [
+          { key: "moon", name: "Moon", param: "moon" },
+          { key: "mercury", name: "Mercury", param: "mercury" },
+          { key: "venus", name: "Venus", param: "venus" },
+          { key: "mars", name: "Mars", param: "mars" },
+          { key: "jupiter", name: "Jupiter", param: "jupiter" },
+          { key: "saturn", name: "Saturn", param: "saturn" },
+          { key: "uranus", name: "Uranus", param: "uranus" },
+          { key: "neptune", name: "Neptune", param: "neptune" },
+          { key: "sun", name: "Sun", param: "sun" }
+        ];
+        const params = new URLSearchParams(window.location.search);
+        const currentBody = (params.get("body") || "jupiter").toLowerCase();
+        let selectedIdx = planetOrder.findIndex((p) => p.param === currentBody);
+        if (selectedIdx < 0) selectedIdx = 4;
+        const iconBtns = [];
+        for (let i = 0; i < planetOrder.length; i++) {
+          const p = planetOrder[i];
+          const btn = document.createElement("button");
+          btn.className = "planet-icon-btn";
+          btn.title = p.name;
+          const imgUrl = planetIconDataUrls.get(p.key);
+          if (imgUrl) {
+            const img = document.createElement("img");
+            img.src = imgUrl;
+            img.alt = p.name;
+            btn.appendChild(img);
+          } else {
+            btn.textContent = p.name.charAt(0);
+          }
+          if (i === selectedIdx) btn.classList.add("selected");
+          btn.addEventListener("click", () => selectPlanet2(i));
+          iconsContainer.appendChild(btn);
+          iconBtns.push(btn);
+        }
+        nameLabel.textContent = planetOrder[selectedIdx].name;
+        prevBtn.addEventListener("click", () => {
+          selectPlanet2((selectedIdx - 1 + planetOrder.length) % planetOrder.length);
+        });
+        nextBtn.addEventListener("click", () => {
+          selectPlanet2((selectedIdx + 1) % planetOrder.length);
+        });
+      }
+    }
     const initialRect = grid.getBoundingClientRect();
     if (initialRect.width > 0 && initialRect.height > 0) {
       onGridResize(initialRect.width, initialRect.height);

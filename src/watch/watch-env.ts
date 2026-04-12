@@ -102,7 +102,13 @@ export function createWatchEnvironment(
     // Register time functions (uses the provided getNow source)
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
 
+    // Evaluate all init blocks in document order
+    for (const expr of watch.initExprs) {
+        evaluate(expr, env);
+    }
+
     // URL param override for 'body' (Venezia planet selection via ?body=jupiter etc.)
+    // Must run AFTER init blocks so it overrides the XML's default body assignment.
     if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         const bodyParam = params.get('body');
@@ -117,13 +123,21 @@ export function createWatchEnvironment(
             const planet = bodyMap[bodyParam.toLowerCase()];
             if (planet !== undefined) {
                 env.variables.set('body', planet);
+                // Recompute bodySlot from body (matching the XML init expression)
+                const body = planet;
+                const bodySlot =
+                    body === ECPlanetNumber.Moon ? 0 :
+                    body === ECPlanetNumber.Mercury ? 1 :
+                    body === ECPlanetNumber.Venus ? 2 :
+                    body === ECPlanetNumber.Mars ? 3 :
+                    body === ECPlanetNumber.Jupiter ? 4 :
+                    body === ECPlanetNumber.Saturn ? 5 :
+                    body === ECPlanetNumber.Uranus ? 6 :
+                    body === ECPlanetNumber.Neptune ? 7 :
+                    body === ECPlanetNumber.Sun ? 8 : 0.5;
+                env.variables.set('bodySlot', bodySlot);
             }
         }
-    }
-
-    // Evaluate all init blocks in document order
-    for (const expr of watch.initExprs) {
-        evaluate(expr, env);
     }
 
     return env;

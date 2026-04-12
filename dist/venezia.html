@@ -700,6 +700,87 @@
             background: #446;
             color: #ddf;
         }
+        /* ============= Planet Selector (Venezia) ============= */
+
+        #planet-selector {
+            display: none;  /* shown dynamically for Venezia */
+            flex: 0 0 auto;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 16px 4px;
+            border-top: 1px solid #2a2a3e;
+            background: rgba(25, 25, 42, 0.9);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .planet-icons {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .planet-icon-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            background: rgba(42, 42, 62, 0.6);
+            cursor: pointer;
+            padding: 2px;
+            transition: border-color 0.2s, background 0.2s, transform 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .planet-icon-btn img {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            object-fit: contain;
+        }
+
+        .planet-icon-btn:hover {
+            background: rgba(60, 60, 90, 0.8);
+            transform: scale(1.1);
+        }
+
+        .planet-icon-btn.selected {
+            border-color: #8af;
+            background: rgba(60, 60, 90, 0.9);
+        }
+
+        .planet-name-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .planet-nav-btn {
+            background: none;
+            border: none;
+            color: #667;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 2px 6px;
+            transition: color 0.15s;
+            line-height: 1;
+        }
+
+        .planet-nav-btn:hover {
+            color: #ccf;
+        }
+
+        #planet-name {
+            color: #99b;
+            font-size: 13px;
+            min-width: 70px;
+            text-align: center;
+            font-family: system-ui, sans-serif;
+        }
     </style>
 </head>
 
@@ -707,6 +788,14 @@
     <div id="app">
         <a id="back-link" href="index.html">← Home</a>
         <div id="watch-grid"></div>
+        <div id="planet-selector">
+            <div class="planet-icons" id="planet-icons"></div>
+            <div class="planet-name-row">
+                <button class="planet-nav-btn" id="planet-prev">◀</button>
+                <span id="planet-name">Jupiter</span>
+                <button class="planet-nav-btn" id="planet-next">▶</button>
+            </div>
+        </div>
         <div id="time-bar">
             <button id="time-bar-label">⏱ Show time controller</button>
             <span id="time-bar-info">
