@@ -1,0 +1,39 @@
+        <!-- Location prompt overlay (hidden by default) -->
+        <div id="location-prompt" style="display:none">
+            <div class="lp-backdrop"></div>
+            <div class="lp-dialog">
+                <h3 class="lp-title">Set Location</h3>
+                <div class="lp-search-section">
+                    <div class="lp-search-input-wrap">
+                        <input type="text" id="lp-city-input" placeholder="Search city or airport code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <div id="lp-city-results"></div>
+                </div>
+                <div class="lp-buttons">
+                    <button class="lp-btn" id="lp-use-browser">Use browser location</button>
+                </div>
+                <div class="lp-manual-section">
+                    <div class="lp-search-label">Manual coordinates</div>
+                    <div class="lp-inputs">
+                        <label>Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"></label>
+                        <label>Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"></label>
+                    </div>
+                    <div class="lp-buttons">
+                        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
+                    </div>
+                </div>
+                <div class="lp-map-footer" id="lp-map-footer">
+                    <div class="lp-map-row">
+                        <canvas id="lp-globe" width="100" height="100"></canvas>
+                        <div class="lp-osm-container" id="lp-osm-container">
+                            <img id="lp-osm-tile" alt="">
+                            <div class="lp-map-marker" id="lp-map-marker"></div>
+                            <div class="lp-osm-offline" id="lp-osm-offline" style="display:none">(offline)</div>
+                        </div>
+                    </div>
+                    <div class="lp-map-label" id="lp-map-label"></div>
+                    <div class="lp-map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+                    <button class="lp-btn lp-btn-done" id="lp-done" style="display:none">Done</button>
+                </div>
+            </div>
+        </div>

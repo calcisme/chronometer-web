@@ -6,6 +6,7 @@
 #   dist/{name}.html             — per-face viewer
 #   dist/all.html                — all faces in a grid
 #   dist/index.html              — face selector with thumbnails
+#   dist/index-page.js           — index page location dialog logic
 set -e
 
 ESBUILD="npx --yes esbuild"
@@ -28,7 +29,26 @@ for face in $FACES; do
     --outfile="$DIST/face-$face.js"
 done
 
+echo "=== Building index page script ==="
+$ESBUILD "$SRC/index-page.ts" --bundle $COMMON_FLAGS \
+  --outfile="$DIST/index-page.js"
+echo "  → index-page.js"
+
 echo "=== Generating HTML files ==="
+
+# Helper: inject partial files into a template.
+# Reads from stdin, writes to stdout.
+# Replaces lines containing {{LOCATION_CSS}}, {{LOCATION_DIALOG}},
+# {{TIME_CSS}}, and {{TIME_CONTROLLER}} with the corresponding partial file content.
+inject_partials() {
+    awk -v P="$SRC/partials" '
+    /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
+    /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
+    /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
+    /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
+    { print }
+    '
+}
 
 # Helper to get display title for each face
 get_title() {
@@ -52,11 +72,11 @@ for face in $FACES; do
   sed -e "s|{{TITLE}}|$TITLE|g" \
       -e "s|{{SCRIPTS}}|$SCRIPTS|g" \
       -e "s|{{ICON}}|$ICON|g" \
-      "$SRC/face-template.html" > "$DIST/$face.html"
+      "$SRC/face-template.html" | inject_partials > "$DIST/$face.html"
   echo "  → $face.html"
 done
 
-# all.html — loads all 5 faces
+# all.html — loads all faces
 ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-mauna-kea.js"><\/script>\
     <script src="face-haleakala.js"><\/script>\
@@ -68,11 +88,11 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \
-    "$SRC/face-template.html" > "$DIST/all.html"
+    "$SRC/face-template.html" | inject_partials > "$DIST/all.html"
 echo "  → all.html"
 
-# index.html — copy the selector page
-cp "$SRC/index.html" "$DIST/index.html"
+# index.html — process with partial injection
+inject_partials < "$SRC/index.html" > "$DIST/index.html"
 echo "  → index.html"
 
 # cities-data.js — city database for location picker (if generated)
@@ -82,7 +102,7 @@ if [ -f "$SRC/cities-data.js" ]; then
 fi
 
 # Also copy thumbnail images and app icon if they exist
-for f in "$SRC"/thumb-*.png "$SRC"/apple-touch-icon.png; do
+for f in "$SRC"/faces/thumb-*.png "$SRC"/apple-touch-icon.png; do
   [ -f "$f" ] && cp "$f" "$DIST/" && echo "  → $(basename "$f")"
 done
 
