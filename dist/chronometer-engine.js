@@ -192,8 +192,10 @@
     // Check if current token is a specific type (optionally with a specific value)
     match(type, value) {
       const tok = this.peek();
-      if (tok.type !== type) return false;
-      if (value !== void 0 && tok.value !== value) return false;
+      if (tok.type !== type)
+        return false;
+      if (value !== void 0 && tok.value !== value)
+        return false;
       return true;
     }
     // Save/restore for backtracking
@@ -786,7 +788,8 @@
   }
   function attrExpr(el, name) {
     const val = attr(el, name);
-    if (!val) return void 0;
+    if (!val)
+      return void 0;
     try {
       return parse(val);
     } catch (e) {
@@ -803,7 +806,8 @@
       return desiredMode === "front";
     }
     const lower = modesAttr.toLowerCase();
-    if (lower === "all") return true;
+    if (lower === "all")
+      return true;
     return lower.split("|").some((m) => m.trim() === desiredMode);
   }
 
@@ -1385,7 +1389,6 @@
     switch (monthNumber) {
       case 1:
         return 31;
-      // Jan
       case 2: {
         const firstOfFeb = timeIntervalFromUTCComponents(eraNumber, yearNumber, 2, 1, 0, 0, 0);
         const firstOfMar = timeIntervalFromUTCComponents(eraNumber, yearNumber, 3, 1, 0, 0, 0);
@@ -1500,7 +1503,8 @@
           const normalizedTarget = fmod2(newTarget, 2 * Math.PI);
           const normalizedCurrent = fmod2(state.angle.currentValue, 2 * Math.PI);
           let delta = Math.abs(normalizedTarget - normalizedCurrent);
-          if (delta > Math.PI) delta = 2 * Math.PI - delta;
+          if (delta > Math.PI)
+            delta = 2 * Math.PI - delta;
           const normalDurationMs = animateSpeed > 0 ? delta / animateSpeed * 1e3 : 0;
           if (normalDurationMs > timeUntilNextUpdateMs) {
             startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
@@ -1539,14 +1543,17 @@
   function nextWakeupTime(states) {
     let earliest = Infinity;
     for (const s of states) {
-      if (s.nextUpdateTime < earliest) earliest = s.nextUpdateTime;
+      if (s.nextUpdateTime < earliest)
+        earliest = s.nextUpdateTime;
     }
     return earliest;
   }
   function anyAnimating(states) {
     for (const s of states) {
-      if (s.angle.animating) return true;
-      if (s.offsetAngle && s.offsetAngle.animating) return true;
+      if (s.angle.animating)
+        return true;
+      if (s.offsetAngle && s.offsetAngle.animating)
+        return true;
     }
     return false;
   }
@@ -8492,7 +8499,8 @@
     }
     longitude = 1e-7 * longitude + 4.9353929 + 62833.196168 * U;
     longitude = fmod(longitude, Math.PI * 2);
-    if (cache) cache.set(73 /* SunLongitude */, longitude);
+    if (cache)
+      cache.set(73 /* SunLongitude */, longitude);
     return longitude;
   }
   function WB_sunRadius(U, cache) {
@@ -8505,7 +8513,8 @@
       radius += d.ri * Math.cos(d.ali + d.bli * U);
     }
     radius = 1e-7 * radius + 1.0001026;
-    if (cache) cache.set(75 /* SunRadius */, radius);
+    if (cache)
+      cache.set(75 /* SunRadius */, radius);
     return radius;
   }
   function WB_sunLongitudeRadiusRaw(U, cache) {
@@ -8574,13 +8583,15 @@
     const { nutation, obliquity } = WB_nutationObliquity(U, cache);
     let apparentLongitude = longitude + aberration + nutation;
     apparentLongitude = fmod(apparentLongitude, Math.PI * 2);
-    if (apparentLongitude < 0) apparentLongitude += Math.PI * 2;
+    if (apparentLongitude < 0)
+      apparentLongitude += Math.PI * 2;
     const declination = Math.asin(Math.sin(obliquity) * Math.sin(apparentLongitude));
     let rightAscension = Math.atan2(
       Math.cos(obliquity) * Math.sin(apparentLongitude),
       Math.cos(apparentLongitude)
     );
-    if (rightAscension < 0) rightAscension += Math.PI * 2;
+    if (rightAscension < 0)
+      rightAscension += Math.PI * 2;
     return { rightAscension, declination, apparentLongitude };
   }
   function WB_sunLongitudeApparent(U, cache) {
@@ -8592,8 +8603,10 @@
     const { nutation } = WB_nutationObliquity(U, cache);
     let apparentLongitude = longitude + aberration + nutation;
     apparentLongitude = fmod(apparentLongitude, Math.PI * 2);
-    if (apparentLongitude < 0) apparentLongitude += Math.PI * 2;
-    if (cache) cache.set(74 /* SunLongitudeApparent */, apparentLongitude);
+    if (apparentLongitude < 0)
+      apparentLongitude += Math.PI * 2;
+    if (cache)
+      cache.set(74 /* SunLongitudeApparent */, apparentLongitude);
     return apparentLongitude;
   }
 
@@ -10011,7 +10024,8 @@
     }
     let V = 218.31665436 + 481267.8813424 * t - 13268e-7 * t2 + 1856e-9 * t3 - 1534e-11 * t4 + SV + 1e-3 * (SV1 + t * SV2 + t2 * 1e-4 * SV3);
     V = fmod(V, 360);
-    if (cache) cache.set(slotIndex, V);
+    if (cache)
+      cache.set(slotIndex, V);
     return V;
   }
   function lunarLatitudeForTDT(t, p, cache) {
@@ -10046,8 +10060,10 @@
     }
     let U = SU + 1e-3 * (SU1 + t * SU2 + t2 * 1e-4 * SU3);
     U = fmod(U, 360);
-    if (U > 180) U -= 360;
-    if (cache) cache.set(slotIndex, U);
+    if (U > 180)
+      U -= 360;
+    if (cache)
+      cache.set(slotIndex, U);
     return U;
   }
   function lunarDistanceForTDT(t, p, cache) {
@@ -10080,7 +10096,8 @@
       SR3 += d.rn * Math.cos(Math.PI / 180 * (d.dn0 + d.dn1 * t));
     }
     const R = 385000.57 + SR + SR1 + t * SR2 + t2 * 1e-4 * SR3;
-    if (cache) cache.set(slotIndex, R);
+    if (cache)
+      cache.set(slotIndex, R);
     return R;
   }
   function lunarAberrationV(t) {
@@ -10135,7 +10152,8 @@
         cosTrueOb * sinV * cosU - sinTrueOb * sinU,
         cosV * cosU
       );
-      if (ra < 0) ra += Math.PI * 2;
+      if (ra < 0)
+        ra += Math.PI * 2;
     }
     const decl = Math.asin(sinTrueOb * sinV * cosU + cosTrueOb * sinU);
     return { ra, decl };
@@ -10172,10 +10190,12 @@
   }
   function WB_MoonDistance(centuriesSinceEpochTDT, cache, p) {
     const slotIndex = 70 /* MoonDistanceLow */ + p;
-    if (cache && cache.isValid(slotIndex)) return cache.get(slotIndex);
+    if (cache && cache.isValid(slotIndex))
+      return cache.get(slotIndex);
     let R = lunarDistanceForTDT(centuriesSinceEpochTDT, p, cache);
     R += lunarAberrationR(centuriesSinceEpochTDT);
-    if (cache) cache.set(slotIndex, R);
+    if (cache)
+      cache.set(slotIndex, R);
     return R;
   }
   function WB_MoonAscendingNodeLongitude(centuriesSinceEpochTDT, cache) {
@@ -10253,13 +10273,23 @@
     const Z = Udot * cosV + Vdot * sinU * cosU * sinV;
     const Omega = Math.atan2(Y, Z);
     let L = fmod(Omega, 2 * Math.PI);
-    if (L < 0) L += 2 * Math.PI;
-    if (cache) cache.set(48 /* AscendingNodeLongitude */, L);
+    if (L < 0)
+      L += 2 * Math.PI;
+    if (cache)
+      cache.set(48 /* AscendingNodeLongitude */, L);
     return L;
   }
 
   // src/astronomy/es-coordinates.ts
   var TWO_PI2 = Math.PI * 2;
+  function raAndDeclO(eclipticLatitude, eclipticLongitude, obliquity) {
+    const sinDelta = Math.sin(eclipticLatitude) * Math.cos(obliquity) + Math.cos(eclipticLatitude) * Math.sin(obliquity) * Math.sin(eclipticLongitude);
+    const declination = Math.asin(sinDelta);
+    const y = Math.sin(eclipticLongitude) * Math.cos(obliquity) - Math.tan(eclipticLatitude) * Math.sin(obliquity);
+    const x = Math.cos(eclipticLongitude);
+    const rightAscension = Math.atan2(y, x);
+    return { rightAscension, declination };
+  }
   function topocentricParallax(ra, decl, H, distInAU, observerLatitude, observerAltitude) {
     const bOverA = 0.99664719;
     const u = Math.atan(bOverA * Math.tan(observerLatitude));
@@ -10311,6 +10341,17 @@
       cache.set(3 /* sunDecl */, result.declination);
     }
     return { rightAscension: result.rightAscension, declination: result.declination };
+  }
+  function sunEclipticLongitudeForDate(dateInterval, cache) {
+    if (cache && cache.isValid(1 /* sunEclipticLongitude */)) {
+      return cache.get(1 /* sunEclipticLongitude */);
+    }
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const eclipticLongitude = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+    if (cache) {
+      cache.set(1 /* sunEclipticLongitude */, eclipticLongitude);
+    }
+    return eclipticLongitude;
   }
   function moonRAAndDecl(dateInterval, cache) {
     if (cache && cache.isValid(8 /* moonRA */)) {
@@ -10374,8 +10415,10 @@
     const meanGeoLong = Math.atan2(yGeo, xGeo);
     const meanGeoLat = Math.atan2(zGeo, Math.sqrt(xGeo * xGeo + yGeo * yGeo));
     let geoLong = meanGeoLong + longAberration + nutation;
-    if (geoLong < 0) geoLong += Math.PI * 2;
-    else if (geoLong > Math.PI * 2) geoLong -= Math.PI * 2;
+    if (geoLong < 0)
+      geoLong += Math.PI * 2;
+    else if (geoLong > Math.PI * 2)
+      geoLong -= Math.PI * 2;
     const geoLat = meanGeoLat + latAberration;
     const cosObl = Math.cos(obliquity);
     const sinObl = Math.sin(obliquity);
@@ -10387,7 +10430,8 @@
     const y = cosObl * cosLatG * sinLong - sinObl * sinLat;
     const x = cosLatG * Math.cos(geoLong);
     let ra = fmod(Math.atan2(y, x), Math.PI * 2);
-    if (ra < 0) ra += Math.PI * 2;
+    if (ra < 0)
+      ra += Math.PI * 2;
     return { geoLong, geoLat, distance, ra, decl };
   }
   function innerPlanetApparentPosition(U, helioLong, helioLat, radius, longAber, latAber, cache) {
@@ -10414,7 +10458,8 @@
     }
     L = L * 1e-7 + 4.4429839 + 260881.4701279 * U + 1e-6 * (409894.2 + 2435 * U - 1408 * U_2 + 114 * U_3 + 233 * U_4 - 88 * U_5) * Math.sin(3.053817 + 260878.756773 * U - 1093e-6 * U_2 - 93e-5 * U_3 + 43e-5 * U_4 + 14e-5 * U_5);
     L = fmod(L, Math.PI * 2);
-    if (L < 0) L += Math.PI * 2;
+    if (L < 0)
+      L += Math.PI * 2;
     return L;
   }
   function mercuryHeliocentricLatitude(U) {
@@ -10459,7 +10504,8 @@
     }
     L = L * 1e-7 + 3.2184413 + 102135.2937764 * U + 1e-6 * (13539.7 - 9570 * U + 1987 * U_2 + 927 * U_3 + 230 * U_4 - 51 * U_5 + 10 * U_6) * Math.sin(0.88074 + 102132.84648 * U + 0.24082 * U_2 + 0.1004 * U_3 + 0.0355 * U_4 - 17e-4 * U_5 - 0.0151 * U_6) + 1e-6 * (898.9 + 112.4 * U - 170 * U_2 + 113 * U_3 + 34 * U_4 - 79 * U_5 + 56 * U_6) * Math.sin(0.5941 + 204267.313 * U + 0.014 * U_2 + 0.123 * U_3 - 0.146 * U_4 + 0.052 * U_5);
     L = fmod(L, Math.PI * 2);
-    if (L < 0) L += Math.PI * 2;
+    if (L < 0)
+      L += Math.PI * 2;
     return L;
   }
   function venusHeliocentricLatitude(U) {
@@ -10505,7 +10551,8 @@
     }
     L = L * 1e-7 + 6.2458611 + 33408.5620646 * U + 1e-6 * (186563.7 + 18135 * U - 1332 * U_2 - 704 * U_3 - 65 * U_4 - 89 * U_5 + 9 * U_6) * Math.sin(0.337967 + 33405.348759 * U + 0.031676 * U_2 - 7354e-6 * U_3 + 1143e-6 * U_4 - 29e-5 * U_5 - 1e-4 * U_6);
     L = fmod(L, Math.PI * 2);
-    if (L < 0) L += Math.PI * 2;
+    if (L < 0)
+      L += Math.PI * 2;
     return L;
   }
   function marsHeliocentricLatitude(U) {
@@ -10558,11 +10605,14 @@
     const jd = U * 3652500 + 2451545;
     const firstJD = jdRanges[0].startJD;
     const lastJD = jdRanges[descriptor.numEntries - 1].endJD;
-    if (jd < firstJD || jd > lastJD) return null;
+    if (jd < firstJD || jd > lastJD)
+      return null;
     const fract = (jd - firstJD) / (lastJD - 4 - firstJD);
     let indx = Math.trunc(fract * descriptor.numEntries);
-    if (indx < 0) indx = 0;
-    else if (indx > descriptor.numEntries - 1) indx = descriptor.numEntries - 1;
+    if (indx < 0)
+      indx = 0;
+    else if (indx > descriptor.numEntries - 1)
+      indx = descriptor.numEntries - 1;
     if (jd < jdRanges[indx].startJD) {
       indx--;
     } else if (indx < descriptor.numEntries - 1 && jd >= jdRanges[indx + 1].startJD) {
@@ -10573,21 +10623,25 @@
   }
   function outerHelioLong(U, desc) {
     const r = findOuterPlanetDatum(U, desc);
-    if (!r) return 0;
+    if (!r)
+      return 0;
     const Vs = makeVsTable(r.V);
     let L = calcOuterValue(Vs, r.datum.aLong);
     L = fmod(L, Math.PI * 2);
-    if (L < 0) L += Math.PI * 2;
+    if (L < 0)
+      L += Math.PI * 2;
     return L;
   }
   function outerHelioLat(U, desc) {
     const r = findOuterPlanetDatum(U, desc);
-    if (!r) return 0;
+    if (!r)
+      return 0;
     return calcOuterValue(makeVsTable(r.V), r.datum.aLat);
   }
   function outerRadius(U, desc) {
     const r = findOuterPlanetDatum(U, desc);
-    if (!r) return 0;
+    if (!r)
+      return 0;
     return calcOuterValue(makeVsTable(r.V), r.datum.aRad);
   }
   var jupiterHeliocentricLongitude = (U) => outerHelioLong(U, jupiterDescriptor);
@@ -10886,6 +10940,17 @@
     }
     return eotAsSeconds;
   }
+  function localSiderealTime(dateInterval, observerLongitude, cache) {
+    if (cache && cache.isValid(166 /* lst */)) {
+      return cache.get(166 /* lst */);
+    }
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    if (cache) {
+      cache.set(166 /* lst */, lst);
+    }
+    return lst;
+  }
   function positionAngle(sunRA, sunDecl, objRA, objDecl) {
     return Math.atan2(
       Math.cos(sunDecl) * Math.sin(sunRA - objRA),
@@ -11008,7 +11073,8 @@
     const moonAngularSize = moonSizeParallax.angularSize;
     const moonParallax = moonSizeParallax.parallax;
     let raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI3);
-    if (raDelta > Math.PI) raDelta = TWO_PI3 - raDelta;
+    if (raDelta > Math.PI)
+      raDelta = TWO_PI3 - raDelta;
     let physicalSeparation;
     let separationAtPartialEclipse;
     let separationAtTotalEclipse;
@@ -11043,7 +11109,8 @@
     } else {
       shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
       let shadowRA = sunRA + Math.PI;
-      if (shadowRA > TWO_PI3) shadowRA -= TWO_PI3;
+      if (shadowRA > TWO_PI3)
+        shadowRA -= TWO_PI3;
       const shadowDecl = -sunDecl;
       physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
       separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
@@ -11433,7 +11500,8 @@
           leavesPerQuadrant,
           incremental ? 1 : 0
         );
-        if (!isUpper(quadrant)) initialAngle += Math.PI;
+        if (!isUpper(quadrant))
+          initialAngle += Math.PI;
         const now = performance.now();
         leaves.push({
           quadrant,
@@ -11463,7 +11531,8 @@
     return leaves;
   }
   function updateLeafAngles(leaves, env) {
-    if (leaves.length === 0) return;
+    if (leaves.length === 0)
+      return;
     const phase = leaves[0].phaseExpr ? evaluate(leaves[0].phaseExpr, env) : 0;
     const rotation = leaves[0].rotationExpr ? evaluate(leaves[0].rotationExpr, env) : 0;
     for (const leaf of leaves) {
@@ -11483,7 +11552,8 @@
   }
   var kECGLAngleAnimationSpeed2 = 2;
   function tickLeafAnimations(leaves, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0) {
-    if (leaves.length === 0) return;
+    if (leaves.length === 0)
+      return;
     let phase = null;
     let rotation = null;
     for (const leaf of leaves) {
@@ -11499,7 +11569,8 @@
           leaf.leavesPerQuadrant,
           leaf.incremental ? 1 : 0
         );
-        if (!isUpper(leaf.quadrant)) newAngle += Math.PI;
+        if (!isUpper(leaf.quadrant))
+          newAngle += Math.PI;
         const newRotation = rotation;
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
           let ticksUntilUpdate = 1;
@@ -11536,7 +11607,8 @@
     const a = fmod3(current, 2 * Math.PI);
     const b = fmod3(target, 2 * Math.PI);
     let d = Math.abs(b - a);
-    if (d > Math.PI) d = 2 * Math.PI - d;
+    if (d > Math.PI)
+      d = 2 * Math.PI - d;
     return d;
   }
   function finishLeafAnimations(leaves) {
@@ -11561,7 +11633,8 @@
   }
   function anyLeafAnimating(leaves) {
     for (const leaf of leaves) {
-      if (leaf.angleAnim.animating || leaf.rotationAnim.animating) return true;
+      if (leaf.angleAnim.animating || leaf.rotationAnim.animating)
+        return true;
     }
     return false;
   }
@@ -11636,7 +11709,8 @@
     ctx.stroke();
   }
   function drawTerminator(ctx, leaves, scale = 1) {
-    if (leaves.length === 0) return;
+    if (leaves.length === 0)
+      return;
     for (const leaf of leaves) {
       ctx.save();
       ctx.translate(leaf.centerX * scale, -leaf.centerY * scale);
@@ -11689,11 +11763,13 @@
     return env;
   }
   function evalAttr(expr, env) {
-    if (!expr) return 0;
+    if (!expr)
+      return 0;
     return evaluate(expr, env);
   }
   function evalColor(expr, env) {
-    if (!expr) return "rgba(0,0,0,0)";
+    if (!expr)
+      return "rgba(0,0,0,0)";
     const val = evaluate(expr, env);
     return argbToCSS(val);
   }
@@ -11777,10 +11853,14 @@
       const north = OBSERVER_LAT >= 0;
       const di = dateToDateInterval(getNow());
       const sunLong = planetEclipticLongitude(0 /* Sun */, di, null);
-      if (sunLong > Math.PI * 3 / 2) return north ? 3 : 1;
-      else if (sunLong > Math.PI) return north ? 2 : 0;
-      else if (sunLong > Math.PI / 2) return north ? 1 : 3;
-      else return north ? 0 : 2;
+      if (sunLong > Math.PI * 3 / 2)
+        return north ? 3 : 1;
+      else if (sunLong > Math.PI)
+        return north ? 2 : 0;
+      else if (sunLong > Math.PI / 2)
+        return north ? 1 : 3;
+      else
+        return north ? 0 : 2;
     });
     functions.set("offsetOfWinterSolsticeFromDec31Midnight", () => {
       const di = dateToDateInterval(getNow());
@@ -12052,8 +12132,102 @@
     functions.set("timeIndicatorColor", () => 0);
     functions.set("locationIndicatorColor", () => 0);
     functions.set("skew", () => 0);
+    functions.set("sunRA", () => {
+      const di = dateToDateInterval(getNow());
+      return sunRAandDecl(di, null).rightAscension;
+    });
+    functions.set("moonRA", () => {
+      const di = dateToDateInterval(getNow());
+      return moonRAAndDecl(di, null).rightAscension;
+    });
+    functions.set("minuteValue", () => {
+      const now2 = getNow();
+      const secSinceMidnight = now2.getHours() * 3600 + now2.getMinutes() * 60 + now2.getSeconds() + now2.getMilliseconds() / 1e3;
+      return fmod(secSinceMidnight / 60, 60);
+    });
+    functions.set("minuteValueAngle", () => {
+      const now2 = getNow();
+      const secSinceMidnight = now2.getHours() * 3600 + now2.getMinutes() * 60 + now2.getSeconds() + now2.getMilliseconds() / 1e3;
+      return fmod(secSinceMidnight / 60, 60) * 2 * Math.PI / 60;
+    });
+    functions.set("lstValue", () => {
+      const di = dateToDateInterval(getNow());
+      const lstRadians = localSiderealTime(di, OBSERVER_LON, null);
+      return lstRadians * (12 * 3600) / Math.PI;
+    });
+    functions.set("lunarAscendingNodeRA", () => {
+      const di = dateToDateInterval(getNow());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      const longitude = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch);
+      const { nutation, obliquity } = WB_nutationObliquity(julianCenturiesSince2000Epoch / 100);
+      const { rightAscension } = raAndDeclO(0, longitude, obliquity);
+      let ra = rightAscension;
+      if (ra < 0)
+        ra += 2 * Math.PI;
+      return ra;
+    });
+    functions.set("eclipseSeparation", () => {
+      const di = dateToDateInterval(getNow());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).abstractSeparation;
+    });
+    functions.set("eclipseKind", () => {
+      const di = dateToDateInterval(getNow());
+      let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
+      if (value > 0)
+        value--;
+      return value;
+    });
+    functions.set("legacyEclipseKind", () => {
+      const di = dateToDateInterval(getNow());
+      let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
+      if (value > 0)
+        value--;
+      return value;
+    });
+    functions.set("year366IndicatorAngle", () => {
+      return computeYear366IndicatorFraction(getNow()) * 2 * Math.PI;
+    });
+    functions.set("closestSunEclipticLongitudeQuarter366IndicatorAngle", (quarterNumber) => {
+      return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow());
+    });
+    functions.set("planetrise24HourIndicatorAngleLST", (planetNumber) => {
+      return computeDayNightLeafAngleLST(
+        planetNumber,
+        0,
+        0,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+    });
+    functions.set("planetset24HourIndicatorAngleLST", (planetNumber) => {
+      return computeDayNightLeafAngleLST(
+        planetNumber,
+        1,
+        0,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+    });
     functions.set("dayNightLeafAngle", (planetNumber, leafNumber, numLeaves) => {
       return computeDayNightLeafAngle(
+        planetNumber,
+        leafNumber,
+        numLeaves,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+    });
+    functions.set("dayNightLeafAngleLST", (planetNumber, leafNumber, numLeaves) => {
+      return computeDayNightLeafAngleLST(
         planetNumber,
         leafNumber,
         numLeaves,
@@ -12207,8 +12381,10 @@
     if (isNaN(riseTimeAngle)) {
       if (isNaN(setTimeAngle)) {
         let sTA = sTransitAngle;
-        if (sTA > rTransitAngle + Math.PI) sTA -= 2 * Math.PI;
-        else if (sTA < rTransitAngle - Math.PI) sTA += 2 * Math.PI;
+        if (sTA > rTransitAngle + Math.PI)
+          sTA -= 2 * Math.PI;
+        else if (sTA < rTransitAngle - Math.PI)
+          sTA += 2 * Math.PI;
         const avgTransit = (rTransitAngle + sTA) / 2;
         if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
           riseTimeAngle = avgTransit - Math.PI;
@@ -12235,6 +12411,147 @@
       } else {
         setTimeAngle = riseTimeAngle + leafWidth;
         polarWinter = true;
+      }
+    }
+    riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
+    setTimeAngle = fmod(setTimeAngle, 2 * Math.PI);
+    if (setTimeAngle <= riseTimeAngle + 1e-4) {
+      setTimeAngle += 2 * Math.PI;
+    }
+    setTimeAngle -= leafWidth / 2;
+    riseTimeAngle += leafWidth / 2;
+    if (setTimeAngle < riseTimeAngle) {
+      riseTimeAngle = setTimeAngle = (riseTimeAngle + setTimeAngle) / 2;
+    }
+    let leafCenterAngle = riseTimeAngle + (setTimeAngle - riseTimeAngle) / (numLeaves - 1) * leafNumber;
+    if (leafCenterAngle > 2 * Math.PI) {
+      leafCenterAngle -= 2 * Math.PI;
+    }
+    return leafCenterAngle;
+  }
+  function computeYear366IndicatorFraction(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const dom = date.getDate();
+    const isLeap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const startOfYear = new Date(year, 0, 1);
+    let diffMs = date.getTime() - startOfYear.getTime();
+    let daysSinceStart = diffMs / (1e3 * 60 * 60 * 24);
+    if (!isLeap && (month > 1 || month === 1 && dom > 28)) {
+      daysSinceStart += 1;
+    }
+    return fmod(daysSinceStart / 366, 1);
+  }
+  function timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool) {
+    const sunLongForTryDate = sunEclipticLongitudeForDate(tryDate, pool.tempCache);
+    const howFarAway = targetSunLong - sunLongForTryDate;
+    let deltaAngleToTarget;
+    if (howFarAway >= 0) {
+      if (howFarAway >= Math.PI) {
+        deltaAngleToTarget = howFarAway - 2 * Math.PI;
+      } else {
+        deltaAngleToTarget = howFarAway;
+      }
+    } else if (howFarAway >= -Math.PI) {
+      deltaAngleToTarget = howFarAway;
+    } else {
+      deltaAngleToTarget = howFarAway + 2 * Math.PI;
+    }
+    const kECSecondsInTropicalYear = 3600 * 24 * 365.2422;
+    return tryDate + deltaAngleToTarget * kECSecondsInTropicalYear / (2 * Math.PI);
+  }
+  function computeClosestSunEclipticLongQuarter366Angle(quarterNumber, nowDate) {
+    const calcDate = dateToDateInterval(nowDate);
+    const targetSunLong = quarterNumber * Math.PI / 2;
+    const pool = new AstroCachePool();
+    pool.tempCache.dateInterval = calcDate;
+    pool.tempCache.currentFlag = 1;
+    let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate, pool);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    const targetDate = new Date((targetTime + 978307200) * 1e3);
+    return computeYear366IndicatorFraction(targetDate) * 2 * Math.PI;
+  }
+  function angle24HourLSTForDate(dateInterval, observerLon) {
+    const lstRadians = localSiderealTime(dateInterval, observerLon, null);
+    return fmod(lstRadians, 2 * Math.PI);
+  }
+  function computeDayNightLeafAngleLST(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const lookahead = 3600 * 13.2;
+    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
+    const sunIsUp = alt > 0;
+    const riseTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+      observerLat,
+      observerLon,
+      true,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const setTime = planetaryRiseSetTimeRefined(
+      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+      observerLat,
+      observerLon,
+      false,
+      0 /* Sun */,
+      NaN,
+      pool
+    );
+    const now = getNow();
+    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourLSTForDate(riseTime, observerLon);
+    let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourLSTForDate(setTime, observerLon);
+    const rTransitAngle = angle24HourLSTForDate(dateToDateInterval(noon), observerLon);
+    const sTransitAngle = angle24HourLSTForDate(dateToDateInterval(midnight), observerLon);
+    if (numLeaves === 0) {
+      if (leafNumber === 0) {
+        if (isNaN(riseTimeAngle)) {
+          return rTransitAngle;
+        } else {
+          return riseTimeAngle;
+        }
+      } else if (leafNumber === 1) {
+        if (isNaN(setTimeAngle)) {
+          return sTransitAngle;
+        } else {
+          return setTimeAngle;
+        }
+      }
+      return 0;
+    }
+    const leafWidth = 2 * Math.PI / numLeaves;
+    if (isNaN(riseTimeAngle)) {
+      if (isNaN(setTimeAngle)) {
+        let sTA = sTransitAngle;
+        if (sTA > rTransitAngle + Math.PI)
+          sTA -= 2 * Math.PI;
+        else if (sTA < rTransitAngle - Math.PI)
+          sTA += 2 * Math.PI;
+        const avgTransit = (rTransitAngle + sTA) / 2;
+        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+          riseTimeAngle = avgTransit - Math.PI;
+          setTimeAngle = avgTransit + Math.PI;
+        } else {
+          riseTimeAngle = avgTransit - leafWidth / 2 - 1e-5;
+          setTimeAngle = avgTransit + leafWidth / 2 + 1e-5;
+        }
+      } else {
+        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+          riseTimeAngle = setTimeAngle - 2 * Math.PI;
+        } else {
+          riseTimeAngle = setTimeAngle - leafWidth;
+        }
+      }
+    } else if (isNaN(setTimeAngle)) {
+      if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+        setTimeAngle = riseTimeAngle + 2 * Math.PI;
+      } else {
+        setTimeAngle = riseTimeAngle + leafWidth;
       }
     }
     riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
@@ -12300,7 +12617,8 @@
         pendingWindows.push(part);
         continue;
       }
-      if (part.type === "Button") continue;
+      if (part.type === "Button")
+        continue;
       if (part.type === "Static") {
         pendingWindows.length = 0;
         if (part.cachedCanvas) {
@@ -12368,7 +12686,8 @@
     }
   }
   function drawBezel(ctx, watch) {
-    if (!watch.bezelColor) return;
+    if (!watch.bezelColor)
+      return;
     const faceRadius = watch.faceWidth / 2;
     const outerRadius2 = faceRadius + BEZEL_THICKNESS_XML;
     ctx.save();
@@ -12442,7 +12761,8 @@
       ];
     }
     const m = c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
-    if (m) return [+m[1], +m[2], +m[3]];
+    if (m)
+      return [+m[1], +m[2], +m[3]];
     return [192, 192, 192];
   }
   function darkenColor(color, factor) {
@@ -12466,7 +12786,8 @@
         }
         continue;
       }
-      if (part.type === "Button") continue;
+      if (part.type === "Button")
+        continue;
       if (part.type === "QHand") {
         if (part.src && images && !part.xAnchor && !part.yAnchor) {
           drawImageHand(ctx, part, env, images);
@@ -12578,7 +12899,8 @@
   function textVisualCenterY(ctx, _text) {
     const font = ctx.font;
     let cached = _fontCenterCache.get(font);
-    if (cached !== void 0) return cached;
+    if (cached !== void 0)
+      return cached;
     const m = ctx.measureText("X");
     cached = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
     _fontCenterCache.set(font, cached);
@@ -12590,7 +12912,8 @@
   var MARKS_TICK_OUT = 1 << 2;
   var MARKS_DOT = 1 << 4;
   function parseMarksType(marks) {
-    if (!marks) return MARKS_NONE;
+    if (!marks)
+      return MARKS_NONE;
     let result = MARKS_NONE;
     for (const part of marks.split("|")) {
       switch (part.trim().toLowerCase()) {
@@ -12614,7 +12937,8 @@
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const radius = evalAttr(part.radius, env);
-    if (radius <= 0) return;
+    if (radius <= 0)
+      return;
     const bgColor = evalColor(part.bgColor, env);
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
     const markWidth = part.markWidth !== void 0 ? evalAttr(part.markWidth, env) : 1;
@@ -12650,7 +12974,8 @@
         const th = i / nMarks * 2 * Math.PI;
         if (angle1 !== 0 || angle2 !== 2 * Math.PI) {
           const normTh = th;
-          if (normTh < angle1 || normTh > angle2) continue;
+          if (normTh < angle1 || normTh > angle2)
+            continue;
         }
         const cosT = Math.cos(th - Math.PI / 2);
         const sinT = Math.sin(th - Math.PI / 2);
@@ -12668,7 +12993,8 @@
       for (let i = 0; i < nMarks; i++) {
         const th = i / nMarks * 2 * Math.PI;
         if (angle1 !== 0 || angle2 !== 2 * Math.PI) {
-          if (th < angle1 || th > angle2) continue;
+          if (th < angle1 || th > angle2)
+            continue;
         }
         const cosT = Math.cos(th - Math.PI / 2);
         const sinT = Math.sin(th - Math.PI / 2);
@@ -12695,7 +13021,8 @@
         const radiusFactor = radius < EC_DIAL_SMALL_RADIUS_CUTOFF ? EC_DIAL_RADIUS_FACTOR + EC_DIAL_SMALL_RADIUS_FACTOR * (EC_DIAL_SMALL_RADIUS_CUTOFF - radius) : EC_DIAL_RADIUS_FACTOR;
         for (let i = 0; i < n; i++) {
           const label = labels[i].trim();
-          if (!label) continue;
+          if (!label)
+            continue;
           const th = i / n * 2 * Math.PI - Math.PI / 2;
           const measured = ctx.measureText(label);
           const w = measured.width;
@@ -12713,7 +13040,8 @@
         const baseR = radius;
         for (let i = 0; i < n; i++) {
           const label = labels[i].trim();
-          if (!label) continue;
+          if (!label)
+            continue;
           const th = i / n * 2 * Math.PI - Math.PI / 2;
           const measured = ctx.measureText(label);
           const textH = fontSize;
@@ -12739,7 +13067,8 @@
       } else {
         for (let i = 0; i < n; i++) {
           const label = labels[i].trim();
-          if (!label) continue;
+          if (!label)
+            continue;
           const th = i / n * 2 * Math.PI - Math.PI / 2;
           const textH = fontSize;
           const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
@@ -12768,7 +13097,8 @@
     const length = evalAttr(part.length, env);
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);
-    if (length <= 0) return;
+    if (length <= 0)
+      return;
     const handType = part.handType || "tri";
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
@@ -12790,8 +13120,10 @@
       ctx.quadraticCurveTo(-oWidth * 0.45, -oLength / 2, -oWidth / 4, -oLength);
       ctx.moveTo(oWidth / 4, -oLength);
       ctx.quadraticCurveTo(oWidth * 0.45, -oLength / 2, oWidth / 12, -oCenter2);
-      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+      if (fillColor !== "rgba(0,0,0,0)")
+        ctx.fill();
+      if (strokeColor !== "rgba(0,0,0,0)")
+        ctx.stroke();
       const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
       ctx.fillStyle = oStrokeColor;
       ctx.lineWidth = 0;
@@ -12880,8 +13212,10 @@
     ctx.lineTo(0, innerY);
     ctx.lineTo(-oWidth / 2, baseY);
     ctx.closePath();
-    if (oFillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (oStrokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    if (oFillColor !== "rgba(0,0,0,0)")
+      ctx.fill();
+    if (oStrokeColor !== "rgba(0,0,0,0)")
+      ctx.stroke();
     if (oLineWidth > 0) {
       const extraTipY = -(length + oLength);
       const extraBaseY = -(length + oLength - oLineWidth * 3);
@@ -12901,8 +13235,10 @@
     ctx.fillStyle = fillColor;
     ctx.beginPath();
     ctx.arc(0, tail + oRadius, oRadius, 0, 2 * Math.PI);
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    if (fillColor !== "rgba(0,0,0,0)")
+      ctx.fill();
+    if (strokeColor !== "rgba(0,0,0,0)")
+      ctx.stroke();
   }
   function drawCenterDot(ctx, radius, color) {
     ctx.fillStyle = color;
@@ -12956,10 +13292,12 @@
     const y = -evalAttr(part.y, env);
     const radius = evalAttr(part.radius, env);
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    if (radius <= 0) return;
+    if (radius <= 0)
+      return;
     const labels = part.text?.split(",") || [];
     const n = labels.length;
-    if (n === 0) return;
+    if (n === 0)
+      return;
     const fontSize = evalAttr(part.fontSize, env) || 12;
     const fontName = part.fontName || "Arial";
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
@@ -13067,7 +13405,8 @@
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const text = part.text || "";
-    if (!text) return;
+    if (!text)
+      return;
     const fontSize = evalAttr(part.fontSize, env) || 12;
     const fontName = part.fontName || "Arial";
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
@@ -13117,9 +13456,11 @@
     ctx.restore();
   }
   function drawImage(ctx, part, env, images) {
-    if (!part.src || !images) return;
+    if (!part.src || !images)
+      return;
     const loaded2 = images.get(part.src);
-    if (!loaded2) return;
+    if (!loaded2)
+      return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const alpha = part.alpha !== void 0 ? evalAttr(part.alpha, env) : 1;
@@ -13134,9 +13475,11 @@
     ctx.restore();
   }
   function drawImageHand(ctx, part, env, images) {
-    if (!part.src || !images) return;
+    if (!part.src || !images)
+      return;
     const loaded2 = images.get(part.src);
-    if (!loaded2) return;
+    if (!loaded2)
+      return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
@@ -13172,7 +13515,8 @@
     const yCorner = evalAttr(part.y, env);
     const w = evalAttr(part.w, env);
     const h = evalAttr(part.h, env);
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0)
+      return;
     const cx = xCorner + w / 2;
     const cy = -(yCorner + h / 2);
     const bgColor = evalColor(part.bgColor, env);
@@ -13206,7 +13550,8 @@
     const innerR = evalAttr(part.innerRadius, env);
     const span = evalAttr(part.angleSpan, env);
     const angle = evalAttr(part.angle, env);
-    if (outerR <= 0 || innerR <= 0 || span <= 0) return;
+    if (outerR <= 0 || innerR <= 0 || span <= 0)
+      return;
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "transparent";
     ctx.save();
@@ -13237,12 +13582,14 @@
     const numWedges = evalAttr(part.numWedges, env) || 24;
     const planetNumber = evalAttr(part.planetNumber, env);
     const masterOffset = evalAttr(part.masterOffset, env);
-    if (outerR <= 0 || innerR <= 0) return;
+    if (outerR <= 0 || innerR <= 0)
+      return;
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "white";
     const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
     const leafAngleFn = env.functions.get("dayNightLeafAngle");
-    if (!leafAngleFn) return;
+    if (!leafAngleFn)
+      return;
     ctx.save();
     ctx.translate(cx, cy);
     for (let i = 0; i < numWedges; i++) {
@@ -13277,7 +13624,8 @@
     const border = evalAttr(part.border, env);
     const strokeColor = evalColor(part.strokeColor, env);
     const isPorthole = part.windowType === "porthole";
-    if (w <= 0 || h <= 0) return;
+    if (w <= 0 || h <= 0)
+      return;
     const cx = isPorthole ? xVal : xVal + w / 2;
     const cy = isPorthole ? -yVal : -(yVal + h / 2);
     ctx.save();
@@ -13327,7 +13675,6 @@
         return 86400;
       case "month":
         return 30 * 86400;
-      // approximate
       case "year":
         return 365 * 86400;
     }
@@ -13498,10 +13845,13 @@
     }
     /** Human-readable status label */
     get statusLabel() {
-      if (this.stopped) return "Stopped";
+      if (this.stopped)
+        return "Stopped";
       if (this.rate === null) {
-        if (this.direction === -1) return "1\xD7 \u25C0";
-        if (this.offsetMs !== 0) return "1\xD7";
+        if (this.direction === -1)
+          return "1\xD7 \u25C0";
+        if (this.offsetMs !== 0)
+          return "1\xD7";
         return "1\xD7 (real time)";
       }
       return `${this.rate.label} ${this.direction === 1 ? "\u25B6" : "\u25C0"}`;
@@ -13565,7 +13915,8 @@
      * crossed and fires the tick if so. Returns true if a tick occurred.
      */
     checkTick(nowPerfMs) {
-      if (this.rate === null || this.stopped) return false;
+      if (this.rate === null || this.stopped)
+        return false;
       if (nowPerfMs - this.lastTickRealMs >= TICK_INTERVAL_MS) {
         this.tickTime = new Date(this.nextTickTime.getTime());
         this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
@@ -13579,9 +13930,12 @@
      * True for quantized rates and -1×; false for stopped and real-time 1×.
      */
     get needsContinuousRender() {
-      if (this.stopped) return false;
-      if (this.rate !== null) return true;
-      if (this.direction === -1) return true;
+      if (this.stopped)
+        return false;
+      if (this.rate !== null)
+        return true;
+      if (this.direction === -1)
+        return true;
       return false;
     }
     // ========================================================================
@@ -13610,7 +13964,8 @@
     }
     /** Set direction (forward or reverse). Preserves current rate. */
     setDirection(dir) {
-      if (dir === this.direction) return;
+      if (dir === this.direction)
+        return;
       const prevTime = this.getDisplayTime();
       this.direction = dir;
       this.stopped = false;
@@ -13625,7 +13980,8 @@
     }
     /** Stop time. */
     stop() {
-      if (this.stopped) return;
+      if (this.stopped)
+        return;
       const prevTime = this.getDisplayTime();
       this.stopped = true;
       this.tickTime = prevTime;
@@ -13705,8 +14061,10 @@
     const offStr = params.get("off");
     const dirStr = params.get("dir");
     let dir = 1;
-    if (dirStr === "-1") dir = -1;
-    else if (dirStr === "0") dir = 0;
+    if (dirStr === "-1")
+      dir = -1;
+    else if (dirStr === "0")
+      dir = 0;
     return {
       lat: !isNaN(lat) ? lat : null,
       lon: !isNaN(lon) ? lon : null,
@@ -13831,8 +14189,10 @@
   }
   var loadError = "";
   function loadCityData() {
-    if (loaded) return Promise.resolve();
-    if (loadError) return Promise.reject(new Error(loadError));
+    if (loaded)
+      return Promise.resolve();
+    if (loadError)
+      return Promise.reject(new Error(loadError));
     return new Promise((resolve, reject) => {
       const existing = window.ChronometerCities;
       if (existing) {
@@ -13893,9 +14253,11 @@
     return loaded;
   }
   function searchCities(query, limit = 20) {
-    if (!loaded || !query || query.length < 2) return [];
+    if (!loaded || !query || query.length < 2)
+      return [];
     const q = toASCII(query.trim());
-    if (!q) return [];
+    if (!q)
+      return [];
     const qUpper = query.trim().toUpperCase();
     const results = [];
     for (const a of AIRPORTS) {
@@ -13973,7 +14335,8 @@
       }
     }
     results.sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority - b.priority;
+      if (a.priority !== b.priority)
+        return a.priority - b.priority;
       return b.pop - a.pop;
     });
     return results.slice(0, limit).map((r) => r.result);
@@ -13988,10 +14351,12 @@
   var textureCtx = null;
   var textureLoaded = false;
   function ensureTexture() {
-    if (textureLoaded) return Promise.resolve();
-    if (textureImg) return new Promise((r) => {
-      textureImg.onload = () => r();
-    });
+    if (textureLoaded)
+      return Promise.resolve();
+    if (textureImg)
+      return new Promise((r) => {
+        textureImg.onload = () => r();
+      });
     return new Promise((resolve) => {
       textureImg = new Image();
       textureImg.onload = () => {
@@ -14029,7 +14394,8 @@
         const nx = (sx - cx) / r;
         const ny = (cy - sy) / r;
         const \u03C12 = nx * nx + ny * ny;
-        if (\u03C12 > 1) continue;
+        if (\u03C12 > 1)
+          continue;
         const \u03C1 = Math.sqrt(\u03C12);
         const c = Math.asin(\u03C1);
         const sinC = Math.sin(c);
@@ -14127,7 +14493,8 @@
 
   // src/engine-entry.ts
   function requestBrowserLocation() {
-    if (!navigator.geolocation) return Promise.resolve(null);
+    if (!navigator.geolocation)
+      return Promise.resolve(null);
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
@@ -14137,7 +14504,8 @@
     });
   }
   function optimizeGrid(count, containerW, containerH, gap, padding) {
-    if (count <= 0) return { cols: 1, rows: 1, size: 0 };
+    if (count <= 0)
+      return { cols: 1, rows: 1, size: 0 };
     let bestCols = 1, bestRows = count, bestSize = 0;
     for (let c = 1; c <= count; c++) {
       const r = Math.ceil(count / c);
@@ -14294,7 +14662,8 @@
       face.scale = physPx / totalDiameter;
     }
     function buildCache(face) {
-      if (!face.enabled || face.sizePx === 0) return;
+      if (!face.enabled || face.sizePx === 0)
+        return;
       const { canvas, watch, env, images, scale } = face;
       face.terminatorLeaves = [];
       for (const part of watch.parts) {
@@ -14323,7 +14692,8 @@
     }
     function rebuildEnvironments() {
       for (const face of faces) {
-        if (!face.enabled) continue;
+        if (!face.enabled)
+          continue;
         face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
@@ -14331,7 +14701,8 @@
     }
     function rebuildAllForTime() {
       for (const face of faces) {
-        if (!face.enabled) continue;
+        if (!face.enabled)
+          continue;
         const fd = faceDataArray[face.faceDataIndex];
         const freshWatch = parseWatchXML(fd.xml, "front");
         face.watch.parts = freshWatch.parts;
@@ -14340,7 +14711,8 @@
         face.cachesBuilt = false;
       }
       for (const face of faces) {
-        if (!face.enabled) continue;
+        if (!face.enabled)
+          continue;
         buildCache(face);
       }
     }
@@ -14368,7 +14740,8 @@
       const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
       const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
       for (const face of faces) {
-        if (!face.enabled || !face.cachesBuilt) continue;
+        if (!face.enabled || !face.cachesBuilt)
+          continue;
         tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
         if (face.terminatorLeaves.length > 0) {
           tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
@@ -14387,7 +14760,8 @@
           }
         }
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
-        if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
+        if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves))
+          stillAnimating = true;
       }
       {
         const sim = timeController.getDisplayTime();
@@ -14404,20 +14778,25 @@
       }
     }
     function armIdle() {
-      if (idleTimerId !== null) return;
+      if (idleTimerId !== null)
+        return;
       let earliest = Infinity;
       for (const face of faces) {
-        if (!face.enabled || face.handStates.length === 0) continue;
+        if (!face.enabled || face.handStates.length === 0)
+          continue;
         const t = nextWakeupTime(face.handStates);
-        if (t < earliest) earliest = t;
+        if (t < earliest)
+          earliest = t;
       }
-      if (earliest === Infinity) return;
+      if (earliest === Infinity)
+        return;
       const delay = Math.max(0, earliest - performance.now() - SCHEDULER_LOOKAHEAD_MS);
       idleTimerId = setTimeout(onIdleWakeup, delay);
     }
     function onIdleWakeup() {
       idleTimerId = null;
-      if (rafId !== null) return;
+      if (rafId !== null)
+        return;
       rafId = requestAnimationFrame(frame);
     }
     function startScheduler() {
@@ -14479,7 +14858,8 @@
       lastContainerW = W;
       lastContainerH = H;
       const result = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
-      if (result.size <= 0) return;
+      if (result.size <= 0)
+        return;
       let size = result.size;
       let gridShiftX = 0, gridShiftY = 0;
       let useTopLeftAlign = false;
@@ -14506,7 +14886,8 @@
           const lastColX = hexColX(cols2 - 1, remainder, cols2, cellStep, hasNestle);
           const gridW = lastColX + s + 2 * PADDING_PX;
           const gridH = (rows2 - 1) * cellStep + s + 2 * PADDING_PX;
-          if (gridW > W || gridH > H) return false;
+          if (gridW > W || gridH > H)
+            return false;
           for (let i = 0; i < faces.length; i++) {
             const row = Math.floor(i / cols2);
             const col = i % cols2;
@@ -14536,7 +14917,8 @@
           let lo = 0, hi = Math.max(W, H);
           for (let iter = 0; iter < 25; iter++) {
             const mid = Math.floor((lo + hi) / 2);
-            if (mid <= 0) break;
+            if (mid <= 0)
+              break;
             let anyWorks = false;
             for (let c = 1; c <= faces.length; c++) {
               if (configFits(c, mid)) {
@@ -14561,7 +14943,8 @@
           result.cols = bestConfig;
           result.rows = Math.ceil(faces.length / bestConfig);
           useTopLeftAlign = true;
-          if (size <= 0) return;
+          if (size <= 0)
+            return;
           const cellStep = size + GAP_PX;
           const remainder = faces.length - bestConfig * (result.rows - 1);
           const hasNestle = remainder > 0 && remainder < bestConfig;
@@ -14613,7 +14996,8 @@
       const dpr = window.devicePixelRatio || 1;
       const newPhys = Math.round(size * dpr);
       const positionChanged = useTopLeftAlign !== wasShifted;
-      if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
+      if (newPhys === faces[0]?.canvas.width && !positionChanged)
+        return;
       wasShifted = useTopLeftAlign;
       stopScheduler();
       cols = result.cols;
@@ -14678,14 +15062,16 @@
     }
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (!entry) return;
+      if (!entry)
+        return;
       const { width } = entry.contentRect;
       const locationPanel = document.getElementById("location-panel");
       const timeBarEl = document.getElementById("time-bar");
       const panelH = locationPanel ? locationPanel.offsetHeight : 0;
       const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
       const height = entry.contentRect.height - panelH - timeBarH;
-      if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
+      if (resizeDebounceTimer !== null)
+        clearTimeout(resizeDebounceTimer);
       resizeDebounceTimer = setTimeout(() => {
         resizeDebounceTimer = null;
         onGridResize(width, height);
@@ -14709,7 +15095,8 @@
     }
     function showLocationPrompt(blur) {
       locationPrompt.style.display = "";
-      if (blur) grid.classList.add("blurred");
+      if (blur)
+        grid.classList.add("blurred");
       lpLatInput.value = lat !== 0 || lon !== 0 ? lat.toFixed(3) : "";
       lpLonInput.value = lat !== 0 || lon !== 0 ? lon.toFixed(3) : "";
       if (lpCityInput) {
@@ -14781,7 +15168,8 @@
     lpUseCoords.addEventListener("click", () => {
       const newLat = parseFloat(lpLatInput.value);
       const newLon = parseFloat(lpLonInput.value);
-      if (isNaN(newLat) || isNaN(newLon)) return;
+      if (isNaN(newLat) || isNaN(newLon))
+        return;
       applyLocation(newLat, newLon, "", true);
     });
     lpUseBrowser.addEventListener("click", async () => {
@@ -14878,7 +15266,8 @@
       }
     }
     function debounceCitySearch() {
-      if (citySearchDebounce) clearTimeout(citySearchDebounce);
+      if (citySearchDebounce)
+        clearTimeout(citySearchDebounce);
       citySearchDebounce = setTimeout(onCityInput, 150);
     }
     lpCityInput.addEventListener("input", debounceCitySearch);
@@ -14891,7 +15280,8 @@
     });
     lpCityInput.addEventListener("keydown", (e) => {
       const items = lpCityResults.querySelectorAll(".lp-city-item");
-      if (items.length === 0) return;
+      if (items.length === 0)
+        return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         selectedCityIndex = Math.min(selectedCityIndex + 1, items.length - 1);
@@ -15031,7 +15421,8 @@
     function formatOffset(sim, real) {
       const ms = sim.getTime() - real.getTime();
       const sign = ms < 0 ? "-" : "+";
-      if (Math.abs(ms) < 2e3) return "";
+      if (Math.abs(ms) < 2e3)
+        return "";
       const fromMs = (ms < 0 ? sim : real).getTime();
       const toMs = (ms < 0 ? real : sim).getTime();
       const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
@@ -15081,12 +15472,18 @@
         hrs %= 24;
       }
       const parts = [];
-      if (years > 0) parts.push(`${years}y`);
-      if (months > 0) parts.push(`${months}mo`);
-      if (days > 0) parts.push(`${days}d`);
-      if (hrs > 0) parts.push(`${hrs}h`);
-      if (mins > 0) parts.push(`${mins}m`);
-      if (sec > 0) parts.push(`${sec}s`);
+      if (years > 0)
+        parts.push(`${years}y`);
+      if (months > 0)
+        parts.push(`${months}mo`);
+      if (days > 0)
+        parts.push(`${days}d`);
+      if (hrs > 0)
+        parts.push(`${hrs}h`);
+      if (mins > 0)
+        parts.push(`${mins}m`);
+      if (sec > 0)
+        parts.push(`${sec}s`);
       return parts.length > 0 ? `(${sign}${parts.join(" ")})` : "";
     }
     function showPopover() {
@@ -15210,7 +15607,8 @@
       const el = btn;
       const stepKey = el.dataset.step;
       const entry = stepMap[stepKey];
-      if (!entry) return;
+      if (!entry)
+        return;
       const [unit, dir] = entry;
       const unitName = el.dataset.unit || unit;
       el.addEventListener("mousedown", (e) => {
@@ -15221,7 +15619,8 @@
         timeController.beginFrame();
         const stepNow = performance.now();
         for (const face of faces) {
-          if (!face.enabled || !face.cachesBuilt) continue;
+          if (!face.enabled || !face.cachesBuilt)
+            continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
           tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
@@ -15251,7 +15650,8 @@
         timeController.beginFrame();
         const stepNow = performance.now();
         for (const face of faces) {
-          if (!face.enabled || !face.cachesBuilt) continue;
+          if (!face.enabled || !face.cachesBuilt)
+            continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
           tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
@@ -15281,7 +15681,8 @@
       const dy = parseInt(document.getElementById("tp-day").value, 10);
       const hr = parseInt(document.getElementById("tp-hour").value, 10);
       const mn = parseInt(document.getElementById("tp-minute").value, 10);
-      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn))
+        return;
       const d = new Date(yr, mo, dy, hr, mn, 0, 0);
       timeController.setTime(d);
       updateTimeUI();
@@ -15295,7 +15696,8 @@
         const dy = parseInt(document.getElementById("tp-day").value, 10);
         const hr = parseInt(document.getElementById("tp-hour").value, 10);
         const mn = parseInt(document.getElementById("tp-minute").value, 10);
-        if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+        if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn))
+          return;
         const d = new Date(yr, mo, dy, hr, mn, 0, 0);
         timeController.setTime(d);
         updateTimeUI();

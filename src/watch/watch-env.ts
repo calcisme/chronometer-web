@@ -33,13 +33,17 @@ import {
     closestPhaseDayNumber, planetEclipticLongitude, planetEclipticLatitude,
     planetGeocentricDistance, lunarAscendingNodeLongitude as computeLunarAscendingNode,
     EOTSeconds,
+    calculateEclipse, EclipseKind,
+    localSiderealTime,
 } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet, kECAlwaysAboveHorizon, kECAlwaysBelowHorizon, fmod } from '../astronomy/astro-constants.js';
 import { terminatorAngle } from './terminator.js';
 import { GSTDifferenceForDate } from '../astronomy/es-sidereal.js';
-import { generalPrecessionSinceJ2000 } from '../astronomy/es-coordinates.js';
+import { generalPrecessionSinceJ2000, sunRAandDecl, moonRAAndDecl, sunEclipticLongitudeForDate, raAndDeclO, generalObliquity } from '../astronomy/es-coordinates.js';
 import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
+import { WB_MoonAscendingNodeLongitude } from '../astronomy/wb-moon.js';
+import { WB_nutationObliquity } from '../astronomy/wb-sun.js';
 
 // Default observer location (San Jose, CA): used if geolocation unavailable
 const DEFAULT_LAT_DEG = 37.205;    // degrees N
@@ -600,9 +604,112 @@ function registerTimeFunctions(
     functions.set('locationIndicatorColor', () => 0);  // stub
     functions.set('skew', () => 0);  // stub
 
+    // --- Sun/Moon RA (radians) ---
+    // iOS: [mainAstro sunRA] → sunRAandDecl().rightAscension
+    functions.set('sunRA', () => {
+        const di = dateToDateInterval(getNow());
+        return sunRAandDecl(di, null).rightAscension;
+    });
+    functions.set('moonRA', () => {
+        const di = dateToDateInterval(getNow());
+        return moonRAAndDecl(di, null).rightAscension;
+    });
+
+    // --- minuteValue: fractional minutes (12:35:45 => 35.75) ---
+    // iOS: ECWatchTime minuteValueUsingEnv: secondsSinceMidnightValue / 60 mod 60
+    functions.set('minuteValue', () => {
+        const now = getNow();
+        const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
+        return fmod(secSinceMidnight / 60, 60);
+    });
+    functions.set('minuteValueAngle', () => {
+        const now = getNow();
+        const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
+        return fmod(secSinceMidnight / 60, 60) * 2 * Math.PI / 60;
+    });
+
+    // --- Local Sidereal Time in seconds ---
+    // iOS: [mainAstro localSiderealTime] returns seconds
+    // Our localSiderealTime() returns radians; convert: sec = radians * 12*3600/π
+    functions.set('lstValue', () => {
+        const di = dateToDateInterval(getNow());
+        const lstRadians = localSiderealTime(di, OBSERVER_LON, null);
+        return lstRadians * (12 * 3600) / Math.PI;
+    });
+
+    // --- Lunar ascending node RA ---
+    // iOS: [mainAstro moonAscendingNodeRA] — converts node ecliptic longitude to RA
+    functions.set('lunarAscendingNodeRA', () => {
+        const di = dateToDateInterval(getNow());
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        const longitude = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch);
+        const { nutation, obliquity } = WB_nutationObliquity(julianCenturiesSince2000Epoch / 100);
+        const { rightAscension } = raAndDeclO(0, longitude, obliquity);
+        let ra = rightAscension;
+        if (ra < 0) ra += 2 * Math.PI;
+        return ra;
+    });
+
+    // --- Eclipse separation and kind ---
+    // iOS: [mainAstro eclipseSeparation] → calculateEclipse().abstractSeparation
+    functions.set('eclipseSeparation', () => {
+        const di = dateToDateInterval(getNow());
+        return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).abstractSeparation;
+    });
+    // iOS: eclipseKind → maps enum to wheel value (0-based with "none" collapsed)
+    functions.set('eclipseKind', () => {
+        const di = dateToDateInterval(getNow());
+        let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
+        if (value > 0) value--;  // Wheel assumes one "none" value; collapse NoneSolar(0)/NoneLunar(5→4) gap
+        return value;
+    });
+    // legacyEclipseKind: same as eclipseKind on iOS (Android-origin shim)
+    functions.set('legacyEclipseKind', () => {
+        const di = dateToDateInterval(getNow());
+        let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
+        if (value > 0) value--;
+        return value;
+    });
+
+    // --- year366IndicatorAngle ---
+    // iOS: year366IndicatorFractionUsingEnv * 2π
+    // Fraction of 366-day year (non-leap years skip Feb 29 → offset after Feb)
+    functions.set('year366IndicatorAngle', () => {
+        return computeYear366IndicatorFraction(getNow()) * 2 * Math.PI;
+    });
+
+    // --- closestSunEclipticLongitudeQuarter366IndicatorAngle ---
+    // iOS: finds time of closest equinox/solstice, converts to year366 indicator angle
+    functions.set('closestSunEclipticLongitudeQuarter366IndicatorAngle', (quarterNumber: number) => {
+        return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow());
+    });
+
+    // --- planetrise/set 24-hour indicator angle LST ---
+    // iOS: dayNightLeafAngleForPlanetNumber:leafNumber:0/1:numLeaves:0:timeBaseKind:LST
+    functions.set('planetrise24HourIndicatorAngleLST', (planetNumber: number) => {
+        return computeDayNightLeafAngleLST(
+            planetNumber, 0, 0,
+            getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
+        );
+    });
+    functions.set('planetset24HourIndicatorAngleLST', (planetNumber: number) => {
+        return computeDayNightLeafAngleLST(
+            planetNumber, 1, 0,
+            getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
+        );
+    });
+
     // --- Day/night ring leaf angle function (used by QdayNightRing) ---
     functions.set('dayNightLeafAngle', (planetNumber: number, leafNumber: number, numLeaves: number) => {
         return computeDayNightLeafAngle(
+            planetNumber, leafNumber, numLeaves,
+            getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
+        );
+    });
+
+    // --- Day/night ring leaf angle function with LST time base (used by QdayNightRing with timeBase='LST') ---
+    functions.set('dayNightLeafAngleLST', (planetNumber: number, leafNumber: number, numLeaves: number) => {
+        return computeDayNightLeafAngleLST(
             planetNumber, leafNumber, numLeaves,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
         );
@@ -842,6 +949,230 @@ function computeDayNightLeafAngle(
         } else {
             setTimeAngle = riseTimeAngle + leafWidth;
             polarWinter = true;
+        }
+    }
+
+    // Normalize
+    riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
+    setTimeAngle = fmod(setTimeAngle, 2 * Math.PI);
+    if (setTimeAngle <= riseTimeAngle + 0.0001) {
+        setTimeAngle += 2 * Math.PI;
+    }
+
+    // Normal daytime leaf: shrink by half leaf width
+    setTimeAngle -= leafWidth / 2;
+    riseTimeAngle += leafWidth / 2;
+
+    if (setTimeAngle < riseTimeAngle) {
+        riseTimeAngle = setTimeAngle = (riseTimeAngle + setTimeAngle) / 2;
+    }
+
+    let leafCenterAngle = riseTimeAngle + (setTimeAngle - riseTimeAngle) / (numLeaves - 1) * leafNumber;
+
+    if (leafCenterAngle > 2 * Math.PI) {
+        leafCenterAngle -= 2 * Math.PI;
+    }
+
+    return leafCenterAngle;
+}
+
+// ============================================================================
+// Year-366 (leap year inclusive) indicator fraction
+// ============================================================================
+
+/**
+ * Compute the fraction of the year for a 366-day (leap-scaled) indicator.
+ * iOS: ECWatchTime year366IndicatorFractionUsingEnv
+ * 
+ * Maps non-leap years so they skip February 29th (adding 1 day to the offset).
+ *
+ * @param date - Current JS Date
+ * @returns Fraction of 366 days [0, 1)
+ */
+function computeYear366IndicatorFraction(date: Date): number {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const dom = date.getDate();
+    
+    // Determine if current year is leap year
+    const isLeap = (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0));
+    
+    // Find start of year
+    const startOfYear = new Date(year, 0, 1);
+    
+    // Difference in days from start of year to now
+    let diffMs = date.getTime() - startOfYear.getTime();
+    let daysSinceStart = diffMs / (1000 * 60 * 60 * 24);
+    
+    // Non-leap years: after Feb 28, add 1 full day so we skip the Feb 29 slot
+    if (!isLeap && (month > 1 || (month === 1 && dom > 28))) {
+        daysSinceStart += 1;
+    }
+    
+    // 366 days in our scaled year
+    return fmod(daysSinceStart / 366.0, 1.0);
+}
+
+// ============================================================================
+// Closest sun ecliptic longitude quarter (equinox/solstice)
+// ============================================================================
+
+/**
+ * Approximate time when sun ecliptic longitude hits target.
+ * Uses tropical year ratio.
+ */
+function timeOfClosestSunEclipticLongitude(
+    targetSunLong: number,
+    tryDate: number,
+    pool: AstroCachePool,
+): number {
+    const sunLongForTryDate = sunEclipticLongitudeForDate(tryDate, pool.tempCache);
+    const howFarAway = targetSunLong - sunLongForTryDate;
+    let deltaAngleToTarget: number;
+    if (howFarAway >= 0) {
+        if (howFarAway >= Math.PI) {
+            deltaAngleToTarget = howFarAway - 2 * Math.PI;
+        } else {
+            deltaAngleToTarget = howFarAway;
+        }
+    } else if (howFarAway >= -Math.PI) {
+        deltaAngleToTarget = howFarAway;
+    } else {
+        deltaAngleToTarget = howFarAway + 2 * Math.PI;
+    }
+    
+    const kECSecondsInTropicalYear = 3600.0 * 24 * 365.2422;
+    return tryDate + deltaAngleToTarget * kECSecondsInTropicalYear / (2 * Math.PI);
+}
+
+/**
+ * Refine the closest equinox/solstice time and return its year366 fraction angle.
+ * iOS: closestSunEclipticLongitudeQuarter366IndicatorAngle
+ * quarterNumber: 0=vernal eq, 1=summer sol, 2=autumn eq, 3=winter sol
+ */
+function computeClosestSunEclipticLongQuarter366Angle(
+    quarterNumber: number,
+    nowDate: Date,
+): number {
+    const calcDate = dateToDateInterval(nowDate);
+    const targetSunLong = quarterNumber * Math.PI / 2;
+    
+    // Temporary pool since we just evaluate and throw away
+    const pool = new AstroCachePool();
+    pool.tempCache.dateInterval = calcDate;
+    pool.tempCache.currentFlag = 1;
+    
+    // Iterative refinement (3 steps like iOS)
+    let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate, pool);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    
+    // Convert target interval to year366 fraction
+    const targetDate = new Date((targetTime + 978307200) * 1000); // Apple epoch to JS
+    return computeYear366IndicatorFraction(targetDate) * 2 * Math.PI;
+}
+
+// ============================================================================
+// LST variant of day/night leaf angle
+// ============================================================================
+
+/**
+ * Compute the LST 24-hour angle for a given time.
+ */
+function angle24HourLSTForDate(dateInterval: number, observerLon: number): number {
+    const lstRadians = localSiderealTime(dateInterval, observerLon, null);
+    return fmod(lstRadians, 2 * Math.PI);
+}
+
+/**
+ * Compute day/night leaf angle using LST.
+ * Same logic as computeDayNightLeafAngle, but returns an LST angle.
+ */
+function computeDayNightLeafAngleLST(
+    planetNumber: number,
+    leafNumber: number,
+    numLeaves: number,
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): number {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeSeconds = -5;
+    const lookahead = 3600 * 13.2;
+
+    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
+    const sunIsUp = alt > 0;
+
+    // Get rise time
+    const riseTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+    );
+    // Get set time
+    const setTime = planetaryRiseSetTimeRefined(
+        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+    );
+
+    // Compute transit angles for fallback
+    const now = getNow();
+    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    
+    let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourLSTForDate(riseTime, observerLon);
+    let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourLSTForDate(setTime, observerLon);
+    const rTransitAngle = angle24HourLSTForDate(dateToDateInterval(noon), observerLon);
+    const sTransitAngle = angle24HourLSTForDate(dateToDateInterval(midnight), observerLon);
+
+    // Special case: numLeaves == 0
+    if (numLeaves === 0) {
+        if (leafNumber === 0) { // Rise
+            if (isNaN(riseTimeAngle)) {
+                return rTransitAngle; // Fallback
+            } else {
+                return riseTimeAngle;
+            }
+        } else if (leafNumber === 1) { // Set
+            if (isNaN(setTimeAngle)) {
+                return sTransitAngle; // Fallback
+            } else {
+                return setTimeAngle;
+            }
+        }
+        return 0; // polar checks not done here
+    }
+
+    const leafWidth = 2 * Math.PI / numLeaves;
+
+    // Handle NaN cases — match iOS logic exactly
+    if (isNaN(riseTimeAngle)) {
+        if (isNaN(setTimeAngle)) {
+            let sTA = sTransitAngle;
+            if (sTA > rTransitAngle + Math.PI) sTA -= 2 * Math.PI;
+            else if (sTA < rTransitAngle - Math.PI) sTA += 2 * Math.PI;
+            const avgTransit = (rTransitAngle + sTA) / 2;
+            if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+                riseTimeAngle = avgTransit - Math.PI;
+                setTimeAngle = avgTransit + Math.PI;
+            } else {
+                riseTimeAngle = avgTransit - leafWidth / 2 - 0.00001;
+                setTimeAngle = avgTransit + leafWidth / 2 + 0.00001;
+            }
+        } else {
+            if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+                riseTimeAngle = setTimeAngle - 2 * Math.PI;
+            } else {
+                riseTimeAngle = setTimeAngle - leafWidth;
+            }
+        }
+    } else if (isNaN(setTimeAngle)) {
+        if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+            setTimeAngle = riseTimeAngle + 2 * Math.PI;
+        } else {
+            setTimeAngle = riseTimeAngle + leafWidth;
         }
     }
 
