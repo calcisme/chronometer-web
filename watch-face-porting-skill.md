@@ -51,3 +51,24 @@ When tasked with porting a new watch face from the existing Objective-C/C++ iOS 
 
 * **Drawing Order**: The renderer must process XML parts strictly in document order. Z-index ordering is not fully implemented, meaning if `Part A` is listed before `Part B` in the XML, `B` will render on top of `A`.
 * **Verification**: Build the project (`bash build.sh`). It is not necessary to run a local web server to test the file; instead you can simply use a `file://` URL pointing at the appropriate `.html` file in the `dist/` directory, using URL parameters for lat and lon to avoid the initial location popup (you can use 37.33182 -122.03118 for Apple Park). This app is designed to work using `file://` URLs. Check the browser console for rendering errors or unimplemented function errors. Ensure that there are no overlapping artifacts, orphaned windows, or text misalignments.
+
+## 7. Astronomy & Time API Pitfalls
+
+* **`julianCenturiesSince2000EpochForDateInterval` returns an object**: This function returns `{ julianCenturiesSince2000Epoch: number, deltaT: number }`, NOT a bare number. Always destructure it: `const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, cache)`.
+* **NaN guards in astronomical functions**: During initial hand state collection (`createHandState` in `animation.ts`), expression functions may be called before all variables are resolved, producing NaN inputs. Functions that do table lookups (e.g. `findOuterPlanetDatum` in `wb-planets.ts`) must guard against NaN at the top: `if (isNaN(U)) return null;`. NaN defeats range checks because `NaN < x` and `NaN > x` are both `false`, causing index calculations to produce `NaN` and crash on array access.
+
+## 8. Offset-Radius Hand Rendering
+
+When a hand has `offsetRadius > 0`, the renderer uses polar-offset mode (see `renderer.ts`). The geometry must match the iOS `ECGLPart.m` behavior:
+
+1. **Position**: The hand is placed at `(offsetRadius, offsetAngle)` in polar coordinates from the watch center.
+2. **Rotation**: The image is rotated by `offsetAngle + angle` around its anchor point. Since `ctx.rotate(offsetAngle)` is applied first as part of the positioning, only `ctx.rotate(angle)` is needed afterward — do NOT double-count `offsetAngle`.
+3. **Y-Anchor Flip**: iOS CG uses Y-up coordinates (anchor measured from image bottom). Canvas uses Y-down. The offset branch must use the same CG-to-Canvas convention as the non-offset anchored branch: `yAnchor = -evalAttr(...)` and `drawImage(bitmap, -xAnchor, -yAnchor - drawH, ...)`.
+4. **Orbital displacement via anchor**: The Moon's `yAnchor=23` on a 20px-tall image (at 1x) places the rotation center 3px below the image. When `angle = -moonAgeAngle()` rotates the image, this creates a small orbital circle around the offset point (Earth), making the Moon visibly orbit Earth.
+
+## 9. Index Page & Thumbnails
+
+* **Thumbnail creation**: Wait for the user to supply a screenshot file — do not attempt to capture one yourself. Once provided, scale it to 400×400 with `sips -z 400 400 --out src/faces/thumb-<name>.png <screenshot>.png`.
+* **Index page card**: Add the face card to `src/index.html` in the `face-grid` div. The "All Faces" card should always be **first** in the grid (most visible without scrolling on mobile).
+* **Description text**: Use a short phrase describing the face's distinguishing feature (e.g. "Planetary orrery", "Giant moonphase with alt/az dots").
+
