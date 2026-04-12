@@ -16015,20 +16015,27 @@
           const url = new URL(window.location.href);
           url.searchParams.set("body", p.param);
           window.history.replaceState({}, "", url.toString());
-          stopScheduler();
           for (const face of faces) {
-            const fd = faceDataArray[face.faceDataIndex];
-            const freshWatch = parseWatchXML(fd.xml, "front");
-            face.watch.parts = freshWatch.parts;
-            face.watch.initExprs = freshWatch.initExprs;
+            if (!face.enabled) continue;
             face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
-            face.cachesBuilt = false;
+            if (face.terminatorLeaves.length > 0) {
+              updateLeafAngles(face.terminatorLeaves, face.env);
+              resetLeafSchedules(face.terminatorLeaves);
+              face.lastTerminatorRebuild = 0;
+            }
+            const { canvas, watch, env, images, scale } = face;
+            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+            for (const hs of face.handStates) {
+              hs.nextUpdateTime = 0;
+            }
           }
-          buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
+          stopScheduler();
+          startScheduler();
         };
         var selectPlanet = selectPlanet2;
         selectorEl.style.display = "flex";
         const planetOrder = [
+          { key: "sun", name: "Sun", param: "sun" },
           { key: "moon", name: "Moon", param: "moon" },
           { key: "mercury", name: "Mercury", param: "mercury" },
           { key: "venus", name: "Venus", param: "venus" },
@@ -16036,13 +16043,12 @@
           { key: "jupiter", name: "Jupiter", param: "jupiter" },
           { key: "saturn", name: "Saturn", param: "saturn" },
           { key: "uranus", name: "Uranus", param: "uranus" },
-          { key: "neptune", name: "Neptune", param: "neptune" },
-          { key: "sun", name: "Sun", param: "sun" }
+          { key: "neptune", name: "Neptune", param: "neptune" }
         ];
         const params = new URLSearchParams(window.location.search);
         const currentBody = (params.get("body") || "jupiter").toLowerCase();
         let selectedIdx = planetOrder.findIndex((p) => p.param === currentBody);
-        if (selectedIdx < 0) selectedIdx = 4;
+        if (selectedIdx < 0) selectedIdx = 5;
         const iconBtns = [];
         for (let i = 0; i < planetOrder.length; i++) {
           const p = planetOrder[i];
