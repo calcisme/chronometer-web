@@ -1,3 +1,6 @@
+> **Usage (for humans):** To port a new watch face, start a conversation with:
+> *"Port the 'Foo' face according to the guidelines in `watch-face-porting-skill.md`."*
+
 # Watch Face Porting Skill
 
 When tasked with porting a new watch face from the existing Objective-C/C++ iOS codebase to this TypeScript web application, follow the procedures and guidelines outlined below.
