@@ -463,6 +463,7 @@ function parseQDayNightRing(el: Element): QDayNightRingPart {
         strokeColor: attrExpr(el, 'strokeColor'),
         fillColor: attrExpr(el, 'fillColor'),
         update: attrExpr(el, 'update'),
+        timeBase: attr(el, 'timeBase'),
     };
 }
 

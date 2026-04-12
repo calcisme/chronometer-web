@@ -316,4 +316,5 @@ export interface QDayNightRingPart extends PartBase {
     strokeColor?: ASTNode;
     fillColor?: ASTNode;
     update?: ASTNode;
+    timeBase?: string;         // 'LST' for Local Sidereal Time, omitted for local time
 }

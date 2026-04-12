@@ -777,7 +777,8 @@
       masterOffset: attrExpr(el, "masterOffset"),
       strokeColor: attrExpr(el, "strokeColor"),
       fillColor: attrExpr(el, "fillColor"),
-      update: attrExpr(el, "update")
+      update: attrExpr(el, "update"),
+      timeBase: attr(el, "timeBase")
     };
   }
   function attr(el, name) {
@@ -12283,23 +12284,24 @@
     const calcDate = dateToDateInterval(getNow());
     const fudgeSeconds = -5;
     const lookahead = 3600 * 13.2;
-    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
-    const sunIsUp = alt > 0;
+    const correctForParallax = planetNumber === 1 /* Moon */;
+    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
+    const planetIsUp = alt > 0;
     const riseTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+      planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
       observerLat,
       observerLon,
       true,
-      0 /* Sun */,
+      planetNumber,
       NaN,
       pool
     );
     const setTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+      planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
       observerLat,
       observerLon,
       false,
-      0 /* Sun */,
+      planetNumber,
       NaN,
       pool
     );
@@ -12422,23 +12424,24 @@
     const calcDate = dateToDateInterval(getNow());
     const fudgeSeconds = -5;
     const lookahead = 3600 * 13.2;
-    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
-    const sunIsUp = alt > 0;
+    const correctForParallax = planetNumber === 1 /* Moon */;
+    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
+    const planetIsUp = alt > 0;
     const riseTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+      planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
       observerLat,
       observerLon,
       true,
-      0 /* Sun */,
+      planetNumber,
       NaN,
       pool
     );
     const setTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+      planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
       observerLat,
       observerLon,
       false,
-      0 /* Sun */,
+      planetNumber,
       NaN,
       pool
     );
@@ -13505,7 +13508,8 @@
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "white";
     const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
-    const leafAngleFn = env.functions.get("dayNightLeafAngle");
+    const fnName = part.timeBase === "LST" ? "dayNightLeafAngleLST" : "dayNightLeafAngle";
+    const leafAngleFn = env.functions.get(fnName);
     if (!leafAngleFn) return;
     ctx.save();
     ctx.translate(cx, cy);

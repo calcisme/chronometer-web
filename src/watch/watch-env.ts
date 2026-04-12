@@ -35,6 +35,7 @@ import {
     EOTSeconds,
     calculateEclipse, EclipseKind,
     localSiderealTime,
+    planetAltAz,
 } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet, kECAlwaysAboveHorizon, kECAlwaysBelowHorizon, fmod } from '../astronomy/astro-constants.js';
@@ -873,18 +874,20 @@ function computeDayNightLeafAngle(
     const fudgeSeconds = -5;
     const lookahead = 3600 * 13.2;
 
-    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
-    const sunIsUp = alt > 0;
+    // Use the actual planet (Sun or Moon) for altitude and rise/set
+    const correctForParallax = planetNumber === ECPlanetNumber.Moon;
+    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
+    const planetIsUp = alt > 0;
 
     // Get rise time
     const riseTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
-        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+        planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+        observerLat, observerLon, true, planetNumber, NaN, pool,
     );
     // Get set time
     const setTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
-        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+        planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+        observerLat, observerLon, false, planetNumber, NaN, pool,
     );
 
     // Compute transit angles for fallback
@@ -1099,18 +1102,20 @@ function computeDayNightLeafAngleLST(
     const fudgeSeconds = -5;
     const lookahead = 3600 * 13.2;
 
-    const alt = sunAltitude(calcDate, observerLat, observerLon, null);
-    const sunIsUp = alt > 0;
+    // Use the actual planet (Sun or Moon) for altitude and rise/set
+    const correctForParallax = planetNumber === ECPlanetNumber.Moon;
+    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
+    const planetIsUp = alt > 0;
 
     // Get rise time
     const riseTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
-        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+        planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+        observerLat, observerLon, true, planetNumber, NaN, pool,
     );
     // Get set time
     const setTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
-        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+        planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+        observerLat, observerLon, false, planetNumber, NaN, pool,
     );
 
     // Compute transit angles for fallback

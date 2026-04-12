@@ -1689,8 +1689,9 @@ function drawQDayNightRing(
     // Each wedge spans a bit more than 2PI/numWedges so they overlap slightly (matching iOS)
     const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
 
-    // Get the dayNightLeafAngle function from the environment
-    const leafAngleFn = env.functions.get('dayNightLeafAngle') as
+    // Select the leaf angle function based on the time base
+    const fnName = part.timeBase === 'LST' ? 'dayNightLeafAngleLST' : 'dayNightLeafAngle';
+    const leafAngleFn = env.functions.get(fnName) as
         ((planetNumber: number, leafNumber: number, numLeaves: number) => number) | undefined;
     if (!leafAngleFn) return;
 
