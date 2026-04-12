@@ -70,5 +70,18 @@ When a hand has `offsetRadius > 0`, the renderer uses polar-offset mode (see `re
 
 * **Thumbnail creation**: Wait for the user to supply a screenshot file — do not attempt to capture one yourself. Once provided, scale it to 400×400 with `sips -z 400 400 --out src/faces/thumb-<name>.png <screenshot>.png`.
 * **Index page card**: Add the face card to `src/index.html` in the `face-grid` div. The "All Faces" card should always be **first** in the grid (most visible without scrolling on mobile).
-* **Description text**: Use a short phrase describing the face's distinguishing feature (e.g. "Planetary orrery", "Giant moonphase with alt/az dots").
+* **Description text**: Use a short phrase describing the face's distinguishing feature (e.g. "Planetary positions", "Giant moonphase with alt/az dots").
+
+## 10. Animation Scheduling & Update Intervals
+
+* **`update` attribute and scrubbing**: The `update` attribute on hands/wheels controls how often their angle expression is re-evaluated (in seconds of display time). Large values like `1 * days()` (86400s) cause hands to visibly "jump" when scrubbing time at faster rates. It's reasonable to reduce excessively long intervals (e.g. from `1 * days()` to `1 * hours()`) if the computational cost is low.
+* **Quantized mode compression**: When scrubbing at fast rates, `tickAnimations` compresses animations to fit within the tick interval. The compression check must consider **both** `angle` **and** `offsetAngle` deltas — if only `angle` is checked (and it's constant, e.g. `angle='0'`), an `offsetAngle` that changes significantly per tick will use uncompressed normal-speed animation, causing oscillation. This was fixed in `animation.ts`.
+* **When to reset `nextUpdateTime`**: Reset hand schedules (`nextUpdateTime = 0`) only at discrete transition points (single step taps, body switches, start of hold-to-scrub). Do NOT reset on every tick during continuous scrubbing — the quantized tick system handles scheduling correctly, and resetting disrupts in-progress animations.
+* **Terminator leaf schedules**: Terminator leaves have their own `nextUpdateTime` and `resetLeafSchedules()` function. These must also be reset at the same transition points as hand states.
+
+## 11. Interactive Face Controllers
+
+* **Planet/body selector pattern**: Faces like Venezia that allow switching between celestial bodies use a URL parameter (`?body=...`) for state persistence. The selector UI is injected into `#planet-selector` in `face-template.html`, hidden by default and shown only for applicable faces.
+* **URL parameter vs init blocks**: When the URL specifies a body parameter, it must be applied **after** XML init block evaluation in `watch-env.ts`, as init blocks may set default values that would overwrite the URL parameter.
+* **Animation-preserving body switch**: When switching bodies, preserve existing `HandState` objects rather than recreating them. Update the environment, reset schedules, and let the animation system interpolate from old to new target values for smooth transitions.
 
