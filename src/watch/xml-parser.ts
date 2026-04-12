@@ -351,6 +351,7 @@ function parseImage(el: Element): ImagePart {
         modes: attr(el, 'modes'),
         src: attr(el, 'src'),
         alpha: attrExpr(el, 'alpha'),
+        scale: attrExpr(el, 'scale'),
     };
 }
 

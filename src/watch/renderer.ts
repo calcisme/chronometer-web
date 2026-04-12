@@ -661,6 +661,7 @@ const MARKS_OUTER    = 1 << 0;
 const MARKS_CENTER   = 1 << 1;
 const MARKS_TICK_OUT = 1 << 2;
 const MARKS_DOT      = 1 << 4;
+const MARKS_ROSE     = 1 << 5;
 
 function parseMarksType(marks: string | undefined): number {
     if (!marks) return MARKS_NONE;
@@ -672,6 +673,7 @@ function parseMarksType(marks: string | undefined): number {
             case 'center': result |= MARKS_CENTER; break;
             case 'tickout': result |= MARKS_TICK_OUT; break;
             case 'dot': result |= MARKS_DOT; break;
+            case 'rose': result |= MARKS_ROSE; break;
         }
     }
     return result;
@@ -761,6 +763,48 @@ function drawQDial(
             ctx.beginPath();
             ctx.arc(radius * cosT, radius * sinT, dotR, 0, 2 * Math.PI);
             ctx.fill();
+        }
+    }
+
+    // Rose petals (compass rose pattern)
+    if ((marks & MARKS_ROSE) && nMarks > 0) {
+        const outerR = radius;
+        const innerR = part.radius2 !== undefined ? evalAttr(part.radius2, env) : radius * 0.6;
+        const fillColor1 = part.fillColor1 ? evalColor(part.fillColor1, env) : 'rgba(0,0,0,0)';
+        const fillColor2 = part.fillColor2 ? evalColor(part.fillColor2, env) : 'rgba(0,0,0,0)';
+        const roseStroke = strokeColor;
+        const deltaTheta = Math.PI / nMarks;
+
+        for (let i = 0; i < nMarks; i++) {
+            const theta = 2 * i * deltaTheta;
+
+            // Left petal: outer → left inner → center inner → outer
+            ctx.beginPath();
+            ctx.moveTo(outerR * Math.cos(theta), outerR * Math.sin(theta));
+            ctx.lineTo(innerR * Math.cos(theta - deltaTheta), innerR * Math.sin(theta - deltaTheta));
+            ctx.lineTo(innerR * Math.cos(theta), innerR * Math.sin(theta));
+            ctx.closePath();
+            if (fillColor1 !== 'rgba(0,0,0,0)') {
+                ctx.fillStyle = fillColor1;
+                ctx.fill();
+            }
+            ctx.strokeStyle = roseStroke;
+            ctx.lineWidth = markWidth;
+            ctx.stroke();
+
+            // Right petal: outer → right inner → center inner → outer
+            ctx.beginPath();
+            ctx.moveTo(outerR * Math.cos(theta), outerR * Math.sin(theta));
+            ctx.lineTo(innerR * Math.cos(theta + deltaTheta), innerR * Math.sin(theta + deltaTheta));
+            ctx.lineTo(innerR * Math.cos(theta), innerR * Math.sin(theta));
+            ctx.closePath();
+            if (fillColor2 !== 'rgba(0,0,0,0)') {
+                ctx.fillStyle = fillColor2;
+                ctx.fill();
+            }
+            ctx.strokeStyle = roseStroke;
+            ctx.lineWidth = markWidth;
+            ctx.stroke();
         }
     }
 
@@ -856,9 +900,35 @@ function drawQDial(
                 }
                 ctx.restore();
             }
+        } else if (orientation === 'rotated') {
+            // iOS: drawDialRadial(rotated: true)
+            // Text is positioned radially — each label points outward from center.
+            // iOS first rotates the context by π/2, then places text at
+            //   (radius * factor - s.height, -s.width/2) and rotates by -2π/n per label.
+            // We replicate by rotating each label's angle by π/2 and drawing text
+            // along the radial direction.
+            for (let i = 0; i < n; i++) {
+                const label = labels[i].trim();
+                if (!label) continue;
+                // iOS iterates i=0..n-1 and rotates CW by -2π/n each step,
+                // starting from a π/2 pre-rotation.
+                // Effective angle for label i: π/2 - i * 2π/n (iOS Y-up)
+                // In canvas Y-down: -(π/2 - i * 2π/n) = -π/2 + i * 2π/n
+                const th = (i / n) * 2 * Math.PI - Math.PI / 2;
+                const textH = fontSize;
+                const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
+                const tx = textR * Math.cos(th);
+                const ty = textR * Math.sin(th);
+                ctx.save();
+                ctx.translate(tx, ty);
+                // Rotate so text reads outward along the radius
+                ctx.rotate(th);
+                ctx.fillText(label, 0, textVisualCenterY(ctx, label));
+                ctx.restore();
+            }
         } else {
-            // Default: radial text
-            // Original iOS: drawDialRadial
+            // Default: radial text (tangent to circle)
+            // Original iOS: drawDialRadial(rotated: false)
             // rect at y = radius * 0.92 - s.height → center at radius * 0.92 - textH/2
             for (let i = 0; i < n; i++) {
                 const label = labels[i].trim();
@@ -1487,9 +1557,11 @@ function drawImage(
     const alpha = part.alpha !== undefined ? evalAttr(part.alpha, env) : 1;
 
     const { bitmap, scale: imgScale } = loaded;
+    // xmlScale: optional per-element scale from the XML attribute (e.g. scale='0.5')
+    const xmlScale = part.scale ? evalAttr(part.scale, env) : 1;
     // Image dimensions in XML coordinate units (1x space)
-    const drawW = bitmap.width * imgScale;
-    const drawH = bitmap.height * imgScale;
+    const drawW = bitmap.width * imgScale * xmlScale;
+    const drawH = bitmap.height * imgScale * xmlScale;
 
     ctx.save();
     if (alpha < 1) {

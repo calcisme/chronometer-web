@@ -36,14 +36,15 @@ import {
     calculateEclipse, EclipseKind,
     localSiderealTime,
     planetAltAz,
+    positionAngle, northAngleForObject,
 } from '../astronomy/es-astro.js';
-import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
+import { planetaryRiseSetTimeRefined, planettransitTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet, kECAlwaysAboveHorizon, kECAlwaysBelowHorizon, fmod } from '../astronomy/astro-constants.js';
 import { terminatorAngle } from './terminator.js';
-import { GSTDifferenceForDate } from '../astronomy/es-sidereal.js';
+import { GSTDifferenceForDate, convertUTToGSTP03, convertGSTtoLST } from '../astronomy/es-sidereal.js';
 import { generalPrecessionSinceJ2000, sunRAandDecl, moonRAAndDecl, sunEclipticLongitudeForDate, raAndDeclO, generalObliquity } from '../astronomy/es-coordinates.js';
 import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
-import { WB_planetHeliocentricLongitude } from '../astronomy/willmann-bell.js';
+import { WB_planetHeliocentricLongitude, WB_planetHeliocentricRadius, WB_planetApparentPosition } from '../astronomy/willmann-bell.js';
 import { WB_MoonAscendingNodeLongitude } from '../astronomy/wb-moon.js';
 import { WB_nutationObliquity } from '../astronomy/wb-sun.js';
 
@@ -100,6 +101,25 @@ export function createWatchEnvironment(
 
     // Register time functions (uses the provided getNow source)
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
+
+    // URL param override for 'body' (Venezia planet selection via ?body=jupiter etc.)
+    if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const bodyParam = params.get('body');
+        if (bodyParam) {
+            const bodyMap: Record<string, number> = {
+                sun: ECPlanetNumber.Sun, moon: ECPlanetNumber.Moon,
+                mercury: ECPlanetNumber.Mercury, venus: ECPlanetNumber.Venus,
+                earth: ECPlanetNumber.Earth, mars: ECPlanetNumber.Mars,
+                jupiter: ECPlanetNumber.Jupiter, saturn: ECPlanetNumber.Saturn,
+                uranus: ECPlanetNumber.Uranus, neptune: ECPlanetNumber.Neptune,
+            };
+            const planet = bodyMap[bodyParam.toLowerCase()];
+            if (planet !== undefined) {
+                env.variables.set('body', planet);
+            }
+        }
+    }
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
@@ -464,6 +484,202 @@ function registerTimeFunctions(
         const di = dateToDateInterval(getNow());
         return planetGeocentricDistance(n as ECPlanetNumber, di, null);
     });
+
+    // --- Planet azimuth / altitude / RA (Venezia) ---
+    // azimuthOfPlanet(body): topocentric azimuth (radians)
+    functions.set('azimuthOfPlanet', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        if (planetNumber === ECPlanetNumber.Sun) return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+        if (planetNumber === ECPlanetNumber.Moon) return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+        return planetAltAz(planetNumber, di, OBSERVER_LAT, OBSERVER_LON, true, false, null);
+    });
+    // altitudeOfPlanet(body): topocentric altitude (radians)
+    functions.set('altitudeOfPlanet', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        if (planetNumber === ECPlanetNumber.Sun) return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+        if (planetNumber === ECPlanetNumber.Moon) return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+        return planetAltAz(planetNumber, di, OBSERVER_LAT, OBSERVER_LON, true, true, null);
+    });
+    // RAOfPlanet(body): right ascension (radians)
+    functions.set('RAOfPlanet', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        if (planetNumber === ECPlanetNumber.Sun) {
+            return sunRAandDecl(di, null).rightAscension;
+        }
+        if (planetNumber === ECPlanetNumber.Moon) {
+            return moonRAAndDecl(di, null).rightAscension;
+        }
+        const pos = WB_planetApparentPosition(planetNumber as ECPlanetNumber, julianCenturiesSince2000Epoch / 100);
+        return pos.apparentRightAscension;
+    });
+
+    // --- Planet rise/transit/set for day (Venezia) ---
+    // Helper: find transit of any planet for the current day
+    function transitForDay(planetNumber: ECPlanetNumber): number {
+        const now = getNow();
+        const di = dateToDateInterval(now);
+        const localNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+        const noonDI = dateToDateInterval(localNoon);
+
+        const result = planettransitTimeRefined(noonDI, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
+        if (isSameLocalDay(result, di)) return result;
+
+        // Try from noon the day before
+        const result2 = planettransitTimeRefined(noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
+        if (isSameLocalDay(result2, di)) return result2;
+
+        return NaN;
+    }
+
+    // riseOfPlanetForDayValid(body)
+    functions.set('riseOfPlanetForDayValid', (planetNumber: number) => {
+        return isNaN(riseSetForDay(true, planetNumber as ECPlanetNumber)) ? 0 : 1;
+    });
+    functions.set('riseOfPlanetForDayHour12ValueAngle', (planetNumber: number) => {
+        const r = riseSetForDay(true, planetNumber as ECPlanetNumber);
+        return isNaN(r) ? 0 : riseSetAngles(r).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('riseOfPlanetForDayMinuteValueAngle', (planetNumber: number) => {
+        const r = riseSetForDay(true, planetNumber as ECPlanetNumber);
+        return isNaN(r) ? 0 : riseSetAngles(r).minute * 2 * Math.PI / 60;
+    });
+    functions.set('riseOfPlanetForDayHour24Number', (planetNumber: number) => {
+        const r = riseSetForDay(true, planetNumber as ECPlanetNumber);
+        return isNaN(r) ? 0 : riseSetAngles(r).hour24;
+    });
+
+    // transitOfPlanetForDayValid(body)
+    functions.set('transitOfPlanetForDayValid', (planetNumber: number) => {
+        return isNaN(transitForDay(planetNumber as ECPlanetNumber)) ? 0 : 1;
+    });
+    functions.set('transitOfPlanetForDayHour12ValueAngle', (planetNumber: number) => {
+        const t = transitForDay(planetNumber as ECPlanetNumber);
+        return isNaN(t) ? 0 : riseSetAngles(t).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('transitOfPlanetForDayMinuteValueAngle', (planetNumber: number) => {
+        const t = transitForDay(planetNumber as ECPlanetNumber);
+        return isNaN(t) ? 0 : riseSetAngles(t).minute * 2 * Math.PI / 60;
+    });
+    functions.set('transitOfPlanetForDayHour24Number', (planetNumber: number) => {
+        const t = transitForDay(planetNumber as ECPlanetNumber);
+        return isNaN(t) ? 0 : riseSetAngles(t).hour24;
+    });
+
+    // setOfPlanetForDayValid(body)
+    functions.set('setOfPlanetForDayValid', (planetNumber: number) => {
+        return isNaN(riseSetForDay(false, planetNumber as ECPlanetNumber)) ? 0 : 1;
+    });
+    functions.set('setOfPlanetForDayHour12ValueAngle', (planetNumber: number) => {
+        const s = riseSetForDay(false, planetNumber as ECPlanetNumber);
+        return isNaN(s) ? 0 : riseSetAngles(s).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set('setOfPlanetForDayMinuteValueAngle', (planetNumber: number) => {
+        const s = riseSetForDay(false, planetNumber as ECPlanetNumber);
+        return isNaN(s) ? 0 : riseSetAngles(s).minute * 2 * Math.PI / 60;
+    });
+    functions.set('setOfPlanetForDayHour24Number', (planetNumber: number) => {
+        const s = riseSetForDay(false, planetNumber as ECPlanetNumber);
+        return isNaN(s) ? 0 : riseSetAngles(s).hour24;
+    });
+
+    // --- Planet phase/terminator functions (Venezia) ---
+    // planetMoonAgeAngle(body): returns an age-like angle for the terminator display
+    // Follows ECAstronomy.m planetAge + planetMoonAgeAngle
+    functions.set('planetMoonAgeAngle', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        if (planetNumber === ECPlanetNumber.Sun) return Math.PI; // always bright
+        if (planetNumber === ECPlanetNumber.Moon) return moonAge(di, null).age;
+
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        const U = julianCenturiesSince2000Epoch / 100;
+
+        // Solve the Sun-planet-Earth triangle for phase angle
+        const planet_r = WB_planetHeliocentricRadius(planetNumber as ECPlanetNumber, U);
+        const planet_delta = planetGeocentricDistance(planetNumber as ECPlanetNumber, di, null);
+        const planet_R = WB_planetHeliocentricRadius(ECPlanetNumber.Earth, U); // Earth-Sun distance
+
+        const cos_i = ((planet_r * planet_r) + (planet_delta * planet_delta) - (planet_R * planet_R))
+            / (2 * planet_r * planet_delta);
+        const phase = Math.acos(Math.max(-1, Math.min(1, cos_i)));
+
+        // moonAge = pi - phase (complement)
+        let moonAgeVal = Math.PI - phase;
+
+        // Determine sign from heliocentric longitude difference
+        const planetHLong = WB_planetHeliocentricLongitude(planetNumber as ECPlanetNumber, U);
+        const earthHLong = WB_planetHeliocentricLongitude(ECPlanetNumber.Earth, U);
+        let deltaHL = planetHLong - earthHLong;
+        if (deltaHL < 0) deltaHL += 2 * Math.PI;
+        if (deltaHL > Math.PI) {
+            moonAgeVal = 2 * Math.PI - moonAgeVal;
+        }
+        return moonAgeVal;
+    });
+
+    // planetRelativePositionAngle(body): rotation of the terminator as it appears in the sky
+    // Follows ECAstronomy.m planetRelativePositionAngle
+    functions.set('planetRelativePositionAngle', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        if (planetNumber === ECPlanetNumber.Moon) {
+            return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
+        }
+        if (planetNumber === ECPlanetNumber.Sun) return 0;
+
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        const U = julianCenturiesSince2000Epoch / 100;
+
+        // Sun RA/Decl
+        const sunRD = sunRAandDecl(di, null);
+        // Planet RA/Decl (without parallax)
+        const planetPos = WB_planetApparentPosition(planetNumber as ECPlanetNumber, U);
+        const planetRA = planetPos.apparentRightAscension;
+        const planetDecl = planetPos.apparentDeclination;
+
+        let posAngle = positionAngle(sunRD.rightAscension, sunRD.declination, planetRA, planetDecl);
+
+        // Check if bright limb is on the left (moonAge > pi)
+        const planet_r = WB_planetHeliocentricRadius(planetNumber as ECPlanetNumber, U);
+        const planet_delta = planetGeocentricDistance(planetNumber as ECPlanetNumber, di, null);
+        const planet_R = WB_planetHeliocentricRadius(ECPlanetNumber.Earth, U);
+        const cos_i = ((planet_r * planet_r) + (planet_delta * planet_delta) - (planet_R * planet_R))
+            / (2 * planet_r * planet_delta);
+        const phase = Math.acos(Math.max(-1, Math.min(1, cos_i)));
+        let moonAgeVal = Math.PI - phase;
+        const planetHLong = WB_planetHeliocentricLongitude(planetNumber as ECPlanetNumber, U);
+        const earthHLong = WB_planetHeliocentricLongitude(ECPlanetNumber.Earth, U);
+        let deltaHL = planetHLong - earthHLong;
+        if (deltaHL < 0) deltaHL += 2 * Math.PI;
+        if (deltaHL > Math.PI) moonAgeVal = 2 * Math.PI - moonAgeVal;
+
+        if (moonAgeVal > Math.PI) {
+            posAngle = posAngle > Math.PI ? posAngle - Math.PI : posAngle + Math.PI;
+        }
+
+        // Compute planet's azimuth/altitude for northAngle
+        const gst = convertUTToGSTP03(di, null);
+        const lst = convertGSTtoLST(gst, OBSERVER_LON);
+        const planetHourAngle = lst - planetRA;
+        const sinAlt = Math.sin(planetDecl) * Math.sin(OBSERVER_LAT)
+            + Math.cos(planetDecl) * Math.cos(OBSERVER_LAT) * Math.cos(planetHourAngle);
+        const planetAzimuth = Math.atan2(
+            -Math.cos(planetDecl) * Math.cos(OBSERVER_LAT) * Math.sin(planetHourAngle),
+            Math.sin(planetDecl) - Math.sin(OBSERVER_LAT) * sinAlt,
+        );
+        const planetAltitude = Math.asin(sinAlt);
+        const nAngle = northAngleForObject(planetAltitude, planetAzimuth, OBSERVER_LAT);
+
+        let angle = -nAngle - posAngle - Math.PI / 2;
+        if (angle < 0) angle += 2 * Math.PI;
+        else if (angle > 2 * Math.PI) angle -= 2 * Math.PI;
+        return angle;
+    });
+
+    // --- Venezia state variables ---
+    // VeneziaTapsEnabled: always returns 0 (buttons deferred)
+    functions.set('VeneziaTapsEnabled', () => 0);
+    // saveBody: no-op for now
+    functions.set('saveBody', (_n: number) => 0);
 
     // --- Lunar ascending node longitude ---
     functions.set('lunarAscendingNodeLongitude', () => {

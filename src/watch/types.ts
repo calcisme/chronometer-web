@@ -203,6 +203,7 @@ export interface ImagePart extends PartBase {
     type: 'Image';
     src?: string;
     alpha?: ASTNode;
+    scale?: ASTNode;
 }
 
 // ============================================================================

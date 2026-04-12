@@ -35,6 +35,7 @@ import { convertLSTtoGST, convertGSTtoLST, convertUTToGSTP03, convertGSTtoUTclos
 import { sunRAandDecl, moonRAAndDecl, altitudeAtRiseSet } from './es-coordinates';
 import { WB_sunRAAndDecl } from './wb-sun';
 import { WB_MoonRAAndDecl, WB_MoonDistance } from './wb-moon';
+import { WB_planetApparentPosition } from './willmann-bell';
 
 const TWO_PI = Math.PI * 2;
 
@@ -212,8 +213,17 @@ function getPlanetRADeclDist(
             distance: distKm / 149597870.691,
         };
     } else {
-        // Skeleton for other planets
-        return { rightAscension: 0, declination: 0, distance: 1 };
+        // Other planets: use WB_planetApparentPosition
+        const pos = WB_planetApparentPosition(
+            planetNumber as ECPlanetNumber,
+            julianCenturiesSince2000Epoch / 100,
+            cache ?? undefined,
+        );
+        return {
+            rightAscension: pos.apparentRightAscension,
+            declination: pos.apparentDeclination,
+            distance: pos.geocentricDistance,
+        };
     }
 }
 

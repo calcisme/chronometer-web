@@ -31,6 +31,7 @@ import {
 } from './es-coordinates';
 import { WB_sunLongitudeApparent, WB_sunRAAndDecl } from './wb-sun';
 import { WB_MoonDistance, WB_MoonAscendingNodeLongitude } from './wb-moon';
+import { WB_planetApparentPosition } from './willmann-bell';
 
 const TWO_PI = Math.PI * 2;
 
@@ -103,9 +104,21 @@ export function planetAltAz(
             planetDeclination = cache.get(CacheSlot.planetDecl + planetNumber);
             planetGeocentricDistance = cache.get(CacheSlot.planetGeocentricDistance + planetNumber);
         } else {
-            // Skeleton: would call WB_planetApparentPosition here
-            // For now, return 0 for unsupported planets
-            return 0;
+            // Compute RA/Decl for planets Mercury–Neptune via WB_planetApparentPosition
+            const { julianCenturiesSince2000Epoch } =
+                julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+            const U = julianCenturiesSince2000Epoch / 100;
+            const pos = WB_planetApparentPosition(planetNumber as ECPlanetNumber, U);
+            planetRightAscension = pos.apparentRightAscension;
+            planetDeclination = pos.apparentDeclination;
+            planetGeocentricDistance = distanceOfPlanetInAU(
+                planetNumber as ECPlanetNumber, julianCenturiesSince2000Epoch, cache,
+            );
+            if (cache) {
+                cache.set(CacheSlot.planetRA + planetNumber, planetRightAscension);
+                cache.set(CacheSlot.planetDecl + planetNumber, planetDeclination);
+                cache.set(CacheSlot.planetGeocentricDistance + planetNumber, planetGeocentricDistance);
+            }
         }
     }
 

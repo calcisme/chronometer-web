@@ -671,7 +671,8 @@
       y: attrExpr(el, "y"),
       modes: attr(el, "modes"),
       src: attr(el, "src"),
-      alpha: attrExpr(el, "alpha")
+      alpha: attrExpr(el, "alpha"),
+      scale: attrExpr(el, "scale")
     };
   }
   function parseButton(el) {
@@ -10809,6 +10810,28 @@
         return NaN;
     }
   }
+  function WB_planetHeliocentricRadius(planetNumber, U, cache) {
+    switch (planetNumber) {
+      case 4 /* Earth */:
+        return WB_sunRadius(U, cache);
+      case 2 /* Mercury */:
+        return mercuryRadius(U);
+      case 3 /* Venus */:
+        return venusRadius(U);
+      case 5 /* Mars */:
+        return marsRadius(U);
+      case 6 /* Jupiter */:
+        return jupiterRadius(U);
+      case 7 /* Saturn */:
+        return saturnRadius(U);
+      case 8 /* Uranus */:
+        return uranusRadius(U);
+      case 9 /* Neptune */:
+        return neptuneRadius(U);
+      default:
+        return NaN;
+    }
+  }
 
   // src/astronomy/es-astro.ts
   var TWO_PI3 = Math.PI * 2;
@@ -10853,7 +10876,21 @@
         planetDeclination = cache.get(411 /* planetDecl */ + planetNumber);
         planetGeocentricDistance2 = cache.get(108 /* planetGeocentricDistance */ + planetNumber);
       } else {
-        return 0;
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+        const U = julianCenturiesSince2000Epoch / 100;
+        const pos = WB_planetApparentPosition(planetNumber, U);
+        planetRightAscension = pos.apparentRightAscension;
+        planetDeclination = pos.apparentDeclination;
+        planetGeocentricDistance2 = distanceOfPlanetInAU(
+          planetNumber,
+          julianCenturiesSince2000Epoch,
+          cache
+        );
+        if (cache) {
+          cache.set(401 /* planetRA */ + planetNumber, planetRightAscension);
+          cache.set(411 /* planetDecl */ + planetNumber, planetDeclination);
+          cache.set(108 /* planetGeocentricDistance */ + planetNumber, planetGeocentricDistance2);
+        }
       }
     }
     const gst = convertUTToGSTP03(calculationDateInterval, cache);
@@ -11228,6 +11265,20 @@
     const riseSetDate = convertGSTtoUTclosest(GST_rs, calculationDateInterval, cachePool);
     return riseSetDate;
   }
+  function transitTime(dateInterval, wantHighTransit, observerLongitude, rightAscension, currentCache) {
+    const gst = convertUTToGSTP03(dateInterval, currentCache);
+    let ra = rightAscension;
+    if (!wantHighTransit) {
+      ra += Math.PI;
+    }
+    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI4);
+    if (hourAngle > Math.PI) {
+      hourAngle -= TWO_PI4;
+    } else if (hourAngle < -Math.PI) {
+      hourAngle += TWO_PI4;
+    }
+    return dateInterval - hourAngle * (12 * 3600) / Math.PI;
+  }
   function linearFit(X1, Y1, X2, Y2) {
     const offset = X1;
     const x1 = 0;
@@ -11304,7 +11355,16 @@
         distance: distKm / 149597870691e-3
       };
     } else {
-      return { rightAscension: 0, declination: 0, distance: 1 };
+      const pos = WB_planetApparentPosition(
+        planetNumber,
+        julianCenturiesSince2000Epoch / 100,
+        cache ?? void 0
+      );
+      return {
+        rightAscension: pos.apparentRightAscension,
+        declination: pos.apparentDeclination,
+        distance: pos.geocentricDistance
+      };
     }
   }
   function planetaryRiseSetTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, riseNotSet, planetNumber, overrideAltitudeDesired, cachePool) {
@@ -11359,6 +11419,54 @@
       results[fitTries] = newDate;
       fitTries++;
       tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
+    }
+    return tryDate;
+  }
+  function planettransitTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, wantHighTransit, planetNumber, cachePool) {
+    let tryDate = calculationDateInterval;
+    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
+    const numIterations = 7;
+    const tryDates = new Array(numIterations);
+    const results_arr = new Array(numIterations);
+    let fitTries = 0;
+    for (let i = 0; i < numIterations; i++) {
+      if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
+        precision = 2 /* Full */;
+        i--;
+        fitTries = 0;
+      }
+      const priorCache = pushECAstroCacheWithSlopInPool(
+        cachePool,
+        cachePool.refinementCache,
+        tryDate,
+        0
+      );
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
+      const { rightAscension } = getPlanetRADeclDist(
+        planetNumber,
+        julianCenturiesSince2000Epoch,
+        cachePool.currentCache,
+        precision
+      );
+      const newDate = transitTime(
+        tryDate,
+        wantHighTransit,
+        observerLongitude,
+        rightAscension,
+        cachePool.currentCache
+      );
+      popECAstroCacheToInPool(cachePool, priorCache);
+      if (Math.abs(newDate - tryDate) < 0.1) {
+        if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
+          precision = 2 /* Full */;
+        } else {
+          return newDate;
+        }
+      }
+      tryDates[fitTries] = tryDate;
+      results_arr[fitTries] = newDate;
+      fitTries++;
+      tryDate = extrapolateToYEqualX(tryDates, results_arr, fitTries);
     }
     return tryDate;
   }
@@ -11748,6 +11856,28 @@
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const bodyParam = params.get("body");
+      if (bodyParam) {
+        const bodyMap = {
+          sun: 0 /* Sun */,
+          moon: 1 /* Moon */,
+          mercury: 2 /* Mercury */,
+          venus: 3 /* Venus */,
+          earth: 4 /* Earth */,
+          mars: 5 /* Mars */,
+          jupiter: 6 /* Jupiter */,
+          saturn: 7 /* Saturn */,
+          uranus: 8 /* Uranus */,
+          neptune: 9 /* Neptune */
+        };
+        const planet = bodyMap[bodyParam.toLowerCase()];
+        if (planet !== void 0) {
+          env.variables.set("body", planet);
+        }
+      }
+    }
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
     }
@@ -12010,6 +12140,151 @@
       const di = dateToDateInterval(getNow());
       return planetGeocentricDistance(n, di, null);
     });
+    functions.set("azimuthOfPlanet", (planetNumber) => {
+      const di = dateToDateInterval(getNow());
+      if (planetNumber === 0 /* Sun */) return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+      if (planetNumber === 1 /* Moon */) return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+      return planetAltAz(planetNumber, di, OBSERVER_LAT, OBSERVER_LON, true, false, null);
+    });
+    functions.set("altitudeOfPlanet", (planetNumber) => {
+      const di = dateToDateInterval(getNow());
+      if (planetNumber === 0 /* Sun */) return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+      if (planetNumber === 1 /* Moon */) return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
+      return planetAltAz(planetNumber, di, OBSERVER_LAT, OBSERVER_LON, true, true, null);
+    });
+    functions.set("RAOfPlanet", (planetNumber) => {
+      const di = dateToDateInterval(getNow());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      if (planetNumber === 0 /* Sun */) {
+        return sunRAandDecl(di, null).rightAscension;
+      }
+      if (planetNumber === 1 /* Moon */) {
+        return moonRAAndDecl(di, null).rightAscension;
+      }
+      const pos = WB_planetApparentPosition(planetNumber, julianCenturiesSince2000Epoch / 100);
+      return pos.apparentRightAscension;
+    });
+    function transitForDay(planetNumber) {
+      const now2 = getNow();
+      const di = dateToDateInterval(now2);
+      const localNoon = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 12, 0, 0);
+      const noonDI = dateToDateInterval(localNoon);
+      const result = planettransitTimeRefined(noonDI, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
+      if (isSameLocalDay(result, di)) return result;
+      const result2 = planettransitTimeRefined(noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
+      if (isSameLocalDay(result2, di)) return result2;
+      return NaN;
+    }
+    functions.set("riseOfPlanetForDayValid", (planetNumber) => {
+      return isNaN(riseSetForDay(true, planetNumber)) ? 0 : 1;
+    });
+    functions.set("riseOfPlanetForDayHour12ValueAngle", (planetNumber) => {
+      const r = riseSetForDay(true, planetNumber);
+      return isNaN(r) ? 0 : riseSetAngles(r).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set("riseOfPlanetForDayMinuteValueAngle", (planetNumber) => {
+      const r = riseSetForDay(true, planetNumber);
+      return isNaN(r) ? 0 : riseSetAngles(r).minute * 2 * Math.PI / 60;
+    });
+    functions.set("riseOfPlanetForDayHour24Number", (planetNumber) => {
+      const r = riseSetForDay(true, planetNumber);
+      return isNaN(r) ? 0 : riseSetAngles(r).hour24;
+    });
+    functions.set("transitOfPlanetForDayValid", (planetNumber) => {
+      return isNaN(transitForDay(planetNumber)) ? 0 : 1;
+    });
+    functions.set("transitOfPlanetForDayHour12ValueAngle", (planetNumber) => {
+      const t = transitForDay(planetNumber);
+      return isNaN(t) ? 0 : riseSetAngles(t).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set("transitOfPlanetForDayMinuteValueAngle", (planetNumber) => {
+      const t = transitForDay(planetNumber);
+      return isNaN(t) ? 0 : riseSetAngles(t).minute * 2 * Math.PI / 60;
+    });
+    functions.set("transitOfPlanetForDayHour24Number", (planetNumber) => {
+      const t = transitForDay(planetNumber);
+      return isNaN(t) ? 0 : riseSetAngles(t).hour24;
+    });
+    functions.set("setOfPlanetForDayValid", (planetNumber) => {
+      return isNaN(riseSetForDay(false, planetNumber)) ? 0 : 1;
+    });
+    functions.set("setOfPlanetForDayHour12ValueAngle", (planetNumber) => {
+      const s = riseSetForDay(false, planetNumber);
+      return isNaN(s) ? 0 : riseSetAngles(s).hour12 * 2 * Math.PI / 12;
+    });
+    functions.set("setOfPlanetForDayMinuteValueAngle", (planetNumber) => {
+      const s = riseSetForDay(false, planetNumber);
+      return isNaN(s) ? 0 : riseSetAngles(s).minute * 2 * Math.PI / 60;
+    });
+    functions.set("setOfPlanetForDayHour24Number", (planetNumber) => {
+      const s = riseSetForDay(false, planetNumber);
+      return isNaN(s) ? 0 : riseSetAngles(s).hour24;
+    });
+    functions.set("planetMoonAgeAngle", (planetNumber) => {
+      const di = dateToDateInterval(getNow());
+      if (planetNumber === 0 /* Sun */) return Math.PI;
+      if (planetNumber === 1 /* Moon */) return moonAge(di, null).age;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      const U = julianCenturiesSince2000Epoch / 100;
+      const planet_r = WB_planetHeliocentricRadius(planetNumber, U);
+      const planet_delta = planetGeocentricDistance(planetNumber, di, null);
+      const planet_R = WB_planetHeliocentricRadius(4 /* Earth */, U);
+      const cos_i = (planet_r * planet_r + planet_delta * planet_delta - planet_R * planet_R) / (2 * planet_r * planet_delta);
+      const phase = Math.acos(Math.max(-1, Math.min(1, cos_i)));
+      let moonAgeVal = Math.PI - phase;
+      const planetHLong = WB_planetHeliocentricLongitude(planetNumber, U);
+      const earthHLong = WB_planetHeliocentricLongitude(4 /* Earth */, U);
+      let deltaHL = planetHLong - earthHLong;
+      if (deltaHL < 0) deltaHL += 2 * Math.PI;
+      if (deltaHL > Math.PI) {
+        moonAgeVal = 2 * Math.PI - moonAgeVal;
+      }
+      return moonAgeVal;
+    });
+    functions.set("planetRelativePositionAngle", (planetNumber) => {
+      const di = dateToDateInterval(getNow());
+      if (planetNumber === 1 /* Moon */) {
+        return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
+      }
+      if (planetNumber === 0 /* Sun */) return 0;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      const U = julianCenturiesSince2000Epoch / 100;
+      const sunRD = sunRAandDecl(di, null);
+      const planetPos = WB_planetApparentPosition(planetNumber, U);
+      const planetRA = planetPos.apparentRightAscension;
+      const planetDecl = planetPos.apparentDeclination;
+      let posAngle = positionAngle(sunRD.rightAscension, sunRD.declination, planetRA, planetDecl);
+      const planet_r = WB_planetHeliocentricRadius(planetNumber, U);
+      const planet_delta = planetGeocentricDistance(planetNumber, di, null);
+      const planet_R = WB_planetHeliocentricRadius(4 /* Earth */, U);
+      const cos_i = (planet_r * planet_r + planet_delta * planet_delta - planet_R * planet_R) / (2 * planet_r * planet_delta);
+      const phase = Math.acos(Math.max(-1, Math.min(1, cos_i)));
+      let moonAgeVal = Math.PI - phase;
+      const planetHLong = WB_planetHeliocentricLongitude(planetNumber, U);
+      const earthHLong = WB_planetHeliocentricLongitude(4 /* Earth */, U);
+      let deltaHL = planetHLong - earthHLong;
+      if (deltaHL < 0) deltaHL += 2 * Math.PI;
+      if (deltaHL > Math.PI) moonAgeVal = 2 * Math.PI - moonAgeVal;
+      if (moonAgeVal > Math.PI) {
+        posAngle = posAngle > Math.PI ? posAngle - Math.PI : posAngle + Math.PI;
+      }
+      const gst = convertUTToGSTP03(di, null);
+      const lst = convertGSTtoLST(gst, OBSERVER_LON);
+      const planetHourAngle = lst - planetRA;
+      const sinAlt = Math.sin(planetDecl) * Math.sin(OBSERVER_LAT) + Math.cos(planetDecl) * Math.cos(OBSERVER_LAT) * Math.cos(planetHourAngle);
+      const planetAzimuth = Math.atan2(
+        -Math.cos(planetDecl) * Math.cos(OBSERVER_LAT) * Math.sin(planetHourAngle),
+        Math.sin(planetDecl) - Math.sin(OBSERVER_LAT) * sinAlt
+      );
+      const planetAltitude = Math.asin(sinAlt);
+      const nAngle = northAngleForObject(planetAltitude, planetAzimuth, OBSERVER_LAT);
+      let angle = -nAngle - posAngle - Math.PI / 2;
+      if (angle < 0) angle += 2 * Math.PI;
+      else if (angle > 2 * Math.PI) angle -= 2 * Math.PI;
+      return angle;
+    });
+    functions.set("VeneziaTapsEnabled", () => 0);
+    functions.set("saveBody", (_n) => 0);
     functions.set("lunarAscendingNodeLongitude", () => {
       const di = dateToDateInterval(getNow());
       return lunarAscendingNodeLongitude(di, null);
@@ -12888,6 +13163,7 @@
   var MARKS_CENTER = 1 << 1;
   var MARKS_TICK_OUT = 1 << 2;
   var MARKS_DOT = 1 << 4;
+  var MARKS_ROSE = 1 << 5;
   function parseMarksType(marks) {
     if (!marks) return MARKS_NONE;
     let result = MARKS_NONE;
@@ -12904,6 +13180,9 @@
           break;
         case "dot":
           result |= MARKS_DOT;
+          break;
+        case "rose":
+          result |= MARKS_ROSE;
           break;
       }
     }
@@ -12976,6 +13255,41 @@
         ctx.fill();
       }
     }
+    if (marks & MARKS_ROSE && nMarks > 0) {
+      const outerR = radius;
+      const innerR = part.radius2 !== void 0 ? evalAttr(part.radius2, env) : radius * 0.6;
+      const fillColor1 = part.fillColor1 ? evalColor(part.fillColor1, env) : "rgba(0,0,0,0)";
+      const fillColor2 = part.fillColor2 ? evalColor(part.fillColor2, env) : "rgba(0,0,0,0)";
+      const roseStroke = strokeColor;
+      const deltaTheta = Math.PI / nMarks;
+      for (let i = 0; i < nMarks; i++) {
+        const theta = 2 * i * deltaTheta;
+        ctx.beginPath();
+        ctx.moveTo(outerR * Math.cos(theta), outerR * Math.sin(theta));
+        ctx.lineTo(innerR * Math.cos(theta - deltaTheta), innerR * Math.sin(theta - deltaTheta));
+        ctx.lineTo(innerR * Math.cos(theta), innerR * Math.sin(theta));
+        ctx.closePath();
+        if (fillColor1 !== "rgba(0,0,0,0)") {
+          ctx.fillStyle = fillColor1;
+          ctx.fill();
+        }
+        ctx.strokeStyle = roseStroke;
+        ctx.lineWidth = markWidth;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(outerR * Math.cos(theta), outerR * Math.sin(theta));
+        ctx.lineTo(innerR * Math.cos(theta + deltaTheta), innerR * Math.sin(theta + deltaTheta));
+        ctx.lineTo(innerR * Math.cos(theta), innerR * Math.sin(theta));
+        ctx.closePath();
+        if (fillColor2 !== "rgba(0,0,0,0)") {
+          ctx.fillStyle = fillColor2;
+          ctx.fill();
+        }
+        ctx.strokeStyle = roseStroke;
+        ctx.lineWidth = markWidth;
+        ctx.stroke();
+      }
+    }
     const EC_DIAL_RADIUS_FACTOR = 0.92;
     const EC_DIAL_SMALL_RADIUS_CUTOFF = 45;
     const EC_DIAL_SMALL_RADIUS_FACTOR = 0.11 / (EC_DIAL_SMALL_RADIUS_CUTOFF - 25);
@@ -13033,6 +13347,21 @@
             ctx.rotate(th + Math.PI / 2);
             ctx.fillText(label, 0, textVisualCenterY(ctx, label));
           }
+          ctx.restore();
+        }
+      } else if (orientation === "rotated") {
+        for (let i = 0; i < n; i++) {
+          const label = labels[i].trim();
+          if (!label) continue;
+          const th = i / n * 2 * Math.PI - Math.PI / 2;
+          const textH = fontSize;
+          const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
+          const tx = textR * Math.cos(th);
+          const ty = textR * Math.sin(th);
+          ctx.save();
+          ctx.translate(tx, ty);
+          ctx.rotate(th);
+          ctx.fillText(label, 0, textVisualCenterY(ctx, label));
           ctx.restore();
         }
       } else {
@@ -13431,8 +13760,9 @@
     const y = -evalAttr(part.y, env);
     const alpha = part.alpha !== void 0 ? evalAttr(part.alpha, env) : 1;
     const { bitmap, scale: imgScale } = loaded2;
-    const drawW = bitmap.width * imgScale;
-    const drawH = bitmap.height * imgScale;
+    const xmlScale = part.scale ? evalAttr(part.scale, env) : 1;
+    const drawW = bitmap.width * imgScale * xmlScale;
+    const drawH = bitmap.height * imgScale * xmlScale;
     ctx.save();
     if (alpha < 1) {
       ctx.globalAlpha = alpha;
