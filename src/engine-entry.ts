@@ -381,8 +381,14 @@ async function main() {
             // Just update the static caches with current leaf positions.
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-            // Hand states are preserved — their angle expressions will
-            // be re-evaluated by tickAnimations using the fresh env
+            // Force all hands to re-evaluate immediately so wheels with long
+            // update intervals (e.g. 60s) respond without delay
+            for (const hs of face.handStates) {
+                hs.nextUpdateTime = 0;
+            }
+            if (face.terminatorLeaves.length > 0) {
+                resetLeafSchedules(face.terminatorLeaves);
+            }
         }
     }
 

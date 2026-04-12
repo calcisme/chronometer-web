@@ -15003,6 +15003,12 @@
         face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        for (const hs of face.handStates) {
+          hs.nextUpdateTime = 0;
+        }
+        if (face.terminatorLeaves.length > 0) {
+          resetLeafSchedules(face.terminatorLeaves);
+        }
       }
     }
     function rebuildAllForTime() {
