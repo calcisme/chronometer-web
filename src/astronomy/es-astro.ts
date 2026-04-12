@@ -514,14 +514,14 @@ export function moonRelativeAngle(
 /** Eclipse type classification (iOS ECEclipseKind) */
 export enum EclipseKind {
     NoneSolar = 0,
-    SolarNotUp,
-    PartialSolar,
-    AnnularSolar,
-    TotalSolar,
-    NoneLunar,
-    LunarNotUp,
-    PartialLunar,
-    TotalLunar,
+    NoneLunar,       // iOS: 1 (adjacent to NoneSolar so both collapse to 0 via value--)
+    SolarNotUp,      // iOS: 2
+    PartialSolar,    // iOS: 3
+    AnnularSolar,    // iOS: 4
+    TotalSolar,      // iOS: 5
+    LunarNotUp,      // iOS: 6
+    PartialLunar,    // iOS: 7
+    TotalLunar,      // iOS: 8
 }
 
 /**
@@ -605,8 +605,10 @@ export function calculateEclipse(
     const moonParallax = moonSizeParallax.parallax;
 
     // Quick check: RA delta to determine solar vs lunar proximity
-    let raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI);
-    if (raDelta > Math.PI) raDelta = TWO_PI - raDelta;
+    // iOS: EC_fmod(fabs(moonRA - sunRA), 2π), result in [0, 2π)
+    // Near new moon: raDelta < π/2 → solar branch
+    // Near full moon or in between: raDelta >= π/2 → lunar branch
+    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI);
 
     let physicalSeparation: number;
     let separationAtPartialEclipse: number;

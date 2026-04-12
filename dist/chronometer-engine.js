@@ -11037,8 +11037,7 @@
     const moonSizeParallax = planetSizeAndParallax(1 /* Moon */, moonDistAU);
     const moonAngularSize = moonSizeParallax.angularSize;
     const moonParallax = moonSizeParallax.parallax;
-    let raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI3);
-    if (raDelta > Math.PI) raDelta = TWO_PI3 - raDelta;
+    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI3);
     let physicalSeparation;
     let separationAtPartialEclipse;
     let separationAtTotalEclipse;
@@ -11059,15 +11058,15 @@
       const sunAlt = planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
       const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 0 /* Sun */, false, cache);
       if (sunAlt < altAtRS) {
-        eclipseKind = 1 /* SolarNotUp */;
+        eclipseKind = 2 /* SolarNotUp */;
       } else if (physicalSeparation > separationAtPartialEclipse) {
         eclipseKind = 0 /* NoneSolar */;
       } else if (physicalSeparation < separationAtAnnularEclipse) {
-        eclipseKind = 3 /* AnnularSolar */;
+        eclipseKind = 4 /* AnnularSolar */;
       } else if (physicalSeparation > separationAtTotalEclipse) {
-        eclipseKind = 2 /* PartialSolar */;
+        eclipseKind = 3 /* PartialSolar */;
       } else {
-        eclipseKind = 4 /* TotalSolar */;
+        eclipseKind = 5 /* TotalSolar */;
       }
       solarNotLunar = true;
     } else {
@@ -11083,7 +11082,7 @@
       if (moonAlt < altAtRS) {
         eclipseKind = 6 /* LunarNotUp */;
       } else if (physicalSeparation > separationAtPartialEclipse) {
-        eclipseKind = 5 /* NoneLunar */;
+        eclipseKind = 1 /* NoneLunar */;
       } else if (physicalSeparation > separationAtTotalEclipse) {
         eclipseKind = 7 /* PartialLunar */;
       } else {
@@ -11096,7 +11095,7 @@
       abstractSeparation = 0;
     } else if (abstractSeparation > 3) {
       abstractSeparation = 3;
-      eclipseKind = solarNotLunar ? 0 /* NoneSolar */ : 5 /* NoneLunar */;
+      eclipseKind = solarNotLunar ? 0 /* NoneSolar */ : 1 /* NoneLunar */;
     }
     return {
       abstractSeparation,
@@ -11108,10 +11107,10 @@
   function eclipseKindIsMoreSolarThanLunar(kind) {
     switch (kind) {
       case 0 /* NoneSolar */:
-      case 1 /* SolarNotUp */:
-      case 2 /* PartialSolar */:
-      case 3 /* AnnularSolar */:
-      case 4 /* TotalSolar */:
+      case 2 /* SolarNotUp */:
+      case 3 /* PartialSolar */:
+      case 4 /* AnnularSolar */:
+      case 5 /* TotalSolar */:
         return true;
       default:
         return false;
@@ -12387,8 +12386,8 @@
     }
     return fmod(daysSinceStart / 366, 1);
   }
-  function timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool) {
-    const sunLongForTryDate = sunEclipticLongitudeForDate(tryDate, pool.tempCache);
+  function timeOfClosestSunEclipticLongitude(targetSunLong, tryDate) {
+    const sunLongForTryDate = sunEclipticLongitudeForDate(tryDate, null);
     const howFarAway = targetSunLong - sunLongForTryDate;
     let deltaAngleToTarget;
     if (howFarAway >= 0) {
@@ -12408,13 +12407,10 @@
   function computeClosestSunEclipticLongQuarter366Angle(quarterNumber, nowDate) {
     const calcDate = dateToDateInterval(nowDate);
     const targetSunLong = quarterNumber * Math.PI / 2;
-    const pool = new AstroCachePool();
-    pool.tempCache.dateInterval = calcDate;
-    pool.tempCache.currentFlag = 1;
-    let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate, pool);
-    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
-    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
-    const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
+    const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     const targetDate = new Date((targetTime + 978307200) * 1e3);
     return computeYear366IndicatorFraction(targetDate) * 2 * Math.PI;
   }
@@ -12534,6 +12530,9 @@
         ctx.scale(scale, scale);
         renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, true);
         for (const win of part.precedingWindows) {
+          drawWindowBorder(ctx, win, env);
+        }
+        for (const win of part.precedingWindows) {
           cutWindowHole(ctx, win, env);
         }
         part.cachedCanvas = cache;
@@ -12570,11 +12569,6 @@
           ctx.restore();
         }
         drawQHandsInParts(ctx, part.children, env, images);
-        if (part.precedingWindows) {
-          for (const win of part.precedingWindows) {
-            drawWindowBorder(ctx, win, env);
-          }
-        }
         continue;
       }
       if (part.type === "QHand") {
@@ -12748,10 +12742,12 @@
       }
     }
     for (const win of pendingWindows) {
+      drawWindowBorder(ctx, win, env);
+    }
+    for (const win of pendingWindows) {
       if (applyTrailingCutouts) {
         cutWindowHole(ctx, win, env);
       }
-      drawWindowBorder(ctx, win, env);
     }
     for (const win of leadingWindows) {
       drawWindowBorder(ctx, win, env);
@@ -12767,15 +12763,15 @@
     tctx.scale(scale, scale);
     drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale, images);
     for (const win of windows) {
+      drawWindowBorder(tctx, win, env);
+    }
+    for (const win of windows) {
       cutWindowHole(tctx, win, env);
     }
     ctx.save();
     ctx.resetTransform();
     ctx.drawImage(temp, 0, 0);
     ctx.restore();
-    for (const win of windows) {
-      drawWindowBorder(ctx, win, env);
-    }
   }
   function cutWindowHole(ctx, win, env) {
     const xVal = evalAttr(win.x, env);
@@ -13175,7 +13171,15 @@
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = strokeColor;
     ctx.fillStyle = fillColor;
-    if (handType === "rect") {
+    if (handType === "wire") {
+      const hw = width / 2;
+      ctx.moveTo(-hw, -length2);
+      ctx.lineTo(-hw, -(length - (oTail < 0 ? oTail : 0)));
+      if (strokeColor !== "rgba(0,0,0,0)") {
+        ctx.stroke();
+      }
+      return;
+    } else if (handType === "rect") {
       const hw = width / 2;
       if (length2 > 0) {
         ctx.rect(-hw, -length2, width, -(length - length2));

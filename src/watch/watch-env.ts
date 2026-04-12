@@ -1024,9 +1024,10 @@ function computeYear366IndicatorFraction(date: Date): number {
 function timeOfClosestSunEclipticLongitude(
     targetSunLong: number,
     tryDate: number,
-    pool: AstroCachePool,
 ): number {
-    const sunLongForTryDate = sunEclipticLongitudeForDate(tryDate, pool.tempCache);
+    // Pass null for cache: each iteration uses a different tryDate,
+    // so a shared cache would return stale sun longitude values.
+    const sunLongForTryDate = sunEclipticLongitudeForDate(tryDate, null);
     const howFarAway = targetSunLong - sunLongForTryDate;
     let deltaAngleToTarget: number;
     if (howFarAway >= 0) {
@@ -1057,16 +1058,11 @@ function computeClosestSunEclipticLongQuarter366Angle(
     const calcDate = dateToDateInterval(nowDate);
     const targetSunLong = quarterNumber * Math.PI / 2;
     
-    // Temporary pool since we just evaluate and throw away
-    const pool = new AstroCachePool();
-    pool.tempCache.dateInterval = calcDate;
-    pool.tempCache.currentFlag = 1;
-    
-    // Iterative refinement (3 steps like iOS)
-    let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate, pool);
-    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
-    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
-    const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate, pool);
+    // Iterative refinement (4 steps like iOS)
+    let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
+    tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
+    const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     
     // Convert target interval to year366 fraction
     const targetDate = new Date((targetTime + 978307200) * 1000); // Apple epoch to JS

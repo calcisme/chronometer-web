@@ -96,7 +96,12 @@ export function buildStaticBlockCaches(
             // Draw the static block's children with internal window handling
             renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, true);
 
-            // Apply preceding window cutouts
+            // Draw preceding window borders, THEN cut holes.
+            // The cutout erases the inner half of the border stroke,
+            // leaving only the outer half visible (matching iOS).
+            for (const win of part.precedingWindows) {
+                drawWindowBorder(ctx, win, env);
+            }
             for (const win of part.precedingWindows) {
                 cutWindowHole(ctx, win, env);
             }
@@ -201,12 +206,8 @@ function renderPartsDocumentOrder(
             // Draw any QHands inside the static block (they're dynamic)
             drawQHandsInParts(ctx, part.children, env, images);
 
-            // Draw window borders from the preceding windows
-            if (part.precedingWindows) {
-                for (const win of part.precedingWindows) {
-                    drawWindowBorder(ctx, win, env);
-                }
-            }
+            // Preceding window borders are already baked into the static cache
+            // (drawn before holes were cut, so only outer half is visible).
             continue;
         }
 
@@ -460,11 +461,14 @@ function renderPartsWithWindows(
     }
 
     // Leftover pending windows (between-part windows with no following part)
+    // Draw borders first, then cut holes (inner half of border gets erased).
+    for (const win of pendingWindows) {
+        drawWindowBorder(ctx, win, env);
+    }
     for (const win of pendingWindows) {
         if (applyTrailingCutouts) {
             cutWindowHole(ctx, win, env);
         }
-        drawWindowBorder(ctx, win, env);
     }
 
     // Leading windows: draw borders first, then cut holes.
@@ -503,6 +507,12 @@ function renderWithWindowCutouts(
     // Draw the part onto the temp canvas
     drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale, images);
 
+    // Draw window borders BEFORE cutting holes, so the cutout erases
+    // the inner half of the border stroke (matching iOS).
+    for (const win of windows) {
+        drawWindowBorder(tctx, win, env);
+    }
+
     // Cut window holes using destination-out
     for (const win of windows) {
         cutWindowHole(tctx, win, env);
@@ -513,11 +523,6 @@ function renderWithWindowCutouts(
     ctx.resetTransform();
     ctx.drawImage(temp, 0, 0);
     ctx.restore();
-
-    // Draw window borders on main context (on top of composited result)
-    for (const win of windows) {
-        drawWindowBorder(ctx, win, env);
-    }
 }
 
 /**
@@ -1139,7 +1144,18 @@ function drawHandShape(
     ctx.strokeStyle = strokeColor;
     ctx.fillStyle = fillColor;
 
-    if (handType === 'rect') {
+    if (handType === 'wire') {
+        // iOS ECQHandWire: single straight line from length2 to length
+        // Offset by -width/2 horizontally (iOS quirk preserved for fidelity)
+        const hw = width / 2;
+        ctx.moveTo(-hw, -length2);
+        ctx.lineTo(-hw, -(length - (oTail < 0 ? oTail : 0)));
+        // Wire has no fill, only stroke
+        if (strokeColor !== 'rgba(0,0,0,0)') {
+            ctx.stroke();
+        }
+        return;  // Skip generic fill/stroke below
+    } else if (handType === 'rect') {
         // Rectangle hand: from length2 to length (or tail to length if no length2)
         const hw = width / 2;
         if (length2 > 0) {
