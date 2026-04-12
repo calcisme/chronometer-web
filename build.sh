@@ -8,7 +8,7 @@
 #   dist/index.html              — face selector with thumbnails
 set -e
 
-ESBUILD="./build-with-esbuild.sh"
+ESBUILD="npx --yes esbuild"
 DIST="dist"
 SRC="src"
 LOADER_FLAGS="--loader:.xml=text --loader:.png=dataurl"
