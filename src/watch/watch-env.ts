@@ -43,6 +43,7 @@ import { terminatorAngle } from './terminator.js';
 import { GSTDifferenceForDate } from '../astronomy/es-sidereal.js';
 import { generalPrecessionSinceJ2000, sunRAandDecl, moonRAAndDecl, sunEclipticLongitudeForDate, raAndDeclO, generalObliquity } from '../astronomy/es-coordinates.js';
 import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
+import { WB_planetHeliocentricLongitude } from '../astronomy/willmann-bell.js';
 import { WB_MoonAscendingNodeLongitude } from '../astronomy/wb-moon.js';
 import { WB_nutationObliquity } from '../astronomy/wb-sun.js';
 
@@ -88,6 +89,14 @@ export function createWatchEnvironment(
     // Planet constants used in XML expressions
     env.variables.set('planetSun', ECPlanetNumber.Sun);
     env.variables.set('planetMoon', ECPlanetNumber.Moon);
+    env.variables.set('planetMercury', ECPlanetNumber.Mercury);
+    env.variables.set('planetVenus', ECPlanetNumber.Venus);
+    env.variables.set('planetEarth', ECPlanetNumber.Earth);
+    env.variables.set('planetMars', ECPlanetNumber.Mars);
+    env.variables.set('planetJupiter', ECPlanetNumber.Jupiter);
+    env.variables.set('planetSaturn', ECPlanetNumber.Saturn);
+    env.variables.set('planetUranus', ECPlanetNumber.Uranus);
+    env.variables.set('planetNeptune', ECPlanetNumber.Neptune);
 
     // Register time functions (uses the provided getNow source)
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
@@ -437,6 +446,13 @@ function registerTimeFunctions(
     functions.set('ELongitudeOfPlanet', (n: number) => {
         const di = dateToDateInterval(getNow());
         return planetEclipticLongitude(n as ECPlanetNumber, di, null);
+    });
+    // HLongitudeOfPlanet(n): heliocentric longitude (radians)
+    // Used by Firenze's orrery to position planets on their orbits.
+    functions.set('HLongitudeOfPlanet', (n: number) => {
+        const di = dateToDateInterval(getNow());
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        return WB_planetHeliocentricLongitude(n as ECPlanetNumber, julianCenturiesSince2000Epoch / 100);
     });
     // ELatitudeOfPlanet(n): geocentric apparent ecliptic latitude (radians)
     functions.set('ELatitudeOfPlanet', (n: number) => {

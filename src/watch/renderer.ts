@@ -1535,19 +1535,26 @@ function drawImageHand(
     ctx.translate(x, y);
 
     if (offsetRadius > 0) {
-        // Polar offset mode (e.g. Moon hand on Mauna Kea):
-        // The image orbits the center at `offsetRadius` distance,
-        // positioned at `offsetAngle` from 12 o'clock.
-        // The `angle` expression is typically moonAgeAngle() and determines
-        // the image's own rotation (e.g. to show proper phase orientation).
+        // iOS ECGLPart.m behavior:
+        // 1. Position is at (offsetRadius, offsetAngle) — polar coordinates
+        // 2. The image is rotated by (offsetAngle + angle) around its anchor point
+        //    For most hands, anchor is at image center so rotation is purely visual.
+        //    For the Moon (yAnchor=23 vs 10), the off-center anchor creates an
+        //    orbital displacement when rotated, making it orbit around Earth.
+        const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
+        // iOS CG has Y-up (anchor from bottom), Canvas has Y-down.
+        // Match the non-offset branch convention: negate and subtract drawH.
+        const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
+
+        // Translate to the offset position on the orbit circle
         ctx.rotate(offsetAngle);
         ctx.translate(0, -offsetRadius);
-        // Apply the image's own rotation.
-        // In iOS, the total angle is offsetAngle + angle.
-        // Since we are already rotated by offsetAngle, we just rotate by angle.
+
+        // Rotate the image around its anchor point.
+        // The coordinate system is already rotated by offsetAngle from above,
+        // so apply only `angle` here to get the iOS total of (offsetAngle + angle).
         ctx.rotate(angle);
-        // Draw centered
-        ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
     } else if (part.xAnchor || part.yAnchor) {
         // Standard anchored image hand (rotating around pivot)
         if (angle) {

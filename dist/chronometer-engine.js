@@ -10574,6 +10574,7 @@
     return Vs;
   }
   function findOuterPlanetDatum(U, descriptor) {
+    if (isNaN(U)) return null;
     const jdRanges = descriptor.jdRange;
     const jd = U * 3652500 + 2451545;
     const firstJD = jdRanges[0].startJD;
@@ -10780,6 +10781,32 @@
           apparentRightAscension: NaN,
           apparentDeclination: NaN
         };
+    }
+  }
+  function WB_planetHeliocentricLongitude(planetNumber, U, cache) {
+    switch (planetNumber) {
+      case 4 /* Earth */: {
+        const sunLong = WB_sunLongitudeRaw(U, cache);
+        let helio = fmod(Math.PI + sunLong, 2 * Math.PI);
+        if (helio < 0) helio += 2 * Math.PI;
+        return helio;
+      }
+      case 2 /* Mercury */:
+        return mercuryHeliocentricLongitude(U);
+      case 3 /* Venus */:
+        return venusHeliocentricLongitude(U);
+      case 5 /* Mars */:
+        return marsHeliocentricLongitude(U);
+      case 6 /* Jupiter */:
+        return jupiterHeliocentricLongitude(U);
+      case 7 /* Saturn */:
+        return saturnHeliocentricLongitude(U);
+      case 8 /* Uranus */:
+        return uranusHeliocentricLongitude(U);
+      case 9 /* Neptune */:
+        return neptuneHeliocentricLongitude(U);
+      default:
+        return NaN;
     }
   }
 
@@ -11712,6 +11739,14 @@
     env.variables.set("updateForLocSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
     env.variables.set("planetSun", 0 /* Sun */);
     env.variables.set("planetMoon", 1 /* Moon */);
+    env.variables.set("planetMercury", 2 /* Mercury */);
+    env.variables.set("planetVenus", 3 /* Venus */);
+    env.variables.set("planetEarth", 4 /* Earth */);
+    env.variables.set("planetMars", 5 /* Mars */);
+    env.variables.set("planetJupiter", 6 /* Jupiter */);
+    env.variables.set("planetSaturn", 7 /* Saturn */);
+    env.variables.set("planetUranus", 8 /* Uranus */);
+    env.variables.set("planetNeptune", 9 /* Neptune */);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
@@ -11961,6 +11996,11 @@
     functions.set("ELongitudeOfPlanet", (n) => {
       const di = dateToDateInterval(getNow());
       return planetEclipticLongitude(n, di, null);
+    });
+    functions.set("HLongitudeOfPlanet", (n) => {
+      const di = dateToDateInterval(getNow());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      return WB_planetHeliocentricLongitude(n, julianCenturiesSince2000Epoch / 100);
     });
     functions.set("ELatitudeOfPlanet", (n) => {
       const di = dateToDateInterval(getNow());
@@ -13415,10 +13455,12 @@
     ctx.save();
     ctx.translate(x, y);
     if (offsetRadius > 0) {
+      const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
+      const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
       ctx.rotate(offsetAngle);
       ctx.translate(0, -offsetRadius);
       ctx.rotate(angle);
-      ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
     } else if (part.xAnchor || part.yAnchor) {
       if (angle) {
         ctx.rotate(angle);

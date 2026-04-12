@@ -282,6 +282,7 @@ function makeVsTable(V: number): number[] {
 function findOuterPlanetDatum(
     U: number, descriptor: OuterPlanetDescriptor
 ): { datum: OuterPlanetDatum; V: number } | null {
+    if (isNaN(U)) return null;
     const jdRanges = descriptor.jdRange;
     const jd = U * 3652500 + 2451545;
     const firstJD = jdRanges[0].startJD;
