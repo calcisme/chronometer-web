@@ -91,7 +91,7 @@ export function loadCityData(): Promise<void> {
         };
 
         const script = document.createElement('script');
-        script.src = 'cities-data.js?v=' + Date.now();
+        script.src = 'cities-data.js';
 
         // Catch JS parse/runtime errors from the script
         const errorHandler = (evt: ErrorEvent) => {

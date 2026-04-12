@@ -21,6 +21,11 @@ const DEMO_LON = -122.0090;
 
 const isFileProtocol = window.location.protocol === 'file:';
 
+// Preload city database in the background so it's ready when the user
+// opens the location dialog. Fire-and-forget — errors are silently
+// ignored here since loadCityData() will report them on actual use.
+loadCityData().catch(() => {});
+
 // ============================================================================
 // URL state helpers
 // ============================================================================

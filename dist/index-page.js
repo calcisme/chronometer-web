@@ -54,7 +54,7 @@
         }
       };
       const script = document.createElement("script");
-      script.src = "cities-data.js?v=" + Date.now();
+      script.src = "cities-data.js";
       const errorHandler = (evt) => {
         if (evt.filename && evt.filename.includes("cities-data")) {
           window.removeEventListener("error", errorHandler);
@@ -325,6 +325,8 @@
   var DEMO_LAT = 37.3349;
   var DEMO_LON = -122.009;
   var isFileProtocol = window.location.protocol === "file:";
+  loadCityData().catch(() => {
+  });
   function readUrlState() {
     const params = new URLSearchParams(window.location.search);
     const latStr = params.get("lat");

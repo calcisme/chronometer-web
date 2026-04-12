@@ -169,6 +169,11 @@ async function main() {
     // Initialize link preservation
     initNavigationLinks();
 
+    // Preload city database in the background so it's ready when the user
+    // opens the location dialog. This is fire-and-forget — errors are silently
+    // ignored here since loadCityData() will report them on actual use.
+    loadCityData().catch(() => {});
+
     // --- Resolve location ---
     const urlState = readUrlState();
     let lat: number, lon: number;

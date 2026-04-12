@@ -14126,7 +14126,7 @@
         }
       };
       const script = document.createElement("script");
-      script.src = "cities-data.js?v=" + Date.now();
+      script.src = "cities-data.js";
       const errorHandler = (evt) => {
         if (evt.filename && evt.filename.includes("cities-data")) {
           window.removeEventListener("error", errorHandler);
@@ -14463,6 +14463,8 @@
     const lpMapLabel = document.getElementById("lp-map-label");
     const lpDoneBtn = document.getElementById("lp-done");
     initNavigationLinks();
+    loadCityData().catch(() => {
+    });
     const urlState = readUrlState();
     let lat, lon;
     let locationSource = "";
