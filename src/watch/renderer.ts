@@ -223,6 +223,13 @@ function renderPartsDocumentOrder(
             } else {
                 drawQHand(ctx, part, env);
             }
+
+            // Terra: draw city names and channel lines on the worldtime ring
+            if (part.name === 'worldtime ring') {
+                drawTerraCityNames(ctx, part, env);
+                drawTerraChannelLines(ctx, part, env);
+            }
+
             continue;
         }
 
@@ -250,6 +257,11 @@ function renderPartsDocumentOrder(
             pendingWindows.length = 0;
         } else {
             drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
+        }
+
+        // Terra: draw city dots on top of the continents image
+        if (part.name === 'decoration') {
+            drawTerraCityDots(ctx, env);
         }
     }
 
@@ -1247,16 +1259,21 @@ function drawHandShape(
         ctx.lineTo(-hw, midY);            // left side at widest point
         ctx.closePath();
     } else {
-        // Triangle hand (default): pointed tip, wide base
+        // Diamond hand (default 'tri'): matches iOS ECQHandTri
+        // 4-point diamond shape:
+        //   top point at (0, -(length))
+        //   widest at (±width/2, -(length2))
+        //   bottom point at (0, -(length2-tail))
         const hw = width / 2;
         if (length2 > 0) {
-            ctx.moveTo(0, -length);          // tip
-            ctx.lineTo(hw, -length2);        // bottom right
-            ctx.lineTo(-hw, -length2);       // bottom left
+            ctx.moveTo(-hw, -length2);           // left widest point
+            ctx.lineTo(0, -(length - oTail));    // top point
+            ctx.lineTo(hw, -length2);            // right widest point
+            ctx.lineTo(0, -(length2 - tail));    // bottom point
         } else {
-            ctx.moveTo(0, -length);          // tip
-            ctx.lineTo(hw, tail);            // bottom right
-            ctx.lineTo(-hw, tail);           // bottom left
+            ctx.moveTo(0, -length);              // tip
+            ctx.lineTo(hw, tail);                // bottom right
+            ctx.lineTo(-hw, tail);               // bottom left
         }
         ctx.closePath();
     }
@@ -1307,7 +1324,11 @@ function drawWheel(
     ctx.textBaseline = 'alphabetic';
 
     // Compute max label dimensions for consistent positioning
-    let maxW = 0, maxH = fontSize;
+    let maxW = 0;
+    const metrics = ctx.measureText('Xg');  // measure with descender
+    // Use actual measured height for vertical positioning
+    const measuredH = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
+    const maxH = measuredH;
     for (const lab of labels) {
         const m = ctx.measureText(lab.trim());
         maxW = Math.max(maxW, m.width);
@@ -1331,6 +1352,85 @@ function drawWheel(
         ctx.fill();
     }
 
+    // TWheel halfAndHalf: split-color ring background (e.g. 24-hour dial)
+    // On the 24-hour worldtime dial, with labels 0,23,22,...,1:
+    //   - Midnight (0)  is at the top (12 o'clock)
+    //   - 6PM (18)      is at 3 o'clock (index 6, going CW)
+    //   - Noon (12)     is at the bottom (6 o'clock)
+    //   - 6AM (6)       is at 9 o'clock
+    // Night (bgColor=black) should cover the TOP half (6PM through midnight to 6AM)
+    // Day (bgColor2=white) should cover the BOTTOM half (6AM through noon to 6PM)
+    const halfAndHalf = part.halfAndHalf ? evalAttr(part.halfAndHalf, env) : 0;
+    const bgColor2 = part.bgColor2 ? evalColor(part.bgColor2, env) : bgColor;
+    // Inner radius of the ring: approximate from font size
+    const innerR = radius - fontSize - 2;
+    if (part.wheelVariant === 'TWheel' && halfAndHalf) {
+        ctx.save();
+        ctx.rotate(angle);
+        // Night half (top): arc from left (π) CW through top to right (2π/0)
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, Math.PI, 2 * Math.PI);
+        ctx.arc(0, 0, innerR, 2 * Math.PI, Math.PI, true); // inner arc, reverse
+        ctx.closePath();
+        ctx.fill();
+        // Day half (bottom): arc from right (0) CW through bottom to left (π)
+        ctx.fillStyle = bgColor2;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI);
+        ctx.arc(0, 0, innerR, Math.PI, 0, true); // inner arc, reverse
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    } else if (part.wheelVariant === 'TWheel' && bgColor !== 'rgba(0,0,0,0)') {
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.arc(0, 0, innerR, 0, 2 * Math.PI, true);
+        ctx.fill('evenodd');
+    }
+
+    // TWheel tick marks — short marks at the outer edge, with dots on hours
+    if (part.wheelVariant === 'TWheel' && part.ticks) {
+        const ticksPerLabel = Math.round(evalAttr(part.ticks, env) || 0);
+        const nTotalTicks = ticksPerLabel * n;
+        const tw = part.tickWidth ? evalAttr(part.tickWidth, env) : 0.5;
+        if (nTotalTicks > 0) {
+            ctx.save();
+            ctx.rotate(angle);
+            const tickLen = 2;
+            for (let ti = 0; ti < nTotalTicks; ti++) {
+                const theta = (ti / nTotalTicks) * 2 * Math.PI;
+                const cosT = Math.cos(theta);
+                const sinT = Math.sin(theta);
+                if (ti % ticksPerLabel === 0) {
+                    // Hour mark: small filled dot
+                    // Determine if this position is on night (black bg) or day (white bg)
+                    // to pick a contrasting color for the dot
+                    const norm = ((theta % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                    const onNightHalf = norm >= Math.PI;
+                    ctx.fillStyle = onNightHalf ? strokeColor : evalColor(part.bgColor, env);
+                    ctx.beginPath();
+                    ctx.arc(cosT * (radius - 1.5), sinT * (radius - 1.5), 1.2, 0, 2 * Math.PI);
+                    ctx.fill();
+                } else {
+                    // Regular tick mark — use contrast color for visibility
+                    const norm = ((theta % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                    const onNightHalf = norm >= Math.PI;
+                    ctx.strokeStyle = halfAndHalf
+                        ? (onNightHalf ? strokeColor : evalColor(part.bgColor, env))
+                        : strokeColor;
+                    ctx.lineWidth = tw;
+                    ctx.beginPath();
+                    ctx.moveTo(cosT * radius, sinT * radius);
+                    ctx.lineTo(cosT * (radius - tickLen), sinT * (radius - tickLen));
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+    }
+
     // Draw labels around the circle.
     // Two modes depending on whether the wheel spans a full circle or partial arc:
     // - Full circle (no angle1/angle2): text rotates with wheel, tops toward center
@@ -1350,7 +1450,20 @@ function drawWheel(
         const label = labels[i].trim();
 
         if (label) {
-            ctx.fillStyle = strokeColor;
+            // For halfAndHalf TWheels, determine which half this label is in
+            // and set the contrast color accordingly.
+            // Night (bgColor=black) is the TOP half, Day (bgColor2=white) is BOTTOM.
+            // Labels are placed starting from twelve orientation, rotating CW by -step each.
+            // Label i is at angular position -i * step in the rotated frame.
+            if (halfAndHalf) {
+                // iOS uses kCGBlendModeDifference for text on halfAndHalf dials.
+                // This automatically makes text contrast with the background:
+                // white text with 'difference' blend → appears white on black, black on white.
+                ctx.fillStyle = 'white';
+                ctx.globalCompositeOperation = 'difference';
+            } else {
+                ctx.fillStyle = strokeColor;
+            }
             ctx.save();
 
             // Position text based on orientation
@@ -1858,6 +1971,277 @@ function drawWindowBorder(
         } else {
             ctx.strokeRect(-w / 2, -h / 2, w, h);
         }
+    }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// Terra I — Dynamic city name overlay on the worldtime ring
+// ============================================================================
+
+/**
+ * Draw the 24 city names curved along the worldtime ring circumference.
+ * Each character is individually placed on the arc, with tops pointing
+ * outward (away from center) — matching the iOS worldtime dial.
+ *
+ * Even ring indices (0, 2, 4...) use the inner track radius.
+ * Odd ring indices (1, 3, 5...) use the outer track radius.
+ */
+function drawTerraCityNames(
+    ctx: RenderContext,
+    part: QHandPart,
+    env: Environment,
+): void {
+    const terraSlots = (env as any)._terraSlots as Record<number, { cityName: string }> | undefined;
+    if (!terraSlots) return;
+
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
+
+    // Ring band spans roughly radius 120–139 in XML coords
+    const cityFS = 8;
+    const cityRad2 = 131;             // outer track: text center at ~131
+    const cityRad1 = 127 - cityFS;    // inner track: text center at ~119
+    const sectorAngle = Math.PI / 12;  // 15° per slot
+
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.font = `${cityFS}px Arial`;
+    ctx.fillStyle = 'black';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i < 24; i++) {
+        const slot = terraSlots[i + 5]; // ring slots are 5–28
+        if (!slot) continue;
+
+        const slotCenterAngle = i * sectorAngle;
+        const radius = (i % 2 === 0) ? cityRad1 : cityRad2;
+        const name = slot.cityName;
+
+        // Measure each character's width and total angular span
+        const charWidths: number[] = [];
+        let totalWidth = 0;
+        for (let c = 0; c < name.length; c++) {
+            const w = ctx.measureText(name[c]).width;
+            charWidths.push(w);
+            totalWidth += w;
+        }
+        const totalAngle = totalWidth / radius;
+
+        // Center the name on the slot's angular position.
+        // Characters go in increasing angle direction (clockwise at top).
+        let charAngle = slotCenterAngle - totalAngle / 2;
+
+        for (let c = 0; c < name.length; c++) {
+            const charAngularWidth = charWidths[c] / radius;
+            const charCenterAngle = charAngle + charAngularWidth / 2;
+
+            ctx.save();
+            // Rotate to this character's angular position
+            ctx.rotate(charCenterAngle);
+            // Move to the radius (up = -Y in canvas)
+            ctx.translate(0, -radius);
+            // After rotate+translate, +Y points toward center.
+            // Canvas text draws with tops toward -Y, which is OUTWARD. ✓
+            // No additional rotation needed.
+
+            ctx.fillText(name[c], 0, 0);
+            ctx.restore();
+
+            charAngle += charAngularWidth;
+        }
+    }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// Terra I — Channel lines (DST range arcs) on the worldtime ring
+// ============================================================================
+
+/**
+ * Draw channel arc lines on the worldtime ring showing the range
+ * each city's DST dot can occupy.  Matches iOS ECPartSpecialWorldtimeRing.
+ *
+ * For cities with DST, draws a solid arc spanning the low–high offset range.
+ * For cities without DST, draws a dashed 1-sector arc at half opacity.
+ *
+ * Calls env._getDSTRange(slotNum) which uses the proven getTzOffsetSeconds
+ * from watch-env.ts, evaluated at call time (no precomputation).
+ */
+function drawTerraChannelLines(
+    ctx: RenderContext,
+    part: QHandPart,
+    env: Environment,
+): void {
+    const terraSlots = (env as any)._terraSlots as Record<number, { cityName: string }> | undefined;
+    if (!terraSlots) { console.log('[Terra] No terraSlots'); return; }
+    const getDSTRange = (env as any)._getDSTRange as ((slot: number) => { lowHours: number; highHours: number } | null) | undefined;
+    if (!getDSTRange) { console.log('[Terra] No getDSTRange function'); return; }
+
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
+
+    // Channel radii matching iOS: channelRad1=111.5, channelRad2=126 (at 1x)
+    const channelRad1 = 111.5;
+    const channelRad2 = 126;
+    const channelWidth = 0.25;
+
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.lineWidth = channelWidth;
+    ctx.strokeStyle = 'black';
+
+    for (let i = 0; i < 24; i++) {
+        const slot = terraSlots[i + 5];
+        if (!slot) continue;
+
+        const channelR = (i % 2 === 0) ? channelRad1 : channelRad2;
+        const slotNum = i + 5;
+        const dstRange = getDSTRange(slotNum);
+
+        if (dstRange) {
+            // Solid arc showing DST offset range.
+            // The -6 sector offset converts from text coords (12 o'clock = 0)
+            // to arc coords (3 o'clock = 0).
+            const startAngle = (4.5 + dstRange.lowHours) * Math.PI / 12;
+            const endAngle = (4.5 + dstRange.highHours) * Math.PI / 12;
+            ctx.globalAlpha = 1;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.arc(0, 0, channelR, startAngle, endAngle, false);
+            ctx.stroke();
+        } else {
+            // Dashed 1-sector arc centered on the city's sector position.
+            // Same -6 sector offset for text-to-arc coordinate conversion.
+            const startAngle = (i - 6.5) * Math.PI / 12;
+            const endAngle = (i - 5.5) * Math.PI / 12;
+            ctx.globalAlpha = 1;
+            ctx.setLineDash([2, 3]);
+            ctx.beginPath();
+            ctx.arc(0, 0, channelR, startAngle, endAngle, false);
+            ctx.stroke();
+        }
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    ctx.restore();
+}
+
+// ============================================================================
+// Terra I — City dots on the world map (Robinson projection)
+// ============================================================================
+
+// Robinson projection coefficients (from iOS ECMapProjection.m)
+interface RobinsonCoefs { c0: number; c1: number; c2: number; c3: number }
+
+const robX: RobinsonCoefs[] = [
+    {c0:1, c1:-5.67239e-12, c2:-7.15511e-05, c3:3.11028e-06},
+    {c0:0.9986, c1:-0.000482241, c2:-2.4897e-05, c3:-1.33094e-06},
+    {c0:0.9954, c1:-0.000831031, c2:-4.4861e-05, c3:-9.86588e-07},
+    {c0:0.99, c1:-0.00135363, c2:-5.96598e-05, c3:3.67749e-06},
+    {c0:0.9822, c1:-0.00167442, c2:-4.4975e-06, c3:-5.72394e-06},
+    {c0:0.973, c1:-0.00214869, c2:-9.03565e-05, c3:1.88767e-08},
+    {c0:0.96, c1:-0.00305084, c2:-9.00732e-05, c3:1.64869e-06},
+    {c0:0.9427, c1:-0.00382792, c2:-6.53428e-05, c3:-2.61493e-06},
+    {c0:0.9216, c1:-0.00467747, c2:-0.000104566, c3:4.8122e-06},
+    {c0:0.8962, c1:-0.00536222, c2:-3.23834e-05, c3:-5.43445e-06},
+    {c0:0.8679, c1:-0.00609364, c2:-0.0001139, c3:3.32521e-06},
+    {c0:0.835, c1:-0.00698325, c2:-6.40219e-05, c3:9.34582e-07},
+    {c0:0.7986, c1:-0.00755337, c2:-5.00038e-05, c3:9.35532e-07},
+    {c0:0.7597, c1:-0.00798325, c2:-3.59716e-05, c3:-2.27604e-06},
+    {c0:0.7186, c1:-0.00851366, c2:-7.0112e-05, c3:-8.63072e-06},
+    {c0:0.6732, c1:-0.00986209, c2:-0.000199572, c3:1.91978e-05},
+    {c0:0.6213, c1:-0.010418, c2:8.83948e-05, c3:6.24031e-06},
+    {c0:0.5722, c1:-0.00906601, c2:0.000181999, c3:6.24033e-06},
+    {c0:0.5322, c1:0, c2:0, c3:0},
+];
+const robY: RobinsonCoefs[] = [
+    {c0:0, c1:0.0124, c2:3.72529e-10, c3:1.15484e-09},
+    {c0:0.062, c1:0.0124001, c2:1.76951e-08, c3:-5.92321e-09},
+    {c0:0.124, c1:0.0123998, c2:-7.09668e-08, c3:2.25753e-08},
+    {c0:0.186, c1:0.0124008, c2:2.66917e-07, c3:-8.44523e-08},
+    {c0:0.248, c1:0.0123971, c2:-9.99682e-07, c3:3.15569e-07},
+    {c0:0.31, c1:0.0124108, c2:3.73349e-06, c3:-1.1779e-06},
+    {c0:0.372, c1:0.0123598, c2:-1.3935e-05, c3:4.39588e-06},
+    {c0:0.434, c1:0.0125501, c2:5.20034e-05, c3:-1.00051e-05},
+    {c0:0.4968, c1:0.0123198, c2:-9.80735e-05, c3:9.22397e-06},
+    {c0:0.5571, c1:0.0120308, c2:4.02857e-05, c3:-5.2901e-06},
+    {c0:0.6176, c1:0.0120369, c2:-3.90662e-05, c3:7.36117e-07},
+    {c0:0.6769, c1:0.0117015, c2:-2.80246e-05, c3:-8.54283e-07},
+    {c0:0.7346, c1:0.0113572, c2:-4.08389e-05, c3:-5.18524e-07},
+    {c0:0.7903, c1:0.0109099, c2:-4.86169e-05, c3:-1.0718e-06},
+    {c0:0.8435, c1:0.0103433, c2:-6.46934e-05, c3:5.36384e-09},
+    {c0:0.8936, c1:0.00969679, c2:-6.46129e-05, c3:-8.54894e-06},
+    {c0:0.9394, c1:0.00840949, c2:-0.000192847, c3:-4.21023e-06},
+    {c0:0.9761, c1:0.00616525, c2:-0.000256001, c3:-4.21021e-06},
+    {c0:1, c1:0, c2:0, c3:0},
+];
+
+const ROB_FXC = 0.8487;
+const ROB_FYC = 1.3523;
+const ROB_C1 = 11.45915590261646417544;
+const ROB_RC1 = 0.08726646259971647884;
+const ROB_NODES = 18;
+const ROB_RFUDGE = 1.17;
+
+function robV(c: RobinsonCoefs, z: number): number {
+    return c.c0 + z * (c.c1 + z * (c.c2 + z * c.c3));
+}
+
+function forwardRobinson(latDeg: number, lngDeg: number): { x: number; y: number } {
+    const latRad = latDeg * Math.PI / 180;
+    const dphi0 = Math.abs(latRad);
+    let i = Math.floor(dphi0 * ROB_C1);
+    if (i >= ROB_NODES) i = ROB_NODES - 1;
+    const dphi = (180 / Math.PI) * (dphi0 - ROB_RC1 * i);
+    const x = ROB_RFUDGE * robV(robX[i], dphi) * ROB_FXC * lngDeg;
+    let y = ROB_RFUDGE * robV(robY[i], dphi) * ROB_FYC * (180 / Math.PI);
+    if (latDeg < 0) y = -y;
+    return { x, y };
+}
+
+/**
+ * Draw small blue dots on the continent map image for each city.
+ * Uses Robinson projection to convert lat/lon to map coordinates.
+ *
+ * The continents-4x.png image is 720×365 pixels at 4x resolution,
+ * which is 180×91.25 face units at 1x.  Following the iOS approach,
+ * the Robinson output is scaled by (imageWidth/360, imageHeight/180).
+ */
+function drawTerraCityDots(
+    ctx: RenderContext,
+    env: Environment,
+): void {
+    const terraSlots = (env as any)._terraSlots as Record<number, { cityName: string; olsonId: string; lat: number; lon: number }> | undefined;
+    if (!terraSlots) return;
+
+    // Continents image: 720×365 at 4x = 180×91.25 at 1x face coords.
+    // iOS scales by mapWidthPixels/360 and mapHeightPixels/180.
+    const mapWidth = 180;      // 720 / 4
+    const mapHeight = 91.25;   // 365 / 4
+    const xScale = mapWidth / 360;    // 0.5 face-units per Robinson-degree
+    const yScale = mapHeight / 180;   // ~0.507 face-units per Robinson-degree
+
+    ctx.save();
+    ctx.fillStyle = 'blue';
+
+    for (let slotNum = 5; slotNum <= 28; slotNum++) {
+        const slot = terraSlots[slotNum];
+        if (!slot) continue;
+
+        const proj = forwardRobinson(slot.lat, slot.lon);
+        const px = proj.x * xScale;
+        const py = -proj.y * yScale;  // canvas Y is inverted vs lat
+
+        ctx.beginPath();
+        ctx.arc(px, py, 1.5, 0, 2 * Math.PI);
+        ctx.fill();
     }
 
     ctx.restore();

@@ -118,8 +118,10 @@ function processElement(
 
         case 'swheel':
         case 'qwheel':
+        case 'twheel':
             if (matchesMode(el, mode)) {
-                parts.push(parseWheel(el, tag === 'qwheel' ? 'QWheel' : 'SWheel'));
+                const wv = tag === 'qwheel' ? 'QWheel' : tag === 'twheel' ? 'TWheel' : 'SWheel';
+                parts.push(parseWheel(el, wv as 'SWheel' | 'QWheel' | 'TWheel'));
             }
             break;
 
@@ -296,7 +298,7 @@ function parseQHand(el: Element): QHandPart {
     };
 }
 
-function parseWheel(el: Element, variant: 'SWheel' | 'QWheel'): WheelPart {
+function parseWheel(el: Element, variant: 'SWheel' | 'QWheel' | 'TWheel'): WheelPart {
     return {
         type: 'Wheel',
         wheelVariant: variant,
@@ -314,6 +316,7 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel'): WheelPart {
         fontName: attr(el, 'fontName'),
         strokeColor: attrExpr(el, 'strokeColor'),
         bgColor: attrExpr(el, 'bgColor'),
+        bgColor2: attrExpr(el, 'bgColor2'),
         update: attrExpr(el, 'update'),
         updateOffset: attrExpr(el, 'updateOffset'),
         animSpeed: attrExpr(el, 'animSpeed'),
@@ -322,6 +325,10 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel'): WheelPart {
         refName: attr(el, 'refName'),
         tradius: attrExpr(el, 'tradius'),
         tick: attr(el, 'tick'),
+        kind: attr(el, 'kind'),
+        halfAndHalf: attrExpr(el, 'halfAndHalf'),
+        ticks: attrExpr(el, 'ticks'),
+        tickWidth: attrExpr(el, 'tickWidth'),
     };
 }
 

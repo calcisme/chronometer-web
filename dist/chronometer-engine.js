@@ -476,8 +476,10 @@
         break;
       case "swheel":
       case "qwheel":
+      case "twheel":
         if (matchesMode(el, mode)) {
-          parts.push(parseWheel(el, tag === "qwheel" ? "QWheel" : "SWheel"));
+          const wv = tag === "qwheel" ? "QWheel" : tag === "twheel" ? "TWheel" : "SWheel";
+          parts.push(parseWheel(el, wv));
         }
         break;
       case "qtext":
@@ -637,6 +639,7 @@
       fontName: attr(el, "fontName"),
       strokeColor: attrExpr(el, "strokeColor"),
       bgColor: attrExpr(el, "bgColor"),
+      bgColor2: attrExpr(el, "bgColor2"),
       update: attrExpr(el, "update"),
       updateOffset: attrExpr(el, "updateOffset"),
       animSpeed: attrExpr(el, "animSpeed"),
@@ -644,7 +647,11 @@
       marks: attr(el, "marks"),
       refName: attr(el, "refName"),
       tradius: attrExpr(el, "tradius"),
-      tick: attr(el, "tick")
+      tick: attr(el, "tick"),
+      kind: attr(el, "kind"),
+      halfAndHalf: attrExpr(el, "halfAndHalf"),
+      ticks: attrExpr(el, "ticks"),
+      tickWidth: attrExpr(el, "tickWidth")
     };
   }
   function parseQText(el) {
@@ -11926,6 +11933,18 @@
     functions.set("secondNumberAngle", () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
     functions.set("secondValue", () => liveTime().s);
     functions.set("hour24Number", () => liveTime().h24);
+    functions.set("hour24Value", () => {
+      const t = liveTime();
+      return t.h24 + t.min / 60 + t.s / 3600;
+    });
+    functions.set("hour24ValueAngle", () => {
+      const t = liveTime();
+      const h24 = t.h24 + t.min / 60 + t.s / 3600;
+      return h24 * 2 * Math.PI / 24;
+    });
+    functions.set("tzOffsetAngle", () => {
+      return tzOffsetSeconds * Math.PI / (3600 * 12);
+    });
     const getLocalComponents = () => {
       const di = dateToDateInterval(getNow());
       return localComponentsFromTimeInterval(di, tzOffsetSeconds);
@@ -12507,6 +12526,240 @@
         tzOffsetSeconds
       );
     });
+    const terraRingDefaults = {
+      5: { cityName: "Pago Pago", olsonId: "Pacific/Pago_Pago", lat: -14.27806, lon: -170.7025 },
+      6: { cityName: "Honolulu", olsonId: "Pacific/Honolulu", lat: 21.30694, lon: -157.85834 },
+      7: { cityName: "Anchorage", olsonId: "America/Juneau", lat: 61.21806, lon: -149.90028 },
+      8: { cityName: "Los Angeles", olsonId: "America/Los_Angeles", lat: 34.05223, lon: -118.24368 },
+      9: { cityName: "Denver", olsonId: "America/Denver", lat: 39.73915, lon: -104.9847 },
+      10: { cityName: "Chicago", olsonId: "America/Chicago", lat: 41.85003, lon: -87.65005 },
+      11: { cityName: "New York", olsonId: "America/New_York", lat: 40.71427, lon: -74.00597 },
+      12: { cityName: "Santiago", olsonId: "America/Santiago", lat: -33.42628, lon: -70.56655 },
+      13: { cityName: "Rio de Janeiro", olsonId: "America/Sao_Paulo", lat: -22.90278, lon: -43.2075 },
+      14: { cityName: "Grytviken", olsonId: "Atlantic/South_Georgia", lat: -54.27667, lon: -36.51167 },
+      15: { cityName: "Dakar", olsonId: "Africa/Dakar", lat: 14.74208, lon: -17.43978 },
+      16: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
+      17: { cityName: "Paris", olsonId: "Europe/Paris", lat: 48.85341, lon: 2.3488 },
+      18: { cityName: "Cairo", olsonId: "Africa/Cairo", lat: 30.05, lon: 31.25 },
+      19: { cityName: "Moscow", olsonId: "Europe/Moscow", lat: 55.75222, lon: 37.61555 },
+      20: { cityName: "Dubai", olsonId: "Asia/Dubai", lat: 25.25222, lon: 55.28 },
+      21: { cityName: "Delhi", olsonId: "Asia/Kolkata", lat: 28.66667, lon: 77.21666 },
+      22: { cityName: "Dhaka", olsonId: "Asia/Dhaka", lat: 23.72305, lon: 90.40861 },
+      23: { cityName: "Bangkok", olsonId: "Asia/Bangkok", lat: 13.75, lon: 100.51667 },
+      24: { cityName: "Hong Kong", olsonId: "Asia/Hong_Kong", lat: 22.28401, lon: 114.15007 },
+      25: { cityName: "Tokyo", olsonId: "Asia/Tokyo", lat: 35.68953, lon: 139.69168 },
+      26: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 },
+      27: { cityName: "Noum\xE9a", olsonId: "Pacific/Noumea", lat: -22.26667, lon: 166.45 },
+      28: { cityName: "Auckland", olsonId: "Pacific/Auckland", lat: -36.86666, lon: 174.76666 }
+    };
+    env._terraSlots = terraRingDefaults;
+    env._getNow = getNow;
+    env._getDSTRange = (slotNum) => {
+      const slot = terraRingDefaults[slotNum];
+      if (!slot) return null;
+      const now2 = getNow();
+      const jan = new Date(now2.getFullYear(), 0, 1);
+      const jul = new Date(now2.getFullYear(), 6, 1);
+      const janOff = getTzOffsetSeconds(slot.olsonId, jan);
+      const julOff = getTzOffsetSeconds(slot.olsonId, jul);
+      if (janOff === julOff) return null;
+      return {
+        lowHours: Math.min(janOff, julOff) / 3600,
+        highHours: Math.max(janOff, julOff) / 3600
+      };
+    };
+    const UTCSectorNumber = 11;
+    function getTzOffsetSeconds(olsonId, date) {
+      try {
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "longOffset"
+        });
+        const parts = fmt.formatToParts(date);
+        const tzPart = parts.find((p) => p.type === "timeZoneName");
+        if (!tzPart) return 0;
+        const tzStr = tzPart.value;
+        if (tzStr === "GMT" || tzStr === "UTC") return 0;
+        const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+        if (!m) return 0;
+        const sign = m[1] === "+" ? 1 : -1;
+        const hours = parseInt(m[2], 10);
+        const minutes = m[3] ? parseInt(m[3], 10) : 0;
+        return sign * (hours * 3600 + minutes * 60);
+      } catch {
+        return 0;
+      }
+    }
+    function getLocalTimeInZone(olsonId, date) {
+      try {
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          hour: "numeric",
+          minute: "numeric",
+          second: "numeric",
+          day: "numeric",
+          month: "numeric",
+          weekday: "short",
+          hour12: false
+        });
+        const parts = fmt.formatToParts(date);
+        let h24 = 0, min = 0, sec = 0, day = 1, month = 0, weekday = 0;
+        for (const p of parts) {
+          if (p.type === "hour") h24 = parseInt(p.value, 10);
+          else if (p.type === "minute") min = parseInt(p.value, 10);
+          else if (p.type === "second") sec = parseInt(p.value, 10);
+          else if (p.type === "day") day = parseInt(p.value, 10);
+          else if (p.type === "month") month = parseInt(p.value, 10) - 1;
+          else if (p.type === "weekday") {
+            const wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+            weekday = wdMap[p.value] ?? 0;
+          }
+        }
+        if (h24 === 24) h24 = 0;
+        return { h24, min, sec, day, month, weekday };
+      } catch {
+        return {
+          h24: date.getHours(),
+          min: date.getMinutes(),
+          sec: date.getSeconds(),
+          day: date.getDate(),
+          month: date.getMonth(),
+          weekday: date.getDay()
+        };
+      }
+    }
+    let detectedTopSlot = 16;
+    try {
+      const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
+        if (data.olsonId === browserTz) {
+          detectedTopSlot = parseInt(slotStr, 10);
+          break;
+        }
+      }
+      if (detectedTopSlot === 16 && browserTz !== "Europe/London" && browserTz !== "UTC") {
+        const nowDate = getNow();
+        const browserOffset = getTzOffsetSeconds(browserTz, nowDate);
+        let bestDiff = Infinity;
+        for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
+          const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
+          const diff = Math.abs(slotOffset - browserOffset);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            detectedTopSlot = parseInt(slotStr, 10);
+          }
+        }
+      }
+    } catch {
+    }
+    functions.set("terraIDeviceSlot", () => detectedTopSlot);
+    functions.set("overrideTerraITopSlot", (_n) => 0);
+    functions.set("sectorAngle", (slot, topSlot) => {
+      return (slot - topSlot) * Math.PI / 12;
+    });
+    functions.set("UTCSectorOffset", () => UTCSectorNumber - 0.5);
+    functions.set("cityIndicatorOffset", (_topSlot, _firstRingSlot) => 0);
+    functions.set("city24HrDialOffset", (topSlot, firstRingSlot) => {
+      const slot = terraRingDefaults[topSlot];
+      if (!slot) return 0;
+      const offsetSec = getTzOffsetSeconds(slot.olsonId, getNow());
+      return offsetSec * Math.PI / (12 * 3600) + (firstRingSlot - topSlot + UTCSectorNumber - 0.5) * Math.PI / 12;
+    });
+    functions.set("tzOffsetAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const offsetSec = getTzOffsetSeconds(data.olsonId, getNow());
+      return offsetSec * Math.PI / (12 * 3600);
+    });
+    functions.set("isDST", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const nowDate = getNow();
+      const currentOffset = getTzOffsetSeconds(data.olsonId, nowDate);
+      const jan = new Date(nowDate.getFullYear(), 0, 1);
+      const janOffset = getTzOffsetSeconds(data.olsonId, jan);
+      const jul = new Date(nowDate.getFullYear(), 6, 1);
+      const julOffset = getTzOffsetSeconds(data.olsonId, jul);
+      const stdOffset = Math.min(janOffset, julOffset);
+      return currentOffset !== stdOffset ? 1 : 0;
+    });
+    functions.set("moreDay", (slot, topSlot) => {
+      const slotData = terraRingDefaults[slot];
+      const topData = terraRingDefaults[topSlot];
+      if (!slotData || !topData) return 0;
+      const nowDate = getNow();
+      const slotTime = getLocalTimeInZone(slotData.olsonId, nowDate);
+      const topTime = getLocalTimeInZone(topData.olsonId, nowDate);
+      if (slotTime.month !== topTime.month) {
+        const slotM = slotTime.month;
+        const topM = topTime.month;
+        if (slotM === 0 && topM === 11) return 1;
+        if (slotM === 11 && topM === 0) return 0;
+        return slotM > topM ? 1 : 0;
+      }
+      return slotTime.day > topTime.day ? 1 : 0;
+    });
+    functions.set("lessDay", (slot, topSlot) => {
+      const slotData = terraRingDefaults[slot];
+      const topData = terraRingDefaults[topSlot];
+      if (!slotData || !topData) return 0;
+      const nowDate = getNow();
+      const slotTime = getLocalTimeInZone(slotData.olsonId, nowDate);
+      const topTime = getLocalTimeInZone(topData.olsonId, nowDate);
+      if (slotTime.month !== topTime.month) {
+        const slotM = slotTime.month;
+        const topM = topTime.month;
+        if (slotM === 0 && topM === 11) return 0;
+        if (slotM === 11 && topM === 0) return 1;
+        return slotM < topM ? 1 : 0;
+      }
+      return slotTime.day < topTime.day ? 1 : 0;
+    });
+    functions.set("hour12ValueAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      const ms = getNow().getMilliseconds();
+      const s = t.sec + ms / 1e3;
+      const m = t.min + s / 60;
+      const h = t.h24 % 12 + m / 60;
+      return h * 2 * Math.PI / 12;
+    });
+    functions.set("minuteValueAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      const ms = getNow().getMilliseconds();
+      const s = t.sec + ms / 1e3;
+      const m = t.min + s / 60;
+      return m * 2 * Math.PI / 60;
+    });
+    functions.set("secondValueAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      const ms = getNow().getMilliseconds();
+      const s = t.sec + ms / 1e3;
+      return s * 2 * Math.PI / 60;
+    });
+    functions.set("dayNumberN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      return t.day - 1;
+    });
+    functions.set("monthNumberAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      return t.month * 2 * Math.PI / 12;
+    });
+    functions.set("weekdayNumberAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      return t.weekday * 2 * Math.PI / 7;
+    });
     releaseCachePool(pool);
   }
   function dayNightLeafAngle(riseNotSet, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
@@ -12906,6 +13159,10 @@
         } else {
           drawQHand(ctx, part, env);
         }
+        if (part.name === "worldtime ring") {
+          drawTerraCityNames(ctx, part, env);
+          drawTerraChannelLines(ctx, part, env);
+        }
         continue;
       }
       if (part.type === "Terminator") {
@@ -12927,6 +13184,9 @@
         pendingWindows.length = 0;
       } else {
         drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
+      }
+      if (part.name === "decoration") {
+        drawTerraCityDots(ctx, env);
       }
     }
     for (const win of pendingWindows) {
@@ -13577,9 +13837,10 @@
     } else {
       const hw = width / 2;
       if (length2 > 0) {
-        ctx.moveTo(0, -length);
+        ctx.moveTo(-hw, -length2);
+        ctx.lineTo(0, -(length - oTail));
         ctx.lineTo(hw, -length2);
-        ctx.lineTo(-hw, -length2);
+        ctx.lineTo(0, -(length2 - tail));
       } else {
         ctx.moveTo(0, -length);
         ctx.lineTo(hw, tail);
@@ -13613,7 +13874,10 @@
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    let maxW = 0, maxH = fontSize;
+    let maxW = 0;
+    const metrics = ctx.measureText("Xg");
+    const measuredH = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
+    const maxH = measuredH;
     for (const lab of labels) {
       const m = ctx.measureText(lab.trim());
       maxW = Math.max(maxW, m.width);
@@ -13629,6 +13893,65 @@
       ctx.arc(0, 0, radius, 0, 2 * Math.PI);
       ctx.fill();
     }
+    const halfAndHalf = part.halfAndHalf ? evalAttr(part.halfAndHalf, env) : 0;
+    const bgColor2 = part.bgColor2 ? evalColor(part.bgColor2, env) : bgColor;
+    const innerR = radius - fontSize - 2;
+    if (part.wheelVariant === "TWheel" && halfAndHalf) {
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, Math.PI, 2 * Math.PI);
+      ctx.arc(0, 0, innerR, 2 * Math.PI, Math.PI, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = bgColor2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI);
+      ctx.arc(0, 0, innerR, Math.PI, 0, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    } else if (part.wheelVariant === "TWheel" && bgColor !== "rgba(0,0,0,0)") {
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+      ctx.arc(0, 0, innerR, 0, 2 * Math.PI, true);
+      ctx.fill("evenodd");
+    }
+    if (part.wheelVariant === "TWheel" && part.ticks) {
+      const ticksPerLabel = Math.round(evalAttr(part.ticks, env) || 0);
+      const nTotalTicks = ticksPerLabel * n;
+      const tw = part.tickWidth ? evalAttr(part.tickWidth, env) : 0.5;
+      if (nTotalTicks > 0) {
+        ctx.save();
+        ctx.rotate(angle);
+        const tickLen = 2;
+        for (let ti = 0; ti < nTotalTicks; ti++) {
+          const theta = ti / nTotalTicks * 2 * Math.PI;
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+          if (ti % ticksPerLabel === 0) {
+            const norm = (theta % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+            const onNightHalf = norm >= Math.PI;
+            ctx.fillStyle = onNightHalf ? strokeColor : evalColor(part.bgColor, env);
+            ctx.beginPath();
+            ctx.arc(cosT * (radius - 1.5), sinT * (radius - 1.5), 1.2, 0, 2 * Math.PI);
+            ctx.fill();
+          } else {
+            const norm = (theta % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+            const onNightHalf = norm >= Math.PI;
+            ctx.strokeStyle = halfAndHalf ? onNightHalf ? strokeColor : evalColor(part.bgColor, env) : strokeColor;
+            ctx.lineWidth = tw;
+            ctx.beginPath();
+            ctx.moveTo(cosT * radius, sinT * radius);
+            ctx.lineTo(cosT * (radius - tickLen), sinT * (radius - tickLen));
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+    }
     const isPartialArc = !!part.angle1 || !!part.angle2;
     ctx.save();
     if (isPartialArc) {
@@ -13639,7 +13962,12 @@
     for (let i = 0; i < n; i++) {
       const label = labels[i].trim();
       if (label) {
-        ctx.fillStyle = strokeColor;
+        if (halfAndHalf) {
+          ctx.fillStyle = "white";
+          ctx.globalCompositeOperation = "difference";
+        } else {
+          ctx.fillStyle = strokeColor;
+        }
         ctx.save();
         const currentRotation = isPartialArc ? -angle + angle1 + i * step : 0;
         switch (orientation.toLowerCase()) {
@@ -13948,6 +14276,178 @@
       } else {
         ctx.strokeRect(-w / 2, -h / 2, w, h);
       }
+    }
+    ctx.restore();
+  }
+  function drawTerraCityNames(ctx, part, env) {
+    const terraSlots = env._terraSlots;
+    if (!terraSlots) return;
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
+    const cityFS = 8;
+    const cityRad2 = 131;
+    const cityRad1 = 127 - cityFS;
+    const sectorAngle = Math.PI / 12;
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.font = `${cityFS}px Arial`;
+    ctx.fillStyle = "black";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 0; i < 24; i++) {
+      const slot = terraSlots[i + 5];
+      if (!slot) continue;
+      const slotCenterAngle = i * sectorAngle;
+      const radius = i % 2 === 0 ? cityRad1 : cityRad2;
+      const name = slot.cityName;
+      const charWidths = [];
+      let totalWidth = 0;
+      for (let c = 0; c < name.length; c++) {
+        const w = ctx.measureText(name[c]).width;
+        charWidths.push(w);
+        totalWidth += w;
+      }
+      const totalAngle = totalWidth / radius;
+      let charAngle = slotCenterAngle - totalAngle / 2;
+      for (let c = 0; c < name.length; c++) {
+        const charAngularWidth = charWidths[c] / radius;
+        const charCenterAngle = charAngle + charAngularWidth / 2;
+        ctx.save();
+        ctx.rotate(charCenterAngle);
+        ctx.translate(0, -radius);
+        ctx.fillText(name[c], 0, 0);
+        ctx.restore();
+        charAngle += charAngularWidth;
+      }
+    }
+    ctx.restore();
+  }
+  function drawTerraChannelLines(ctx, part, env) {
+    const terraSlots = env._terraSlots;
+    if (!terraSlots) {
+      console.log("[Terra] No terraSlots");
+      return;
+    }
+    const getDSTRange = env._getDSTRange;
+    if (!getDSTRange) {
+      console.log("[Terra] No getDSTRange function");
+      return;
+    }
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
+    const channelRad1 = 111.5;
+    const channelRad2 = 126;
+    const channelWidth = 0.25;
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.lineWidth = channelWidth;
+    ctx.strokeStyle = "black";
+    for (let i = 0; i < 24; i++) {
+      const slot = terraSlots[i + 5];
+      if (!slot) continue;
+      const channelR = i % 2 === 0 ? channelRad1 : channelRad2;
+      const slotNum = i + 5;
+      const dstRange = getDSTRange(slotNum);
+      if (dstRange) {
+        const startAngle = (4.5 + dstRange.lowHours) * Math.PI / 12;
+        const endAngle = (4.5 + dstRange.highHours) * Math.PI / 12;
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(0, 0, channelR, startAngle, endAngle, false);
+        ctx.stroke();
+      } else {
+        const startAngle = (i - 6.5) * Math.PI / 12;
+        const endAngle = (i - 5.5) * Math.PI / 12;
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.arc(0, 0, channelR, startAngle, endAngle, false);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  var robX = [
+    { c0: 1, c1: -567239e-17, c2: -715511e-10, c3: 311028e-11 },
+    { c0: 0.9986, c1: -482241e-9, c2: -24897e-9, c3: -133094e-11 },
+    { c0: 0.9954, c1: -831031e-9, c2: -44861e-9, c3: -986588e-12 },
+    { c0: 0.99, c1: -135363e-8, c2: -596598e-10, c3: 367749e-11 },
+    { c0: 0.9822, c1: -167442e-8, c2: -44975e-10, c3: -572394e-11 },
+    { c0: 0.973, c1: -214869e-8, c2: -903565e-10, c3: 188767e-13 },
+    { c0: 0.96, c1: -305084e-8, c2: -900732e-10, c3: 164869e-11 },
+    { c0: 0.9427, c1: -382792e-8, c2: -653428e-10, c3: -261493e-11 },
+    { c0: 0.9216, c1: -467747e-8, c2: -104566e-9, c3: 48122e-10 },
+    { c0: 0.8962, c1: -536222e-8, c2: -323834e-10, c3: -543445e-11 },
+    { c0: 0.8679, c1: -609364e-8, c2: -1139e-7, c3: 332521e-11 },
+    { c0: 0.835, c1: -698325e-8, c2: -640219e-10, c3: 934582e-12 },
+    { c0: 0.7986, c1: -755337e-8, c2: -500038e-10, c3: 935532e-12 },
+    { c0: 0.7597, c1: -798325e-8, c2: -359716e-10, c3: -227604e-11 },
+    { c0: 0.7186, c1: -851366e-8, c2: -70112e-9, c3: -863072e-11 },
+    { c0: 0.6732, c1: -986209e-8, c2: -199572e-9, c3: 191978e-10 },
+    { c0: 0.6213, c1: -0.010418, c2: 883948e-10, c3: 624031e-11 },
+    { c0: 0.5722, c1: -906601e-8, c2: 181999e-9, c3: 624033e-11 },
+    { c0: 0.5322, c1: 0, c2: 0, c3: 0 }
+  ];
+  var robY = [
+    { c0: 0, c1: 0.0124, c2: 372529e-15, c3: 115484e-14 },
+    { c0: 0.062, c1: 0.0124001, c2: 176951e-13, c3: -592321e-14 },
+    { c0: 0.124, c1: 0.0123998, c2: -709668e-13, c3: 225753e-13 },
+    { c0: 0.186, c1: 0.0124008, c2: 266917e-12, c3: -844523e-13 },
+    { c0: 0.248, c1: 0.0123971, c2: -999682e-12, c3: 315569e-12 },
+    { c0: 0.31, c1: 0.0124108, c2: 373349e-11, c3: -11779e-10 },
+    { c0: 0.372, c1: 0.0123598, c2: -13935e-9, c3: 439588e-11 },
+    { c0: 0.434, c1: 0.0125501, c2: 520034e-10, c3: -100051e-10 },
+    { c0: 0.4968, c1: 0.0123198, c2: -980735e-10, c3: 922397e-11 },
+    { c0: 0.5571, c1: 0.0120308, c2: 402857e-10, c3: -52901e-10 },
+    { c0: 0.6176, c1: 0.0120369, c2: -390662e-10, c3: 736117e-12 },
+    { c0: 0.6769, c1: 0.0117015, c2: -280246e-10, c3: -854283e-12 },
+    { c0: 0.7346, c1: 0.0113572, c2: -408389e-10, c3: -518524e-12 },
+    { c0: 0.7903, c1: 0.0109099, c2: -486169e-10, c3: -10718e-10 },
+    { c0: 0.8435, c1: 0.0103433, c2: -646934e-10, c3: 536384e-14 },
+    { c0: 0.8936, c1: 969679e-8, c2: -646129e-10, c3: -854894e-11 },
+    { c0: 0.9394, c1: 840949e-8, c2: -192847e-9, c3: -421023e-11 },
+    { c0: 0.9761, c1: 616525e-8, c2: -256001e-9, c3: -421021e-11 },
+    { c0: 1, c1: 0, c2: 0, c3: 0 }
+  ];
+  var ROB_FXC = 0.8487;
+  var ROB_FYC = 1.3523;
+  var ROB_C1 = 11.459155902616464;
+  var ROB_RC1 = 0.08726646259971647;
+  var ROB_NODES = 18;
+  var ROB_RFUDGE = 1.17;
+  function robV(c, z) {
+    return c.c0 + z * (c.c1 + z * (c.c2 + z * c.c3));
+  }
+  function forwardRobinson(latDeg, lngDeg) {
+    const latRad = latDeg * Math.PI / 180;
+    const dphi0 = Math.abs(latRad);
+    let i = Math.floor(dphi0 * ROB_C1);
+    if (i >= ROB_NODES) i = ROB_NODES - 1;
+    const dphi = 180 / Math.PI * (dphi0 - ROB_RC1 * i);
+    const x = ROB_RFUDGE * robV(robX[i], dphi) * ROB_FXC * lngDeg;
+    let y = ROB_RFUDGE * robV(robY[i], dphi) * ROB_FYC * (180 / Math.PI);
+    if (latDeg < 0) y = -y;
+    return { x, y };
+  }
+  function drawTerraCityDots(ctx, env) {
+    const terraSlots = env._terraSlots;
+    if (!terraSlots) return;
+    const mapWidth = 180;
+    const mapHeight = 91.25;
+    const xScale = mapWidth / 360;
+    const yScale = mapHeight / 180;
+    ctx.save();
+    ctx.fillStyle = "blue";
+    for (let slotNum = 5; slotNum <= 28; slotNum++) {
+      const slot = terraSlots[slotNum];
+      if (!slot) continue;
+      const proj = forwardRobinson(slot.lat, slot.lon);
+      const px = proj.x * xScale;
+      const py = -proj.y * yScale;
+      ctx.beginPath();
+      ctx.arc(px, py, 1.5, 0, 2 * Math.PI);
+      ctx.fill();
     }
     ctx.restore();
   }

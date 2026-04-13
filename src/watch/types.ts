@@ -157,7 +157,7 @@ export interface QHandPart extends PartBase {
 
 export interface WheelPart extends PartBase {
     type: 'Wheel';
-    wheelVariant: 'SWheel' | 'QWheel';
+    wheelVariant: 'SWheel' | 'QWheel' | 'TWheel';
     angle?: ASTNode;
     angle1?: ASTNode;
     angle2?: ASTNode;
@@ -168,6 +168,7 @@ export interface WheelPart extends PartBase {
     fontName?: string;
     strokeColor?: ASTNode;
     bgColor?: ASTNode;
+    bgColor2?: ASTNode;       // TWheel: second background color (halfAndHalf mode)
     update?: ASTNode;
     updateOffset?: ASTNode;
     animSpeed?: ASTNode;
@@ -178,6 +179,14 @@ export interface WheelPart extends PartBase {
     tradius?: ASTNode;
     /** Tick mark style (e.g. 'tick288', 'tick96'). */
     tick?: string;
+    /** Kind indicator (e.g. 'reverseHour24Kind'). */
+    kind?: string;
+    /** If set, wheel is split into two halves with different background colors. */
+    halfAndHalf?: ASTNode;
+    /** Number of tick marks around the wheel. */
+    ticks?: ASTNode;
+    /** Width of tick marks. */
+    tickWidth?: ASTNode;
 }
 
 // ============================================================================

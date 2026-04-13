@@ -211,6 +211,21 @@ function registerTimeFunctions(
     functions.set('secondNumberAngle', () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
     functions.set('secondValue', () => liveTime().s);
     functions.set('hour24Number', () => liveTime().h24);
+    // hour24Value: 24-hour time as continuous float (e.g. 14.5 = 2:30 PM)
+    functions.set('hour24Value', () => {
+        const t = liveTime();
+        return t.h24 + t.min / 60 + t.s / 3600;
+    });
+    // hour24ValueAngle: 24-hour time as angle (2π/24 per hour)
+    functions.set('hour24ValueAngle', () => {
+        const t = liveTime();
+        const h24 = t.h24 + t.min / 60 + t.s / 3600;
+        return h24 * 2 * Math.PI / 24;
+    });
+    // tzOffsetAngle: local timezone UTC offset as angle on 24-hour dial
+    functions.set('tzOffsetAngle', () => {
+        return tzOffsetSeconds * Math.PI / (3600 * 12);
+    });
 
     // --- Calendar (LIVE — uses hybrid Julian/Gregorian calendar) ---
     // Helper: get local calendar components using the hybrid calendar system.
@@ -960,6 +975,329 @@ function registerTimeFunctions(
             planetNumber, leafNumber, numLeaves,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
         );
+    });
+
+    // =========================================================================
+    // Terra I — World-time ring functions
+    // =========================================================================
+    //
+    // Terra uses 25 environment slots:
+    //   Slot 0: the device's own timezone (unused by the front face directly;
+    //           the front face uses terraIDeviceSlot() which returns a ring slot)
+    //   Slots 5–28: the 24 cities on the worldtime ring
+    //
+    // The iOS ringDefaults[] array from ECFactoryUI.m defines the default
+    // city for each ring slot.  Ring sector 0 corresponds to env slot 5.
+
+    interface TerraSlot {
+        cityName: string;
+        olsonId: string;
+        lat: number;
+        lon: number;
+    }
+
+    // Ring slots 5–28 (24 cities), indexed by envSlot number.
+    // Slots 0–4 are unused on the front face (slot 0 = device, 1–4 = back subdials).
+    const terraRingDefaults: Record<number, TerraSlot> = {
+        5:  { cityName: 'Pago Pago',      olsonId: 'Pacific/Pago_Pago',      lat: -14.27806, lon: -170.70250 },
+        6:  { cityName: 'Honolulu',       olsonId: 'Pacific/Honolulu',       lat:  21.30694, lon: -157.85834 },
+        7:  { cityName: 'Anchorage',      olsonId: 'America/Juneau',         lat:  61.21806, lon: -149.90028 },
+        8:  { cityName: 'Los Angeles',    olsonId: 'America/Los_Angeles',    lat:  34.05223, lon: -118.24368 },
+        9:  { cityName: 'Denver',         olsonId: 'America/Denver',         lat:  39.73915, lon: -104.98470 },
+        10: { cityName: 'Chicago',        olsonId: 'America/Chicago',        lat:  41.85003, lon:  -87.65005 },
+        11: { cityName: 'New York',       olsonId: 'America/New_York',       lat:  40.71427, lon:  -74.00597 },
+        12: { cityName: 'Santiago',       olsonId: 'America/Santiago',       lat: -33.42628, lon:  -70.56655 },
+        13: { cityName: 'Rio de Janeiro', olsonId: 'America/Sao_Paulo',      lat: -22.90278, lon:  -43.20750 },
+        14: { cityName: 'Grytviken',      olsonId: 'Atlantic/South_Georgia', lat: -54.27667, lon:  -36.51167 },
+        15: { cityName: 'Dakar',          olsonId: 'Africa/Dakar',           lat:  14.74208, lon:  -17.43978 },
+        16: { cityName: 'London',         olsonId: 'Europe/London',          lat:  51.50842, lon:   -0.12553 },
+        17: { cityName: 'Paris',          olsonId: 'Europe/Paris',           lat:  48.85341, lon:    2.34880 },
+        18: { cityName: 'Cairo',          olsonId: 'Africa/Cairo',           lat:  30.05000, lon:   31.25000 },
+        19: { cityName: 'Moscow',         olsonId: 'Europe/Moscow',          lat:  55.75222, lon:   37.61555 },
+        20: { cityName: 'Dubai',          olsonId: 'Asia/Dubai',             lat:  25.25222, lon:   55.28000 },
+        21: { cityName: 'Delhi',          olsonId: 'Asia/Kolkata',           lat:  28.66667, lon:   77.21666 },
+        22: { cityName: 'Dhaka',          olsonId: 'Asia/Dhaka',             lat:  23.72305, lon:   90.40861 },
+        23: { cityName: 'Bangkok',        olsonId: 'Asia/Bangkok',           lat:  13.75000, lon:  100.51667 },
+        24: { cityName: 'Hong Kong',      olsonId: 'Asia/Hong_Kong',         lat:  22.28401, lon:  114.15007 },
+        25: { cityName: 'Tokyo',          olsonId: 'Asia/Tokyo',             lat:  35.68953, lon:  139.69168 },
+        26: { cityName: 'Sydney',         olsonId: 'Australia/Sydney',       lat: -33.86785, lon:  151.20732 },
+        27: { cityName: 'Nouméa',         olsonId: 'Pacific/Noumea',         lat: -22.26667, lon:  166.45000 },
+        28: { cityName: 'Auckland',       olsonId: 'Pacific/Auckland',       lat: -36.86666, lon:  174.76666 },
+    };
+
+    // Export the slot data, getNow, and a DST range function
+    // so the dynamic ring renderer can access them.
+    (env as any)._terraSlots = terraRingDefaults;
+    (env as any)._getNow = getNow;
+
+    // Callable DST range function for the renderer: returns {low, high} offset
+    // in hours if DST exists, or null if no DST.  Uses the same getTzOffsetSeconds
+    // that powers isDST, evaluated at call time (no precomputation).
+    (env as any)._getDSTRange = (slotNum: number): { lowHours: number; highHours: number } | null => {
+        const slot = terraRingDefaults[slotNum];
+        if (!slot) return null;
+        const now = getNow();
+        const jan = new Date(now.getFullYear(), 0, 1);
+        const jul = new Date(now.getFullYear(), 6, 1);
+        const janOff = getTzOffsetSeconds(slot.olsonId, jan);
+        const julOff = getTzOffsetSeconds(slot.olsonId, jul);
+        if (janOff === julOff) return null;
+        return {
+            lowHours: Math.min(janOff, julOff) / 3600,
+            highHours: Math.max(janOff, julOff) / 3600,
+        };
+    };
+
+    const UTCSectorNumber = 11;
+
+    // --- Timezone offset computation via Intl.DateTimeFormat ---
+
+    /**
+     * Get the UTC offset in seconds for a given Olson timezone at a given Date.
+     * Uses Intl.DateTimeFormat with 'longOffset' to parse "GMT+05:30" etc.
+     * Falls back to 0 for out-of-range dates or unknown zones.
+     */
+    function getTzOffsetSeconds(olsonId: string, date: Date): number {
+        try {
+            const fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: olsonId,
+                timeZoneName: 'longOffset',
+            });
+            const parts = fmt.formatToParts(date);
+            const tzPart = parts.find(p => p.type === 'timeZoneName');
+            if (!tzPart) return 0;
+            const tzStr = tzPart.value; // e.g. "GMT+05:30" or "GMT" or "GMT-08:00"
+            if (tzStr === 'GMT' || tzStr === 'UTC') return 0;
+            const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+            if (!m) return 0;
+            const sign = m[1] === '+' ? 1 : -1;
+            const hours = parseInt(m[2], 10);
+            const minutes = m[3] ? parseInt(m[3], 10) : 0;
+            return sign * (hours * 3600 + minutes * 60);
+        } catch {
+            return 0; // graceful fallback for out-of-range dates
+        }
+    }
+
+    /**
+     * Get local time components in a given Olson timezone.
+     * Returns hours (0-23), minutes, seconds, day (1-indexed), month (0-indexed), weekday (0=Sun).
+     */
+    function getLocalTimeInZone(olsonId: string, date: Date): {
+        h24: number; min: number; sec: number; day: number; month: number; weekday: number;
+    } {
+        try {
+            const fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: olsonId,
+                hour: 'numeric', minute: 'numeric', second: 'numeric',
+                day: 'numeric', month: 'numeric', weekday: 'short',
+                hour12: false,
+            });
+            const parts = fmt.formatToParts(date);
+            let h24 = 0, min = 0, sec = 0, day = 1, month = 0, weekday = 0;
+            for (const p of parts) {
+                if (p.type === 'hour') h24 = parseInt(p.value, 10);
+                else if (p.type === 'minute') min = parseInt(p.value, 10);
+                else if (p.type === 'second') sec = parseInt(p.value, 10);
+                else if (p.type === 'day') day = parseInt(p.value, 10);
+                else if (p.type === 'month') month = parseInt(p.value, 10) - 1; // 0-indexed
+                else if (p.type === 'weekday') {
+                    const wdMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+                    weekday = wdMap[p.value] ?? 0;
+                }
+            }
+            // Intl may return 24 for midnight in hour24 mode
+            if (h24 === 24) h24 = 0;
+            return { h24, min, sec, day, month, weekday };
+        } catch {
+            // Fallback to local time if Intl fails
+            return {
+                h24: date.getHours(), min: date.getMinutes(), sec: date.getSeconds(),
+                day: date.getDate(), month: date.getMonth(), weekday: date.getDay(),
+            };
+        }
+    }
+
+    // --- Auto-detect which ring slot matches the user's timezone ---
+    let detectedTopSlot = 16; // default: London (slot 16 = UTC)
+    try {
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        // First try exact Olson ID match
+        for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
+            if (data.olsonId === browserTz) {
+                detectedTopSlot = parseInt(slotStr, 10);
+                break;
+            }
+        }
+        // If no exact match, match by offset
+        if (detectedTopSlot === 16 && browserTz !== 'Europe/London' && browserTz !== 'UTC') {
+            const nowDate = getNow();
+            const browserOffset = getTzOffsetSeconds(browserTz, nowDate);
+            let bestDiff = Infinity;
+            for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
+                const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
+                const diff = Math.abs(slotOffset - browserOffset);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    detectedTopSlot = parseInt(slotStr, 10);
+                }
+            }
+        }
+    } catch {
+        // keep default
+    }
+
+    // terraIDeviceSlot(): returns the ring slot for the "top" city (12 o'clock)
+    functions.set('terraIDeviceSlot', () => detectedTopSlot);
+
+    // overrideTerraITopSlot(n): button action stub (Phase 2)
+    functions.set('overrideTerraITopSlot', (_n: number) => 0);
+
+    // sectorAngle(slot, topSlot): angular position of a slot relative to top
+    // (slot - topSlot) * π/12
+    functions.set('sectorAngle', (slot: number, topSlot: number) => {
+        return (slot - topSlot) * Math.PI / 12;
+    });
+
+    // UTCSectorOffset(): constant = UTCSectorNumber - 0.5 = 10.5
+    functions.set('UTCSectorOffset', () => UTCSectorNumber - 0.5);
+
+    // cityIndicatorOffset(topSlot, firstRingSlot): returns 0
+    // (EC_OFFSET_CITY_INDICATOR is not defined)
+    functions.set('cityIndicatorOffset', (_topSlot: number, _firstRingSlot: number) => 0);
+
+    // city24HrDialOffset(topSlot, firstRingSlot):
+    // The offset angle for the 24-hour dial indicator showing the top city's time.
+    // iOS: tzOffset(topSlot) * π/(12*3600) + (firstRingSlot - topSlot + UTCSectorOffset) * π/12
+    functions.set('city24HrDialOffset', (topSlot: number, firstRingSlot: number) => {
+        const slot = terraRingDefaults[topSlot];
+        if (!slot) return 0;
+        const offsetSec = getTzOffsetSeconds(slot.olsonId, getNow());
+        return offsetSec * Math.PI / (12 * 3600) + (firstRingSlot - topSlot + UTCSectorNumber - 0.5) * Math.PI / 12;
+    });
+
+    // tzOffsetAngleN(slot): timezone offset of slot's city as an angle
+    // iOS: tzOffsetUsingEnv(env[slot]) * π / (12 * 3600)
+    functions.set('tzOffsetAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const offsetSec = getTzOffsetSeconds(data.olsonId, getNow());
+        return offsetSec * Math.PI / (12 * 3600);
+    });
+
+    // isDST(slot): whether the city in slot is currently observing DST
+    functions.set('isDST', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const nowDate = getNow();
+        const currentOffset = getTzOffsetSeconds(data.olsonId, nowDate);
+        // Compare to January offset (standard time in Northern hemisphere)
+        const jan = new Date(nowDate.getFullYear(), 0, 1);
+        const janOffset = getTzOffsetSeconds(data.olsonId, jan);
+        // Compare to July offset (standard time in Southern hemisphere)
+        const jul = new Date(nowDate.getFullYear(), 6, 1);
+        const julOffset = getTzOffsetSeconds(data.olsonId, jul);
+        const stdOffset = Math.min(janOffset, julOffset);
+        return currentOffset !== stdOffset ? 1 : 0;
+    });
+
+    // moreDay(slot, topSlot): whether slot's city is on a LATER day than topSlot's city
+    // iOS: numberOfDaysOffsetFrom(slot, topSlot) > 0
+    functions.set('moreDay', (slot: number, topSlot: number) => {
+        const slotData = terraRingDefaults[slot];
+        const topData = terraRingDefaults[topSlot];
+        if (!slotData || !topData) return 0;
+        const nowDate = getNow();
+        const slotTime = getLocalTimeInZone(slotData.olsonId, nowDate);
+        const topTime = getLocalTimeInZone(topData.olsonId, nowDate);
+        // Compare day-of-month (simple but works for same-month; cross-month handled by sign)
+        if (slotTime.month !== topTime.month) {
+            // Different months: later month = more day
+            // Handle year wrap: Dec vs Jan
+            const slotM = slotTime.month;
+            const topM = topTime.month;
+            if (slotM === 0 && topM === 11) return 1; // slot is Jan, top is Dec
+            if (slotM === 11 && topM === 0) return 0; // slot is Dec, top is Jan
+            return slotM > topM ? 1 : 0;
+        }
+        return slotTime.day > topTime.day ? 1 : 0;
+    });
+
+    // lessDay(slot, topSlot): whether slot's city is on an EARLIER day than topSlot's city
+    functions.set('lessDay', (slot: number, topSlot: number) => {
+        const slotData = terraRingDefaults[slot];
+        const topData = terraRingDefaults[topSlot];
+        if (!slotData || !topData) return 0;
+        const nowDate = getNow();
+        const slotTime = getLocalTimeInZone(slotData.olsonId, nowDate);
+        const topTime = getLocalTimeInZone(topData.olsonId, nowDate);
+        if (slotTime.month !== topTime.month) {
+            const slotM = slotTime.month;
+            const topM = topTime.month;
+            if (slotM === 0 && topM === 11) return 0;
+            if (slotM === 11 && topM === 0) return 1;
+            return slotM < topM ? 1 : 0;
+        }
+        return slotTime.day < topTime.day ? 1 : 0;
+    });
+
+    // --- N-suffixed time functions (per-slot time in the slot's timezone) ---
+
+    // hour12ValueAngleN(slot): 12-hour angle in the slot's timezone
+    functions.set('hour12ValueAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        const ms = getNow().getMilliseconds();
+        const s = t.sec + ms / 1000;
+        const m = t.min + s / 60;
+        const h = (t.h24 % 12) + m / 60;
+        return h * 2 * Math.PI / 12;
+    });
+
+    // minuteValueAngleN(slot): minute angle in the slot's timezone
+    functions.set('minuteValueAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        const ms = getNow().getMilliseconds();
+        const s = t.sec + ms / 1000;
+        const m = t.min + s / 60;
+        return m * 2 * Math.PI / 60;
+    });
+
+    // secondValueAngleN(slot): second angle in the slot's timezone
+    functions.set('secondValueAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        const ms = getNow().getMilliseconds();
+        const s = t.sec + ms / 1000;
+        return s * 2 * Math.PI / 60;
+    });
+
+    // dayNumberN(slot): day of month (0-indexed) in the slot's timezone
+    functions.set('dayNumberN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        return t.day - 1; // 0-indexed like iOS dayNumber
+    });
+
+    // monthNumberAngleN(slot): month angle in the slot's timezone
+    functions.set('monthNumberAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        return t.month * 2 * Math.PI / 12; // month is already 0-indexed
+    });
+
+    // weekdayNumberAngleN(slot): weekday angle in the slot's timezone
+    functions.set('weekdayNumberAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        return t.weekday * 2 * Math.PI / 7;
     });
 
     // Release the cache pool
