@@ -14847,6 +14847,7 @@
     const lat = latStr !== null ? parseFloat(latStr) : NaN;
     const lon = lonStr !== null ? parseFloat(lonStr) : NaN;
     const city = params.get("city");
+    const blocStr = params.get("bloc");
     const tcStr = params.get("tc");
     const tStr = params.get("t");
     const offStr = params.get("off");
@@ -14858,6 +14859,7 @@
       lat: !isNaN(lat) ? lat : null,
       lon: !isNaN(lon) ? lon : null,
       city: city || null,
+      bloc: blocStr === "1",
       tc: tcStr === "1",
       t: tStr !== null ? parseInt(tStr, 10) : null,
       off: offStr !== null ? parseInt(offStr, 10) : null,
@@ -14885,6 +14887,13 @@
         params.set("city", changes.city);
       } else {
         params.delete("city");
+      }
+    }
+    if ("bloc" in changes) {
+      if (changes.bloc) {
+        params.set("bloc", "1");
+      } else {
+        params.delete("bloc");
       }
     }
     if ("tc" in changes) {
@@ -15360,7 +15369,7 @@
         } catch {
         }
       }
-    } else {
+    } else if (urlState.bloc) {
       const loc = await requestBrowserLocation();
       if (loc) {
         lat = loc.lat;
@@ -15374,6 +15383,12 @@
         needsPrompt = true;
         geoPermission = "denied";
       }
+    } else {
+      lat = 0;
+      lon = 0;
+      locationSource = "";
+      needsPrompt = true;
+      geoPermission = "unknown";
     }
     function updateLocationDisplay() {
       locationDisplay.innerHTML = `Latitude&nbsp;<span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude&nbsp;<span style="font-family:monospace">${lon.toFixed(3)}</span>`;
@@ -15908,14 +15923,14 @@
       const btn = lpUseBrowser;
       const isFileUrl = window.location.protocol === "file:";
       const deniedTooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
-      if (geoPermission === "granted") {
-        btn.disabled = false;
-        delete btn.dataset.tooltip;
-        btn.textContent = "Use browser location";
-      } else {
+      if (geoPermission === "denied") {
         btn.disabled = true;
         btn.dataset.tooltip = deniedTooltip;
         btn.textContent = "Use browser location (unavailable)";
+      } else {
+        btn.disabled = false;
+        delete btn.dataset.tooltip;
+        btn.textContent = "Use browser location";
       }
       const coordsBtn = lpUseCoords;
       function validateCoordInputs() {
@@ -15972,6 +15987,7 @@
       lpUseBrowser.textContent = "Use browser location";
       if (loc) {
         applyLocation(loc.lat, loc.lon, "from browser", false);
+        writeUrlState({ bloc: true, lat: null, lon: null, city: null });
       }
     });
     setLocationBtn.addEventListener("click", () => {

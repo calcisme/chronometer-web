@@ -194,19 +194,26 @@ async function main() {
                 geoPermission = status.state === 'granted' ? 'granted' : status.state === 'denied' ? 'denied' : 'unknown';
             } catch { /* ignore — not all browsers support this */ }
         }
-    } else {
+    } else if (urlState.bloc) {
+        // bloc=1 set — ask browser for location without showing prompt
         const loc = await requestBrowserLocation();
         if (loc) {
             lat = loc.lat; lon = loc.lon;
             locationSource = 'from browser';
             geoPermission = 'granted';
         } else {
-            // No location available — render at 0,0 with blur, show prompt
+            // Browser denied — fall through to prompt
             lat = 0; lon = 0;
             locationSource = '';
             needsPrompt = true;
             geoPermission = 'denied';
         }
+    } else {
+        // No lat/lon and no bloc — go straight to location prompt
+        lat = 0; lon = 0;
+        locationSource = '';
+        needsPrompt = true;
+        geoPermission = 'unknown';
     }
 
     function updateLocationDisplay() {
@@ -929,14 +936,14 @@ async function main() {
             ? 'Not all browsers support location access from file:// URLs'
             : 'Browser location was not granted — check your browser settings to allow it';
 
-        if (geoPermission === 'granted') {
-            btn.disabled = false;
-            delete btn.dataset.tooltip;
-            btn.textContent = 'Use browser location';
-        } else {
+        if (geoPermission === 'denied') {
             btn.disabled = true;
             btn.dataset.tooltip = deniedTooltip;
             btn.textContent = 'Use browser location (unavailable)';
+        } else {
+            btn.disabled = false;
+            delete btn.dataset.tooltip;
+            btn.textContent = 'Use browser location';
         }
 
         // Disable "Use this location" until inputs have valid numbers
@@ -1010,6 +1017,8 @@ async function main() {
         lpUseBrowser.textContent = 'Use browser location';
         if (loc) {
             applyLocation(loc.lat, loc.lon, 'from browser', false);
+            // Write bloc=1 and clear lat/lon/city so next reload asks browser again
+            writeUrlState({ bloc: true, lat: null, lon: null, city: null });
         }
     });
 

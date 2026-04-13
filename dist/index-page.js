@@ -334,7 +334,8 @@
     return {
       lat: latStr !== null && !isNaN(parseFloat(latStr)) ? parseFloat(latStr) : null,
       lon: lonStr !== null && !isNaN(parseFloat(lonStr)) ? parseFloat(lonStr) : null,
-      city: params.get("city")
+      city: params.get("city"),
+      bloc: params.get("bloc") === "1"
     };
   }
   function writeUrlState(changes) {
@@ -350,6 +351,10 @@
     if ("city" in changes) {
       if (changes.city) params.set("city", changes.city);
       else params.delete("city");
+    }
+    if ("bloc" in changes) {
+      if (changes.bloc) params.set("bloc", "1");
+      else params.delete("bloc");
     }
     params.delete("long");
     params.delete("loc");
@@ -443,6 +448,8 @@
     lpUseBrowser.textContent = "Use browser location";
     if (loc) {
       applyLocation(loc.lat, loc.lon, "from browser", false);
+      writeUrlState({ bloc: true, lat: null, lon: null, city: null });
+      updateLinks();
     }
   });
   locationPrompt.querySelector(".lp-backdrop").addEventListener("click", () => {
@@ -561,7 +568,7 @@
     if (urlState.lat !== null && urlState.lon !== null) {
       hasLocation = true;
       updateLinks();
-    } else {
+    } else if (urlState.bloc) {
       const loc = await requestBrowserLocation();
       if (loc) {
         hasLocation = true;
@@ -570,6 +577,9 @@
         showPrompt(true);
         updateLinks();
       }
+    } else {
+      showPrompt(false);
+      updateLinks();
     }
   })();
 })();

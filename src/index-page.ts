@@ -30,7 +30,7 @@ loadCityData().catch(() => {});
 // URL state helpers
 // ============================================================================
 
-function readUrlState(): { lat: number | null; lon: number | null; city: string | null } {
+function readUrlState(): { lat: number | null; lon: number | null; city: string | null; bloc: boolean } {
     const params = new URLSearchParams(window.location.search);
     const latStr = params.get('lat');
     const lonStr = params.get('lon') || params.get('long');
@@ -38,10 +38,11 @@ function readUrlState(): { lat: number | null; lon: number | null; city: string 
         lat: latStr !== null && !isNaN(parseFloat(latStr)) ? parseFloat(latStr) : null,
         lon: lonStr !== null && !isNaN(parseFloat(lonStr)) ? parseFloat(lonStr) : null,
         city: params.get('city'),
+        bloc: params.get('bloc') === '1',
     };
 }
 
-function writeUrlState(changes: { lat?: number | null; lon?: number | null; city?: string | null }) {
+function writeUrlState(changes: { lat?: number | null; lon?: number | null; city?: string | null; bloc?: boolean }) {
     const params = new URLSearchParams(window.location.search);
     if ('lat' in changes) {
         if (changes.lat != null) params.set('lat', changes.lat.toFixed(3));
@@ -54,6 +55,10 @@ function writeUrlState(changes: { lat?: number | null; lon?: number | null; city
     if ('city' in changes) {
         if (changes.city) params.set('city', changes.city);
         else params.delete('city');
+    }
+    if ('bloc' in changes) {
+        if (changes.bloc) params.set('bloc', '1');
+        else params.delete('bloc');
     }
     params.delete('long'); params.delete('loc');
     const qs = params.toString();
@@ -173,6 +178,9 @@ lpUseBrowser.addEventListener('click', async () => {
     lpUseBrowser.textContent = 'Use browser location';
     if (loc) {
         applyLocation(loc.lat, loc.lon, 'from browser', false);
+        // Write bloc=1 and clear lat/lon/city so next reload asks browser again
+        writeUrlState({ bloc: true, lat: null, lon: null, city: null });
+        updateLinks();
     }
 });
 
@@ -319,16 +327,20 @@ lpCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
     if (urlState.lat !== null && urlState.lon !== null) {
         hasLocation = true;
         updateLinks();
-    } else {
-        // Try browser geolocation
+    } else if (urlState.bloc) {
+        // bloc=1 set — ask browser for location without showing prompt
         const loc = await requestBrowserLocation();
         if (loc) {
             hasLocation = true;
             updateLinks();
         } else {
-            // No location — show prompt
+            // Browser denied — show prompt
             showPrompt(true);
             updateLinks();
         }
+    } else {
+        // No location and no bloc — show prompt
+        showPrompt(false);
+        updateLinks();
     }
 })();

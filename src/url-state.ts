@@ -8,6 +8,7 @@
  *   lat  - Observer latitude (degrees, negative = south)
  *   lon  - Observer longitude (degrees, negative = west)
  *   city - City/location label (URL-encoded, e.g. "San Francisco")
+ *   bloc - Browser location: 1 = ask browser for location on startup
  *   tc   - Time controller popover visible (1 = shown, absent = hidden)
  *   t    - Display time as Unix ms (absent = real time)
  *   off  - Millisecond offset from real time (used for 1× forward with offset)
@@ -18,6 +19,7 @@ export interface UrlState {
     lat: number | null;
     lon: number | null;
     city: string | null;
+    bloc: boolean;
     tc: boolean;
     t: number | null;
     off: number | null;
@@ -33,6 +35,7 @@ export function readUrlState(): UrlState {
     const lat = latStr !== null ? parseFloat(latStr) : NaN;
     const lon = lonStr !== null ? parseFloat(lonStr) : NaN;
     const city = params.get('city');
+    const blocStr = params.get('bloc');
 
     const tcStr = params.get('tc');
     const tStr = params.get('t');
@@ -47,6 +50,7 @@ export function readUrlState(): UrlState {
         lat: !isNaN(lat) ? lat : null,
         lon: !isNaN(lon) ? lon : null,
         city: city || null,
+        bloc: blocStr === '1',
         tc: tcStr === '1',
         t: tStr !== null ? parseInt(tStr, 10) : null,
         off: offStr !== null ? parseInt(offStr, 10) : null,
@@ -84,6 +88,13 @@ export function writeUrlState(changes: Partial<UrlState>): void {
             params.set('city', changes.city);
         } else {
             params.delete('city');
+        }
+    }
+    if ('bloc' in changes) {
+        if (changes.bloc) {
+            params.set('bloc', '1');
+        } else {
+            params.delete('bloc');
         }
     }
     if ('tc' in changes) {
