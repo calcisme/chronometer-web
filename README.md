@@ -1,77 +1,55 @@
 # Emerald Chronometer — Web Edition
 
-A web port of [Emerald Chronometer](https://github.com/EmeraldSequoia/Chronometer), an astronomical watch-face app originally built for iPhone and iPad in Objective-C, C++, and C.
+A web port of [Emerald Chronometer](https://github.com/EmeraldSequoia/Chronometer), an astronomical watch-face app originally built for iPhone and iPad in Objective-C, C++, and C. This project re-implements the app entirely in TypeScript, rendering animated watch faces to HTML Canvas. Like the original iOS app, it requires **no backend server** — it runs completely in the browser using only the device's clock and location.
 
-This project re-implements the app entirely in TypeScript, rendering animated watch faces to HTML Canvas. Like the original iOS app, it requires **no backend server** — it runs completely in the browser using only the device's clock and location.
+The original Emerald Chronometer was developed by Steve Pucci and Bill Arnett of [Emerald Sequoia LLC](https://emeraldsequoia.com) and was one of the first 500 apps in the App Store in 2008.
 
-## Watch Faces
+This project is under very active development as of April 2026.
 
-The current build includes four faces:
+## How to Run
 
-| Face | Description |
-|------|-------------|
-| **Haleakalā** | Sunrise & sunset times with altitude/azimuth |
-| **Hana** | Moonrise & moonset times, lunar phase, and altitude/azimuth |
-| **Chandra** | Giant moon-phase display with altitude/azimuth dots |
-| **Selene** | Comprehensive lunar information |
+### Option 1: Download and open locally
 
-## Prerequisites
+1. Download the `dist/` directory from this repository. The easiest way is to download the `dist.zip` archive from the [latest release](https://github.com/nicpotet/chronometer-web/releases), or clone the repo and use the `dist/` directory directly.
+2. Unzip (if needed) and double-click **`index.html`** to open it in your browser, or open any of the individual face HTML files (e.g. `mauna-kea.html`).
 
-- **Node.js** (v18 or later) — only needed for the `npx` command, which invokes [esbuild](https://esbuild.github.io/) to bundle TypeScript into browser-ready JavaScript.
-- **Bash** — the build script is a short shell script.
-- **zip** — used by the build script to create a distributable archive (pre-installed on macOS and most Linux distributions).
+Almost everything works when opened via `file://` URLs. The exceptions are:
 
-There are no runtime server dependencies. The build output is a set of static files.
+- **No detailed map in the location picker** — OpenStreetMap tiles require an HTTP `Referer` header that `file://` URLs cannot provide. A Blue Marble globe is shown instead.
+- **Browser geolocation may not work** — some browsers restrict the Geolocation API to secure contexts (`https://` and `localhost`). You can still search for a city/airport by name or enter coordinates manually.
 
-## Building
+See [file-url-limitations.md](planning/file-url-limitations.md) for full details.
 
-1. Install dependencies:
+### Option 2: Serve from a web server
 
-   ```bash
-   npm install
-   ```
+Serve all files in the `dist/` directory from any static web server. To support browser-based location detection, the files must be served over **`https:`**.
 
-2. Run the build script:
+### Building from source
 
-   ```bash
-   npm run build
-   ```
+The build requires **Node.js** (v18+) — specifically `npx`, which invokes [esbuild](https://esbuild.github.io/) to bundle TypeScript into browser-ready JavaScript. **Bash** and **zip** are also needed (both are pre-installed on macOS and most Linux distributions).
 
-   This produces the `dist/` directory containing:
-   - `index.html` — face-selector page with thumbnails
-   - `haleakala.html`, `hana.html`, `chandra.html`, `selene.html` — individual face viewers
-   - `all.html` — a grid view of all faces at once
-   - `chronometer-engine.js` — the shared rendering engine
-   - `face-*.js` — per-face data (XML definitions and image assets, all inlined)
-   - `thumb-*.png` — thumbnail images for the selector page
+```bash
+./build.sh
+```
 
-   It also creates `dist.zip` at the project root — a zip archive of the entire `dist/` directory.
-
-## Running
-
-The built app is entirely self-contained — no web server is required. To use it:
-
-1. Open the `dist/` directory in Finder (or your file manager).
-2. Double-click **`index.html`** to open it in your default browser.
-3. Select a watch face from the grid, or open any individual face HTML file directly.
-
-The watch faces will animate in real time using your system clock. If your browser supports the Geolocation API and you grant permission, astronomical calculations (sunrise, moonrise, etc.) will use your current location; otherwise they default to a built-in location.
+This produces the `dist/` directory containing all HTML, JS, and image assets, as well as a `dist.zip` archive.
 
 ## Development
 
-For iterative development with hot reload:
+There is no need to run a development server. After building, simply open `dist/index.html` (or the specific watch face HTML file you are working on) directly in your browser.
 
-```bash
-npm run dev
+To skip the location prompt during development, add lat/lon URL parameters to the `file://` URL. For example:
+
+```
+file:///path/to/dist/mauna-kea.html?lat=37.335&lon=-122.009
 ```
 
-This starts a [Vite](https://vite.dev/) dev server. Other useful commands:
+Other useful commands:
 
 | Command | Description |
 |---------|-------------|
-| `npm run typecheck` | Run the TypeScript compiler in check-only mode |
-| `npm test` | Run the test suite (Vitest) |
-| `npm run test:watch` | Run tests in watch mode |
+| `npx tsc --noEmit` | Run the TypeScript compiler in check-only mode |
+| `npx vitest` | Run the test suite |
 
 ## Architecture
 
@@ -82,14 +60,27 @@ The app is structured as a pure client-side renderer:
 - **`src/astronomy/`** — Ported astronomical routines (sun/moon positions, rise/set times, twilight, lunar phase).
 - **`src/faces/`** — Per-face entry points that bundle the XML definition and image assets for each watch face.
 
-## Provenance
+## Credits
 
-The original Emerald Chronometer was created by [Emerald Sequoia LLC](https://github.com/EmeraldSequoia) and has been available on the iOS App Store since 2008. The source code for the iOS app and its supporting libraries is available on GitHub:
+**Emerald Chronometer** was created by **Steve Pucci** and **Bill Arnett** of [Emerald Sequoia LLC](https://emeraldsequoia.com).
 
-- [Chronometer](https://github.com/EmeraldSequoia/Chronometer) — the iOS app
-- [esastro](https://github.com/EmeraldSequoia/esastro) — the astronomical calculation library
+### Astronomical algorithms
 
-This web edition is a ground-up rewrite in TypeScript. It reads the same XML watch-face definitions as the iOS app but replaces the OpenGL rendering pipeline with Canvas 2D, and replaces the binary expression evaluator with a TypeScript implementation.
+The algorithms employed in Emerald Chronometer are very high-precision series calculations originally developed by astronomers at the Bureau des Longitudes in Paris in the 1980s and 1990s. They are particularly well-suited to run in a browser tab because the data tables they are based on can fit in about 500 kilobytes of memory (this includes data for most planets for the same period), and yet still produce accuracy of less than a degree for the next 100 years. No Internet connection is required for any astronomical calculation.
+
+Specifically, the tables employed are from [*Lunar Tables and Programs from 4000 B.C. to A.D. 8000*](https://www.amazon.com/exec/obidos/ASIN/0943396336), by Michelle Chapront-Touzé & Jean Chapront, copyright 1991, and [*Planetary Programs and Tables from -4000 to +2800*](https://www.amazon.com/exec/obidos/ASIN/0943396085), by Pierre Bretagnon & Jean-Louis Simon, copyright 1986, both published by Willmann-Bell, Inc. (the latter includes the Sun motion tables).
+
+### Location data
+
+City and airport search data is derived from [GeoNames](https://www.geonames.org/) (CC BY 4.0).
+
+### Map tiles
+
+Map tiles in the location picker are provided by [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL).
+
+### Timezone lookup
+
+Latitude/longitude to timezone mapping uses [tz-lookup](https://github.com/darkskyapp/tz-lookup) by Dark Sky (ISC license).
 
 ## License
 
