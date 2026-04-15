@@ -10,7 +10,7 @@ This project is under very active development as of April 2026.
 
 ### Option 1: Download and open locally
 
-1. Download the `dist/` directory from this repository. The easiest way is to download the `dist.zip` archive from the [latest release](https://github.com/nicpotet/chronometer-web/releases), or clone the repo and use the `dist/` directory directly.
+1. Download the `dist/` directory from this repository. The easiest way is to download the `dist.zip` archive from the [latest release](https://github.com/emeraldsequoia/chronometer-web/releases), or clone the repo and use the `dist/` directory directly.
 2. Unzip (if needed) and double-click **`index.html`** to open it in your browser, or open any of the individual face HTML files (e.g. `mauna-kea.html`).
 
 Almost everything works when opened via `file://` URLs. The exceptions are:
