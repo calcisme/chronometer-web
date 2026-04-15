@@ -34,15 +34,29 @@ The build requires **Node.js** (v18+) — specifically `npx`, which invokes [esb
 
 This produces the `dist/` directory containing all HTML, JS, and image assets, as well as a `dist.zip` archive.
 
-## Development
+### URL parameters
 
-There is no need to run a development server. After building, simply open `dist/index.html` (or the specific watch face HTML file you are working on) directly in your browser.
+Regardless of whether the app is opened via `file://` or `https://`, URL parameters can be used to control the observer location:
 
-To skip the location prompt during development, add lat/lon URL parameters to the `file://` URL. For example:
+| Parameter | Description |
+|-----------|-------------|
+| `lat` | Observer latitude in degrees (negative = south) |
+| `lon` | Observer longitude in degrees (negative = west) |
+| `city` | Display label for the location (URL-encoded) |
+| `bloc` | Set to `1` to always request the browser's location on startup |
+
+If `lat` and `lon` are present, they are used directly. If only `bloc=1` is set, the app asks the browser for its location (which may trigger a permission prompt). If none of these are set, the app opens the location settings panel.
+
+For example:
 
 ```
 file:///path/to/dist/mauna-kea.html?lat=37.335&lon=-122.009
+file:///path/to/dist/index.html?bloc=1
 ```
+
+## Development
+
+There is no need to run a development server. After building, simply open `dist/index.html` (or the specific watch face HTML file you are working on) directly in your browser. To skip the location prompt, add `?lat=…&lon=…` URL parameters as described above.
 
 Other useful commands:
 
