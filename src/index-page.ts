@@ -113,6 +113,7 @@ const lpNoLocation = document.getElementById('lp-no-location')!;
 const lpLocationName = document.getElementById('lp-location-name')!;
 const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
 const lpDoneBtn = document.getElementById('lp-done')!;
+const lpDialogFooter = lpDoneBtn.parentElement!;
 
 let hasLocation = false;  // tracks whether a valid location has been set
 let currentLat = 0;
@@ -133,14 +134,14 @@ function showPrompt(geoDenied: boolean) {
 
     // Show status or no-location placeholder
     if (hasLocation) {
-        lpStatusSection.style.display = 'block';
-        lpNoLocation.style.display = 'none';
+        lpStatusSection.classList.add('visible');
+        lpNoLocation.classList.add('hidden');
         updateMapPreview(currentLat, currentLon);
     } else {
-        lpStatusSection.style.display = 'none';
-        lpNoLocation.style.display = 'block';
+        lpStatusSection.classList.remove('visible');
+        lpNoLocation.classList.remove('hidden');
     }
-    lpDoneBtn.style.display = hasLocation ? 'block' : 'none';
+    lpDialogFooter.classList.toggle('visible', hasLocation);
 }
 
 function hidePrompt() {
@@ -163,8 +164,8 @@ function buildLocationNameHTML(): string {
 }
 
 function updateMapPreview(mapLat: number, mapLon: number) {
-    lpStatusSection.style.display = 'block';
-    lpNoLocation.style.display = 'none';
+    lpStatusSection.classList.add('visible');
+    lpNoLocation.classList.add('hidden');
 
     renderGlobe(lpGlobe, mapLat, mapLon);
     if (isFileProtocol) {
@@ -197,7 +198,7 @@ function applyLocation(newLat: number, newLon: number, source: string, fullLabel
     }
     updateLinks();
     updateMapPreview(newLat, newLon);
-    lpDoneBtn.style.display = 'block';
+    lpDialogFooter.classList.add('visible');
 }
 
 // ============================================================================

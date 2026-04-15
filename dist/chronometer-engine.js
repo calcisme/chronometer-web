@@ -15387,6 +15387,7 @@
     const lpLocationName = document.getElementById("lp-location-name");
     const lpOsmAttribution = document.getElementById("lp-osm-attribution");
     const lpDoneBtn = document.getElementById("lp-done");
+    const lpDialogFooter = lpDoneBtn.parentElement;
     initNavigationLinks();
     loadCityData().catch(() => {
     });
@@ -15961,14 +15962,14 @@
       setTimeout(() => lpCityInput?.focus(), 50);
       const hasLocation = lat !== 0 || lon !== 0;
       if (hasLocation) {
-        lpStatusSection.style.display = "block";
-        lpNoLocation.style.display = "none";
+        lpStatusSection.classList.add("visible");
+        lpNoLocation.classList.add("hidden");
         updateMapPreview(lat, lon);
       } else {
-        lpStatusSection.style.display = "none";
-        lpNoLocation.style.display = "block";
+        lpStatusSection.classList.remove("visible");
+        lpNoLocation.classList.remove("hidden");
       }
-      lpDoneBtn.style.display = !needsPrompt || hasLocation ? "" : "none";
+      lpDialogFooter.classList.toggle("visible", !needsPrompt || hasLocation);
       const btn = lpUseBrowser;
       const isFileUrl = window.location.protocol === "file:";
       const deniedTooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
@@ -16011,8 +16012,8 @@
       return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
     }
     function updateMapPreview(mapLat, mapLon) {
-      lpStatusSection.style.display = "block";
-      lpNoLocation.style.display = "none";
+      lpStatusSection.classList.add("visible");
+      lpNoLocation.classList.add("hidden");
       renderGlobe(lpGlobe, mapLat, mapLon);
       if (isFileProtocol) {
         lpOsmContainer.style.display = "none";
@@ -16040,7 +16041,7 @@
         writeUrlState({ lat: newLat, lon: newLon, city: source || null });
       }
       updateMapPreview(newLat, newLon);
-      lpDoneBtn.style.display = "block";
+      lpDialogFooter.classList.add("visible");
       needsPrompt = false;
     }
     lpUseCoords.addEventListener("click", () => {

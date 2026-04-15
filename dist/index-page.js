@@ -430,6 +430,7 @@
   var lpLocationName = document.getElementById("lp-location-name");
   var lpOsmAttribution = document.getElementById("lp-osm-attribution");
   var lpDoneBtn = document.getElementById("lp-done");
+  var lpDialogFooter = lpDoneBtn.parentElement;
   var hasLocation = false;
   var currentLat = 0;
   var currentLon = 0;
@@ -444,14 +445,14 @@
       lpUseBrowser.textContent = "Use browser location (unavailable)";
     }
     if (hasLocation) {
-      lpStatusSection.style.display = "block";
-      lpNoLocation.style.display = "none";
+      lpStatusSection.classList.add("visible");
+      lpNoLocation.classList.add("hidden");
       updateMapPreview(currentLat, currentLon);
     } else {
-      lpStatusSection.style.display = "none";
-      lpNoLocation.style.display = "block";
+      lpStatusSection.classList.remove("visible");
+      lpNoLocation.classList.remove("hidden");
     }
-    lpDoneBtn.style.display = hasLocation ? "block" : "none";
+    lpDialogFooter.classList.toggle("visible", hasLocation);
   }
   function hidePrompt() {
     locationPrompt.style.display = "none";
@@ -471,8 +472,8 @@
     return `${currentLat.toFixed(3)}, ${currentLon.toFixed(3)}`;
   }
   function updateMapPreview(mapLat, mapLon) {
-    lpStatusSection.style.display = "block";
-    lpNoLocation.style.display = "none";
+    lpStatusSection.classList.add("visible");
+    lpNoLocation.classList.add("hidden");
     renderGlobe(lpGlobe, mapLat, mapLon);
     if (isFileProtocol) {
       lpOsmContainer.style.display = "none";
@@ -503,7 +504,7 @@
     }
     updateLinks();
     updateMapPreview(newLat, newLon);
-    lpDoneBtn.style.display = "block";
+    lpDialogFooter.classList.add("visible");
   }
   lpUseCoords.addEventListener("click", () => {
     const newLat = parseFloat(lpLatInput.value);

@@ -168,6 +168,7 @@ async function main() {
     const lpLocationName = document.getElementById('lp-location-name')!;
     const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
     const lpDoneBtn = document.getElementById('lp-done')!;
+    const lpDialogFooter = lpDoneBtn.parentElement!;
 
     // Initialize link preservation
     initNavigationLinks();
@@ -934,16 +935,16 @@ async function main() {
         // Show status section (map + location name) or no-location placeholder
         const hasLocation = lat !== 0 || lon !== 0;
         if (hasLocation) {
-            lpStatusSection.style.display = 'block';
-            lpNoLocation.style.display = 'none';
+            lpStatusSection.classList.add('visible');
+            lpNoLocation.classList.add('hidden');
             updateMapPreview(lat, lon);
         } else {
-            lpStatusSection.style.display = 'none';
-            lpNoLocation.style.display = 'block';
+            lpStatusSection.classList.remove('visible');
+            lpNoLocation.classList.remove('hidden');
         }
 
         // Show Done button when user can dismiss (has a real location)
-        lpDoneBtn.style.display = (!needsPrompt || hasLocation) ? '' : 'none';
+        lpDialogFooter.classList.toggle('visible', !needsPrompt || hasLocation);
 
         // Configure browser location button based on permission state
         const btn = lpUseBrowser as HTMLButtonElement;
@@ -1009,8 +1010,8 @@ async function main() {
     /** Update the map preview in the dialog to show the given location. */
     function updateMapPreview(mapLat: number, mapLon: number) {
         // Show the status section, hide the no-location placeholder
-        lpStatusSection.style.display = 'block';
-        lpNoLocation.style.display = 'none';
+        lpStatusSection.classList.add('visible');
+        lpNoLocation.classList.add('hidden');
 
         // Globe always renders
         renderGlobe(lpGlobe, mapLat, mapLon);
@@ -1046,7 +1047,7 @@ async function main() {
         }
         // Update the map preview and show Done button
         updateMapPreview(newLat, newLon);
-        lpDoneBtn.style.display = 'block';
+        lpDialogFooter.classList.add('visible');
         needsPrompt = false;
     }
 
