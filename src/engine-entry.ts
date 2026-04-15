@@ -34,7 +34,7 @@ import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishL
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js';
-import { loadCityData, searchCities, isCityDataLoaded, loadError } from './city-search.js';
+import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './city-search.js';
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
 
@@ -163,7 +163,10 @@ async function main() {
     const lpOsmTile = document.getElementById('lp-osm-tile') as HTMLImageElement;
     const lpMapMarker = document.getElementById('lp-map-marker')!;
     const lpOsmOffline = document.getElementById('lp-osm-offline')!;
-    const lpMapLabel = document.getElementById('lp-map-label')!;
+    const lpStatusSection = document.getElementById('lp-status-section')!;
+    const lpNoLocation = document.getElementById('lp-no-location')!;
+    const lpLocationName = document.getElementById('lp-location-name')!;
+    const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
     const lpDoneBtn = document.getElementById('lp-done')!;
 
     // Initialize link preservation
@@ -178,6 +181,9 @@ async function main() {
     const urlState = readUrlState();
     let lat: number, lon: number;
     let locationSource = '';
+    let locationFullLabel = '';  // Full "City, State, Country" for dialog display
+    // Track how the location was obtained for display purposes
+    let locationSourceType: 'url-city' | 'browser' | 'manual' | 'none' = 'none';
     let needsPrompt = false;
     // Track whether browser geolocation is available
     // 'granted' = we got a position, 'denied' = user rejected or unavailable, 'unknown' = never tried
@@ -187,6 +193,7 @@ async function main() {
         lat = urlState.lat;
         lon = urlState.lon;
         locationSource = urlState.city || '';
+        locationSourceType = urlState.city ? 'url-city' : 'manual';
         // We haven't tried geolocation — check the Permissions API if available
         if (navigator.permissions) {
             try {
@@ -200,11 +207,13 @@ async function main() {
         if (loc) {
             lat = loc.lat; lon = loc.lon;
             locationSource = 'from browser';
+            locationSourceType = 'browser';
             geoPermission = 'granted';
         } else {
             // Browser denied — fall through to prompt
             lat = 0; lon = 0;
             locationSource = '';
+            locationSourceType = 'none';
             needsPrompt = true;
             geoPermission = 'denied';
         }
@@ -212,6 +221,7 @@ async function main() {
         // No lat/lon and no bloc — go straight to location prompt
         lat = 0; lon = 0;
         locationSource = '';
+        locationSourceType = 'none';
         needsPrompt = true;
         geoPermission = 'unknown';
     }
@@ -921,13 +931,19 @@ async function main() {
         // Autofocus the search input after dialog renders
         setTimeout(() => lpCityInput?.focus(), 50);
 
-        // Show map for current location
-        if (lat !== 0 || lon !== 0) {
-            updateMapPreview(lat, lon, locationSource || `${lat.toFixed(3)}, ${lon.toFixed(3)}`);
+        // Show status section (map + location name) or no-location placeholder
+        const hasLocation = lat !== 0 || lon !== 0;
+        if (hasLocation) {
+            lpStatusSection.style.display = 'block';
+            lpNoLocation.style.display = 'none';
+            updateMapPreview(lat, lon);
+        } else {
+            lpStatusSection.style.display = 'none';
+            lpNoLocation.style.display = 'block';
         }
 
         // Show Done button when user can dismiss (has a real location)
-        lpDoneBtn.style.display = (!needsPrompt || (lat !== 0 || lon !== 0)) ? '' : 'none';
+        lpDoneBtn.style.display = (!needsPrompt || hasLocation) ? '' : 'none';
 
         // Configure browser location button based on permission state
         const btn = lpUseBrowser as HTMLButtonElement;
@@ -965,13 +981,43 @@ async function main() {
 
     const isFileProtocol = window.location.protocol === 'file:';
 
+    /**
+     * Build the location name string for the dialog header.
+     * Rules:
+     *   - If locationSourceType is 'url-city' → use locationSource + "(from cities database)"
+     *   - If locationSourceType is 'browser' → find closest city + "(from browser)"
+     *   - If locationSourceType is 'manual'  → find closest city + "(manually entered)"
+     *   - If no city data loaded yet, just show coords
+     */
+    function buildLocationNameHTML(): string {
+        if (locationSourceType === 'url-city' && locationFullLabel) {
+            return `${locationFullLabel} <span class="lp-loc-source">(from cities database)</span>`;
+        }
+        // For browser or manual, find closest city
+        if (locationSourceType === 'browser' || locationSourceType === 'manual') {
+            const closest = findClosestCity(lat, lon);
+            const sourceLabel = locationSourceType === 'browser' ? '(from browser)' : '(manually entered)';
+            if (closest) {
+                return `${closest.label} <span class="lp-loc-source">${sourceLabel}</span>`;
+            }
+            return `${lat.toFixed(3)}, ${lon.toFixed(3)} <span class="lp-loc-source">${sourceLabel}</span>`;
+        }
+        // Fallback — just coords
+        return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+    }
+
     /** Update the map preview in the dialog to show the given location. */
-    function updateMapPreview(mapLat: number, mapLon: number, label: string) {
+    function updateMapPreview(mapLat: number, mapLon: number) {
+        // Show the status section, hide the no-location placeholder
+        lpStatusSection.style.display = 'block';
+        lpNoLocation.style.display = 'none';
+
         // Globe always renders
         renderGlobe(lpGlobe, mapLat, mapLon);
         // OSM tiles require a Referer header, which file:// URLs can't provide
         if (isFileProtocol) {
             lpOsmContainer.style.display = 'none';
+            lpOsmAttribution.style.display = 'none';
             // Enlarge globe when it's the only map
             lpGlobe.width = 160;
             lpGlobe.height = 160;
@@ -979,27 +1025,29 @@ async function main() {
             lpGlobe.style.height = '160px';
         } else {
             lpOsmContainer.style.display = '';
+            lpOsmAttribution.style.display = '';
             lpOsmOffline.style.display = 'none';
             loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then(ok => {
                 lpOsmOffline.style.display = ok ? 'none' : '';
             });
         }
-        lpMapLabel.textContent = label;
+        // Update location name
+        lpLocationName.innerHTML = buildLocationNameHTML();
     }
 
     /** Apply location to the watch AND update the map preview (dialog stays open). */
-    function applyLocation(newLat: number, newLon: number, source: string, writeToUrl: boolean) {
+    function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean) {
         locationSource = source;
+        locationFullLabel = fullLabel;
+        locationSourceType = sourceType;
         rebuildAllForLocation(newLat, newLon);
         if (writeToUrl) {
             writeUrlState({ lat: newLat, lon: newLon, city: source || null });
         }
-        // Update the map preview if the dialog is still open
-        if (locationPrompt.style.display !== 'none') {
-            updateMapPreview(newLat, newLon, source);
-            // Now that user has a location, show Done button
-            lpDoneBtn.style.display = '';
-        }
+        // Update the map preview and show Done button
+        updateMapPreview(newLat, newLon);
+        lpDoneBtn.style.display = 'block';
+        needsPrompt = false;
     }
 
     // "Use this location" button in prompt
@@ -1007,7 +1055,7 @@ async function main() {
         const newLat = parseFloat(lpLatInput.value);
         const newLon = parseFloat(lpLonInput.value);
         if (isNaN(newLat) || isNaN(newLon)) return;
-        applyLocation(newLat, newLon, '', true);
+        applyLocation(newLat, newLon, '', '', 'manual', true);
     });
 
     // "Use browser location" button in prompt
@@ -1016,7 +1064,7 @@ async function main() {
         const loc = await requestBrowserLocation();
         lpUseBrowser.textContent = 'Use browser location';
         if (loc) {
-            applyLocation(loc.lat, loc.lon, 'from browser', false);
+            applyLocation(loc.lat, loc.lon, '', '', 'browser', false);
             // Write bloc=1 and clear lat/lon/city so next reload asks browser again
             writeUrlState({ bloc: true, lat: null, lon: null, city: null });
         }
@@ -1072,7 +1120,7 @@ async function main() {
                 div.textContent = r.label;
             }
             div.addEventListener('click', () => {
-                applyLocation(r.lat, r.lon, r.shortLabel, true);
+                applyLocation(r.lat, r.lon, r.shortLabel, r.label, 'url-city', true);
                 lpCityInput.value = '';
                 lpCityResults.innerHTML = '';
                 // Update lat/lon inputs to reflect selection

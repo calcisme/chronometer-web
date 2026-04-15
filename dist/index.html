@@ -241,6 +241,15 @@
             margin-bottom: 12px;
         }
 
+        #location-prompt .lp-browser-section {
+            margin-top: 12px;
+            border-top: 1px solid #2a2a3e;
+            padding-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
         #location-prompt .lp-manual-section {
             margin-top: 12px;
             border-top: 1px solid #2a2a3e;
@@ -334,11 +343,11 @@
             font-style: italic;
         }
 
-        /* Map footer */
-        .lp-map-footer {
-            margin-top: 12px;
-            border-top: 1px solid #2a2a3e;
-            padding-top: 10px;
+        /* Status section (map + location name) at top of dialog */
+        .lp-status-section {
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2a3e;
         }
 
         .lp-map-row {
@@ -355,8 +364,8 @@
             height: 100px;
         }
 
-        /* When globe is the only visible child, make it bigger */
-        #lp-globe:only-child {
+        /* When globe is the only visible child in the map row, make it bigger */
+        .lp-map-row #lp-globe:only-child {
             width: 160px;
             height: 160px;
         }
@@ -402,14 +411,6 @@
             font-style: italic;
         }
 
-        .lp-map-label {
-            font-size: 12px;
-            color: #aab;
-            margin-top: 6px;
-            text-align: center;
-            min-height: 1.2em;
-        }
-
         .lp-map-attribution {
             font-size: 9px;
             color: #445;
@@ -422,9 +423,41 @@
             text-decoration: none;
         }
 
+        .lp-location-name {
+            font-size: 13px;
+            color: #bbc;
+            margin-top: 6px;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .lp-location-name .lp-loc-source {
+            color: #667;
+            font-style: italic;
+            font-size: 11px;
+        }
+
+        /* No-location placeholder */
+        .lp-no-location {
+            margin-bottom: 14px;
+            padding: 20px 0 14px;
+            border-bottom: 1px solid #2a2a3e;
+            text-align: center;
+        }
+
+        .lp-no-location-text {
+            color: #667;
+            font-size: 14px;
+            font-style: italic;
+        }
+
+        /* Dialog footer with Done button */
+        .lp-dialog-footer {
+            margin-top: 10px;
+        }
+
         .lp-btn-done {
             width: 100%;
-            margin-top: 8px;
             padding: 8px;
             font-size: 14px;
         }
@@ -510,14 +543,35 @@
         <div id="location-prompt" style="display:none">
             <div class="lp-backdrop"></div>
             <div class="lp-dialog">
-                <h3 class="lp-title">Set Location</h3>
+                <h3 class="lp-title">Location</h3>
+
+                <!-- Current location status (map + name) — shown at top when we have a location -->
+                <div class="lp-status-section" id="lp-status-section" style="display:none">
+                    <div class="lp-map-row" id="lp-map-row">
+                        <canvas id="lp-globe" width="100" height="100"></canvas>
+                        <div class="lp-osm-container" id="lp-osm-container">
+                            <img id="lp-osm-tile" alt="">
+                            <div class="lp-map-marker" id="lp-map-marker"></div>
+                            <div class="lp-osm-offline" id="lp-osm-offline" style="display:none">(offline)</div>
+                        </div>
+                    </div>
+                    <div class="lp-map-attribution" id="lp-osm-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+                    <div class="lp-location-name" id="lp-location-name"></div>
+                </div>
+
+                <!-- "No location set yet" placeholder -->
+                <div class="lp-no-location" id="lp-no-location">
+                    <div class="lp-no-location-text">No location set yet</div>
+                </div>
+
                 <div class="lp-search-section">
+                    <div class="lp-search-label">City search</div>
                     <div class="lp-search-input-wrap">
                         <input type="text" id="lp-city-input" placeholder="Search city or airport code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                     </div>
                     <div id="lp-city-results"></div>
                 </div>
-                <div class="lp-buttons">
+                <div class="lp-browser-section">
                     <button class="lp-btn" id="lp-use-browser">Use browser location</button>
                 </div>
                 <div class="lp-manual-section">
@@ -530,17 +584,7 @@
                         <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
                     </div>
                 </div>
-                <div class="lp-map-footer" id="lp-map-footer">
-                    <div class="lp-map-row">
-                        <canvas id="lp-globe" width="100" height="100"></canvas>
-                        <div class="lp-osm-container" id="lp-osm-container">
-                            <img id="lp-osm-tile" alt="">
-                            <div class="lp-map-marker" id="lp-map-marker"></div>
-                            <div class="lp-osm-offline" id="lp-osm-offline" style="display:none">(offline)</div>
-                        </div>
-                    </div>
-                    <div class="lp-map-label" id="lp-map-label"></div>
-                    <div class="lp-map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+                <div class="lp-dialog-footer">
                     <button class="lp-btn lp-btn-done" id="lp-done" style="display:none">Done</button>
                 </div>
             </div>

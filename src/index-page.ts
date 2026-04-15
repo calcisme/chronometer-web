@@ -8,7 +8,7 @@
  *   - Full location dialog with city search, globe, and OSM map
  */
 
-import { loadCityData, searchCities, isCityDataLoaded, loadError } from './city-search.js';
+import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './city-search.js';
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
 
@@ -108,10 +108,18 @@ const lpOsmContainer = document.getElementById('lp-osm-container')!;
 const lpOsmTile = document.getElementById('lp-osm-tile') as HTMLImageElement;
 const lpMapMarker = document.getElementById('lp-map-marker')!;
 const lpOsmOffline = document.getElementById('lp-osm-offline')!;
-const lpMapLabel = document.getElementById('lp-map-label')!;
+const lpStatusSection = document.getElementById('lp-status-section')!;
+const lpNoLocation = document.getElementById('lp-no-location')!;
+const lpLocationName = document.getElementById('lp-location-name')!;
+const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
 const lpDoneBtn = document.getElementById('lp-done')!;
 
 let hasLocation = false;  // tracks whether a valid location has been set
+let currentLat = 0;
+let currentLon = 0;
+let locationSource = '';
+let locationFullLabel = '';  // Full "City, State, Country" for dialog display
+let locationSourceType: 'url-city' | 'browser' | 'manual' | 'none' = 'none';
 
 function showPrompt(geoDenied: boolean) {
     locationPrompt.style.display = '';
@@ -122,43 +130,74 @@ function showPrompt(geoDenied: boolean) {
             : 'Browser location was not granted — check your browser settings to allow it';
         lpUseBrowser.textContent = 'Use browser location (unavailable)';
     }
-    // Show the map with demo location initially
-    updateMapPreview(DEMO_LAT, DEMO_LON, 'Cupertino, CA');
+
+    // Show status or no-location placeholder
+    if (hasLocation) {
+        lpStatusSection.style.display = 'block';
+        lpNoLocation.style.display = 'none';
+        updateMapPreview(currentLat, currentLon);
+    } else {
+        lpStatusSection.style.display = 'none';
+        lpNoLocation.style.display = 'block';
+    }
+    lpDoneBtn.style.display = hasLocation ? 'block' : 'none';
 }
 
 function hidePrompt() {
     locationPrompt.style.display = 'none';
 }
 
-function updateMapPreview(mapLat: number, mapLon: number, label: string) {
+function buildLocationNameHTML(): string {
+    if (locationSourceType === 'url-city' && locationFullLabel) {
+        return `${locationFullLabel} <span class="lp-loc-source">(from cities database)</span>`;
+    }
+    if (locationSourceType === 'browser' || locationSourceType === 'manual') {
+        const closest = findClosestCity(currentLat, currentLon);
+        const sourceLabel = locationSourceType === 'browser' ? '(from browser)' : '(manually entered)';
+        if (closest) {
+            return `${closest.label} <span class="lp-loc-source">${sourceLabel}</span>`;
+        }
+        return `${currentLat.toFixed(3)}, ${currentLon.toFixed(3)} <span class="lp-loc-source">${sourceLabel}</span>`;
+    }
+    return `${currentLat.toFixed(3)}, ${currentLon.toFixed(3)}`;
+}
+
+function updateMapPreview(mapLat: number, mapLon: number) {
+    lpStatusSection.style.display = 'block';
+    lpNoLocation.style.display = 'none';
+
     renderGlobe(lpGlobe, mapLat, mapLon);
     if (isFileProtocol) {
         lpOsmContainer.style.display = 'none';
+        lpOsmAttribution.style.display = 'none';
         lpGlobe.width = 160;
         lpGlobe.height = 160;
         lpGlobe.style.width = '160px';
         lpGlobe.style.height = '160px';
     } else {
         lpOsmContainer.style.display = '';
+        lpOsmAttribution.style.display = '';
         lpOsmOffline.style.display = 'none';
         loadOSMTile(lpOsmContainer, lpOsmTile, lpMapMarker, mapLat, mapLon).then(ok => {
             lpOsmOffline.style.display = ok ? 'none' : '';
         });
     }
-    lpMapLabel.textContent = label;
+    lpLocationName.innerHTML = buildLocationNameHTML();
 }
 
-function applyLocation(newLat: number, newLon: number, source: string, writeToUrl: boolean) {
+function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean) {
     hasLocation = true;
+    currentLat = newLat;
+    currentLon = newLon;
+    locationSource = source;
+    locationFullLabel = fullLabel;
+    locationSourceType = sourceType;
     if (writeToUrl) {
         writeUrlState({ lat: newLat, lon: newLon, city: source || null });
     }
     updateLinks();
-    // Update the map preview if the dialog is still open
-    if (locationPrompt.style.display !== 'none') {
-        updateMapPreview(newLat, newLon, source);
-        lpDoneBtn.style.display = '';
-    }
+    updateMapPreview(newLat, newLon);
+    lpDoneBtn.style.display = 'block';
 }
 
 // ============================================================================
@@ -169,7 +208,7 @@ lpUseCoords.addEventListener('click', () => {
     const newLat = parseFloat(lpLatInput.value);
     const newLon = parseFloat(lpLonInput.value);
     if (isNaN(newLat) || isNaN(newLon)) return;
-    applyLocation(newLat, newLon, '', true);
+    applyLocation(newLat, newLon, '', '', 'manual', true);
 });
 
 lpUseBrowser.addEventListener('click', async () => {
@@ -177,7 +216,7 @@ lpUseBrowser.addEventListener('click', async () => {
     const loc = await requestBrowserLocation();
     lpUseBrowser.textContent = 'Use browser location';
     if (loc) {
-        applyLocation(loc.lat, loc.lon, 'from browser', false);
+        applyLocation(loc.lat, loc.lon, '', '', 'browser', false);
         // Write bloc=1 and clear lat/lon/city so next reload asks browser again
         writeUrlState({ bloc: true, lat: null, lon: null, city: null });
         updateLinks();
@@ -224,7 +263,7 @@ function renderCityResults(results: CityResult[]) {
             div.textContent = r.label;
         }
         div.addEventListener('click', () => {
-            applyLocation(r.lat, r.lon, r.shortLabel, true);
+            applyLocation(r.lat, r.lon, r.shortLabel, r.label, 'url-city', true);
             lpCityInput.value = '';
             lpCityResults.innerHTML = '';
             lpLatInput.value = r.lat.toFixed(3);
@@ -326,12 +365,19 @@ lpCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
 
     if (urlState.lat !== null && urlState.lon !== null) {
         hasLocation = true;
+        currentLat = urlState.lat;
+        currentLon = urlState.lon;
+        locationSource = urlState.city || '';
+        locationSourceType = urlState.city ? 'url-city' : 'manual';
         updateLinks();
     } else if (urlState.bloc) {
         // bloc=1 set — ask browser for location without showing prompt
         const loc = await requestBrowserLocation();
         if (loc) {
             hasLocation = true;
+            currentLat = loc.lat;
+            currentLon = loc.lon;
+            locationSourceType = 'browser';
             updateLinks();
         } else {
             // Browser denied — show prompt

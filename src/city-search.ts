@@ -241,3 +241,50 @@ export function searchCities(query: string, limit: number = 20): CityResult[] {
 
     return results.slice(0, limit).map(r => r.result);
 }
+
+/**
+ * Find the closest city in the database to the given coordinates.
+ * Uses a fast equirectangular approximation for distance.
+ * Returns null if city data is not loaded.
+ */
+export function findClosestCity(lat: number, lon: number): CityResult | null {
+    if (!loaded || CITIES.length === 0) return null;
+
+    let bestDist = Infinity;
+    let bestIdx = -1;
+
+    // Equirectangular approximation (fast, good enough for nearest-city)
+    const cosLat = Math.cos(lat * Math.PI / 180);
+
+    for (let i = 0; i < CITIES.length; i++) {
+        const cLat: number = CITIES[i][C_LAT];
+        const cLon: number = CITIES[i][C_LON];
+        const dLat = cLat - lat;
+        const dLon = (cLon - lon) * cosLat;
+        const dist = dLat * dLat + dLon * dLon;
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = i;
+        }
+    }
+
+    if (bestIdx < 0) return null;
+
+    const c = CITIES[bestIdx];
+    const name: string = c[C_NAME];
+    const cc = CC[c[C_CC]] || '';
+    const admin1 = AD[c[C_AD1]] || '';
+    let label = name;
+    if (c[C_AD2]) label += ` (${c[C_AD2]})`;
+    if (admin1) label += `, ${admin1}`;
+    if (cc) label += `, ${cc}`;
+
+    return {
+        label,
+        shortLabel: name,
+        lat: c[C_LAT],
+        lon: c[C_LON],
+        timezone: TZ[c[C_TZ]] || '',
+        isAirport: false,
+    };
+}
