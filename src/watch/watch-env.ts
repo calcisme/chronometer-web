@@ -67,6 +67,7 @@ export function createWatchEnvironment(
     observerLatDeg: number = DEFAULT_LAT_DEG,
     observerLonDeg: number = DEFAULT_LON_DEG,
     getNow: () => Date = () => new Date(),
+    olsonTimezone?: string,
 ): Environment {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
@@ -100,7 +101,7 @@ export function createWatchEnvironment(
     env.variables.set('planetNeptune', ECPlanetNumber.Neptune);
 
     // Register time functions (uses the provided getNow source)
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone);
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
@@ -183,6 +184,7 @@ function registerTimeFunctions(
     OBSERVER_LAT: number,
     OBSERVER_LON: number,
     getNow: () => Date = () => new Date(),
+    olsonTimezone?: string,
 ): void {
     const { functions } = env;
 
@@ -190,9 +192,37 @@ function registerTimeFunctions(
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
 
-    // Local timezone offset in seconds (JS gives minutes, positive for west)
-    const tzOffsetMinutes = now.getTimezoneOffset();
-    const tzOffsetSeconds = -tzOffsetMinutes * 60; // Convert to seconds, east-positive
+    // Timezone offset in seconds (east-positive).
+    // If an Olson timezone was provided, use it; otherwise use the browser's timezone.
+    let tzOffsetSeconds: number;
+    if (olsonTimezone) {
+        // getTzOffsetSeconds is defined later in this function but hoisted.
+        // We compute it inline here using the same Intl approach.
+        try {
+            const fmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: olsonTimezone,
+                timeZoneName: 'longOffset',
+            });
+            const parts = fmt.formatToParts(now);
+            const tzPart = parts.find(p => p.type === 'timeZoneName');
+            const tzStr = tzPart?.value || '';
+            if (tzStr === 'GMT' || tzStr === 'UTC' || !tzStr) {
+                tzOffsetSeconds = 0;
+            } else {
+                const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+                if (m) {
+                    const sign = m[1] === '+' ? 1 : -1;
+                    tzOffsetSeconds = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
+                } else {
+                    tzOffsetSeconds = -now.getTimezoneOffset() * 60;
+                }
+            }
+        } catch {
+            tzOffsetSeconds = -now.getTimezoneOffset() * 60;
+        }
+    } else {
+        tzOffsetSeconds = -now.getTimezoneOffset() * 60;
+    }
 
     // --- Clock hands (LIVE — recompute from Date.now() on each call) ---
     // These are called every animation frame so the hands move in real time.

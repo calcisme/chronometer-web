@@ -13,6 +13,7 @@
  *   t    - Display time as Unix ms (absent = real time)
  *   off  - Millisecond offset from real time (used for 1× forward with offset)
  *   dir  - Time direction: 1=forward, -1=reverse, 0=stopped (absent = 1)
+ *   tz   - IANA timezone for the location (e.g. "America/Los_Angeles")
  */
 
 export interface UrlState {
@@ -24,6 +25,7 @@ export interface UrlState {
     t: number | null;
     off: number | null;
     dir: 1 | -1 | 0;
+    tz: string | null;
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -55,6 +57,7 @@ export function readUrlState(): UrlState {
         t: tStr !== null ? parseInt(tStr, 10) : null,
         off: offStr !== null ? parseInt(offStr, 10) : null,
         dir,
+        tz: params.get('tz') || null,
     };
 }
 
@@ -123,6 +126,14 @@ export function writeUrlState(changes: Partial<UrlState>): void {
             params.set('dir', changes.dir.toString());
         } else {
             params.delete('dir');
+        }
+    }
+
+    if ('tz' in changes) {
+        if (changes.tz) {
+            params.set('tz', changes.tz);
+        } else {
+            params.delete('tz');
         }
     }
 

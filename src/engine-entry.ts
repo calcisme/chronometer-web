@@ -37,6 +37,7 @@ import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js
 import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './city-search.js';
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
+import { resolveTimezone } from './tz-resolve.js';
 
 // ============================================================================
 // Location helpers
@@ -149,6 +150,7 @@ async function main() {
     const grid = document.getElementById('watch-grid') as HTMLDivElement;
     const locationDisplay = document.getElementById('location-display')!;
     const sourceLabel = document.getElementById('location-source')!;
+    const locationTzLabel = document.getElementById('location-tz')!;
     const setLocationBtn = document.getElementById('set-location-btn')!;
     const locationPrompt = document.getElementById('location-prompt')!;
     const lpLatInput = document.getElementById('lp-lat') as HTMLInputElement;
@@ -166,6 +168,7 @@ async function main() {
     const lpStatusSection = document.getElementById('lp-status-section')!;
     const lpNoLocation = document.getElementById('lp-no-location')!;
     const lpLocationName = document.getElementById('lp-location-name')!;
+    const lpLocationTz = document.getElementById('lp-location-tz')!;
     const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
     const lpDoneBtn = document.getElementById('lp-done')!;
     const lpDialogFooter = lpDoneBtn.parentElement!;
@@ -186,6 +189,8 @@ async function main() {
     // Track how the location was obtained for display purposes
     let locationSourceType: 'url-city' | 'browser' | 'manual' | 'none' = 'none';
     let needsPrompt = false;
+    // Resolved IANA timezone for the current location (e.g. "America/Los_Angeles")
+    let locationTimezone: string | undefined = urlState.tz || undefined;
     // Track whether browser geolocation is available
     // 'granted' = we got a position, 'denied' = user rejected or unavailable, 'unknown' = never tried
     let geoPermission: 'granted' | 'denied' | 'unknown' = 'unknown';
@@ -195,6 +200,11 @@ async function main() {
         lon = urlState.lon;
         locationSource = urlState.city || '';
         locationSourceType = urlState.city ? 'url-city' : 'manual';
+        // If no tz in URL (old link), resolve it now
+        if (!locationTimezone) {
+            locationTimezone = resolveTimezone(lat, lon, null);
+            writeUrlState({ tz: locationTimezone });
+        }
         // We haven't tried geolocation — check the Permissions API if available
         if (navigator.permissions) {
             try {
@@ -210,6 +220,7 @@ async function main() {
             locationSource = 'from browser';
             locationSourceType = 'browser';
             geoPermission = 'granted';
+            locationTimezone = resolveTimezone(lat, lon, null);
         } else {
             // Browser denied — fall through to prompt
             lat = 0; lon = 0;
@@ -312,7 +323,7 @@ async function main() {
         grid.appendChild(cell);
 
         const watch = parsedWatches[i];
-        const env = createWatchEnvironment(watch, lat, lon, getNow);
+        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone);
 
         const face: FaceInstance = {
             watch,
@@ -392,7 +403,7 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled) continue;
             // Rebuild the environment but keep the same watch/parts
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
             // Preserve terminator leaves — their expressions are evaluated
             // against the env each frame by tickLeafAnimations, so they
             // don't need recreating. Recreating them would destroy animation state.
@@ -416,7 +427,7 @@ async function main() {
             const freshWatch = parseWatchXML(fd.xml, 'front');
             face.watch.parts = freshWatch.parts;
             face.watch.initExprs = freshWatch.initExprs;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
             face.cachesBuilt = false;
         }
         // Rebuild caches synchronously (tight loop for responsiveness during ticking)
@@ -913,10 +924,11 @@ async function main() {
             const freshWatch = parseWatchXML(fd.xml, 'front');
             face.watch.parts = freshWatch.parts;
             face.watch.initExprs = freshWatch.initExprs;
-            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow);
+            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone);
             face.cachesBuilt = false;
         }
         updateLocationDisplay();
+        updateTimezoneDisplay();
         buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
     }
 
@@ -1037,13 +1049,15 @@ async function main() {
     }
 
     /** Apply location to the watch AND update the map preview (dialog stays open). */
-    function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean) {
+    function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean, cityTz: string | null = null) {
         locationSource = source;
         locationFullLabel = fullLabel;
         locationSourceType = sourceType;
+        // Resolve timezone for this location
+        locationTimezone = resolveTimezone(newLat, newLon, cityTz);
         rebuildAllForLocation(newLat, newLon);
         if (writeToUrl) {
-            writeUrlState({ lat: newLat, lon: newLon, city: source || null });
+            writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
         }
         // Update the map preview and show Done button
         updateMapPreview(newLat, newLon);
@@ -1065,7 +1079,7 @@ async function main() {
         const loc = await requestBrowserLocation();
         lpUseBrowser.textContent = 'Use browser location';
         if (loc) {
-            applyLocation(loc.lat, loc.lon, '', '', 'browser', false);
+            applyLocation(loc.lat, loc.lon, '', '', 'browser', false, null);
             // Write bloc=1 and clear lat/lon/city so next reload asks browser again
             writeUrlState({ bloc: true, lat: null, lon: null, city: null });
         }
@@ -1121,7 +1135,7 @@ async function main() {
                 div.textContent = r.label;
             }
             div.addEventListener('click', () => {
-                applyLocation(r.lat, r.lon, r.shortLabel, r.label, 'url-city', true);
+                applyLocation(r.lat, r.lon, r.shortLabel, r.label, 'url-city', true, r.timezone);
                 lpCityInput.value = '';
                 lpCityResults.innerHTML = '';
                 // Update lat/lon inputs to reflect selection
@@ -1239,6 +1253,47 @@ async function main() {
     const tpRateLabel = document.getElementById('tp-rate-label')!;
     const tpTransport = document.getElementById('tp-transport')!;
     const tpClose = document.getElementById('tp-close')!;
+
+    /** Format the current timezone for display in the time bar.
+     *  Output: "America/Los_Angeles\u00a0(PDT)\u00a0UTC-7:00" with non-breaking spaces. */
+    function formatTimezoneDisplay(olsonId: string | undefined): string {
+        if (!olsonId) return '';
+        try {
+            const now = new Date();
+            // Get short abbreviation like "PDT", "EST"
+            const shortFmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: olsonId,
+                timeZoneName: 'short',
+            });
+            const shortParts = shortFmt.formatToParts(now);
+            const abbr = shortParts.find(p => p.type === 'timeZoneName')?.value || '';
+
+            // Get UTC offset like "GMT-07:00"
+            const longFmt = new Intl.DateTimeFormat('en-US', {
+                timeZone: olsonId,
+                timeZoneName: 'longOffset',
+            });
+            const longParts = longFmt.formatToParts(now);
+            const offsetStr = longParts.find(p => p.type === 'timeZoneName')?.value || '';
+            // Convert "GMT-07:00" to "UTC-7:00", "GMT+05:30" to "UTC+5:30", "GMT" to "UTC"
+            let utcStr = offsetStr.replace('GMT', 'UTC');
+            // Remove leading zero: UTC-07:00 → UTC-7:00, UTC+05:30 → UTC+5:30
+            utcStr = utcStr.replace(/([+-])0(\d)/, '$1$2');
+
+            // Use non-breaking spaces within to prevent internal wrapping
+            // but the span itself allows line wrap before it
+            return `${olsonId}\u00a0(${abbr})\u00a0${utcStr}`;
+        } catch {
+            return olsonId;
+        }
+    }
+
+    function updateTimezoneDisplay() {
+        const formatted = formatTimezoneDisplay(locationTimezone);
+        locationTzLabel.innerHTML = formatted;
+        lpLocationTz.innerHTML = formatted;
+    }
+    updateTimezoneDisplay();
 
     let popoverOpen = false;
 
@@ -1818,7 +1873,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     // Rebuild environment (picks up new body URL param)
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
                     // Update terminator leaf angles for the new planet's phase
                     // (keep existing leaves so the animation system can interpolate)
                     if (face.terminatorLeaves.length > 0) {

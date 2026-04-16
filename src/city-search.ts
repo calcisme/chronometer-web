@@ -22,6 +22,8 @@ export interface CityResult {
     timezone: string;
     /** True if this is an airport entry */
     isAirport: boolean;
+    /** Equirectangular distance in degrees from the query point (only set by findClosestCity) */
+    distanceDeg?: number;
 }
 
 // City row indices
@@ -286,5 +288,6 @@ export function findClosestCity(lat: number, lon: number): CityResult | null {
         lon: c[C_LON],
         timezone: TZ[c[C_TZ]] || '',
         isAirport: false,
+        distanceDeg: Math.sqrt(bestDist),
     };
 }

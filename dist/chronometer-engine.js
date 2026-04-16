@@ -11842,7 +11842,7 @@
   // src/watch/watch-env.ts
   var DEFAULT_LAT_DEG = 37.205;
   var DEFAULT_LON_DEG = -121.954;
-  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date()) {
+  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
@@ -11866,7 +11866,7 @@
     env.variables.set("planetSaturn", 7 /* Saturn */);
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
     }
@@ -11914,12 +11914,37 @@
     const b = v & 255;
     return `rgba(${r},${g},${b},${a.toFixed(3)})`;
   }
-  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date()) {
+  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone) {
     const { functions } = env;
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
-    const tzOffsetMinutes = now.getTimezoneOffset();
-    const tzOffsetSeconds = -tzOffsetMinutes * 60;
+    let tzOffsetSeconds;
+    if (olsonTimezone) {
+      try {
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonTimezone,
+          timeZoneName: "longOffset"
+        });
+        const parts = fmt.formatToParts(now);
+        const tzPart = parts.find((p) => p.type === "timeZoneName");
+        const tzStr = tzPart?.value || "";
+        if (tzStr === "GMT" || tzStr === "UTC" || !tzStr) {
+          tzOffsetSeconds = 0;
+        } else {
+          const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+          if (m) {
+            const sign = m[1] === "+" ? 1 : -1;
+            tzOffsetSeconds = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
+          } else {
+            tzOffsetSeconds = -now.getTimezoneOffset() * 60;
+          }
+        }
+      } catch {
+        tzOffsetSeconds = -now.getTimezoneOffset() * 60;
+      }
+    } else {
+      tzOffsetSeconds = -now.getTimezoneOffset() * 60;
+    }
     const liveTime = () => {
       const t = getNow();
       const s = t.getSeconds() + t.getMilliseconds() / 1e3;
@@ -14863,7 +14888,8 @@
       tc: tcStr === "1",
       t: tStr !== null ? parseInt(tStr, 10) : null,
       off: offStr !== null ? parseInt(offStr, 10) : null,
-      dir
+      dir,
+      tz: params.get("tz") || null
     };
   }
   function writeUrlState(changes) {
@@ -14922,6 +14948,13 @@
         params.set("dir", changes.dir.toString());
       } else {
         params.delete("dir");
+      }
+    }
+    if ("tz" in changes) {
+      if (changes.tz) {
+        params.set("tz", changes.tz);
+      } else {
+        params.delete("tz");
       }
     }
     params.delete("long");
@@ -15165,7 +15198,8 @@
       lat: c[C_LAT],
       lon: c[C_LON],
       timezone: TZ[c[C_TZ]] || "",
-      isAirport: false
+      isAirport: false,
+      distanceDeg: Math.sqrt(bestDist)
     };
   }
 
@@ -15315,6 +15349,18 @@
     return Promise.all(promises).then((results) => results.some((ok) => ok));
   }
 
+  // src/tz-resolve.ts
+  function resolveTimezone(lat, lon, cityTz) {
+    if (cityTz) return cityTz;
+    const closest = findClosestCity(lat, lon);
+    if (closest?.timezone) return closest.timezone;
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return "Etc/UTC";
+    }
+  }
+
   // src/engine-entry.ts
   function requestBrowserLocation() {
     if (!navigator.geolocation) return Promise.resolve(null);
@@ -15369,6 +15415,7 @@
     const grid = document.getElementById("watch-grid");
     const locationDisplay = document.getElementById("location-display");
     const sourceLabel = document.getElementById("location-source");
+    const locationTzLabel = document.getElementById("location-tz");
     const setLocationBtn = document.getElementById("set-location-btn");
     const locationPrompt = document.getElementById("location-prompt");
     const lpLatInput = document.getElementById("lp-lat");
@@ -15385,6 +15432,7 @@
     const lpStatusSection = document.getElementById("lp-status-section");
     const lpNoLocation = document.getElementById("lp-no-location");
     const lpLocationName = document.getElementById("lp-location-name");
+    const lpLocationTz = document.getElementById("lp-location-tz");
     const lpOsmAttribution = document.getElementById("lp-osm-attribution");
     const lpDoneBtn = document.getElementById("lp-done");
     const lpDialogFooter = lpDoneBtn.parentElement;
@@ -15397,12 +15445,17 @@
     let locationFullLabel = "";
     let locationSourceType = "none";
     let needsPrompt = false;
+    let locationTimezone = urlState.tz || void 0;
     let geoPermission = "unknown";
     if (urlState.lat !== null && urlState.lon !== null) {
       lat = urlState.lat;
       lon = urlState.lon;
       locationSource = urlState.city || "";
       locationSourceType = urlState.city ? "url-city" : "manual";
+      if (!locationTimezone) {
+        locationTimezone = resolveTimezone(lat, lon, null);
+        writeUrlState({ tz: locationTimezone });
+      }
       if (navigator.permissions) {
         try {
           const status = await navigator.permissions.query({ name: "geolocation" });
@@ -15418,6 +15471,7 @@
         locationSource = "from browser";
         locationSourceType = "browser";
         geoPermission = "granted";
+        locationTimezone = resolveTimezone(lat, lon, null);
       } else {
         lat = 0;
         lon = 0;
@@ -15502,7 +15556,7 @@
       cell.appendChild(canvas);
       grid.appendChild(cell);
       const watch = parsedWatches[i];
-      const env = createWatchEnvironment(watch, lat, lon, getNow);
+      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone);
       const face = {
         watch,
         env,
@@ -15563,7 +15617,7 @@
     function rebuildEnvironments() {
       for (const face of faces) {
         if (!face.enabled) continue;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
@@ -15575,7 +15629,7 @@
         const freshWatch = parseWatchXML(fd.xml, "front");
         face.watch.parts = freshWatch.parts;
         face.watch.initExprs = freshWatch.initExprs;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
         face.cachesBuilt = false;
       }
       for (const face of faces) {
@@ -15942,10 +15996,11 @@
         const freshWatch = parseWatchXML(fd.xml, "front");
         face.watch.parts = freshWatch.parts;
         face.watch.initExprs = freshWatch.initExprs;
-        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow);
+        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone);
         face.cachesBuilt = false;
       }
       updateLocationDisplay();
+      updateTimezoneDisplay();
       buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
     }
     function showLocationPrompt(blur) {
@@ -16032,13 +16087,14 @@
       }
       lpLocationName.innerHTML = buildLocationNameHTML();
     }
-    function applyLocation(newLat, newLon, source, fullLabel, sourceType, writeToUrl) {
+    function applyLocation(newLat, newLon, source, fullLabel, sourceType, writeToUrl, cityTz = null) {
       locationSource = source;
       locationFullLabel = fullLabel;
       locationSourceType = sourceType;
+      locationTimezone = resolveTimezone(newLat, newLon, cityTz);
       rebuildAllForLocation(newLat, newLon);
       if (writeToUrl) {
-        writeUrlState({ lat: newLat, lon: newLon, city: source || null });
+        writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
       }
       updateMapPreview(newLat, newLon);
       lpDialogFooter.classList.add("visible");
@@ -16055,7 +16111,7 @@
       const loc = await requestBrowserLocation();
       lpUseBrowser.textContent = "Use browser location";
       if (loc) {
-        applyLocation(loc.lat, loc.lon, "", "", "browser", false);
+        applyLocation(loc.lat, loc.lon, "", "", "browser", false, null);
         writeUrlState({ bloc: true, lat: null, lon: null, city: null });
       }
     });
@@ -16094,7 +16150,7 @@
           div.textContent = r.label;
         }
         div.addEventListener("click", () => {
-          applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true);
+          applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
           lpCityInput.value = "";
           lpCityResults.innerHTML = "";
           lpLatInput.value = r.lat.toFixed(3);
@@ -16187,6 +16243,35 @@
     const tpRateLabel = document.getElementById("tp-rate-label");
     const tpTransport = document.getElementById("tp-transport");
     const tpClose = document.getElementById("tp-close");
+    function formatTimezoneDisplay(olsonId) {
+      if (!olsonId) return "";
+      try {
+        const now = /* @__PURE__ */ new Date();
+        const shortFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "short"
+        });
+        const shortParts = shortFmt.formatToParts(now);
+        const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
+        const longFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "longOffset"
+        });
+        const longParts = longFmt.formatToParts(now);
+        const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
+        let utcStr = offsetStr.replace("GMT", "UTC");
+        utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
+        return `${olsonId}\xA0(${abbr})\xA0${utcStr}`;
+      } catch {
+        return olsonId;
+      }
+    }
+    function updateTimezoneDisplay() {
+      const formatted = formatTimezoneDisplay(locationTimezone);
+      locationTzLabel.innerHTML = formatted;
+      lpLocationTz.innerHTML = formatted;
+    }
+    updateTimezoneDisplay();
     let popoverOpen = false;
     const unitToRateIndex = {
       "minute": 1,
@@ -16606,7 +16691,7 @@
           window.history.replaceState({}, "", url.toString());
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);

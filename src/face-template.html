@@ -66,6 +66,25 @@
             border-top: 1px solid #2a2a3e;
         }
 
+        #location-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        #location-info-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #location-tz {
+            color: #667;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
         #location-display {
             color: #888;
         }
@@ -163,6 +182,7 @@
             align-items: center;
             gap: 8px;
         }
+
 
         #time-bar-date {
             color: #99b;
@@ -487,8 +507,13 @@
             <button class="time-bar-btn" id="time-bar-now">Now</button>
         </div>
         <div id="location-panel">
-            <span id="location-display"></span>
-            <span id="location-source"></span>
+            <div id="location-info">
+                <div id="location-info-row">
+                    <span id="location-display"></span>
+                    <span id="location-source"></span>
+                </div>
+                <span id="location-tz"></span>
+            </div>
             <button id="set-location-btn">Location</button>
         </div>
 

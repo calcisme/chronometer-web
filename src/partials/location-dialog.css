@@ -357,6 +357,14 @@
             font-size: 11px;
         }
 
+        .lp-location-tz {
+            font-size: 11px;
+            color: #778;
+            text-align: center;
+            margin-top: 2px;
+            white-space: nowrap;
+        }
+
         /* No-location placeholder */
         .lp-no-location {
             margin-bottom: 14px;

@@ -205,7 +205,8 @@
       lat: c[C_LAT],
       lon: c[C_LON],
       timezone: TZ[c[C_TZ]] || "",
-      isAirport: false
+      isAirport: false,
+      distanceDeg: Math.sqrt(bestDist)
     };
   }
 
