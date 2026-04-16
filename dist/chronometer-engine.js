@@ -15437,7 +15437,7 @@
     const lpDoneBtn = document.getElementById("lp-done");
     const lpDialogFooter = lpDoneBtn.parentElement;
     initNavigationLinks();
-    loadCityData().catch(() => {
+    loadCityData().then(() => updateLocationDisplay()).catch(() => {
     });
     const urlState = readUrlState();
     let lat, lon;
@@ -15490,7 +15490,29 @@
     }
     function updateLocationDisplay() {
       locationDisplay.innerHTML = `Latitude&nbsp;<span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude&nbsp;<span style="font-family:monospace">${lon.toFixed(3)}</span>`;
-      sourceLabel.textContent = locationSource;
+      if (locationSource) {
+        sourceLabel.textContent = locationSource;
+      } else if (isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
+        const closest = findClosestCity(lat, lon);
+        if (closest) {
+          const distKm = haversineKm(lat, lon, closest.lat, closest.lon);
+          const THRESHOLD_KM = 16;
+          if (distKm > THRESHOLD_KM) {
+            const dir = compassBearing(closest.lat, closest.lon, lat, lon);
+            if (useImperial()) {
+              sourceLabel.textContent = `${Math.round(distKm * 0.621371)}\xA0mi ${dir} of ${closest.shortLabel}`;
+            } else {
+              sourceLabel.textContent = `${Math.round(distKm)}\xA0km ${dir} of ${closest.shortLabel}`;
+            }
+          } else {
+            sourceLabel.textContent = closest.shortLabel;
+          }
+        } else {
+          sourceLabel.textContent = "";
+        }
+      } else {
+        sourceLabel.textContent = "";
+      }
     }
     updateLocationDisplay();
     const parsedWatches = [];
@@ -16052,6 +16074,45 @@
       grid.classList.remove("blurred");
     }
     const isFileProtocol = window.location.protocol === "file:";
+    function useImperial() {
+      const locale = navigator.language || "en-US";
+      const region = locale.split("-")[1]?.toUpperCase() || "";
+      return ["US", "GB", "MM", "LR"].includes(region);
+    }
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+    function compassBearing(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI / 180;
+      const dLon = (lon2 - lon1) * toRad;
+      const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+      const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+      let bearing = Math.atan2(y, x) * 180 / Math.PI;
+      bearing = (bearing + 360) % 360;
+      const dirs = [
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW"
+      ];
+      return dirs[Math.round(bearing / 22.5) % 16];
+    }
     function buildLocationNameHTML() {
       if (locationSourceType === "url-city" && locationFullLabel) {
         return `${locationFullLabel} <span class="lp-loc-source">(from cities database)</span>`;
@@ -16060,6 +16121,19 @@
         const closest = findClosestCity(lat, lon);
         const sourceLabel2 = locationSourceType === "browser" ? "(from browser)" : "(manually entered)";
         if (closest) {
+          const distKm = haversineKm(lat, lon, closest.lat, closest.lon);
+          const THRESHOLD_KM = 16;
+          if (distKm > THRESHOLD_KM) {
+            const dir = compassBearing(closest.lat, closest.lon, lat, lon);
+            let distStr;
+            if (useImperial()) {
+              const mi = Math.round(distKm * 0.621371);
+              distStr = `${mi}\xA0mi`;
+            } else {
+              distStr = `${Math.round(distKm)}\xA0km`;
+            }
+            return `${distStr} ${dir} of ${closest.label} <span class="lp-loc-source">${sourceLabel2}</span>`;
+          }
           return `${closest.label} <span class="lp-loc-source">${sourceLabel2}</span>`;
         }
         return `${lat.toFixed(3)}, ${lon.toFixed(3)} <span class="lp-loc-source">${sourceLabel2}</span>`;

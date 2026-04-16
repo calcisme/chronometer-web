@@ -177,9 +177,9 @@ async function main() {
     initNavigationLinks();
 
     // Preload city database in the background so it's ready when the user
-    // opens the location dialog. This is fire-and-forget — errors are silently
-    // ignored here since loadCityData() will report them on actual use.
-    loadCityData().catch(() => {});
+    // opens the location dialog. Once loaded, update the location display
+    // to show the nearest city name for browser/manual locations.
+    loadCityData().then(() => updateLocationDisplay()).catch(() => {});
 
     // --- Resolve location ---
     const urlState = readUrlState();
@@ -240,7 +240,32 @@ async function main() {
 
     function updateLocationDisplay() {
         locationDisplay.innerHTML = `Latitude&nbsp;<span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude&nbsp;<span style="font-family:monospace">${lon.toFixed(3)}</span>`;
-        sourceLabel.textContent = locationSource;
+        // Show city name or "X mi DIR of CityName" for all source types
+        if (locationSource) {
+            // User picked a city from search — use the short label directly
+            sourceLabel.textContent = locationSource;
+        } else if (isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
+            // Manual or browser location — find closest city and describe
+            const closest = findClosestCity(lat, lon);
+            if (closest) {
+                const distKm = haversineKm(lat, lon, closest.lat, closest.lon);
+                const THRESHOLD_KM = 16; // ~10 miles
+                if (distKm > THRESHOLD_KM) {
+                    const dir = compassBearing(closest.lat, closest.lon, lat, lon);
+                    if (useImperial()) {
+                        sourceLabel.textContent = `${Math.round(distKm * 0.621371)}\u00a0mi ${dir} of ${closest.shortLabel}`;
+                    } else {
+                        sourceLabel.textContent = `${Math.round(distKm)}\u00a0km ${dir} of ${closest.shortLabel}`;
+                    }
+                } else {
+                    sourceLabel.textContent = closest.shortLabel;
+                }
+            } else {
+                sourceLabel.textContent = '';
+            }
+        } else {
+            sourceLabel.textContent = '';
+        }
     }
     updateLocationDisplay();
 
@@ -1002,6 +1027,48 @@ async function main() {
      *   - If locationSourceType is 'manual'  → find closest city + "(manually entered)"
      *   - If no city data loaded yet, just show coords
      */
+    /**
+     * Detect whether the browser locale prefers miles (US, UK, Myanmar, Liberia)
+     * or kilometers (everyone else).
+     */
+    function useImperial(): boolean {
+        const locale = navigator.language || 'en-US';
+        const region = locale.split('-')[1]?.toUpperCase() || '';
+        // US, UK (road signs in miles), Myanmar, Liberia
+        return ['US', 'GB', 'MM', 'LR'].includes(region);
+    }
+
+    /**
+     * Compute great-circle distance in km using the Haversine formula.
+     */
+    function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const R = 6371; // Earth radius in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /**
+     * Compute initial bearing from point 1 to point 2, returned as a
+     * 16-point compass direction (N, NNE, NE, ENE, E, ...).
+     */
+    function compassBearing(lat1: number, lon1: number, lat2: number, lon2: number): string {
+        const toRad = Math.PI / 180;
+        const dLon = (lon2 - lon1) * toRad;
+        const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+        const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+                  Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+        let bearing = Math.atan2(y, x) * 180 / Math.PI;
+        bearing = (bearing + 360) % 360;
+
+        const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE',
+                      'S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        return dirs[Math.round(bearing / 22.5) % 16];
+    }
+
     function buildLocationNameHTML(): string {
         if (locationSourceType === 'url-city' && locationFullLabel) {
             return `${locationFullLabel} <span class="lp-loc-source">(from cities database)</span>`;
@@ -1011,6 +1078,20 @@ async function main() {
             const closest = findClosestCity(lat, lon);
             const sourceLabel = locationSourceType === 'browser' ? '(from browser)' : '(manually entered)';
             if (closest) {
+                const distKm = haversineKm(lat, lon, closest.lat, closest.lon);
+                const THRESHOLD_KM = 16; // ~10 miles
+                if (distKm > THRESHOLD_KM) {
+                    // "253 mi NNE of Princeville, HA, US (manually entered)"
+                    const dir = compassBearing(closest.lat, closest.lon, lat, lon);
+                    let distStr: string;
+                    if (useImperial()) {
+                        const mi = Math.round(distKm * 0.621371);
+                        distStr = `${mi}\u00a0mi`;
+                    } else {
+                        distStr = `${Math.round(distKm)}\u00a0km`;
+                    }
+                    return `${distStr} ${dir} of ${closest.label} <span class="lp-loc-source">${sourceLabel}</span>`;
+                }
                 return `${closest.label} <span class="lp-loc-source">${sourceLabel}</span>`;
             }
             return `${lat.toFixed(3)}, ${lon.toFixed(3)} <span class="lp-loc-source">${sourceLabel}</span>`;
