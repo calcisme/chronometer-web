@@ -101,12 +101,51 @@ export function computeTzDeltaMs(olsonTimezone: string | undefined, referenceDat
  * @param observerLonDeg - Observer longitude in degrees (negative = west). Defaults to San Jose, CA.
  * @param getNow - Time source function. Defaults to () => new Date() (real time).
  */
+
+// --- Exported Terra types and defaults ---
+
+/** A city entry for a Terra worldtime ring slot. */
+export interface TerraSlot {
+    cityName: string;
+    olsonId: string;
+    lat: number;
+    lon: number;
+}
+
+/** Default ring slot cities (indexed by env slot 5–28). */
+export const TERRA_RING_DEFAULTS: Record<number, TerraSlot> = {
+    5:  { cityName: 'Pago Pago',      olsonId: 'Pacific/Pago_Pago',      lat: -14.27806, lon: -170.70250 },
+    6:  { cityName: 'Honolulu',       olsonId: 'Pacific/Honolulu',       lat:  21.30694, lon: -157.85834 },
+    7:  { cityName: 'Anchorage',      olsonId: 'America/Juneau',         lat:  61.21806, lon: -149.90028 },
+    8:  { cityName: 'Los Angeles',    olsonId: 'America/Los_Angeles',    lat:  34.05223, lon: -118.24368 },
+    9:  { cityName: 'Denver',         olsonId: 'America/Denver',         lat:  39.73915, lon: -104.98470 },
+    10: { cityName: 'Chicago',        olsonId: 'America/Chicago',        lat:  41.85003, lon:  -87.65005 },
+    11: { cityName: 'New York',       olsonId: 'America/New_York',       lat:  40.71427, lon:  -74.00597 },
+    12: { cityName: 'Santiago',       olsonId: 'America/Santiago',       lat: -33.42628, lon:  -70.56655 },
+    13: { cityName: 'Rio de Janeiro', olsonId: 'America/Sao_Paulo',      lat: -22.90278, lon:  -43.20750 },
+    14: { cityName: 'Grytviken',      olsonId: 'Atlantic/South_Georgia', lat: -54.27667, lon:  -36.51167 },
+    15: { cityName: 'Dakar',          olsonId: 'Africa/Dakar',           lat:  14.74208, lon:  -17.43978 },
+    16: { cityName: 'London',         olsonId: 'Europe/London',          lat:  51.50842, lon:   -0.12553 },
+    17: { cityName: 'Paris',          olsonId: 'Europe/Paris',           lat:  48.85341, lon:    2.34880 },
+    18: { cityName: 'Cairo',          olsonId: 'Africa/Cairo',           lat:  30.05000, lon:   31.25000 },
+    19: { cityName: 'Moscow',         olsonId: 'Europe/Moscow',          lat:  55.75222, lon:   37.61555 },
+    20: { cityName: 'Dubai',          olsonId: 'Asia/Dubai',             lat:  25.25222, lon:   55.28000 },
+    21: { cityName: 'Delhi',          olsonId: 'Asia/Kolkata',           lat:  28.66667, lon:   77.21666 },
+    22: { cityName: 'Dhaka',          olsonId: 'Asia/Dhaka',             lat:  23.72305, lon:   90.40861 },
+    23: { cityName: 'Bangkok',        olsonId: 'Asia/Bangkok',           lat:  13.75000, lon:  100.51667 },
+    24: { cityName: 'Hong Kong',      olsonId: 'Asia/Hong_Kong',         lat:  22.28401, lon:  114.15007 },
+    25: { cityName: 'Tokyo',          olsonId: 'Asia/Tokyo',             lat:  35.68953, lon:  139.69168 },
+    26: { cityName: 'Sydney',         olsonId: 'Australia/Sydney',       lat: -33.86785, lon:  151.20732 },
+    27: { cityName: 'Nouméa',         olsonId: 'Pacific/Noumea',         lat: -22.26667, lon:  166.45000 },
+    28: { cityName: 'Auckland',       olsonId: 'Pacific/Auckland',       lat: -36.86666, lon:  174.76666 },
+};
 export function createWatchEnvironment(
     watch: Watch,
     observerLatDeg: number = DEFAULT_LAT_DEG,
     observerLonDeg: number = DEFAULT_LON_DEG,
     getNow: () => Date = () => new Date(),
     olsonTimezone?: string,
+    slotOverrides?: Record<number, TerraSlot>,
 ): Environment {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
@@ -140,7 +179,7 @@ export function createWatchEnvironment(
     env.variables.set('planetNeptune', ECPlanetNumber.Neptune);
 
     // Register time functions (uses the provided getNow source)
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides);
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
@@ -224,6 +263,7 @@ function registerTimeFunctions(
     OBSERVER_LON: number,
     getNow: () => Date = () => new Date(),
     olsonTimezone?: string,
+    slotOverrides?: Record<number, TerraSlot>,
 ): void {
     const { functions } = env;
 
@@ -1085,41 +1125,16 @@ function registerTimeFunctions(
     // The iOS ringDefaults[] array from ECFactoryUI.m defines the default
     // city for each ring slot.  Ring sector 0 corresponds to env slot 5.
 
-    interface TerraSlot {
-        cityName: string;
-        olsonId: string;
-        lat: number;
-        lon: number;
+    // Build working slot data: start with defaults, apply any overrides.
+    const terraRingDefaults: Record<number, TerraSlot> = {};
+    for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
+        terraRingDefaults[Number(k)] = { ...v };
     }
-
-    // Ring slots 5–28 (24 cities), indexed by envSlot number.
-    // Slots 0–4 are unused on the front face (slot 0 = device, 1–4 = back subdials).
-    const terraRingDefaults: Record<number, TerraSlot> = {
-        5:  { cityName: 'Pago Pago',      olsonId: 'Pacific/Pago_Pago',      lat: -14.27806, lon: -170.70250 },
-        6:  { cityName: 'Honolulu',       olsonId: 'Pacific/Honolulu',       lat:  21.30694, lon: -157.85834 },
-        7:  { cityName: 'Anchorage',      olsonId: 'America/Juneau',         lat:  61.21806, lon: -149.90028 },
-        8:  { cityName: 'Los Angeles',    olsonId: 'America/Los_Angeles',    lat:  34.05223, lon: -118.24368 },
-        9:  { cityName: 'Denver',         olsonId: 'America/Denver',         lat:  39.73915, lon: -104.98470 },
-        10: { cityName: 'Chicago',        olsonId: 'America/Chicago',        lat:  41.85003, lon:  -87.65005 },
-        11: { cityName: 'New York',       olsonId: 'America/New_York',       lat:  40.71427, lon:  -74.00597 },
-        12: { cityName: 'Santiago',       olsonId: 'America/Santiago',       lat: -33.42628, lon:  -70.56655 },
-        13: { cityName: 'Rio de Janeiro', olsonId: 'America/Sao_Paulo',      lat: -22.90278, lon:  -43.20750 },
-        14: { cityName: 'Grytviken',      olsonId: 'Atlantic/South_Georgia', lat: -54.27667, lon:  -36.51167 },
-        15: { cityName: 'Dakar',          olsonId: 'Africa/Dakar',           lat:  14.74208, lon:  -17.43978 },
-        16: { cityName: 'London',         olsonId: 'Europe/London',          lat:  51.50842, lon:   -0.12553 },
-        17: { cityName: 'Paris',          olsonId: 'Europe/Paris',           lat:  48.85341, lon:    2.34880 },
-        18: { cityName: 'Cairo',          olsonId: 'Africa/Cairo',           lat:  30.05000, lon:   31.25000 },
-        19: { cityName: 'Moscow',         olsonId: 'Europe/Moscow',          lat:  55.75222, lon:   37.61555 },
-        20: { cityName: 'Dubai',          olsonId: 'Asia/Dubai',             lat:  25.25222, lon:   55.28000 },
-        21: { cityName: 'Delhi',          olsonId: 'Asia/Kolkata',           lat:  28.66667, lon:   77.21666 },
-        22: { cityName: 'Dhaka',          olsonId: 'Asia/Dhaka',             lat:  23.72305, lon:   90.40861 },
-        23: { cityName: 'Bangkok',        olsonId: 'Asia/Bangkok',           lat:  13.75000, lon:  100.51667 },
-        24: { cityName: 'Hong Kong',      olsonId: 'Asia/Hong_Kong',         lat:  22.28401, lon:  114.15007 },
-        25: { cityName: 'Tokyo',          olsonId: 'Asia/Tokyo',             lat:  35.68953, lon:  139.69168 },
-        26: { cityName: 'Sydney',         olsonId: 'Australia/Sydney',       lat: -33.86785, lon:  151.20732 },
-        27: { cityName: 'Nouméa',         olsonId: 'Pacific/Noumea',         lat: -22.26667, lon:  166.45000 },
-        28: { cityName: 'Auckland',       olsonId: 'Pacific/Auckland',       lat: -36.86666, lon:  174.76666 },
-    };
+    if (slotOverrides) {
+        for (const [k, v] of Object.entries(slotOverrides)) {
+            terraRingDefaults[Number(k)] = { ...v };
+        }
+    }
 
     // Export the slot data, getNow, and a DST range function
     // so the dynamic ring renderer can access them.

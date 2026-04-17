@@ -1,0 +1,52 @@
+        <!-- Terra city customization dialog (hidden by default) -->
+        <div id="terra-city-dialog" style="display:none">
+            <div class="tc-backdrop"></div>
+            <div class="tc-dialog">
+                <h3 class="tc-title">Change cities on Terra</h3>
+
+                <!-- Status area: shows selected city or placeholder -->
+                <div class="tc-status" id="tc-status">
+                    <div class="tc-no-selection" id="tc-no-selection">No city selected</div>
+                    <div class="tc-selected-city" id="tc-selected-city" style="display:none">
+                        <div class="tc-city-name" id="tc-city-name"></div>
+                        <div class="tc-city-tz" id="tc-city-tz"></div>
+                    </div>
+                </div>
+
+                <!-- City search -->
+                <div class="tc-search-section">
+                    <div class="tc-search-label">Search for a city</div>
+                    <div class="tc-search-input-wrap">
+                        <input type="text" id="tc-city-input" placeholder="Search city or airport code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <div id="tc-city-results"></div>
+                </div>
+
+                <!-- Slot picker (shown when city has 2 valid slots) -->
+                <div class="tc-slot-picker" id="tc-slot-picker" style="display:none">
+                    <div class="tc-slot-label">This city can replace either of the following cities:</div>
+                    <div class="tc-slot-choices" id="tc-slot-choices"></div>
+                </div>
+
+                <!-- Error/info messages -->
+                <div class="tc-message" id="tc-message" style="display:none"></div>
+
+                <!-- Footer -->
+                <div class="tc-dialog-footer">
+                    <button class="tc-btn tc-btn-reset" id="tc-reset">Reset to defaults</button>
+                    <button class="tc-btn tc-btn-cancel" id="tc-cancel">Cancel</button>
+                    <button class="tc-btn tc-btn-done" id="tc-done">Done</button>
+                </div>
+            </div>
+
+            <!-- Nested confirmation modal for Reset -->
+            <div class="tc-confirm-overlay" id="tc-confirm-overlay" style="display:none">
+                <div class="tc-confirm-box">
+                    <div class="tc-confirm-text">This will remove all custom city labels on this face.</div>
+                    <div class="tc-confirm-buttons">
+                        <button class="tc-btn tc-btn-cancel" id="tc-confirm-no">Cancel</button>
+                        <button class="tc-btn tc-btn-reset" id="tc-confirm-yes">Reset to defaults</button>
+                    </div>
+                </div>
+            </div>
+        </div>

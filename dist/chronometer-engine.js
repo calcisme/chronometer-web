@@ -11916,7 +11916,33 @@
     }
     return (targetOffsetSec - browserOffsetSec) * 1e3;
   }
-  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone) {
+  var TERRA_RING_DEFAULTS = {
+    5: { cityName: "Pago Pago", olsonId: "Pacific/Pago_Pago", lat: -14.27806, lon: -170.7025 },
+    6: { cityName: "Honolulu", olsonId: "Pacific/Honolulu", lat: 21.30694, lon: -157.85834 },
+    7: { cityName: "Anchorage", olsonId: "America/Juneau", lat: 61.21806, lon: -149.90028 },
+    8: { cityName: "Los Angeles", olsonId: "America/Los_Angeles", lat: 34.05223, lon: -118.24368 },
+    9: { cityName: "Denver", olsonId: "America/Denver", lat: 39.73915, lon: -104.9847 },
+    10: { cityName: "Chicago", olsonId: "America/Chicago", lat: 41.85003, lon: -87.65005 },
+    11: { cityName: "New York", olsonId: "America/New_York", lat: 40.71427, lon: -74.00597 },
+    12: { cityName: "Santiago", olsonId: "America/Santiago", lat: -33.42628, lon: -70.56655 },
+    13: { cityName: "Rio de Janeiro", olsonId: "America/Sao_Paulo", lat: -22.90278, lon: -43.2075 },
+    14: { cityName: "Grytviken", olsonId: "Atlantic/South_Georgia", lat: -54.27667, lon: -36.51167 },
+    15: { cityName: "Dakar", olsonId: "Africa/Dakar", lat: 14.74208, lon: -17.43978 },
+    16: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
+    17: { cityName: "Paris", olsonId: "Europe/Paris", lat: 48.85341, lon: 2.3488 },
+    18: { cityName: "Cairo", olsonId: "Africa/Cairo", lat: 30.05, lon: 31.25 },
+    19: { cityName: "Moscow", olsonId: "Europe/Moscow", lat: 55.75222, lon: 37.61555 },
+    20: { cityName: "Dubai", olsonId: "Asia/Dubai", lat: 25.25222, lon: 55.28 },
+    21: { cityName: "Delhi", olsonId: "Asia/Kolkata", lat: 28.66667, lon: 77.21666 },
+    22: { cityName: "Dhaka", olsonId: "Asia/Dhaka", lat: 23.72305, lon: 90.40861 },
+    23: { cityName: "Bangkok", olsonId: "Asia/Bangkok", lat: 13.75, lon: 100.51667 },
+    24: { cityName: "Hong Kong", olsonId: "Asia/Hong_Kong", lat: 22.28401, lon: 114.15007 },
+    25: { cityName: "Tokyo", olsonId: "Asia/Tokyo", lat: 35.68953, lon: 139.69168 },
+    26: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 },
+    27: { cityName: "Noum\xE9a", olsonId: "Pacific/Noumea", lat: -22.26667, lon: 166.45 },
+    28: { cityName: "Auckland", olsonId: "Pacific/Auckland", lat: -36.86666, lon: 174.76666 }
+  };
+  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
@@ -11940,7 +11966,7 @@
     env.variables.set("planetSaturn", 7 /* Saturn */);
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
     }
@@ -11988,7 +12014,7 @@
     const b = v & 255;
     return `rgba(${r},${g},${b},${a.toFixed(3)})`;
   }
-  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone) {
+  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides) {
     const { functions } = env;
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
@@ -12627,32 +12653,15 @@
         tzOffsetSeconds
       );
     });
-    const terraRingDefaults = {
-      5: { cityName: "Pago Pago", olsonId: "Pacific/Pago_Pago", lat: -14.27806, lon: -170.7025 },
-      6: { cityName: "Honolulu", olsonId: "Pacific/Honolulu", lat: 21.30694, lon: -157.85834 },
-      7: { cityName: "Anchorage", olsonId: "America/Juneau", lat: 61.21806, lon: -149.90028 },
-      8: { cityName: "Los Angeles", olsonId: "America/Los_Angeles", lat: 34.05223, lon: -118.24368 },
-      9: { cityName: "Denver", olsonId: "America/Denver", lat: 39.73915, lon: -104.9847 },
-      10: { cityName: "Chicago", olsonId: "America/Chicago", lat: 41.85003, lon: -87.65005 },
-      11: { cityName: "New York", olsonId: "America/New_York", lat: 40.71427, lon: -74.00597 },
-      12: { cityName: "Santiago", olsonId: "America/Santiago", lat: -33.42628, lon: -70.56655 },
-      13: { cityName: "Rio de Janeiro", olsonId: "America/Sao_Paulo", lat: -22.90278, lon: -43.2075 },
-      14: { cityName: "Grytviken", olsonId: "Atlantic/South_Georgia", lat: -54.27667, lon: -36.51167 },
-      15: { cityName: "Dakar", olsonId: "Africa/Dakar", lat: 14.74208, lon: -17.43978 },
-      16: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
-      17: { cityName: "Paris", olsonId: "Europe/Paris", lat: 48.85341, lon: 2.3488 },
-      18: { cityName: "Cairo", olsonId: "Africa/Cairo", lat: 30.05, lon: 31.25 },
-      19: { cityName: "Moscow", olsonId: "Europe/Moscow", lat: 55.75222, lon: 37.61555 },
-      20: { cityName: "Dubai", olsonId: "Asia/Dubai", lat: 25.25222, lon: 55.28 },
-      21: { cityName: "Delhi", olsonId: "Asia/Kolkata", lat: 28.66667, lon: 77.21666 },
-      22: { cityName: "Dhaka", olsonId: "Asia/Dhaka", lat: 23.72305, lon: 90.40861 },
-      23: { cityName: "Bangkok", olsonId: "Asia/Bangkok", lat: 13.75, lon: 100.51667 },
-      24: { cityName: "Hong Kong", olsonId: "Asia/Hong_Kong", lat: 22.28401, lon: 114.15007 },
-      25: { cityName: "Tokyo", olsonId: "Asia/Tokyo", lat: 35.68953, lon: 139.69168 },
-      26: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 },
-      27: { cityName: "Noum\xE9a", olsonId: "Pacific/Noumea", lat: -22.26667, lon: 166.45 },
-      28: { cityName: "Auckland", olsonId: "Pacific/Auckland", lat: -36.86666, lon: 174.76666 }
-    };
+    const terraRingDefaults = {};
+    for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
+      terraRingDefaults[Number(k)] = { ...v };
+    }
+    if (slotOverrides) {
+      for (const [k, v] of Object.entries(slotOverrides)) {
+        terraRingDefaults[Number(k)] = { ...v };
+      }
+    }
     env._terraSlots = terraRingDefaults;
     env._getNow = getNow;
     env._getDSTRange = (slotNum) => {
@@ -13194,6 +13203,76 @@
       leafCenterAngle -= 2 * Math.PI;
     }
     return leafCenterAngle;
+  }
+
+  // src/watch/terra-slots.ts
+  var FIRST_ENV_SLOT = 5;
+  var UTC_SECTOR_NUMBER = 11;
+  function getSlotOffsetHour(envSlot) {
+    return envSlot - FIRST_ENV_SLOT - UTC_SECTOR_NUMBER;
+  }
+  function computeTzCenter(olsonId) {
+    try {
+      const now = /* @__PURE__ */ new Date();
+      const jan = new Date(now.getFullYear(), 0, 1);
+      const jul = new Date(now.getFullYear(), 6, 1);
+      const janOff = getTzOffsetMinutes(olsonId, jan);
+      const julOff = getTzOffsetMinutes(olsonId, jul);
+      if (janOff === julOff) {
+        return janOff;
+      }
+      return (janOff + julOff) / 2;
+    } catch {
+      return 0;
+    }
+  }
+  function getTzOffsetMinutes(olsonId, date) {
+    try {
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: olsonId,
+        timeZoneName: "longOffset"
+      });
+      const parts = fmt.formatToParts(date);
+      const tzPart = parts.find((p) => p.type === "timeZoneName");
+      if (!tzPart) return 0;
+      const tzStr = tzPart.value;
+      if (tzStr === "GMT" || tzStr === "UTC") return 0;
+      const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+      if (!m) return 0;
+      const sign = m[1] === "+" ? 1 : -1;
+      const hours = parseInt(m[2], 10);
+      const minutes = m[3] ? parseInt(m[3], 10) : 0;
+      return sign * (hours * 60 + minutes);
+    } catch {
+      return 0;
+    }
+  }
+  function validTZCenteredAt(tzCenter, offsetHours) {
+    const centerSlotMinutes = offsetHours * 60 + 30;
+    let distance = centerSlotMinutes - tzCenter;
+    if (distance > 12 * 60) {
+      distance -= 24 * 60;
+    } else if (distance < -12 * 60) {
+      distance += 24 * 60;
+    }
+    return Math.abs(distance) <= 30;
+  }
+  function validSlotsForTz(olsonId) {
+    const tzCenter = computeTzCenter(olsonId);
+    const result = [];
+    for (let slot = 5; slot <= 28; slot++) {
+      const offsetHour = getSlotOffsetHour(slot);
+      if (validTZCenteredAt(tzCenter, offsetHour)) {
+        result.push(slot);
+      }
+    }
+    return result;
+  }
+  function formatSlotOffset(envSlot) {
+    const h = getSlotOffsetHour(envSlot);
+    if (h === 0) return "UTC\xB10";
+    const sign = h > 0 ? "+" : "";
+    return `UTC${sign}${h}`;
   }
 
   // src/watch/renderer.ts
@@ -15685,6 +15764,29 @@
       }
     }
     const getNow = () => timeController.getDisplayTime();
+    const isTerra = faceDataArray.length === 1 && faceDataArray[0].name === "Terra";
+    let terraSlotOverrides;
+    if (isTerra) {
+      const params = new URLSearchParams(window.location.search);
+      const overrides = {};
+      for (let slot = 5; slot <= 28; slot++) {
+        const name = params.get(`s${slot}`);
+        const tz = params.get(`s${slot}tz`);
+        const latStr = params.get(`s${slot}lat`);
+        const lonStr = params.get(`s${slot}lon`);
+        if (name && tz) {
+          overrides[slot] = {
+            cityName: name,
+            olsonId: tz,
+            lat: latStr ? parseFloat(latStr) : 0,
+            lon: lonStr ? parseFloat(lonStr) : 0
+          };
+        }
+      }
+      if (Object.keys(overrides).length > 0) {
+        terraSlotOverrides = overrides;
+      }
+    }
     let cols = 1, rows = 1;
     const faces = [];
     for (let i = 0; i < parsedWatches.length; i++) {
@@ -15695,7 +15797,7 @@
       cell.appendChild(canvas);
       grid.appendChild(cell);
       const watch = parsedWatches[i];
-      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone);
+      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
       const face = {
         watch,
         env,
@@ -15772,7 +15874,7 @@
     function rebuildEnvironments() {
       for (const face of faces) {
         if (!face.enabled) continue;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
@@ -16132,7 +16234,7 @@
       lon = newLon;
       for (const face of faces) {
         if (!face.enabled) continue;
-        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone);
+        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, terraSlotOverrides);
         if (face.terminatorLeaves.length > 0) {
           updateLeafAngles(face.terminatorLeaves, face.env);
           resetLeafSchedules(face.terminatorLeaves);
@@ -16899,7 +17001,7 @@
           window.history.replaceState({}, "", url.toString());
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -16957,6 +17059,258 @@
         });
         nextBtn.addEventListener("click", () => {
           selectPlanet2((selectedIdx + 1) % planetOrder.length);
+        });
+      }
+    }
+    if (isTerra) {
+      const tcDialog = document.getElementById("terra-city-dialog");
+      const tcCityInput = document.getElementById("tc-city-input");
+      const tcCityResults = document.getElementById("tc-city-results");
+      const tcSlotPicker = document.getElementById("tc-slot-picker");
+      const tcSlotChoices = document.getElementById("tc-slot-choices");
+      const tcMessage = document.getElementById("tc-message");
+      const tcNoSelection = document.getElementById("tc-no-selection");
+      const tcSelectedCity = document.getElementById("tc-selected-city");
+      const tcCityName = document.getElementById("tc-city-name");
+      const tcCityTz = document.getElementById("tc-city-tz");
+      const tcResetBtn = document.getElementById("tc-reset");
+      const tcCancelBtn = document.getElementById("tc-cancel");
+      const tcDoneBtn = document.getElementById("tc-done");
+      if (tcDialog && tcCityInput && tcCityResults && tcSlotPicker && tcSlotChoices && tcMessage && tcDoneBtn && tcResetBtn) {
+        let getCurrentSlots2 = function() {
+          const slots = {};
+          for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
+            slots[Number(k)] = { ...v };
+          }
+          if (terraSlotOverrides) {
+            for (const [k, v] of Object.entries(terraSlotOverrides)) {
+              slots[Number(k)] = { ...v };
+            }
+          }
+          return slots;
+        }, writeTerraOverridesToUrl2 = function() {
+          const params = new URLSearchParams(window.location.search);
+          for (let slot = 5; slot <= 28; slot++) {
+            params.delete(`s${slot}`);
+            params.delete(`s${slot}tz`);
+            params.delete(`s${slot}lat`);
+            params.delete(`s${slot}lon`);
+          }
+          if (terraSlotOverrides) {
+            for (const [slotStr, data] of Object.entries(terraSlotOverrides)) {
+              params.set(`s${slotStr}`, data.cityName);
+              params.set(`s${slotStr}tz`, data.olsonId);
+              params.set(`s${slotStr}lat`, data.lat.toFixed(3));
+              params.set(`s${slotStr}lon`, data.lon.toFixed(3));
+            }
+          }
+          params.delete("long");
+          params.delete("loc");
+          const qs = params.toString();
+          const newUrl = window.location.pathname + (qs ? "?" + qs : "");
+          history.replaceState(null, "", newUrl);
+        }, rebuildTerraForSlotChange2 = function() {
+          for (const face of faces) {
+            if (!face.enabled) continue;
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+            if (face.terminatorLeaves.length > 0) {
+              updateLeafAngles(face.terminatorLeaves, face.env);
+              resetLeafSchedules(face.terminatorLeaves);
+              face.lastTerminatorRebuild = 0;
+            }
+            face.env._terraCityKnockout = null;
+            const { canvas, watch, env, images, scale } = face;
+            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+            for (const hs of face.handStates) {
+              hs.nextUpdateTime = 0;
+            }
+          }
+          stopScheduler();
+          startScheduler();
+        }, assignCityToSlot2 = function(slot, city) {
+          const currentSlots = getCurrentSlots2();
+          const previousCity = currentSlots[slot]?.cityName || "Unknown";
+          if (!terraSlotOverrides) {
+            terraSlotOverrides = {};
+          }
+          terraSlotOverrides[slot] = {
+            cityName: city.shortLabel,
+            olsonId: city.timezone,
+            lat: city.lat,
+            lon: city.lon
+          };
+          writeTerraOverridesToUrl2();
+          rebuildTerraForSlotChange2();
+          showTcMessage2(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, "info");
+        }, showTcMessage2 = function(text, type) {
+          tcMessage.textContent = text;
+          tcMessage.className = `tc-message tc-message-${type}`;
+          tcMessage.style.display = "";
+        }, hideTcMessage2 = function() {
+          tcMessage.style.display = "none";
+        }, showCityStatus2 = function(city) {
+          if (tcNoSelection) tcNoSelection.style.display = "none";
+          if (tcSelectedCity) tcSelectedCity.style.display = "";
+          if (tcCityName) tcCityName.textContent = city.shortLabel;
+          if (tcCityTz) tcCityTz.textContent = city.timezone;
+        }, resetCityStatus2 = function() {
+          if (tcNoSelection) tcNoSelection.style.display = "";
+          if (tcSelectedCity) tcSelectedCity.style.display = "none";
+        }, showTerraDialog2 = function() {
+          tcDialog.style.display = "";
+          grid.classList.add("blurred");
+          tcCityInput.value = "";
+          tcCityResults.innerHTML = "";
+          tcSlotPicker.style.display = "none";
+          hideTcMessage2();
+          resetCityStatus2();
+          setTimeout(() => tcCityInput?.focus(), 50);
+        }, hideTerraDialog2 = function() {
+          tcDialog.style.display = "none";
+          grid.classList.remove("blurred");
+        }, renderTcSearchResults2 = function(results) {
+          tcCityResults.innerHTML = "";
+          if (results.length === 0) {
+            tcCityResults.innerHTML = '<div class="tc-city-loading">No results found</div>';
+            return;
+          }
+          const max = Math.min(results.length, 50);
+          for (let i = 0; i < max; i++) {
+            const r = results[i];
+            const div = document.createElement("div");
+            div.className = "tc-city-item";
+            if (r.isAirport) {
+              div.innerHTML = `<span class="iata-tag">${r.label.split(" ")[0]}</span>${r.label.split(" ").slice(1).join(" ")}`;
+            } else {
+              div.textContent = r.label;
+            }
+            div.addEventListener("click", () => {
+              tcCityInput.value = "";
+              tcCityResults.innerHTML = "";
+              onCitySelected2(r);
+            });
+            tcCityResults.appendChild(div);
+          }
+        }, debounceTcSearch2 = function() {
+          if (tcSearchDebounce) clearTimeout(tcSearchDebounce);
+          tcSearchDebounce = setTimeout(onTcCityInput, 150);
+        }, onCitySelected2 = function(city) {
+          showCityStatus2(city);
+          hideTcMessage2();
+          tcSlotPicker.style.display = "none";
+          const validSlots = validSlotsForTz(city.timezone);
+          if (validSlots.length === 0) {
+            showTcMessage2(`${city.shortLabel}'s timezone (${city.timezone}) cannot fit on any ring slot.`, "error");
+            return;
+          }
+          if (validSlots.length === 1) {
+            assignCityToSlot2(validSlots[0], city);
+          } else {
+            tcSlotPicker.style.display = "";
+            tcSlotChoices.innerHTML = "";
+            const currentSlots = getCurrentSlots2();
+            for (const slot of validSlots) {
+              const currentCity = currentSlots[slot]?.cityName || "Unknown";
+              const btn = document.createElement("button");
+              btn.className = "tc-slot-btn";
+              btn.innerHTML = `<span class="tc-slot-city">${currentCity}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}</span>`;
+              btn.addEventListener("click", () => {
+                tcSlotPicker.style.display = "none";
+                assignCityToSlot2(slot, city);
+              });
+              tcSlotChoices.appendChild(btn);
+            }
+          }
+        };
+        var getCurrentSlots = getCurrentSlots2, writeTerraOverridesToUrl = writeTerraOverridesToUrl2, rebuildTerraForSlotChange = rebuildTerraForSlotChange2, assignCityToSlot = assignCityToSlot2, showTcMessage = showTcMessage2, hideTcMessage = hideTcMessage2, showCityStatus = showCityStatus2, resetCityStatus = resetCityStatus2, showTerraDialog = showTerraDialog2, hideTerraDialog = hideTerraDialog2, renderTcSearchResults = renderTcSearchResults2, debounceTcSearch = debounceTcSearch2, onCitySelected = onCitySelected2;
+        const changeCitiesBtn = document.createElement("button");
+        changeCitiesBtn.className = "change-cities-btn";
+        changeCitiesBtn.textContent = "Change cities";
+        changeCitiesBtn.id = "change-cities-btn";
+        const timeBarEl = document.getElementById("time-bar");
+        if (timeBarEl) {
+          timeBarEl.parentElement.insertBefore(changeCitiesBtn, timeBarEl);
+        }
+        changeCitiesBtn.addEventListener("click", showTerraDialog2);
+        tcDoneBtn.addEventListener("click", hideTerraDialog2);
+        if (tcCancelBtn) tcCancelBtn.addEventListener("click", hideTerraDialog2);
+        tcDialog.querySelector(".tc-backdrop")?.addEventListener("click", hideTerraDialog2);
+        tcResetBtn.addEventListener("click", () => {
+          const overlay = document.getElementById("tc-confirm-overlay");
+          if (overlay) overlay.style.display = "";
+        });
+        const confirmYes = document.getElementById("tc-confirm-yes");
+        const confirmNo = document.getElementById("tc-confirm-no");
+        const confirmOverlay = document.getElementById("tc-confirm-overlay");
+        if (confirmYes && confirmNo && confirmOverlay) {
+          confirmNo.addEventListener("click", () => {
+            confirmOverlay.style.display = "none";
+          });
+          confirmYes.addEventListener("click", () => {
+            confirmOverlay.style.display = "none";
+            terraSlotOverrides = void 0;
+            writeTerraOverridesToUrl2();
+            rebuildTerraForSlotChange2();
+            showTcMessage2("All cities reset to defaults", "info");
+            resetCityStatus2();
+            tcSlotPicker.style.display = "none";
+          });
+        }
+        let tcSearchDebounce = null;
+        async function onTcCityInput() {
+          const query = tcCityInput.value.trim();
+          if (query.length === 0) {
+            tcCityResults.innerHTML = "";
+            return;
+          }
+          try {
+            if (!isCityDataLoaded()) {
+              if (loadError) {
+                tcCityResults.innerHTML = `<div class="tc-city-loading">City search unavailable: ${loadError}</div>`;
+                return;
+              }
+              tcCityResults.innerHTML = '<div class="tc-city-loading">Loading city database\u2026</div>';
+              try {
+                await loadCityData();
+              } catch (err) {
+                tcCityResults.innerHTML = `<div class="tc-city-loading">Failed to load: ${err.message}</div>`;
+                return;
+              }
+              const currentQuery = tcCityInput.value.trim();
+              if (currentQuery.length === 0) {
+                tcCityResults.innerHTML = "";
+                return;
+              }
+            }
+            const results = searchCities(query, lat, lon);
+            renderTcSearchResults2(results);
+          } catch (err) {
+            tcCityResults.innerHTML = `<div class="tc-city-loading">Error: ${err.message}</div>`;
+          }
+        }
+        tcCityInput.addEventListener("input", debounceTcSearch2);
+        tcCityInput.addEventListener("keyup", debounceTcSearch2);
+        tcCityInput.addEventListener("compositionend", debounceTcSearch2);
+        tcCityInput.addEventListener("keydown", (e) => {
+          const items = tcCityResults.querySelectorAll(".tc-city-item");
+          if (items.length === 0) return;
+          const current = tcCityResults.querySelector(".tc-city-item.selected");
+          const idx = current ? Array.from(items).indexOf(current) : -1;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const next = idx < items.length - 1 ? idx + 1 : 0;
+            current?.classList.remove("selected");
+            items[next].classList.add("selected");
+            items[next].scrollIntoView({ block: "nearest" });
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prev = idx > 0 ? idx - 1 : items.length - 1;
+            current?.classList.remove("selected");
+            items[prev].classList.add("selected");
+            items[prev].scrollIntoView({ block: "nearest" });
+          } else if (e.key === "Enter" && current) {
+            current.click();
+          }
         });
       }
     }

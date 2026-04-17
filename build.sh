@@ -39,13 +39,28 @@ echo "=== Generating HTML files ==="
 # Helper: inject partial files into a template.
 # Reads from stdin, writes to stdout.
 # Replaces lines containing {{LOCATION_CSS}}, {{LOCATION_DIALOG}},
-# {{TIME_CSS}}, and {{TIME_CONTROLLER}} with the corresponding partial file content.
+# {{TIME_CSS}}, {{TIME_CONTROLLER}}, and terra city dialog placeholders.
 inject_partials() {
     awk -v P="$SRC/partials" '
     /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
     /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
     /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
     /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
+    /\{\{TERRA_CITY_CSS\}\}/ { next }
+    /\{\{TERRA_CITY_DIALOG\}\}/ { next }
+    { print }
+    '
+}
+
+# Same as inject_partials but includes terra city dialog content.
+inject_partials_terra() {
+    awk -v P="$SRC/partials" '
+    /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
+    /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
+    /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
+    /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
+    /\{\{TERRA_CITY_CSS\}\}/ { while ((getline line < (P"/terra-city-dialog.css")) > 0) print line; close(P"/terra-city-dialog.css"); next }
+    /\{\{TERRA_CITY_DIALOG\}\}/ { while ((getline line < (P"/terra-city-dialog.html")) > 0) print line; close(P"/terra-city-dialog.html"); next }
     { print }
     '
 }
@@ -72,10 +87,16 @@ for face in $FACES; do
   SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-'"$face"'.js"><\/script>'
   ICON="thumb-${face}.png"
+  # Use terra-specific partial injection for terra face
+  if [ "$face" = "terra" ]; then
+    INJECTOR=inject_partials_terra
+  else
+    INJECTOR=inject_partials
+  fi
   sed -e "s|{{TITLE}}|$TITLE|g" \
       -e "s|{{SCRIPTS}}|$SCRIPTS|g" \
       -e "s|{{ICON}}|$ICON|g" \
-      "$SRC/face-template.html" | inject_partials > "$DIST/$face.html"
+      "$SRC/face-template.html" | $INJECTOR > "$DIST/$face.html"
   echo "  → $face.html"
 done
 

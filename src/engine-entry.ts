@@ -23,6 +23,9 @@ declare global {
 
 import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment, computeTzDeltaMs } from './watch/watch-env.js';
+import type { TerraSlot } from './watch/watch-env.js';
+import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
+import { validSlotsForTz, formatSlotOffset, ensureDeviceTzOnRing } from './watch/terra-slots.js';
 import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, clearScrubFreeze, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
@@ -335,6 +338,31 @@ async function main() {
 
     const getNow = () => timeController.getDisplayTime();
 
+    // --- Terra slot overrides (read from URL params s5..s28) ---
+    const isTerra = faceDataArray.length === 1 && faceDataArray[0].name === 'Terra';
+    let terraSlotOverrides: Record<number, TerraSlot> | undefined;
+    if (isTerra) {
+        const params = new URLSearchParams(window.location.search);
+        const overrides: Record<number, TerraSlot> = {};
+        for (let slot = 5; slot <= 28; slot++) {
+            const name = params.get(`s${slot}`);
+            const tz = params.get(`s${slot}tz`);
+            const latStr = params.get(`s${slot}lat`);
+            const lonStr = params.get(`s${slot}lon`);
+            if (name && tz) {
+                overrides[slot] = {
+                    cityName: name,
+                    olsonId: tz,
+                    lat: latStr ? parseFloat(latStr) : 0,
+                    lon: lonStr ? parseFloat(lonStr) : 0,
+                };
+            }
+        }
+        if (Object.keys(overrides).length > 0) {
+            terraSlotOverrides = overrides;
+        }
+    }
+
     // --- Build the DOM: one cell + canvas per face ---
     // cols/rows are recomputed on every resize via optimizeGrid
     let cols = 1, rows = 1;
@@ -351,7 +379,7 @@ async function main() {
         grid.appendChild(cell);
 
         const watch = parsedWatches[i];
-        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone);
+        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
 
         const face: FaceInstance = {
             watch,
@@ -454,7 +482,7 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled) continue;
             // Rebuild the environment but keep the same watch/parts
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
             // Preserve terminator leaves — their expressions are evaluated
             // against the env each frame by tickLeafAnimations, so they
             // don't need recreating. Recreating them would destroy animation state.
@@ -951,7 +979,7 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled) continue;
             // Fresh environment with new lat/lon/tz — same watch/parts
-            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone);
+            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, terraSlotOverrides);
             // Update terminator leaves (preserve for animation interpolation)
             if (face.terminatorLeaves.length > 0) {
                 updateLeafAngles(face.terminatorLeaves, face.env);
@@ -1988,7 +2016,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     // Rebuild environment (picks up new body URL param)
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
                     // Update terminator leaf angles for the new planet's phase
                     // (keep existing leaves so the animation system can interpolate)
                     if (face.terminatorLeaves.length > 0) {
@@ -2015,6 +2043,308 @@ async function main() {
             nextBtn.addEventListener('click', () => {
                 selectPlanet((selectedIdx + 1) % planetOrder.length);
             });
+        }
+    }
+
+    // =========================================================================
+    // Terra city customization (Terra only, single-face mode)
+    // =========================================================================
+    if (isTerra) {
+        const tcDialog = document.getElementById('terra-city-dialog');
+        const tcCityInput = document.getElementById('tc-city-input') as HTMLInputElement | null;
+        const tcCityResults = document.getElementById('tc-city-results');
+        const tcSlotPicker = document.getElementById('tc-slot-picker');
+        const tcSlotChoices = document.getElementById('tc-slot-choices');
+        const tcMessage = document.getElementById('tc-message');
+        const tcNoSelection = document.getElementById('tc-no-selection');
+        const tcSelectedCity = document.getElementById('tc-selected-city');
+        const tcCityName = document.getElementById('tc-city-name');
+        const tcCityTz = document.getElementById('tc-city-tz');
+        const tcResetBtn = document.getElementById('tc-reset');
+        const tcCancelBtn = document.getElementById('tc-cancel');
+        const tcDoneBtn = document.getElementById('tc-done');
+
+        if (tcDialog && tcCityInput && tcCityResults && tcSlotPicker &&
+            tcSlotChoices && tcMessage && tcDoneBtn && tcResetBtn) {
+
+            // Add "Change cities" button below the watch grid
+            const changeCitiesBtn = document.createElement('button');
+            changeCitiesBtn.className = 'change-cities-btn';
+            changeCitiesBtn.textContent = 'Change cities';
+            changeCitiesBtn.id = 'change-cities-btn';
+            const timeBarEl = document.getElementById('time-bar');
+            if (timeBarEl) {
+                timeBarEl.parentElement!.insertBefore(changeCitiesBtn, timeBarEl);
+            }
+
+            /** Get current effective slot data (defaults + overrides) */
+            function getCurrentSlots(): Record<number, TerraSlot> {
+                const slots: Record<number, TerraSlot> = {};
+                for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
+                    slots[Number(k)] = { ...v };
+                }
+                if (terraSlotOverrides) {
+                    for (const [k, v] of Object.entries(terraSlotOverrides)) {
+                        slots[Number(k)] = { ...v };
+                    }
+                }
+                return slots;
+            }
+
+            /** Write slot overrides to URL */
+            function writeTerraOverridesToUrl() {
+                const params = new URLSearchParams(window.location.search);
+                for (let slot = 5; slot <= 28; slot++) {
+                    params.delete(`s${slot}`);
+                    params.delete(`s${slot}tz`);
+                    params.delete(`s${slot}lat`);
+                    params.delete(`s${slot}lon`);
+                }
+                if (terraSlotOverrides) {
+                    for (const [slotStr, data] of Object.entries(terraSlotOverrides)) {
+                        params.set(`s${slotStr}`, data.cityName);
+                        params.set(`s${slotStr}tz`, data.olsonId);
+                        params.set(`s${slotStr}lat`, data.lat.toFixed(3));
+                        params.set(`s${slotStr}lon`, data.lon.toFixed(3));
+                    }
+                }
+                params.delete('long');
+                params.delete('loc');
+                const qs = params.toString();
+                const newUrl = window.location.pathname + (qs ? '?' + qs : '');
+                history.replaceState(null, '', newUrl);
+            }
+
+            /** Rebuild the Terra face after a slot change */
+            function rebuildTerraForSlotChange() {
+                for (const face of faces) {
+                    if (!face.enabled) continue;
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+                    if (face.terminatorLeaves.length > 0) {
+                        updateLeafAngles(face.terminatorLeaves, face.env);
+                        resetLeafSchedules(face.terminatorLeaves);
+                        face.lastTerminatorRebuild = 0;
+                    }
+                    (face.env as any)._terraCityKnockout = null;
+                    const { canvas, watch, env, images, scale } = face;
+                    buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+                    for (const hs of face.handStates) {
+                        hs.nextUpdateTime = 0;
+                    }
+                }
+                stopScheduler();
+                startScheduler();
+            }
+
+            /** Assign a city to a slot */
+            function assignCityToSlot(slot: number, city: CityResult) {
+                const currentSlots = getCurrentSlots();
+                const previousCity = currentSlots[slot]?.cityName || 'Unknown';
+                if (!terraSlotOverrides) {
+                    terraSlotOverrides = {};
+                }
+                terraSlotOverrides[slot] = {
+                    cityName: city.shortLabel,
+                    olsonId: city.timezone,
+                    lat: city.lat,
+                    lon: city.lon,
+                };
+                writeTerraOverridesToUrl();
+                rebuildTerraForSlotChange();
+                showTcMessage(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, 'info');
+            }
+
+            function showTcMessage(text: string, type: 'info' | 'warn' | 'error') {
+                tcMessage!.textContent = text;
+                tcMessage!.className = `tc-message tc-message-${type}`;
+                tcMessage!.style.display = '';
+            }
+
+            function hideTcMessage() {
+                tcMessage!.style.display = 'none';
+            }
+
+            function showCityStatus(city: CityResult) {
+                if (tcNoSelection) tcNoSelection.style.display = 'none';
+                if (tcSelectedCity) tcSelectedCity.style.display = '';
+                if (tcCityName) tcCityName.textContent = city.shortLabel;
+                if (tcCityTz) tcCityTz.textContent = city.timezone;
+            }
+
+            function resetCityStatus() {
+                if (tcNoSelection) tcNoSelection.style.display = '';
+                if (tcSelectedCity) tcSelectedCity.style.display = 'none';
+            }
+
+            function showTerraDialog() {
+                tcDialog!.style.display = '';
+                grid.classList.add('blurred');
+                tcCityInput!.value = '';
+                tcCityResults!.innerHTML = '';
+                tcSlotPicker!.style.display = 'none';
+                hideTcMessage();
+                resetCityStatus();
+                setTimeout(() => tcCityInput?.focus(), 50);
+            }
+
+            function hideTerraDialog() {
+                tcDialog!.style.display = 'none';
+                grid.classList.remove('blurred');
+            }
+
+            changeCitiesBtn.addEventListener('click', showTerraDialog);
+            tcDoneBtn.addEventListener('click', hideTerraDialog);
+            if (tcCancelBtn) tcCancelBtn.addEventListener('click', hideTerraDialog);
+            tcDialog!.querySelector('.tc-backdrop')?.addEventListener('click', hideTerraDialog);
+
+            tcResetBtn.addEventListener('click', () => {
+                const overlay = document.getElementById('tc-confirm-overlay');
+                if (overlay) overlay.style.display = '';
+            });
+
+            const confirmYes = document.getElementById('tc-confirm-yes');
+            const confirmNo = document.getElementById('tc-confirm-no');
+            const confirmOverlay = document.getElementById('tc-confirm-overlay');
+
+            if (confirmYes && confirmNo && confirmOverlay) {
+                confirmNo.addEventListener('click', () => {
+                    confirmOverlay.style.display = 'none';
+                });
+                confirmYes.addEventListener('click', () => {
+                    confirmOverlay.style.display = 'none';
+                    terraSlotOverrides = undefined;
+                    writeTerraOverridesToUrl();
+                    rebuildTerraForSlotChange();
+                    showTcMessage('All cities reset to defaults', 'info');
+                    resetCityStatus();
+                    tcSlotPicker!.style.display = 'none';
+                });
+            }
+
+            // --- City search ---
+            let tcSearchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+            function renderTcSearchResults(results: CityResult[]) {
+                tcCityResults!.innerHTML = '';
+                if (results.length === 0) {
+                    tcCityResults!.innerHTML = '<div class="tc-city-loading">No results found</div>';
+                    return;
+                }
+                const max = Math.min(results.length, 50);
+                for (let i = 0; i < max; i++) {
+                    const r = results[i];
+                    const div = document.createElement('div');
+                    div.className = 'tc-city-item';
+                    if (r.isAirport) {
+                        div.innerHTML = `<span class="iata-tag">${r.label.split(' ')[0]}</span>${r.label.split(' ').slice(1).join(' ')}`;
+                    } else {
+                        div.textContent = r.label;
+                    }
+                    div.addEventListener('click', () => {
+                        tcCityInput!.value = '';
+                        tcCityResults!.innerHTML = '';
+                        onCitySelected(r);
+                    });
+                    tcCityResults!.appendChild(div);
+                }
+            }
+
+            async function onTcCityInput() {
+                const query = tcCityInput!.value.trim();
+                if (query.length === 0) {
+                    tcCityResults!.innerHTML = '';
+                    return;
+                }
+                try {
+                    if (!isCityDataLoaded()) {
+                        if (loadError) {
+                            tcCityResults!.innerHTML = `<div class="tc-city-loading">City search unavailable: ${loadError}</div>`;
+                            return;
+                        }
+                        tcCityResults!.innerHTML = '<div class="tc-city-loading">Loading city database…</div>';
+                        try {
+                            await loadCityData();
+                        } catch (err) {
+                            tcCityResults!.innerHTML = `<div class="tc-city-loading">Failed to load: ${(err as Error).message}</div>`;
+                            return;
+                        }
+                        const currentQuery = tcCityInput!.value.trim();
+                        if (currentQuery.length === 0) {
+                            tcCityResults!.innerHTML = '';
+                            return;
+                        }
+                    }
+                    const results = searchCities(query, lat, lon);
+                    renderTcSearchResults(results);
+                } catch (err) {
+                    tcCityResults!.innerHTML = `<div class="tc-city-loading">Error: ${(err as Error).message}</div>`;
+                }
+            }
+
+            function debounceTcSearch() {
+                if (tcSearchDebounce) clearTimeout(tcSearchDebounce);
+                tcSearchDebounce = setTimeout(onTcCityInput, 150);
+            }
+
+            tcCityInput.addEventListener('input', debounceTcSearch);
+            tcCityInput.addEventListener('keyup', debounceTcSearch);
+            tcCityInput.addEventListener('compositionend', debounceTcSearch);
+
+            tcCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
+                const items = tcCityResults!.querySelectorAll('.tc-city-item');
+                if (items.length === 0) return;
+                const current = tcCityResults!.querySelector('.tc-city-item.selected');
+                const idx = current ? Array.from(items).indexOf(current) : -1;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const next = idx < items.length - 1 ? idx + 1 : 0;
+                    current?.classList.remove('selected');
+                    items[next].classList.add('selected');
+                    items[next].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const prev = idx > 0 ? idx - 1 : items.length - 1;
+                    current?.classList.remove('selected');
+                    items[prev].classList.add('selected');
+                    items[prev].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter' && current) {
+                    (current as HTMLElement).click();
+                }
+            });
+
+            /** Handle a city selection from search results */
+            function onCitySelected(city: CityResult) {
+                showCityStatus(city);
+                hideTcMessage();
+                tcSlotPicker!.style.display = 'none';
+
+                const validSlots = validSlotsForTz(city.timezone);
+
+                if (validSlots.length === 0) {
+                    showTcMessage(`${city.shortLabel}'s timezone (${city.timezone}) cannot fit on any ring slot.`, 'error');
+                    return;
+                }
+
+                if (validSlots.length === 1) {
+                    assignCityToSlot(validSlots[0], city);
+                } else {
+                    // Multiple valid slots — show slot picker
+                    tcSlotPicker!.style.display = '';
+                    tcSlotChoices!.innerHTML = '';
+                    const currentSlots = getCurrentSlots();
+                    for (const slot of validSlots) {
+                        const currentCity = currentSlots[slot]?.cityName || 'Unknown';
+                        const btn = document.createElement('button');
+                        btn.className = 'tc-slot-btn';
+                        btn.innerHTML = `<span class="tc-slot-city">${currentCity}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}</span>`;
+                        btn.addEventListener('click', () => {
+                            tcSlotPicker!.style.display = 'none';
+                            assignCityToSlot(slot, city);
+                        });
+                        tcSlotChoices!.appendChild(btn);
+                    }
+                }
+            }
         }
     }
 
