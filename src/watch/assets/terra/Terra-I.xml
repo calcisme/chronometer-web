@@ -9,9 +9,9 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Terra I' numEnvironments='29' bezelColor='rgb(180,150,130)' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='278' statusBarLoc='bottom'>
+<watch name='Terra I' numEnvironments='29' bezelColor='rgb(180,150,130)' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='276' statusBarLoc='bottom'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
-  <init expr='faceWidth=278, backerWidth=faceWidth' />
+  <init expr='faceWidth=276, backerWidth=faceWidth' />
 
 <!-- env slot specifications -->
   <!-- The first four env slots, with locations, are allocated to the subdials -->
@@ -39,9 +39,9 @@
   <init	expr='utstroke=0xff402040, utfill=0xff80b080, DSTColor=black, DST2Color=white' />
   <init	expr='DSTColorN=nfgclr2, nfgclr3a=0xff00c0c0' />
   <init expr='windowBorder=1, shadowOff=-.5, shadowOpc=.25, shadowSig=1.5' />
-  <init expr='sameColor=black, lessColor=0xff600000, moreColor=0xff005050, sameColorN=0xffd0d000, lessColorN=0xffff6888, moreColorN=0xff00e0e0' />
+  <init expr='sameColor=black, lessColor=0xff900000, moreColor=0xff007878, sameColorN=0xffd0d000, lessColorN=0xffff6888, moreColorN=0xff00e0e0' />
  
-  <init expr='aSpeed=.75, aSpeed2=4, iSpeed=aSpeed/2, alph=1, secUpdate=.125'/>
+  <init expr='aSpeed=.75, aSpeed2=.5, iSpeed=aSpeed/2, alph=1, secUpdate=.125'/>
   <init expr='dotOffset=-pi/24, cityOffset=-pi/24, dateHandSpan=.58, offRad1=11, offRad2=15' />
   <init	expr='wheelfs=11, wheelspace=10' />
   <init	expr='logoX=0, logoY=-36.5' />
