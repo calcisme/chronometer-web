@@ -15619,6 +15619,22 @@
       };
       faces.push(face);
     }
+    const isMultiFace = faceDataArray.length > 1;
+    if (isMultiFace) {
+      let faceNameToSlug2 = function(name) {
+        return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
+      };
+      var faceNameToSlug = faceNameToSlug2;
+      for (let i = 0; i < faces.length; i++) {
+        const face = faces[i];
+        const slug = faceNameToSlug2(faceDataArray[i].name);
+        face.canvas.style.cursor = "pointer";
+        face.canvas.addEventListener("click", () => {
+          const params = new URLSearchParams(window.location.search);
+          window.location.href = `${slug}.html${params.toString() ? "?" + params.toString() : ""}`;
+        });
+      }
+    }
     function applySize(face, size) {
       const dpr = window.devicePixelRatio || 1;
       const physPx = Math.round(size * dpr);

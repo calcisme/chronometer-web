@@ -371,6 +371,29 @@ async function main() {
         faces.push(face);
     }
 
+    // On multi-face pages (all.html), make each face clickable → navigate to its page
+    const isMultiFace = faceDataArray.length > 1;
+    if (isMultiFace) {
+        /** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */
+        function faceNameToSlug(name: string): string {
+            return name
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // strip diacritics
+                .toLowerCase()
+                .replace(/\s+/g, '-');
+        }
+
+        for (let i = 0; i < faces.length; i++) {
+            const face = faces[i];
+            const slug = faceNameToSlug(faceDataArray[i].name);
+            face.canvas.style.cursor = 'pointer';
+            face.canvas.addEventListener('click', () => {
+                // Preserve location/time state in the URL
+                const params = new URLSearchParams(window.location.search);
+                window.location.href = `${slug}.html${params.toString() ? '?' + params.toString() : ''}`;
+            });
+        }
+    }
+
     // --- Size all canvases to match the grid container ---
     function applySize(face: FaceInstance, size: number) {
         const dpr = window.devicePixelRatio || 1;
