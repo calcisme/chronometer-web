@@ -12359,20 +12359,21 @@
       const requestedDI = dateToDateInterval(new Date(targetMidnight.getTime() - tzDeltaMs));
       return moonAge(requestedDI, null).age;
     });
+    const MS_PER_DAY = 864e5;
     functions.set("delOnDayTintColor", (n) => {
-      const dayNum = liveDate().getDate();
+      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
       return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayTintColorA") : env.variables.get("delOnDayTintColorB");
     });
     functions.set("delOnDayStrokeColor", (n) => {
-      const dayNum = liveDate().getDate();
+      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
       return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayStrokeColorA") : env.variables.get("delOnDayStrokeColorB");
     });
     functions.set("delOnDayTintNColor", (n) => {
-      const dayNum = liveDate().getDate();
+      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
       return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayTintNColorA") : env.variables.get("delOnDayTintNColorB");
     });
     functions.set("delOnDayStrokeNColor", (n) => {
-      const dayNum = liveDate().getDate();
+      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
       return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayStrokeNColorA") : env.variables.get("delOnDayStrokeNColorB");
     });
     functions.set("moonriseForDayValid", () => {

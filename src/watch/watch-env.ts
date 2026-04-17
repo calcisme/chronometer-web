@@ -794,30 +794,30 @@ function registerTimeFunctions(
     });
 
     // --- DEL wedge color functions (iOS-style stable alternation) ---
-    // These anchor the A/B color to the absolute day-of-month parity instead of
-    // the relative offset, preventing the ring from swapping colors at midnight.
-    // The current day (n=0) is always "A", and each absolute day keeps its color
-    // assignment regardless of when midnight crosses.
+    // Use Unix day number (continuous integer count from epoch) for parity,
+    // not day-of-month, to avoid color swaps at month boundaries with odd-length
+    // months (e.g. Jan 31→Feb 1 both odd). Consecutive Unix days always alternate.
+    const MS_PER_DAY = 86400000;
     functions.set('delOnDayTintColor', (n: number) => {
-        const dayNum = liveDate().getDate();
+        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
         return ((dayNum + n) % 2 === 0)
             ? env.variables.get('delOnDayTintColorA')!
             : env.variables.get('delOnDayTintColorB')!;
     });
     functions.set('delOnDayStrokeColor', (n: number) => {
-        const dayNum = liveDate().getDate();
+        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
         return ((dayNum + n) % 2 === 0)
             ? env.variables.get('delOnDayStrokeColorA')!
             : env.variables.get('delOnDayStrokeColorB')!;
     });
     functions.set('delOnDayTintNColor', (n: number) => {
-        const dayNum = liveDate().getDate();
+        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
         return ((dayNum + n) % 2 === 0)
             ? env.variables.get('delOnDayTintNColorA')!
             : env.variables.get('delOnDayTintNColorB')!;
     });
     functions.set('delOnDayStrokeNColor', (n: number) => {
-        const dayNum = liveDate().getDate();
+        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
         return ((dayNum + n) % 2 === 0)
             ? env.variables.get('delOnDayStrokeNColorA')!
             : env.variables.get('delOnDayStrokeNColorB')!;
