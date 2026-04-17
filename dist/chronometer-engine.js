@@ -14551,8 +14551,8 @@
       return;
     }
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    const channelRad1 = 111.5;
-    const channelRad2 = 126;
+    const channelRad1 = 111;
+    const channelRad2 = 124.5;
     const channelWidth = 0.25;
     ctx.save();
     ctx.rotate(angle);

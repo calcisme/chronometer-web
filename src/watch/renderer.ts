@@ -2148,9 +2148,11 @@ function drawTerraChannelLines(
         ? part.dynamicState.currentAngle
         : evalAttr(part.angle, env);
 
-    // Channel radii matching iOS: channelRad1=111.5, channelRad2=126 (at 1x)
-    const channelRad1 = 111.5;
-    const channelRad2 = 126;
+    // Channel radii matching XML dot radii:
+    //   dot2Rad = cityRad2 - cityFS - 2.5 = (faceR-1) - 10 - 2.5 = 124.5
+    //   dot1Rad = (dot2Rad-1) - cityFS - 2.5 = 111
+    const channelRad1 = 111;     // dot1Rad — inner ring dots
+    const channelRad2 = 124.5;   // dot2Rad — outer ring dots
     const channelWidth = 0.25;
 
     ctx.save();
