@@ -310,6 +310,12 @@ export interface QWedgePart extends PartBase {
     fillColor?: ASTNode;
     opaque?: number;
     update?: ASTNode;
+    /** Polar offset radius (e.g. Terra date wedges orbiting the worldtime ring). */
+    offsetRadius?: ASTNode;
+    /** Polar offset angle expression. */
+    offsetAngle?: ASTNode;
+    animSpeed?: ASTNode;
+    dragAnimationType?: string;
 }
 
 // ============================================================================

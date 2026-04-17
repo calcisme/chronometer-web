@@ -768,7 +768,11 @@
       strokeColor: attrExpr(el, "strokeColor"),
       fillColor: attrExpr(el, "fillColor"),
       opaque: el.getAttribute("opaque") ? Number(el.getAttribute("opaque")) : void 0,
-      update: attrExpr(el, "update")
+      update: attrExpr(el, "update"),
+      offsetRadius: attrExpr(el, "offsetRadius"),
+      offsetAngle: attrExpr(el, "offsetAngle"),
+      animSpeed: attrExpr(el, "animSpeed"),
+      dragAnimationType: attr(el, "dragAnimationType")
     };
   }
   function parseQDayNightRing(el) {
@@ -1453,7 +1457,7 @@
   }
   function collectDynamicParts(parts, env, now, out, getNow) {
     for (const part of parts) {
-      if (part.type === "QHand" || part.type === "Wheel") {
+      if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
         out.push(createHandState(part, env, now, getNow));
       } else if (part.type === "Static") {
         collectDynamicParts(part.children, env, now, out, getNow);
@@ -1465,7 +1469,7 @@
     const updateIntervalMs = updateIntervalSec * 1e3;
     const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
     const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
-    const hasOffsetAngle = part.type === "QHand" && part.offsetAngle;
+    const hasOffsetAngle = (part.type === "QHand" || part.type === "QWedge") && part.offsetAngle;
     const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle, env) : 0;
     part.dynamicState = {
       currentAngle: initialAngle,
@@ -1497,7 +1501,7 @@
     for (const state of states) {
       if (now >= state.nextUpdateTime) {
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
-        const newOffsetTarget = state.offsetAngle && state.part.type === "QHand" && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
+        const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
           let ticksUntilUpdate = 1;
           if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
@@ -13216,14 +13220,13 @@
           drawWindowBorder(ctx, win, env);
         }
         pendingWindows.length = 0;
-        if (part.src && images) {
+        if (part.name === "worldtime ring") {
+          drawTerraRingWithKnockouts(ctx, part, env, images);
+          drawTerraChannelLines(ctx, part, env);
+        } else if (part.src && images) {
           drawImageHand(ctx, part, env, images);
         } else {
           drawQHand(ctx, part, env);
-        }
-        if (part.name === "worldtime ring") {
-          drawTerraCityNames(ctx, part, env);
-          drawTerraChannelLines(ctx, part, env);
         }
         continue;
       }
@@ -14241,13 +14244,20 @@
     const outerR = evalAttr(part.outerRadius, env);
     const innerR = evalAttr(part.innerRadius, env);
     const span = evalAttr(part.angleSpan, env);
-    const angle = evalAttr(part.angle, env);
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
     if (outerR <= 0 || innerR <= 0 || span <= 0) return;
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "transparent";
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(angle);
+    let totalAngle = angle;
+    if (part.offsetRadius && part.offsetAngle) {
+      const offR = evalAttr(part.offsetRadius, env);
+      const offA = part.dynamicState?.currentOffsetAngle !== void 0 ? part.dynamicState.currentOffsetAngle : evalAttr(part.offsetAngle, env);
+      ctx.translate(offR * Math.sin(offA), -offR * Math.cos(offA));
+      totalAngle = offA + angle;
+    }
+    ctx.rotate(totalAngle);
     const startAngle = -Math.PI / 2 - span / 2;
     const endAngle = -Math.PI / 2 + span / 2;
     ctx.beginPath();
@@ -14341,20 +14351,44 @@
     }
     ctx.restore();
   }
-  function drawTerraCityNames(ctx, part, env) {
+  function drawTerraRingWithKnockouts(ctx, part, env, images) {
     const terraSlots = env._terraSlots;
-    if (!terraSlots) return;
+    if (!terraSlots || !images || !part.src) return;
+    const loaded2 = images.get(part.src);
+    if (!loaded2) return;
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
+    let cache = env._terraCityKnockout;
+    if (!cache) {
+      cache = buildTerraRingKnockoutCache(loaded2, terraSlots);
+      env._terraCityKnockout = cache;
+    }
+    const { scale: imgScale } = loaded2;
+    const drawW = cache.width * imgScale;
+    const drawH = cache.height * imgScale;
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.drawImage(cache, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
+  }
+  function buildTerraRingKnockoutCache(loaded2, terraSlots) {
+    const { bitmap, scale: imgScale } = loaded2;
+    const w = bitmap.width;
+    const h = bitmap.height;
+    const offscreen = new OffscreenCanvas(w, h);
+    const oCtx = offscreen.getContext("2d");
+    oCtx.drawImage(bitmap, 0, 0);
+    oCtx.translate(w / 2, h / 2);
+    const xmlToPixel = 1 / imgScale;
+    oCtx.scale(xmlToPixel, xmlToPixel);
+    oCtx.globalCompositeOperation = "destination-out";
     const cityFS = 8;
     const cityRad2 = 131;
     const cityRad1 = 127 - cityFS;
     const sectorAngle = Math.PI / 12;
-    ctx.save();
-    ctx.rotate(angle);
-    ctx.font = `${cityFS}px Arial`;
-    ctx.fillStyle = "black";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    oCtx.font = `${cityFS}px Arial`;
+    oCtx.fillStyle = "white";
+    oCtx.textAlign = "center";
+    oCtx.textBaseline = "middle";
     for (let i = 0; i < 24; i++) {
       const slot = terraSlots[i + 5];
       if (!slot) continue;
@@ -14364,24 +14398,25 @@
       const charWidths = [];
       let totalWidth = 0;
       for (let c = 0; c < name.length; c++) {
-        const w = ctx.measureText(name[c]).width;
-        charWidths.push(w);
-        totalWidth += w;
+        const cw = oCtx.measureText(name[c]).width;
+        charWidths.push(cw);
+        totalWidth += cw;
       }
-      const totalAngle = totalWidth / radius;
-      let charAngle = slotCenterAngle - totalAngle / 2;
+      const totalAngleSpan = totalWidth / radius;
+      let charAngle = slotCenterAngle - totalAngleSpan / 2;
       for (let c = 0; c < name.length; c++) {
         const charAngularWidth = charWidths[c] / radius;
         const charCenterAngle = charAngle + charAngularWidth / 2;
-        ctx.save();
-        ctx.rotate(charCenterAngle);
-        ctx.translate(0, -radius);
-        ctx.fillText(name[c], 0, 0);
-        ctx.restore();
+        oCtx.save();
+        oCtx.rotate(charCenterAngle);
+        oCtx.translate(0, -radius);
+        oCtx.fillText(name[c], 0, 0);
+        oCtx.restore();
         charAngle += charAngularWidth;
       }
     }
-    ctx.restore();
+    oCtx.globalCompositeOperation = "source-over";
+    return offscreen;
   }
   function drawTerraChannelLines(ctx, part, env) {
     const terraSlots = env._terraSlots;

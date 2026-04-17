@@ -18,7 +18,7 @@
  * - Otherwise, use the normal speed-based duration (slow parts).
  */
 
-import type { Watch, WatchPart, QHandPart, WheelPart } from './types.js';
+import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart } from './types.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './watch-env.js';
 
@@ -70,7 +70,7 @@ export function makeAnimatingValue(initial: number, now: number): AnimatingValue
 /** Per-part state tracked by the animation system. */
 export interface HandState {
     /** Reference to the XML part definition. */
-    part: QHandPart | WheelPart;
+    part: QHandPart | WheelPart | QWedgePart;
     /** The angle being animated. */
     angle: AnimatingValue;
     /** The offsetAngle being animated (only for offset-orbit hands like Moon). */
@@ -112,7 +112,7 @@ function collectDynamicParts(
     getNow: () => Date,
 ): void {
     for (const part of parts) {
-        if (part.type === 'QHand' || part.type === 'Wheel') {
+        if (part.type === 'QHand' || part.type === 'Wheel' || part.type === 'QWedge') {
             out.push(createHandState(part, env, now, getNow));
         } else if (part.type === 'Static') {
             collectDynamicParts(part.children, env, now, out, getNow);
@@ -121,7 +121,7 @@ function collectDynamicParts(
 }
 
 function createHandState(
-    part: QHandPart | WheelPart,
+    part: QHandPart | WheelPart | QWedgePart,
     env: Environment,
     now: number,
     getNow: () => Date,
@@ -137,8 +137,8 @@ function createHandState(
     // Evaluate initial angle and write to part's dynamicState
     const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
     // Evaluate initial offsetAngle if present (e.g. Moon orbit position)
-    const hasOffsetAngle = part.type === 'QHand' && part.offsetAngle;
-    const initialOffsetAngle = hasOffsetAngle ? evalAttr((part as QHandPart).offsetAngle!, env) : 0;
+    const hasOffsetAngle = (part.type === 'QHand' || part.type === 'QWedge') && part.offsetAngle;
+    const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle!, env) : 0;
     part.dynamicState = {
         currentAngle: initialAngle,
         ...(hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}),
@@ -199,8 +199,8 @@ export function tickAnimations(
                 : 0;
 
             // Also evaluate offsetAngle if this hand has one
-            const newOffsetTarget = state.offsetAngle && state.part.type === 'QHand' && (state.part as QHandPart).offsetAngle
-                ? evalAttr((state.part as QHandPart).offsetAngle!, env)
+            const newOffsetTarget = state.offsetAngle && (state.part.type === 'QHand' || state.part.type === 'QWedge') && state.part.offsetAngle
+                ? evalAttr(state.part.offsetAngle!, env)
                 : null;
 
             if (tickIntervalMs !== null && tickIntervalMs > 0) {

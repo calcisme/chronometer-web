@@ -453,6 +453,10 @@ function parseQWedge(el: Element): QWedgePart {
         fillColor: attrExpr(el, 'fillColor'),
         opaque: el.getAttribute('opaque') ? Number(el.getAttribute('opaque')) : undefined,
         update: attrExpr(el, 'update'),
+        offsetRadius: attrExpr(el, 'offsetRadius'),
+        offsetAngle: attrExpr(el, 'offsetAngle'),
+        animSpeed: attrExpr(el, 'animSpeed'),
+        dragAnimationType: attr(el, 'dragAnimationType'),
     };
 }
 

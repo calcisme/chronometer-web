@@ -218,16 +218,14 @@ function renderPartsDocumentOrder(
             }
             pendingWindows.length = 0;
 
-            if (part.src && images) {
+            // Terra: draw ring image with city-name knockouts + channel lines
+            if (part.name === 'worldtime ring') {
+                drawTerraRingWithKnockouts(ctx, part, env, images);
+                drawTerraChannelLines(ctx, part, env);
+            } else if (part.src && images) {
                 drawImageHand(ctx, part, env, images);
             } else {
                 drawQHand(ctx, part, env);
-            }
-
-            // Terra: draw city names and channel lines on the worldtime ring
-            if (part.name === 'worldtime ring') {
-                drawTerraCityNames(ctx, part, env);
-                drawTerraChannelLines(ctx, part, env);
             }
 
             continue;
@@ -1824,7 +1822,9 @@ function drawQWedge(
     const outerR = evalAttr(part.outerRadius, env);
     const innerR = evalAttr(part.innerRadius, env);
     const span = evalAttr(part.angleSpan, env);
-    const angle = evalAttr(part.angle, env);
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
     if (outerR <= 0 || innerR <= 0 || span <= 0) return;
 
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'black';
@@ -1832,8 +1832,22 @@ function drawQWedge(
 
     ctx.save();
     ctx.translate(cx, cy);
-    // Rotate by angle — same convention as QHand (CW for positive angle)
-    ctx.rotate(angle);
+
+    // Apply polar offset if present (e.g. Terra date wedges orbiting the ring)
+    // iOS ECGLPart.m: angleValue = offsetAngleValue + partAngle
+    // The offset both translates the center and contributes to the rotation.
+    let totalAngle = angle;
+    if (part.offsetRadius && part.offsetAngle) {
+        const offR = evalAttr(part.offsetRadius, env);
+        const offA = part.dynamicState?.currentOffsetAngle !== undefined
+            ? part.dynamicState.currentOffsetAngle
+            : evalAttr(part.offsetAngle, env);
+        ctx.translate(offR * Math.sin(offA), -offR * Math.cos(offA));
+        totalAngle = offA + angle;
+    }
+
+    // Rotate by total angle (offsetAngle + partAngle)
+    ctx.rotate(totalAngle);
 
     // Draw annular sector path centred on -PI/2 (12 o'clock)
     const startAngle = -Math.PI / 2 - span / 2;
@@ -1981,37 +1995,91 @@ function drawWindowBorder(
 // ============================================================================
 
 /**
- * Draw the 24 city names curved along the worldtime ring circumference.
- * Each character is individually placed on the arc, with tops pointing
- * outward (away from center) — matching the iOS worldtime dial.
+ * Draw the worldtime ring image with city-name knockouts.
  *
- * Even ring indices (0, 2, 4...) use the inner track radius.
- * Odd ring indices (1, 3, 5...) use the outer track radius.
+ * Uses a cached OffscreenCanvas containing the ring background image with
+ * text-shaped transparent holes punched through it. Through the holes, the
+ * underlying black city-background ring and date-indicator wedges show through:
+ * - Same-date cities appear black (the city backg QDial)
+ * - Ahead-of-date cities appear teal/green (moreW wedge)
+ * - Behind-date cities appear dark red (lessW wedge)
+ *
+ * The cache is built once (text is fixed relative to the ring image) and
+ * drawn each frame with the ring's rotation angle applied.
  */
-function drawTerraCityNames(
+function drawTerraRingWithKnockouts(
     ctx: RenderContext,
     part: QHandPart,
     env: Environment,
+    images?: Map<string, LoadedImage>,
 ): void {
     const terraSlots = (env as any)._terraSlots as Record<number, { cityName: string }> | undefined;
-    if (!terraSlots) return;
+    if (!terraSlots || !images || !part.src) return;
+
+    const loaded = images.get(part.src);
+    if (!loaded) return;
 
     const angle = part.dynamicState
         ? part.dynamicState.currentAngle
         : evalAttr(part.angle, env);
 
-    // Ring band spans roughly radius 120–139 in XML coords
-    const cityFS = 8;
-    const cityRad2 = 131;             // outer track: text center at ~131
-    const cityRad1 = 127 - cityFS;    // inner track: text center at ~119
-    const sectorAngle = Math.PI / 12;  // 15° per slot
+    // Get or build the knockout cache
+    let cache = (env as any)._terraCityKnockout as OffscreenCanvas | undefined;
+    if (!cache) {
+        cache = buildTerraRingKnockoutCache(loaded, terraSlots);
+        (env as any)._terraCityKnockout = cache;
+    }
+
+    // Draw the cached knockout at the ring's current rotation
+    const { scale: imgScale } = loaded;
+    const drawW = cache.width * imgScale;
+    const drawH = cache.height * imgScale;
 
     ctx.save();
     ctx.rotate(angle);
-    ctx.font = `${cityFS}px Arial`;
-    ctx.fillStyle = 'black';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.drawImage(cache, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
+}
+
+/**
+ * Build the knockout cache: ring background image with text-shaped
+ * transparent holes punched through it. Called once and cached.
+ *
+ * Works at the ring image's native pixel resolution for maximum sharpness.
+ */
+function buildTerraRingKnockoutCache(
+    loaded: LoadedImage,
+    terraSlots: Record<number, { cityName: string }>,
+): OffscreenCanvas {
+    const { bitmap, scale: imgScale } = loaded;
+    const w = bitmap.width;
+    const h = bitmap.height;
+
+    const offscreen = new OffscreenCanvas(w, h);
+    const oCtx = offscreen.getContext('2d')!;
+
+    // 1) Draw the ring background image at native resolution
+    oCtx.drawImage(bitmap, 0, 0);
+
+    // 2) Set up centered XML-like coordinates for text placement.
+    //    The image is drawn centered during rendering, so (w/2, h/2) maps
+    //    to (0,0) in XML space. imgScale converts XML units to image pixels.
+    oCtx.translate(w / 2, h / 2);
+    const xmlToPixel = 1 / imgScale;  // how many image pixels per XML unit
+    oCtx.scale(xmlToPixel, xmlToPixel);
+
+    // 3) Punch out text-shaped holes using destination-out
+    oCtx.globalCompositeOperation = 'destination-out';
+
+    const cityFS = 8;
+    const cityRad2 = 131;            // outer track text center
+    const cityRad1 = 127 - cityFS;   // inner track text center = 119
+    const sectorAngle = Math.PI / 12; // 15° per slot
+
+    oCtx.font = `${cityFS}px Arial`;
+    oCtx.fillStyle = 'white';  // color irrelevant for destination-out; only alpha matters
+    oCtx.textAlign = 'center';
+    oCtx.textBaseline = 'middle';
 
     for (let i = 0; i < 24; i++) {
         const slot = terraSlots[i + 5]; // ring slots are 5–28
@@ -2021,41 +2089,35 @@ function drawTerraCityNames(
         const radius = (i % 2 === 0) ? cityRad1 : cityRad2;
         const name = slot.cityName;
 
-        // Measure each character's width and total angular span
+        // Measure each character and compute total angular span
         const charWidths: number[] = [];
         let totalWidth = 0;
         for (let c = 0; c < name.length; c++) {
-            const w = ctx.measureText(name[c]).width;
-            charWidths.push(w);
-            totalWidth += w;
+            const cw = oCtx.measureText(name[c]).width;
+            charWidths.push(cw);
+            totalWidth += cw;
         }
-        const totalAngle = totalWidth / radius;
+        const totalAngleSpan = totalWidth / radius;
 
-        // Center the name on the slot's angular position.
-        // Characters go in increasing angle direction (clockwise at top).
-        let charAngle = slotCenterAngle - totalAngle / 2;
+        // Center the name on the slot's angular position
+        let charAngle = slotCenterAngle - totalAngleSpan / 2;
 
         for (let c = 0; c < name.length; c++) {
             const charAngularWidth = charWidths[c] / radius;
             const charCenterAngle = charAngle + charAngularWidth / 2;
 
-            ctx.save();
-            // Rotate to this character's angular position
-            ctx.rotate(charCenterAngle);
-            // Move to the radius (up = -Y in canvas)
-            ctx.translate(0, -radius);
-            // After rotate+translate, +Y points toward center.
-            // Canvas text draws with tops toward -Y, which is OUTWARD. ✓
-            // No additional rotation needed.
-
-            ctx.fillText(name[c], 0, 0);
-            ctx.restore();
+            oCtx.save();
+            oCtx.rotate(charCenterAngle);
+            oCtx.translate(0, -radius);
+            oCtx.fillText(name[c], 0, 0);
+            oCtx.restore();
 
             charAngle += charAngularWidth;
         }
     }
 
-    ctx.restore();
+    oCtx.globalCompositeOperation = 'source-over';
+    return offscreen;
 }
 
 // ============================================================================
