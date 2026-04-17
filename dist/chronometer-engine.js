@@ -1515,23 +1515,20 @@
           let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
           if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
           const angleDurationMs = animateSpeed > 0 ? angleDelta / animateSpeed * 1e3 : 0;
-          let offsetDurationMs = 0;
+          if (angleDurationMs > timeUntilNextUpdateMs) {
+            startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+          } else {
+            startAnimation(state, newTarget, now);
+          }
           if (newOffsetTarget !== null && state.offsetAngle) {
             const normOffTarget = fmod2(newOffsetTarget, 2 * Math.PI);
             const normOffCurrent = fmod2(state.offsetAngle.currentValue, 2 * Math.PI);
             let offDelta = Math.abs(normOffTarget - normOffCurrent);
             if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
-            offsetDurationMs = animateSpeed > 0 ? offDelta / animateSpeed * 1e3 : 0;
-          }
-          const normalDurationMs = Math.max(angleDurationMs, offsetDurationMs);
-          if (normalDurationMs > timeUntilNextUpdateMs) {
-            startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
-            if (newOffsetTarget !== null && state.offsetAngle) {
+            const offsetDurationMs = animateSpeed > 0 ? offDelta / animateSpeed * 1e3 : 0;
+            if (offsetDurationMs > timeUntilNextUpdateMs) {
               startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
-            }
-          } else {
-            startAnimation(state, newTarget, now);
-            if (newOffsetTarget !== null && state.offsetAngle) {
+            } else {
               startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
             }
           }
@@ -16734,15 +16731,14 @@
         e.preventDefault();
         e.stopPropagation();
         timeController.step(unit, dir);
-        const stepDeltaSec = displaySecondsPerTick(unit);
         timeController.beginFrame();
         const stepNow = performance.now();
         for (const face of faces) {
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
-          tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
-          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+          tickAnimations(face.handStates, face.env, stepNow, null, 0);
+          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
         }
         timeController.endFrame();
         updateTimeUI();
@@ -16764,15 +16760,14 @@
         e.preventDefault();
         e.stopPropagation();
         timeController.step(unit, dir);
-        const stepDeltaSec = displaySecondsPerTick(unit);
         timeController.beginFrame();
         const stepNow = performance.now();
         for (const face of faces) {
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
-          tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
-          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+          tickAnimations(face.handStates, face.env, stepNow, null, 0);
+          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
         }
         timeController.endFrame();
         updateTimeUI();

@@ -1775,16 +1775,16 @@ async function main() {
             e.stopPropagation();
             // Immediate single step with smooth animation
             timeController.step(unit, dir);
-            // One-shot: re-evaluate all hands with tick-interval animation
-            const stepDeltaSec = displaySecondsPerTick(unit);
+            // One-shot: re-evaluate all hands with natural speed animation
+            // (null tickIntervalMs = no compression, unlike continuous scrub)
             timeController.beginFrame();
             const stepNow = performance.now();
             for (const face of faces) {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
-                tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
-                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+                tickAnimations(face.handStates, face.env, stepNow, null, 0);
+                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
             }
             timeController.endFrame();
             updateTimeUI();
@@ -1813,15 +1813,16 @@ async function main() {
             e.stopPropagation();
             // Immediate single step with smooth animation
             timeController.step(unit, dir);
-            const stepDeltaSec = displaySecondsPerTick(unit);
+            // One-shot: re-evaluate all hands with natural speed animation
+            // (null tickIntervalMs = no compression, unlike continuous scrub)
             timeController.beginFrame();
             const stepNow = performance.now();
             for (const face of faces) {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
-                tickAnimations(face.handStates, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
-                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, TICK_INTERVAL_MS, stepDeltaSec);
+                tickAnimations(face.handStates, face.env, stepNow, null, 0);
+                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
             }
             timeController.endFrame();
             updateTimeUI();

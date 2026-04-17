@@ -216,7 +216,9 @@ export function tickAnimations(
 
                 // Adaptive duration: use normal speed unless it wouldn't
                 // finish before the next re-evaluation.
-                // Check BOTH angle and offsetAngle to decide compression.
+                // Angle and offsetAngle are compressed INDEPENDENTLY so that
+                // e.g. a slow wedge flip doesn't get compressed just because
+                // the offset (ring tracking) needs compression.
                 const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
 
                 // Angle duration
@@ -228,31 +230,26 @@ export function tickAnimations(
                     ? (angleDelta / animateSpeed) * 1000
                     : 0;
 
-                // OffsetAngle duration (may be the dominant animation)
-                let offsetDurationMs = 0;
+                // Compress angle if needed, otherwise use natural speed
+                if (angleDurationMs > timeUntilNextUpdateMs) {
+                    startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+                } else {
+                    startAnimation(state, newTarget, now);
+                }
+
+                // Handle offsetAngle independently
                 if (newOffsetTarget !== null && state.offsetAngle) {
                     const normOffTarget = fmod(newOffsetTarget, 2 * Math.PI);
                     const normOffCurrent = fmod(state.offsetAngle.currentValue, 2 * Math.PI);
                     let offDelta = Math.abs(normOffTarget - normOffCurrent);
                     if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
-                    offsetDurationMs = (animateSpeed > 0)
+                    const offsetDurationMs = (animateSpeed > 0)
                         ? (offDelta / animateSpeed) * 1000
                         : 0;
-                }
 
-                const normalDurationMs = Math.max(angleDurationMs, offsetDurationMs);
-
-                if (normalDurationMs > timeUntilNextUpdateMs) {
-                    // Animation wouldn't finish before next re-eval:
-                    // compress to fit within the available time
-                    startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
-                    if (newOffsetTarget !== null && state.offsetAngle) {
+                    if (offsetDurationMs > timeUntilNextUpdateMs) {
                         startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
-                    }
-                } else {
-                    // Animation finishes in time: use normal speed
-                    startAnimation(state, newTarget, now);
-                    if (newOffsetTarget !== null && state.offsetAngle) {
+                    } else {
                         startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
                     }
                 }
