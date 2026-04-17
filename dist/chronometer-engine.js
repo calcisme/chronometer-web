@@ -16251,6 +16251,7 @@
       stopScheduler();
       startScheduler();
     }
+    const browserBtnLabel = lpUseBrowser.textContent || "Use device location via browser";
     function showLocationPrompt(blur) {
       locationPrompt.style.display = "";
       if (blur) grid.classList.add("blurred");
@@ -16279,11 +16280,11 @@
       if (geoPermission === "denied") {
         btn.disabled = true;
         btn.dataset.tooltip = deniedTooltip;
-        btn.textContent = "Use browser location (unavailable)";
+        btn.textContent = browserBtnLabel + " (unavailable)";
       } else {
         btn.disabled = false;
         delete btn.dataset.tooltip;
-        btn.textContent = "Use browser location";
+        btn.textContent = browserBtnLabel;
       }
       const coordsBtn = lpUseCoords;
       function validateCoordInputs() {
@@ -16410,7 +16411,7 @@
     lpUseBrowser.addEventListener("click", async () => {
       lpUseBrowser.textContent = "Requesting\u2026";
       const loc = await requestBrowserLocation();
-      lpUseBrowser.textContent = "Use browser location";
+      lpUseBrowser.textContent = browserBtnLabel;
       if (loc) {
         applyLocation(loc.lat, loc.lon, "", "", "browser", false, null);
         writeUrlState({ bloc: true, lat: null, lon: null, city: null });

@@ -433,6 +433,7 @@
   var lpDoneBtn = document.getElementById("lp-done");
   var lpDialogFooter = lpDoneBtn.parentElement;
   var hasLocation = false;
+  var browserBtnLabel = lpUseBrowser.textContent || "Use device location via browser";
   var currentLat = 0;
   var currentLon = 0;
   var locationSource = "";
@@ -443,7 +444,7 @@
     if (geoDenied) {
       lpUseBrowser.disabled = true;
       lpUseBrowser.dataset.tooltip = isFileProtocol ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
-      lpUseBrowser.textContent = "Use browser location (unavailable)";
+      lpUseBrowser.textContent = browserBtnLabel + " (unavailable)";
     }
     if (hasLocation) {
       lpStatusSection.classList.add("visible");
@@ -516,7 +517,7 @@
   lpUseBrowser.addEventListener("click", async () => {
     lpUseBrowser.textContent = "Requesting\u2026";
     const loc = await requestBrowserLocation();
-    lpUseBrowser.textContent = "Use browser location";
+    lpUseBrowser.textContent = browserBtnLabel;
     if (loc) {
       applyLocation(loc.lat, loc.lon, "", "", "browser", false);
       writeUrlState({ bloc: true, lat: null, lon: null, city: null });

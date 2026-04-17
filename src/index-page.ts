@@ -116,6 +116,7 @@ const lpDoneBtn = document.getElementById('lp-done')!;
 const lpDialogFooter = lpDoneBtn.parentElement!;
 
 let hasLocation = false;  // tracks whether a valid location has been set
+const browserBtnLabel = (lpUseBrowser as HTMLButtonElement).textContent || 'Use device location via browser';
 let currentLat = 0;
 let currentLon = 0;
 let locationSource = '';
@@ -129,7 +130,7 @@ function showPrompt(geoDenied: boolean) {
         lpUseBrowser.dataset.tooltip = isFileProtocol
             ? 'Not all browsers support location access from file:// URLs'
             : 'Browser location was not granted — check your browser settings to allow it';
-        lpUseBrowser.textContent = 'Use browser location (unavailable)';
+        lpUseBrowser.textContent = browserBtnLabel + ' (unavailable)';
     }
 
     // Show status or no-location placeholder
@@ -215,7 +216,7 @@ lpUseCoords.addEventListener('click', () => {
 lpUseBrowser.addEventListener('click', async () => {
     lpUseBrowser.textContent = 'Requesting…';
     const loc = await requestBrowserLocation();
-    lpUseBrowser.textContent = 'Use browser location';
+    lpUseBrowser.textContent = browserBtnLabel;
     if (loc) {
         applyLocation(loc.lat, loc.lon, '', '', 'browser', false);
         // Write bloc=1 and clear lat/lon/city so next reload asks browser again

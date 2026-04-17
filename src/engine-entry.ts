@@ -1000,6 +1000,8 @@ async function main() {
         stopScheduler();
         startScheduler();
     }
+    // Capture the browser button's label from the HTML (single source of truth)
+    const browserBtnLabel = (lpUseBrowser as HTMLButtonElement).textContent || 'Use device location via browser';
 
     function showLocationPrompt(blur: boolean) {
         locationPrompt.style.display = '';
@@ -1037,11 +1039,11 @@ async function main() {
         if (geoPermission === 'denied') {
             btn.disabled = true;
             btn.dataset.tooltip = deniedTooltip;
-            btn.textContent = 'Use browser location (unavailable)';
+            btn.textContent = browserBtnLabel + ' (unavailable)';
         } else {
             btn.disabled = false;
             delete btn.dataset.tooltip;
-            btn.textContent = 'Use browser location';
+            btn.textContent = browserBtnLabel;
         }
 
         // Disable "Use this location" until inputs have valid numbers
@@ -1203,7 +1205,7 @@ async function main() {
     lpUseBrowser.addEventListener('click', async () => {
         lpUseBrowser.textContent = 'Requesting…';
         const loc = await requestBrowserLocation();
-        lpUseBrowser.textContent = 'Use browser location';
+        lpUseBrowser.textContent = browserBtnLabel;
         if (loc) {
             applyLocation(loc.lat, loc.lon, '', '', 'browser', false, null);
             // Write bloc=1 and clear lat/lon/city so next reload asks browser again
