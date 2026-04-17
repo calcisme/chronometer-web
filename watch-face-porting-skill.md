@@ -85,3 +85,16 @@ When a hand has `offsetRadius > 0`, the renderer uses polar-offset mode (see `re
 * **URL parameter vs init blocks**: When the URL specifies a body parameter, it must be applied **after** XML init block evaluation in `watch-env.ts`, as init blocks may set default values that would overwrite the URL parameter.
 * **Animation-preserving body switch**: When switching bodies, preserve existing `HandState` objects rather than recreating them. Update the environment, reset schedules, and let the animation system interpolate from old to new target values for smooth transitions.
 
+## 12. Runtime State Changes — Never Rebuild Parts
+
+* **Parts are parsed once at startup**: `parseWatchXML` is called exactly once per face during initial load. The resulting `watch.parts` array is **never replaced** after that. All runtime state changes — time ticks, location changes, body switches, timezone changes — must preserve the existing part tree.
+* **Animation-preserving pattern**: When any input changes (location, time, body, timezone), follow the same pattern used by the Venezia body switch:
+  1. Create a fresh `Environment` via `createWatchEnvironment()` (picks up new lat/lon/timezone/body)
+  2. Preserve existing `HandState` objects — do NOT call `initHandStates()`
+  3. Reset hand schedules (`hs.nextUpdateTime = 0`) so expressions re-evaluate immediately
+  4. Update terminator leaf angles and reset their schedules
+  5. Rebuild static caches (`buildStaticBlockCaches()`) for visual elements that depend on the new state
+  6. Restart the scheduler
+* **The only exceptions** where full rebuild (including fresh hand states) is acceptable are: initial startup and canvas resize — both are "from scratch" moments where there are no animations to preserve.
+* **If you believe a full part rebuild is needed, STOP and ask the user**. There is almost certainly a way to achieve the desired effect by refreshing the environment and resetting schedules instead.
+
