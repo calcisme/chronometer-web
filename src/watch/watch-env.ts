@@ -1113,6 +1113,18 @@ function registerTimeFunctions(
         );
     });
 
+    // --- Planet transit 24-hour indicator angle (used by Miami) ---
+    // iOS: planettransit24HourIndicatorAngle(planetNumber, numLeaves)
+    //   = dayNightLeafAngle(planetNumber, numLeaves/2, numLeaves)
+    // Android XML calls with 1 arg; numLeaves defaults to env variable planNumWedges
+    functions.set('planettransit24HourIndicatorAngle', (planetNumber: number, numLeaves?: number) => {
+        const nl = (numLeaves != null && numLeaves > 0) ? numLeaves : (env.variables.get('planNumWedges') || 24);
+        return computeDayNightLeafAngle(
+            planetNumber, nl / 2.0, nl,
+            getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
+        );
+    });
+
     // =========================================================================
     // Terra I — World-time ring functions
     // =========================================================================

@@ -12653,6 +12653,19 @@
         tzOffsetSeconds
       );
     });
+    functions.set("planettransit24HourIndicatorAngle", (planetNumber, numLeaves) => {
+      const nl = numLeaves != null && numLeaves > 0 ? numLeaves : env.variables.get("planNumWedges") || 24;
+      return computeDayNightLeafAngle(
+        planetNumber,
+        nl / 2,
+        nl,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+    });
     const terraRingDefaults = {};
     for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
       terraRingDefaults[Number(k)] = { ...v };
