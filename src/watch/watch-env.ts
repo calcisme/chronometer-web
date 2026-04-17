@@ -786,11 +786,41 @@ function registerTimeFunctions(
     // Computes moonAge (= moonEclipticLong - sunEclipticLong) at local midnight ± n days.
     // Uses JS Date for DST-correct midnight (better than iOS, which is imprecise across DST).
     functions.set('moonDeltaEclipticLongitudeAtDeltaDay', (n: number) => {
-        const nowDate = getNow();
+        const nowDate = liveDate();
         // Midnight of the target day in local timezone (DST-aware)
         const targetMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + n);
-        const requestedDI = dateToDateInterval(targetMidnight);
+        const requestedDI = dateToDateInterval(new Date(targetMidnight.getTime() - tzDeltaMs));
         return moonAge(requestedDI, null).age;
+    });
+
+    // --- DEL wedge color functions (iOS-style stable alternation) ---
+    // These anchor the A/B color to the absolute day-of-month parity instead of
+    // the relative offset, preventing the ring from swapping colors at midnight.
+    // The current day (n=0) is always "A", and each absolute day keeps its color
+    // assignment regardless of when midnight crosses.
+    functions.set('delOnDayTintColor', (n: number) => {
+        const dayNum = liveDate().getDate();
+        return ((dayNum + n) % 2 === 0)
+            ? env.variables.get('delOnDayTintColorA')!
+            : env.variables.get('delOnDayTintColorB')!;
+    });
+    functions.set('delOnDayStrokeColor', (n: number) => {
+        const dayNum = liveDate().getDate();
+        return ((dayNum + n) % 2 === 0)
+            ? env.variables.get('delOnDayStrokeColorA')!
+            : env.variables.get('delOnDayStrokeColorB')!;
+    });
+    functions.set('delOnDayTintNColor', (n: number) => {
+        const dayNum = liveDate().getDate();
+        return ((dayNum + n) % 2 === 0)
+            ? env.variables.get('delOnDayTintNColorA')!
+            : env.variables.get('delOnDayTintNColorB')!;
+    });
+    functions.set('delOnDayStrokeNColor', (n: number) => {
+        const dayNum = liveDate().getDate();
+        return ((dayNum + n) % 2 === 0)
+            ? env.variables.get('delOnDayStrokeNColorA')!
+            : env.variables.get('delOnDayStrokeNColorB')!;
     });
 
     // --- Moonrise/moonset for today (LIVE — recompute on call) ---

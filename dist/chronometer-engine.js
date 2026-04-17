@@ -12354,10 +12354,26 @@
       return lunarAscendingNodeLongitude(di, null);
     });
     functions.set("moonDeltaEclipticLongitudeAtDeltaDay", (n) => {
-      const nowDate = getNow();
+      const nowDate = liveDate();
       const targetMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + n);
-      const requestedDI = dateToDateInterval(targetMidnight);
+      const requestedDI = dateToDateInterval(new Date(targetMidnight.getTime() - tzDeltaMs));
       return moonAge(requestedDI, null).age;
+    });
+    functions.set("delOnDayTintColor", (n) => {
+      const dayNum = liveDate().getDate();
+      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayTintColorA") : env.variables.get("delOnDayTintColorB");
+    });
+    functions.set("delOnDayStrokeColor", (n) => {
+      const dayNum = liveDate().getDate();
+      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayStrokeColorA") : env.variables.get("delOnDayStrokeColorB");
+    });
+    functions.set("delOnDayTintNColor", (n) => {
+      const dayNum = liveDate().getDate();
+      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayTintNColorA") : env.variables.get("delOnDayTintNColorB");
+    });
+    functions.set("delOnDayStrokeNColor", (n) => {
+      const dayNum = liveDate().getDate();
+      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayStrokeNColorA") : env.variables.get("delOnDayStrokeNColorB");
     });
     functions.set("moonriseForDayValid", () => {
       return isNaN(riseSetForDay(true, 1 /* Moon */)) ? 0 : 1;
