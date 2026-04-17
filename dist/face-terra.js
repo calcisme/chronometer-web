@@ -27,6 +27,8 @@
   <init	expr='faceR=faceWidth/2' />
   <init	expr='cityRad2=faceR-1,     dot2Rad=cityRad2-cityFS-2.5, channel2Rad=dot2Rad*2, channelWidth=.25, dotHeight=3, dotWidth=4, moverWidth=24' />
   <init	expr='cityRad1=dot2Rad-1, dot1Rad=cityRad1-cityFS-2.5, channel1Rad=dot1Rad*2' />
+  <!-- Override dot radii to align with channel line radii (111.5 / 126) -->
+  <init	expr='dot1Rad=112, dot2Rad=125.5' />
   <init	expr='butR=dot2Rad-1' />
   <init	expr='hourWheelOR=dot1Rad-4, hourWheelIR=hourWheelOR-hour12FS-2' />
   <init expr='ringOR=hourWheelOR, ringW=5, ringIR=hourWheelIR, dnNum=48' />
