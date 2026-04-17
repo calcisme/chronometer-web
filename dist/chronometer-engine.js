@@ -11968,12 +11968,11 @@
     functions.set("hour24Number", () => liveTime().h24);
     functions.set("hour24Value", () => {
       const t = liveTime();
-      return t.h24 + t.min / 60 + t.s / 3600;
+      return t.h24 + t.m / 60;
     });
     functions.set("hour24ValueAngle", () => {
       const t = liveTime();
-      const h24 = t.h24 + t.min / 60 + t.s / 3600;
-      return h24 * 2 * Math.PI / 24;
+      return (t.h24 + t.m / 60) * 2 * Math.PI / 24;
     });
     functions.set("tzOffsetAngle", () => {
       return tzOffsetSeconds * Math.PI / (3600 * 12);
@@ -12073,15 +12072,16 @@
     function riseSetForDay(riseNotSet, planetNumber) {
       const now2 = getNow();
       const calcDate = dateToDateInterval(now2);
+      const ld = liveDate();
       const localNoon = new Date(
-        now2.getFullYear(),
-        now2.getMonth(),
-        now2.getDate(),
+        ld.getFullYear(),
+        ld.getMonth(),
+        ld.getDate(),
         12,
         0,
         0
       );
-      const noonDI = dateToDateInterval(localNoon);
+      const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
       const fwdResult = planetaryRiseSetTimeRefined(
         noonDI,
         OBSERVER_LAT,
@@ -12109,12 +12109,12 @@
       return NaN;
     }
     function isSameLocalDay(di1, di2) {
-      const d1 = new Date((di1 + 978307200) * 1e3);
-      const d2 = new Date((di2 + 978307200) * 1e3);
+      const d1 = new Date((di1 + 978307200) * 1e3 + tzDeltaMs);
+      const d2 = new Date((di2 + 978307200) * 1e3 + tzDeltaMs);
       return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
     }
     function riseSetAngles(di) {
-      const d = new Date((di + 978307200) * 1e3);
+      const d = new Date((di + 978307200) * 1e3 + tzDeltaMs);
       return {
         hour12: d.getHours() % 12 + d.getMinutes() / 60 + d.getSeconds() / 3600,
         minute: d.getMinutes() + d.getSeconds() / 60,
@@ -12229,8 +12229,10 @@
     function transitForDay(planetNumber) {
       const now2 = getNow();
       const di = dateToDateInterval(now2);
-      const localNoon = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(), 12, 0, 0);
-      const noonDI = dateToDateInterval(localNoon);
+      const utcNowSec = di + 978307200;
+      const localNowSec = utcNowSec + tzOffsetSeconds;
+      const localDayStartSec = localNowSec - (localNowSec % 86400 + 86400) % 86400;
+      const noonDI = localDayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
       const result = planettransitTimeRefined(noonDI, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
       if (isSameLocalDay(result, di)) return result;
       const result2 = planettransitTimeRefined(noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
@@ -12468,12 +12470,12 @@
       return moonRAAndDecl(di, null).rightAscension;
     });
     functions.set("minuteValue", () => {
-      const now2 = getNow();
+      const now2 = liveDate();
       const secSinceMidnight = now2.getHours() * 3600 + now2.getMinutes() * 60 + now2.getSeconds() + now2.getMilliseconds() / 1e3;
       return fmod(secSinceMidnight / 60, 60);
     });
     functions.set("minuteValueAngle", () => {
-      const now2 = getNow();
+      const now2 = liveDate();
       const secSinceMidnight = now2.getHours() * 3600 + now2.getMinutes() * 60 + now2.getSeconds() + now2.getMilliseconds() / 1e3;
       return fmod(secSinceMidnight / 60, 60) * 2 * Math.PI / 60;
     });
@@ -12509,10 +12511,10 @@
       return value;
     });
     functions.set("year366IndicatorAngle", () => {
-      return computeYear366IndicatorFraction(getNow()) * 2 * Math.PI;
+      return computeYear366IndicatorFraction(liveDate()) * 2 * Math.PI;
     });
     functions.set("closestSunEclipticLongitudeQuarter366IndicatorAngle", (quarterNumber) => {
-      return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow());
+      return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow(), tzDeltaMs);
     });
     functions.set("planetrise24HourIndicatorAngleLST", (planetNumber) => {
       return computeDayNightLeafAngleLST(
@@ -12666,20 +12668,20 @@
     }
     let detectedTopSlot = 16;
     try {
-      const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
       for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-        if (data.olsonId === browserTz) {
+        if (data.olsonId === targetTz) {
           detectedTopSlot = parseInt(slotStr, 10);
           break;
         }
       }
-      if (detectedTopSlot === 16 && browserTz !== "Europe/London" && browserTz !== "UTC") {
+      if (detectedTopSlot === 16 && targetTz !== "Europe/London" && targetTz !== "UTC") {
         const nowDate = getNow();
-        const browserOffset = getTzOffsetSeconds(browserTz, nowDate);
+        const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
         let bestDiff = Infinity;
         for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
           const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
-          const diff = Math.abs(slotOffset - browserOffset);
+          const diff = Math.abs(slotOffset - targetOffset);
           if (diff < bestDiff) {
             bestDiff = diff;
             detectedTopSlot = parseInt(slotStr, 10);
@@ -12814,9 +12816,10 @@
       pool
     );
     const transitSearchForward = riseNotSet ? !sunIsUp : sunIsUp;
-    const now = getNow();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    const noonDI = dateToDateInterval(noon);
+    const utcSec = calcDate + 978307200;
+    const localSec = utcSec + tzOffsetSeconds;
+    const dayStartSec = localSec - (localSec % 86400 + 86400) % 86400;
+    const noonDI = dayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
     const noonAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
     if (isNoRiseSet(eventTime)) {
       if (eventTime === kECAlwaysAboveHorizon) {
@@ -12886,9 +12889,11 @@
     }
     return false;
   }
-  function angle24HourForDate(dateInterval, _tzOffsetSeconds) {
-    const d = new Date((dateInterval + 978307200) * 1e3);
-    const h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+  function angle24HourForDate(dateInterval, tzOffsetSeconds) {
+    const utcSeconds = dateInterval + 978307200;
+    const localSeconds = utcSeconds + tzOffsetSeconds;
+    const secondsInDay = (localSeconds % 86400 + 86400) % 86400;
+    const h = secondsInDay / 3600;
     return h * Math.PI / 12;
   }
   function computeDayNightLeafAngle(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
@@ -12916,11 +12921,15 @@
       NaN,
       pool
     );
-    const now = getNow();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    const rTransitAngle = angle24HourForDate(dateToDateInterval(noon), tzOffsetSeconds);
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const sTransitAngle = angle24HourForDate(dateToDateInterval(midnight), tzOffsetSeconds);
+    const utcNowSec = dateToDateInterval(getNow()) + 978307200;
+    const localNowSec = utcNowSec + tzOffsetSeconds;
+    const localDayStartSec = localNowSec - (localNowSec % 86400 + 86400) % 86400;
+    const noonUTCSec = localDayStartSec + 12 * 3600 - tzOffsetSeconds;
+    const midnightUTCSec = localDayStartSec - tzOffsetSeconds;
+    const noonDI = noonUTCSec - 978307200;
+    const midnightDI = midnightUTCSec - 978307200;
+    const rTransitAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
+    const sTransitAngle = angle24HourForDate(midnightDI, tzOffsetSeconds);
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
     if (numLeaves === 0) {
@@ -13017,14 +13026,14 @@
     const kECSecondsInTropicalYear = 3600 * 24 * 365.2422;
     return tryDate + deltaAngleToTarget * kECSecondsInTropicalYear / (2 * Math.PI);
   }
-  function computeClosestSunEclipticLongQuarter366Angle(quarterNumber, nowDate) {
+  function computeClosestSunEclipticLongQuarter366Angle(quarterNumber, nowDate, tzDeltaMs) {
     const calcDate = dateToDateInterval(nowDate);
     const targetSunLong = quarterNumber * Math.PI / 2;
     let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate);
     tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
-    const targetDate = new Date((targetTime + 978307200) * 1e3);
+    const targetDate = new Date((targetTime + 978307200) * 1e3 + tzDeltaMs);
     return computeYear366IndicatorFraction(targetDate) * 2 * Math.PI;
   }
   function angle24HourLSTForDate(dateInterval, observerLon) {

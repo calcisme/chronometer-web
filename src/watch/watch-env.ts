@@ -265,15 +265,15 @@ function registerTimeFunctions(
     functions.set('secondValue', () => liveTime().s);
     functions.set('hour24Number', () => liveTime().h24);
     // hour24Value: 24-hour time as continuous float (e.g. 14.5 = 2:30 PM)
+    // t.m already includes seconds/60, so t.h24 + t.m/60 gives the full fractional hour.
     functions.set('hour24Value', () => {
         const t = liveTime();
-        return t.h24 + t.min / 60 + t.s / 3600;
+        return t.h24 + t.m / 60;
     });
     // hour24ValueAngle: 24-hour time as angle (2π/24 per hour)
     functions.set('hour24ValueAngle', () => {
         const t = liveTime();
-        const h24 = t.h24 + t.min / 60 + t.s / 3600;
-        return h24 * 2 * Math.PI / 24;
+        return (t.h24 + t.m / 60) * 2 * Math.PI / 24;
     });
     // tzOffsetAngle: local timezone UTC offset as angle on 24-hour dial
     functions.set('tzOffsetAngle', () => {
@@ -427,10 +427,12 @@ function registerTimeFunctions(
         // Compute LOCAL noon of the user's calendar day.
         // We must use local time (not UT) because isSameLocalDay
         // compares results in the user's timezone.
+        const ld = liveDate();  // timezone-shifted date
         const localNoon = new Date(
-            now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0,
+            ld.getFullYear(), ld.getMonth(), ld.getDate(), 12, 0, 0,
         );
-        const noonDI = dateToDateInterval(localNoon);
+        // Shift back to real UTC for the astronomy calculation
+        const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
 
         // Search from local noon — both sunrise (~6h before) and sunset
         // (~6h after) are within the solver's convergence radius.
@@ -454,18 +456,20 @@ function registerTimeFunctions(
         return NaN;  // no event on current day
     }
 
-    /** Check if two date intervals fall on the same local calendar day */
+    /** Check if two date intervals fall on the same local calendar day (in the target timezone) */
     function isSameLocalDay(di1: number, di2: number): boolean {
-        const d1 = new Date((di1 + 978307200) * 1000);
-        const d2 = new Date((di2 + 978307200) * 1000);
+        // Shift to target timezone for comparison
+        const d1 = new Date((di1 + 978307200) * 1000 + tzDeltaMs);
+        const d2 = new Date((di2 + 978307200) * 1000 + tzDeltaMs);
         return d1.getFullYear() === d2.getFullYear()
             && d1.getMonth() === d2.getMonth()
             && d1.getDate() === d2.getDate();
     }
 
-    /** Convert a dateInterval rise/set result into hour12/minute/hour24 values */
+    /** Convert a dateInterval rise/set result into hour12/minute/hour24 values (in target timezone) */
     function riseSetAngles(di: number): { hour12: number; minute: number; hour24: number } {
-        const d = new Date((di + 978307200) * 1000);
+        // Shift to target timezone so getHours/getMinutes return local values
+        const d = new Date((di + 978307200) * 1000 + tzDeltaMs);
         return {
             hour12: (d.getHours() % 12) + d.getMinutes() / 60 + d.getSeconds() / 3600,
             minute: d.getMinutes() + d.getSeconds() / 60,
@@ -607,8 +611,11 @@ function registerTimeFunctions(
     function transitForDay(planetNumber: ECPlanetNumber): number {
         const now = getNow();
         const di = dateToDateInterval(now);
-        const localNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-        const noonDI = dateToDateInterval(localNoon);
+        // Compute local noon in the target timezone using UTC arithmetic
+        const utcNowSec = di + 978307200;
+        const localNowSec = utcNowSec + tzOffsetSeconds;
+        const localDayStartSec = localNowSec - ((localNowSec % 86400) + 86400) % 86400;
+        const noonDI = localDayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
 
         const result = planettransitTimeRefined(noonDI, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
         if (isSameLocalDay(result, di)) return result;
@@ -939,12 +946,12 @@ function registerTimeFunctions(
     // --- minuteValue: fractional minutes (12:35:45 => 35.75) ---
     // iOS: ECWatchTime minuteValueUsingEnv: secondsSinceMidnightValue / 60 mod 60
     functions.set('minuteValue', () => {
-        const now = getNow();
+        const now = liveDate();
         const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
         return fmod(secSinceMidnight / 60, 60);
     });
     functions.set('minuteValueAngle', () => {
-        const now = getNow();
+        const now = liveDate();
         const secSinceMidnight = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
         return fmod(secSinceMidnight / 60, 60) * 2 * Math.PI / 60;
     });
@@ -996,13 +1003,13 @@ function registerTimeFunctions(
     // iOS: year366IndicatorFractionUsingEnv * 2π
     // Fraction of 366-day year (non-leap years skip Feb 29 → offset after Feb)
     functions.set('year366IndicatorAngle', () => {
-        return computeYear366IndicatorFraction(getNow()) * 2 * Math.PI;
+        return computeYear366IndicatorFraction(liveDate()) * 2 * Math.PI;
     });
 
     // --- closestSunEclipticLongitudeQuarter366IndicatorAngle ---
     // iOS: finds time of closest equinox/solstice, converts to year366 indicator angle
     functions.set('closestSunEclipticLongitudeQuarter366IndicatorAngle', (quarterNumber: number) => {
-        return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow());
+        return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow(), tzDeltaMs);
     });
 
     // --- planetrise/set 24-hour indicator angle LST ---
@@ -1180,22 +1187,23 @@ function registerTimeFunctions(
     // --- Auto-detect which ring slot matches the user's timezone ---
     let detectedTopSlot = 16; // default: London (slot 16 = UTC)
     try {
-        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        // Use the override timezone if set, otherwise fall back to browser timezone
+        const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
         // First try exact Olson ID match
         for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-            if (data.olsonId === browserTz) {
+            if (data.olsonId === targetTz) {
                 detectedTopSlot = parseInt(slotStr, 10);
                 break;
             }
         }
         // If no exact match, match by offset
-        if (detectedTopSlot === 16 && browserTz !== 'Europe/London' && browserTz !== 'UTC') {
+        if (detectedTopSlot === 16 && targetTz !== 'Europe/London' && targetTz !== 'UTC') {
             const nowDate = getNow();
-            const browserOffset = getTzOffsetSeconds(browserTz, nowDate);
+            const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
             let bestDiff = Infinity;
             for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
                 const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
-                const diff = Math.abs(slotOffset - browserOffset);
+                const diff = Math.abs(slotOffset - targetOffset);
                 if (diff < bestDiff) {
                     bestDiff = diff;
                     detectedTopSlot = parseInt(slotStr, 10);
@@ -1403,9 +1411,11 @@ function dayNightLeafAngle(
     const transitSearchForward = riseNotSet ? !sunIsUp : sunIsUp;
     // Transit is midpoint of the search — we don't have a direct transit search,
     // so we'll use noon as transit fallback
-    const now = getNow();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    const noonDI = dateToDateInterval(noon);
+    // Compute local noon in the target timezone using UTC arithmetic
+    const utcSec = calcDate + 978307200;
+    const localSec = utcSec + tzOffsetSeconds;
+    const dayStartSec = localSec - ((localSec % 86400) + 86400) % 86400;
+    const noonDI = dayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
     const noonAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
 
     if (isNoRiseSet(eventTime)) {
@@ -1490,9 +1500,14 @@ function isPolarWinter(
  * Convert a dateInterval to a 24-hour angle in local time.
  * iOS: angle24HourForDateInterval:timeBaseKind:ECTimeBaseKindLT
  */
-function angle24HourForDate(dateInterval: number, _tzOffsetSeconds: number): number {
-    const d = new Date((dateInterval + 978307200) * 1000);  // Apple epoch to JS epoch
-    const h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+function angle24HourForDate(dateInterval: number, tzOffsetSeconds: number): number {
+    // Compute local time of day from the UTC dateInterval + timezone offset.
+    // This avoids relying on browser-local getHours() which would be wrong
+    // when the target timezone differs from the browser timezone.
+    const utcSeconds = dateInterval + 978307200;  // Apple epoch to Unix epoch
+    const localSeconds = utcSeconds + tzOffsetSeconds;
+    const secondsInDay = ((localSeconds % 86400) + 86400) % 86400;  // mod to [0, 86400)
+    const h = secondsInDay / 3600;
     return h * Math.PI / 12;  // 24h → 2π
 }
 
@@ -1534,11 +1549,17 @@ function computeDayNightLeafAngle(
     );
 
     // Compute transit angles for fallback
-    const now = getNow();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    const rTransitAngle = angle24HourForDate(dateToDateInterval(noon), tzOffsetSeconds);
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    const sTransitAngle = angle24HourForDate(dateToDateInterval(midnight), tzOffsetSeconds);
+    // Compute local noon and midnight in the target timezone using UTC arithmetic.
+    // Find the start of the current local day, then add 12h (noon) or 0h (midnight).
+    const utcNowSec = dateToDateInterval(getNow()) + 978307200;
+    const localNowSec = utcNowSec + tzOffsetSeconds;
+    const localDayStartSec = localNowSec - ((localNowSec % 86400) + 86400) % 86400;
+    const noonUTCSec = localDayStartSec + 12 * 3600 - tzOffsetSeconds;
+    const midnightUTCSec = localDayStartSec - tzOffsetSeconds;
+    const noonDI = noonUTCSec - 978307200;
+    const midnightDI = midnightUTCSec - 978307200;
+    const rTransitAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
+    const sTransitAngle = angle24HourForDate(midnightDI, tzOffsetSeconds);
 
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
@@ -1700,6 +1721,7 @@ function timeOfClosestSunEclipticLongitude(
 function computeClosestSunEclipticLongQuarter366Angle(
     quarterNumber: number,
     nowDate: Date,
+    tzDeltaMs: number,
 ): number {
     const calcDate = dateToDateInterval(nowDate);
     const targetSunLong = quarterNumber * Math.PI / 2;
@@ -1710,8 +1732,8 @@ function computeClosestSunEclipticLongQuarter366Angle(
     tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     
-    // Convert target interval to year366 fraction
-    const targetDate = new Date((targetTime + 978307200) * 1000); // Apple epoch to JS
+    // Convert target interval to year366 fraction (tz-shifted for local calendar)
+    const targetDate = new Date((targetTime + 978307200) * 1000 + tzDeltaMs);
     return computeYear366IndicatorFraction(targetDate) * 2 * Math.PI;
 }
 
