@@ -83,6 +83,14 @@ export interface HandState {
     animSpeed: number;
     /** Time source for scheduling aligned updates. */
     getNow: () => Date;
+
+    // --- Scrub-freeze support ---
+    /** Rendered angle captured when scrubbing starts. */
+    preScrubAngle: number | null;
+    /** Target evaluated on the first scrub tick (for comparison). */
+    firstScrubTarget: number | undefined;
+    /** True if this hand has been detected as frozen during scrub. */
+    scrubFrozen: boolean;
 }
 
 // ============================================================================
@@ -164,6 +172,9 @@ function createHandState(
         nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
         animSpeed,
         getNow,
+        preScrubAngle: null,
+        firstScrubTarget: undefined,
+        scrubFrozen: false,
     };
 }
 
@@ -205,6 +216,54 @@ export function tickAnimations(
 
             if (tickIntervalMs !== null && tickIntervalMs > 0) {
                 // --- Quantized mode ---
+
+                // --- Scrub-freeze detection ---
+                // On the first tick after a reset, store the evaluated target.
+                // On the second tick, if the target hasn't changed, this hand
+                // is "frozen" (its expression always returns the same value
+                // due to time-snapping, e.g. seconds=0 at hour-rate scrub).
+                // Frozen hands keep their pre-scrub rendered angle.
+                if (state.preScrubAngle !== null) {
+                    if (state.firstScrubTarget === undefined) {
+                        // First tick: record target, keep pre-scrub angle
+                        state.firstScrubTarget = newTarget;
+                        if (state.part.dynamicState) {
+                            state.part.dynamicState.currentAngle = state.preScrubAngle;
+                        }
+                        state.angle.currentValue = state.preScrubAngle;
+                        state.angle.targetValue = state.preScrubAngle;
+                        state.angle.animating = false;
+                        state.nextUpdateTime = now + tickIntervalMs;
+                        continue;
+                    }
+
+                    // Compare targets with a small epsilon for floating-point
+                    const EPSILON = 1e-9;
+                    const targetDelta = Math.abs(newTarget - state.firstScrubTarget);
+                    if (targetDelta < EPSILON || Math.abs(targetDelta - 2 * Math.PI) < EPSILON) {
+                        // Same target on consecutive ticks — hand is frozen
+                        state.scrubFrozen = true;
+                        if (state.part.dynamicState) {
+                            state.part.dynamicState.currentAngle = state.preScrubAngle;
+                        }
+                        state.angle.currentValue = state.preScrubAngle;
+                        state.angle.targetValue = state.preScrubAngle;
+                        state.angle.animating = false;
+                        state.nextUpdateTime = Infinity;  // no more updates needed
+                        continue;
+                    }
+
+                    // Target changed — this hand is active, not frozen.
+                    // Clear freeze state and fall through to normal animation.
+                    state.preScrubAngle = null;
+                    state.firstScrubTarget = undefined;
+                }
+
+                // Skip re-evaluation for confirmed frozen hands
+                if (state.scrubFrozen) {
+                    state.nextUpdateTime = Infinity;
+                    continue;
+                }
 
                 // Compute how many ticks until this part's next re-evaluation
                 let ticksUntilUpdate = 1;
@@ -348,6 +407,21 @@ export function finishAnimations(states: HandState[]): void {
 export function resetHandSchedules(states: HandState[]): void {
     for (const s of states) {
         s.nextUpdateTime = 0;
+        // Capture current rendered angle for potential scrub-freeze
+        s.preScrubAngle = s.part.dynamicState?.currentAngle ?? s.angle.currentValue;
+        s.firstScrubTarget = undefined;
+        s.scrubFrozen = false;
+    }
+}
+
+/**
+ * Clear scrub-freeze state (call when leaving scrub mode).
+ */
+export function clearScrubFreeze(states: HandState[]): void {
+    for (const s of states) {
+        s.preScrubAngle = null;
+        s.firstScrubTarget = undefined;
+        s.scrubFrozen = false;
     }
 }
 
