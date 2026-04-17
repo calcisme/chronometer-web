@@ -53,6 +53,45 @@ const DEFAULT_LAT_DEG = 37.205;    // degrees N
 const DEFAULT_LON_DEG = -121.954;  // degrees (west is negative)
 
 /**
+ * Compute the millisecond delta between a target IANA timezone and the
+ * browser's local timezone.  Adding this delta to a Date's getTime()
+ * makes getHours()/getMinutes()/etc. return values in the target timezone.
+ *
+ * @param olsonTimezone  IANA timezone (e.g. "Pacific/Honolulu"). If undefined
+ *                       or empty, returns 0 (no shift).
+ * @param referenceDate  Date used to determine DST state.  Defaults to now.
+ * @returns              Milliseconds to add to shift from browser TZ to target TZ.
+ */
+export function computeTzDeltaMs(olsonTimezone: string | undefined, referenceDate?: Date): number {
+    if (!olsonTimezone) return 0;
+    const ref = referenceDate || new Date();
+    const browserOffsetSec = -ref.getTimezoneOffset() * 60;
+    let targetOffsetSec: number;
+    try {
+        const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: olsonTimezone,
+            timeZoneName: 'longOffset',
+        });
+        const parts = fmt.formatToParts(ref);
+        const tzStr = parts.find(p => p.type === 'timeZoneName')?.value || '';
+        if (tzStr === 'GMT' || tzStr === 'UTC' || !tzStr) {
+            targetOffsetSec = 0;
+        } else {
+            const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+            if (m) {
+                const sign = m[1] === '+' ? 1 : -1;
+                targetOffsetSec = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
+            } else {
+                targetOffsetSec = browserOffsetSec;
+            }
+        }
+    } catch {
+        targetOffsetSec = browserOffsetSec;
+    }
+    return (targetOffsetSec - browserOffsetSec) * 1000;
+}
+
+/**
  * Build the expression environment for a watch:
  *  1. Math builtins + color constants
  *  2. Evaluate all init blocks (populates watch variables)
@@ -192,43 +231,27 @@ function registerTimeFunctions(
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
 
-    // Timezone offset in seconds (east-positive).
-    // If an Olson timezone was provided, use it; otherwise use the browser's timezone.
-    let tzOffsetSeconds: number;
-    if (olsonTimezone) {
-        // getTzOffsetSeconds is defined later in this function but hoisted.
-        // We compute it inline here using the same Intl approach.
-        try {
-            const fmt = new Intl.DateTimeFormat('en-US', {
-                timeZone: olsonTimezone,
-                timeZoneName: 'longOffset',
-            });
-            const parts = fmt.formatToParts(now);
-            const tzPart = parts.find(p => p.type === 'timeZoneName');
-            const tzStr = tzPart?.value || '';
-            if (tzStr === 'GMT' || tzStr === 'UTC' || !tzStr) {
-                tzOffsetSeconds = 0;
-            } else {
-                const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
-                if (m) {
-                    const sign = m[1] === '+' ? 1 : -1;
-                    tzOffsetSeconds = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
-                } else {
-                    tzOffsetSeconds = -now.getTimezoneOffset() * 60;
-                }
-            }
-        } catch {
-            tzOffsetSeconds = -now.getTimezoneOffset() * 60;
-        }
-    } else {
-        tzOffsetSeconds = -now.getTimezoneOffset() * 60;
-    }
+    // Timezone offset delta in milliseconds: adding this to a Date's getTime()
+    // makes getHours()/getMinutes()/getSeconds() return target-timezone values.
+    const tzDeltaMs = computeTzDeltaMs(olsonTimezone, now);
+
+    // Timezone offset in seconds (east-positive) for calendar/astronomy.
+    const browserOffsetSec = -now.getTimezoneOffset() * 60;
+    const tzOffsetSeconds = browserOffsetSec + tzDeltaMs / 1000;
 
     // --- Clock hands (LIVE — recompute from Date.now() on each call) ---
     // These are called every animation frame so the hands move in real time.
+
+    // Helper: return a Date shifted to the target timezone for display.
+    // getHours/getMinutes/getSeconds on the result give target-tz values.
+    const liveDate = (): Date => {
+        const raw = getNow();
+        return tzDeltaMs !== 0 ? new Date(raw.getTime() + tzDeltaMs) : raw;
+    };
+
     // Helper to extract fractional components from the current time:
     const liveTime = () => {
-        const t = getNow();
+        const t = liveDate();
         const s = t.getSeconds() + t.getMilliseconds() / 1000;
         const m = t.getMinutes() + s / 60;
         const h = (t.getHours() % 12) + m / 60;
@@ -273,7 +296,7 @@ function registerTimeFunctions(
     });
     functions.set('monthNumber', () => getLocalComponents().month - 1);  // 0-indexed to match JS convention
     functions.set('monthNumberAngle', () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
-    functions.set('weekdayNumberAngle', () => getNow().getDay() * 2 * Math.PI / 7);
+    functions.set('weekdayNumberAngle', () => liveDate().getDay() * 2 * Math.PI / 7);
     functions.set('yearNumber', () => {
         const cs = getLocalComponents();
         return cs.era === 0 ? -cs.year : cs.year;  // negative for BCE
@@ -286,8 +309,18 @@ function registerTimeFunctions(
         return di > kECJulianGregorianSwitchoverTimeInterval ? 1 : 0;
     });
     functions.set('DSTNumber', () => {
+        if (olsonTimezone) {
+            // For a custom timezone, compare the target offset at two reference
+            // points (Jan 1 and Jul 1) to determine if DST is active now.
+            const now = getNow();
+            const yr = liveDate().getFullYear();
+            const janDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 0, 1));
+            const julDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 6, 1));
+            const stdDelta = Math.min(janDelta, julDelta);  // standard time has smaller UTC offset
+            return tzDeltaMs > stdDelta ? 1 : 0;
+        }
+        // Browser timezone: compare January offset to current offset
         const now = getNow();
-        // Compare January offset to current offset — if different, DST is active
         const jan = new Date(now.getFullYear(), 0, 1);
         const jul = new Date(now.getFullYear(), 6, 1);
         const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
@@ -355,12 +388,8 @@ function registerTimeFunctions(
         return calendarError - 10.25 / 365.25 * 2 * Math.PI + northSouthOffset;
     });
 
-    // --- 24-hour time (Mauna Kea) ---
-    functions.set('hour24ValueAngle', () => {
-        const t = getNow();
-        const h24 = t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
-        return h24 * 2 * Math.PI / 24;
-    });
+    // Note: hour24ValueAngle, hour24Value, and hour24Number are registered
+    // above via liveTime() which already uses the timezone-shifted date.
 
     // Time-unit helpers (return value in seconds, matching iOS convention for update intervals)
     functions.set('years', () => 365.25 * 86400);

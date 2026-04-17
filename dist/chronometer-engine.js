@@ -11842,6 +11842,34 @@
   // src/watch/watch-env.ts
   var DEFAULT_LAT_DEG = 37.205;
   var DEFAULT_LON_DEG = -121.954;
+  function computeTzDeltaMs(olsonTimezone, referenceDate) {
+    if (!olsonTimezone) return 0;
+    const ref = referenceDate || /* @__PURE__ */ new Date();
+    const browserOffsetSec = -ref.getTimezoneOffset() * 60;
+    let targetOffsetSec;
+    try {
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: olsonTimezone,
+        timeZoneName: "longOffset"
+      });
+      const parts = fmt.formatToParts(ref);
+      const tzStr = parts.find((p) => p.type === "timeZoneName")?.value || "";
+      if (tzStr === "GMT" || tzStr === "UTC" || !tzStr) {
+        targetOffsetSec = 0;
+      } else {
+        const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+        if (m) {
+          const sign = m[1] === "+" ? 1 : -1;
+          targetOffsetSec = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
+        } else {
+          targetOffsetSec = browserOffsetSec;
+        }
+      }
+    } catch {
+      targetOffsetSec = browserOffsetSec;
+    }
+    return (targetOffsetSec - browserOffsetSec) * 1e3;
+  }
   function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
@@ -11918,35 +11946,15 @@
     const { functions } = env;
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
-    let tzOffsetSeconds;
-    if (olsonTimezone) {
-      try {
-        const fmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonTimezone,
-          timeZoneName: "longOffset"
-        });
-        const parts = fmt.formatToParts(now);
-        const tzPart = parts.find((p) => p.type === "timeZoneName");
-        const tzStr = tzPart?.value || "";
-        if (tzStr === "GMT" || tzStr === "UTC" || !tzStr) {
-          tzOffsetSeconds = 0;
-        } else {
-          const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
-          if (m) {
-            const sign = m[1] === "+" ? 1 : -1;
-            tzOffsetSeconds = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
-          } else {
-            tzOffsetSeconds = -now.getTimezoneOffset() * 60;
-          }
-        }
-      } catch {
-        tzOffsetSeconds = -now.getTimezoneOffset() * 60;
-      }
-    } else {
-      tzOffsetSeconds = -now.getTimezoneOffset() * 60;
-    }
+    const tzDeltaMs = computeTzDeltaMs(olsonTimezone, now);
+    const browserOffsetSec = -now.getTimezoneOffset() * 60;
+    const tzOffsetSeconds = browserOffsetSec + tzDeltaMs / 1e3;
+    const liveDate = () => {
+      const raw = getNow();
+      return tzDeltaMs !== 0 ? new Date(raw.getTime() + tzDeltaMs) : raw;
+    };
     const liveTime = () => {
-      const t = getNow();
+      const t = liveDate();
       const s = t.getSeconds() + t.getMilliseconds() / 1e3;
       const m = t.getMinutes() + s / 60;
       const h = t.getHours() % 12 + m / 60;
@@ -11981,7 +11989,7 @@
     });
     functions.set("monthNumber", () => getLocalComponents().month - 1);
     functions.set("monthNumberAngle", () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
-    functions.set("weekdayNumberAngle", () => getNow().getDay() * 2 * Math.PI / 7);
+    functions.set("weekdayNumberAngle", () => liveDate().getDay() * 2 * Math.PI / 7);
     functions.set("yearNumber", () => {
       const cs = getLocalComponents();
       return cs.era === 0 ? -cs.year : cs.year;
@@ -11992,6 +12000,14 @@
       return di > kECJulianGregorianSwitchoverTimeInterval ? 1 : 0;
     });
     functions.set("DSTNumber", () => {
+      if (olsonTimezone) {
+        const now3 = getNow();
+        const yr = liveDate().getFullYear();
+        const janDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 0, 1));
+        const julDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 6, 1));
+        const stdDelta = Math.min(janDelta, julDelta);
+        return tzDeltaMs > stdDelta ? 1 : 0;
+      }
       const now2 = getNow();
       const jan = new Date(now2.getFullYear(), 0, 1);
       const jul = new Date(now2.getFullYear(), 6, 1);
@@ -12037,11 +12053,6 @@
       const calendarError = year2001Longitude - todaysLongitude;
       const northSouthOffset = OBSERVER_LAT >= 0 ? 0 : Math.PI;
       return calendarError - 10.25 / 365.25 * 2 * Math.PI + northSouthOffset;
-    });
-    functions.set("hour24ValueAngle", () => {
-      const t = getNow();
-      const h24 = t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
-      return h24 * 2 * Math.PI / 24;
     });
     functions.set("years", () => 365.25 * 86400);
     functions.set("weeks", () => 7 * 86400);
@@ -15446,6 +15457,7 @@
     let locationSourceType = "none";
     let needsPrompt = false;
     let locationTimezone = urlState.tz || void 0;
+    let tzDeltaMs = computeTzDeltaMs(locationTimezone);
     let geoPermission = "unknown";
     if (urlState.lat !== null && urlState.lon !== null) {
       lat = urlState.lat;
@@ -15454,6 +15466,7 @@
       locationSourceType = urlState.city ? "url-city" : "manual";
       if (!locationTimezone) {
         locationTimezone = resolveTimezone(lat, lon, null);
+        tzDeltaMs = computeTzDeltaMs(locationTimezone);
         writeUrlState({ tz: locationTimezone });
       }
       if (navigator.permissions) {
@@ -15472,6 +15485,7 @@
         locationSourceType = "browser";
         geoPermission = "granted";
         locationTimezone = resolveTimezone(lat, lon, null);
+        tzDeltaMs = computeTzDeltaMs(locationTimezone);
       } else {
         lat = 0;
         lon = 0;
@@ -15642,21 +15656,6 @@
         face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-      }
-    }
-    function rebuildAllForTime() {
-      for (const face of faces) {
-        if (!face.enabled) continue;
-        const fd = faceDataArray[face.faceDataIndex];
-        const freshWatch = parseWatchXML(fd.xml, "front");
-        face.watch.parts = freshWatch.parts;
-        face.watch.initExprs = freshWatch.initExprs;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
-        face.cachesBuilt = false;
-      }
-      for (const face of faces) {
-        if (!face.enabled) continue;
-        buildCache(face);
       }
     }
     timeController.onTick = rebuildEnvironments;
@@ -16010,20 +16009,26 @@
     });
     resizeObserver.observe(grid.parentElement);
     function rebuildAllForLocation(newLat, newLon) {
-      stopScheduler();
       lat = newLat;
       lon = newLon;
       for (const face of faces) {
-        const fd = faceDataArray[face.faceDataIndex];
-        const freshWatch = parseWatchXML(fd.xml, "front");
-        face.watch.parts = freshWatch.parts;
-        face.watch.initExprs = freshWatch.initExprs;
+        if (!face.enabled) continue;
         face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone);
-        face.cachesBuilt = false;
+        if (face.terminatorLeaves.length > 0) {
+          updateLeafAngles(face.terminatorLeaves, face.env);
+          resetLeafSchedules(face.terminatorLeaves);
+          face.lastTerminatorRebuild = 0;
+        }
+        const { canvas, watch, env, images, scale } = face;
+        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        for (const hs of face.handStates) {
+          hs.nextUpdateTime = 0;
+        }
       }
       updateLocationDisplay();
       updateTimezoneDisplay();
-      buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
+      stopScheduler();
+      startScheduler();
     }
     function showLocationPrompt(blur) {
       locationPrompt.style.display = "";
@@ -16166,6 +16171,7 @@
       locationFullLabel = fullLabel;
       locationSourceType = sourceType;
       locationTimezone = resolveTimezone(newLat, newLon, cityTz);
+      tzDeltaMs = computeTzDeltaMs(locationTimezone);
       rebuildAllForLocation(newLat, newLon);
       if (writeToUrl) {
         writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
@@ -16371,14 +16377,21 @@
       "+month": ["month", 1],
       "+year": ["year", 1]
     };
+    function toTzDate(d) {
+      return tzDeltaMs !== 0 ? new Date(d.getTime() + tzDeltaMs) : d;
+    }
+    function fromTzDate(d) {
+      return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
+    }
     function formatSimTime(d) {
+      const td = toTzDate(d);
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mo = months[d.getMonth()];
-      const day = d.getDate();
-      const yr = d.getFullYear();
-      const h = d.getHours().toString().padStart(2, "0");
-      const m = d.getMinutes().toString().padStart(2, "0");
-      const s = d.getSeconds().toString().padStart(2, "0");
+      const mo = months[td.getMonth()];
+      const day = td.getDate();
+      const yr = td.getFullYear();
+      const h = td.getHours().toString().padStart(2, "0");
+      const m = td.getMinutes().toString().padStart(2, "0");
+      const s = td.getSeconds().toString().padStart(2, "0");
       return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
     }
     function renderTransport() {
@@ -16448,11 +16461,12 @@
       }
       tpRateLabel.textContent = timeController.statusLabel;
       renderTransport();
-      document.getElementById("tp-year").value = sim.getFullYear().toString();
-      document.getElementById("tp-month").value = (sim.getMonth() + 1).toString();
-      document.getElementById("tp-day").value = sim.getDate().toString();
-      document.getElementById("tp-hour").value = sim.getHours().toString();
-      document.getElementById("tp-minute").value = sim.getMinutes().toString();
+      const tzSim = toTzDate(sim);
+      document.getElementById("tp-year").value = tzSim.getFullYear().toString();
+      document.getElementById("tp-month").value = (tzSim.getMonth() + 1).toString();
+      document.getElementById("tp-day").value = tzSim.getDate().toString();
+      document.getElementById("tp-hour").value = tzSim.getHours().toString();
+      document.getElementById("tp-minute").value = tzSim.getMinutes().toString();
     }
     function formatOffset(sim, real) {
       const ms = sim.getTime() - real.getTime();
@@ -16708,7 +16722,7 @@
       const hr = parseInt(document.getElementById("tp-hour").value, 10);
       const mn = parseInt(document.getElementById("tp-minute").value, 10);
       if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-      const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+      const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
       timeController.setTime(d);
       updateTimeUI();
       ensureSchedulerRunning();
@@ -16722,7 +16736,7 @@
         const hr = parseInt(document.getElementById("tp-hour").value, 10);
         const mn = parseInt(document.getElementById("tp-minute").value, 10);
         if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-        const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+        const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
         timeController.setTime(d);
         updateTimeUI();
         ensureSchedulerRunning();

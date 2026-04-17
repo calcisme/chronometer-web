@@ -22,7 +22,7 @@ declare global {
 }
 
 import { parseWatchXML } from './watch/xml-parser.js';
-import { createWatchEnvironment } from './watch/watch-env.js';
+import { createWatchEnvironment, computeTzDeltaMs } from './watch/watch-env.js';
 import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
@@ -191,6 +191,7 @@ async function main() {
     let needsPrompt = false;
     // Resolved IANA timezone for the current location (e.g. "America/Los_Angeles")
     let locationTimezone: string | undefined = urlState.tz || undefined;
+    let tzDeltaMs = computeTzDeltaMs(locationTimezone);
     // Track whether browser geolocation is available
     // 'granted' = we got a position, 'denied' = user rejected or unavailable, 'unknown' = never tried
     let geoPermission: 'granted' | 'denied' | 'unknown' = 'unknown';
@@ -203,6 +204,7 @@ async function main() {
         // If no tz in URL (old link), resolve it now
         if (!locationTimezone) {
             locationTimezone = resolveTimezone(lat, lon, null);
+            tzDeltaMs = computeTzDeltaMs(locationTimezone);
             writeUrlState({ tz: locationTimezone });
         }
         // We haven't tried geolocation — check the Permissions API if available
@@ -221,6 +223,7 @@ async function main() {
             locationSourceType = 'browser';
             geoPermission = 'granted';
             locationTimezone = resolveTimezone(lat, lon, null);
+            tzDeltaMs = computeTzDeltaMs(locationTimezone);
         } else {
             // Browser denied — fall through to prompt
             lat = 0; lon = 0;
@@ -440,27 +443,6 @@ async function main() {
         }
     }
 
-    /**
-     * Full rebuild including fresh hand states.
-     * Only used for major time changes (setTime, location change)
-     * where animation continuity doesn't matter.
-     */
-    function rebuildAllForTime() {
-        for (const face of faces) {
-            if (!face.enabled) continue;
-            const fd = faceDataArray[face.faceDataIndex];
-            const freshWatch = parseWatchXML(fd.xml, 'front');
-            face.watch.parts = freshWatch.parts;
-            face.watch.initExprs = freshWatch.initExprs;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone);
-            face.cachesBuilt = false;
-        }
-        // Rebuild caches synchronously (tight loop for responsiveness during ticking)
-        for (const face of faces) {
-            if (!face.enabled) continue;
-            buildCache(face);
-        }
-    }
 
     timeController.onTick = rebuildEnvironments;
 
@@ -941,20 +923,31 @@ async function main() {
     // =========================================================================
 
     function rebuildAllForLocation(newLat: number, newLon: number) {
-        stopScheduler();
         lat = newLat;
         lon = newLon;
         for (const face of faces) {
-            const fd = faceDataArray[face.faceDataIndex];
-            const freshWatch = parseWatchXML(fd.xml, 'front');
-            face.watch.parts = freshWatch.parts;
-            face.watch.initExprs = freshWatch.initExprs;
+            if (!face.enabled) continue;
+            // Fresh environment with new lat/lon/tz — same watch/parts
             face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone);
-            face.cachesBuilt = false;
+            // Update terminator leaves (preserve for animation interpolation)
+            if (face.terminatorLeaves.length > 0) {
+                updateLeafAngles(face.terminatorLeaves, face.env);
+                resetLeafSchedules(face.terminatorLeaves);
+                face.lastTerminatorRebuild = 0;
+            }
+            // Rebuild static caches (day/night rings, sunrise marks, etc.)
+            const { canvas, watch, env, images, scale } = face;
+            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+            // Reset hand schedules so they re-evaluate immediately and animate to new targets
+            for (const hs of face.handStates) {
+                hs.nextUpdateTime = 0;
+            }
         }
         updateLocationDisplay();
         updateTimezoneDisplay();
-        buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
+        // Kick the scheduler to start animating immediately
+        stopScheduler();
+        startScheduler();
     }
 
     function showLocationPrompt(blur: boolean) {
@@ -1136,6 +1129,7 @@ async function main() {
         locationSourceType = sourceType;
         // Resolve timezone for this location
         locationTimezone = resolveTimezone(newLat, newLon, cityTz);
+        tzDeltaMs = computeTzDeltaMs(locationTimezone);
         rebuildAllForLocation(newLat, newLon);
         if (writeToUrl) {
             writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
@@ -1401,14 +1395,25 @@ async function main() {
         '+year': ['year', 1],
     };
 
+    /** Shift a Date to the target timezone for display purposes. */
+    function toTzDate(d: Date): Date {
+        return tzDeltaMs !== 0 ? new Date(d.getTime() + tzDeltaMs) : d;
+    }
+
+    /** Convert a Date entered in target-timezone values back to a real UTC instant. */
+    function fromTzDate(d: Date): Date {
+        return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
+    }
+
     function formatSimTime(d: Date): string {
+        const td = toTzDate(d);
         const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const mo = months[d.getMonth()];
-        const day = d.getDate();
-        const yr = d.getFullYear();
-        const h = d.getHours().toString().padStart(2, '0');
-        const m = d.getMinutes().toString().padStart(2, '0');
-        const s = d.getSeconds().toString().padStart(2, '0');
+        const mo = months[td.getMonth()];
+        const day = td.getDate();
+        const yr = td.getFullYear();
+        const h = td.getHours().toString().padStart(2, '0');
+        const m = td.getMinutes().toString().padStart(2, '0');
+        const s = td.getSeconds().toString().padStart(2, '0');
         return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
     }
 
@@ -1497,11 +1502,12 @@ async function main() {
         renderTransport();
 
         // Populate date inputs with current sim time
-        (document.getElementById('tp-year') as HTMLInputElement).value = sim.getFullYear().toString();
-        (document.getElementById('tp-month') as HTMLInputElement).value = (sim.getMonth() + 1).toString();
-        (document.getElementById('tp-day') as HTMLInputElement).value = sim.getDate().toString();
-        (document.getElementById('tp-hour') as HTMLInputElement).value = sim.getHours().toString();
-        (document.getElementById('tp-minute') as HTMLInputElement).value = sim.getMinutes().toString();
+        const tzSim = toTzDate(sim);
+        (document.getElementById('tp-year') as HTMLInputElement).value = tzSim.getFullYear().toString();
+        (document.getElementById('tp-month') as HTMLInputElement).value = (tzSim.getMonth() + 1).toString();
+        (document.getElementById('tp-day') as HTMLInputElement).value = tzSim.getDate().toString();
+        (document.getElementById('tp-hour') as HTMLInputElement).value = tzSim.getHours().toString();
+        (document.getElementById('tp-minute') as HTMLInputElement).value = tzSim.getMinutes().toString();
     }
 
     /** Format the difference between sim and real time as a human-readable string.
@@ -1824,7 +1830,7 @@ async function main() {
         const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
         const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
         if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-        const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+        const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
         timeController.setTime(d);
         updateTimeUI();
         ensureSchedulerRunning();
@@ -1841,7 +1847,7 @@ async function main() {
             const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
             const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
             if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-            const d = new Date(yr, mo, dy, hr, mn, 0, 0);
+            const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
             timeController.setTime(d);
             updateTimeUI();
             ensureSchedulerRunning();
