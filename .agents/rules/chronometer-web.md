@@ -23,3 +23,7 @@ Parts must be rendered in exactly the order they appear in the XML file. This or
 * Hands that overlap other hands must appear later in the XML than the hands they overlap.
 * "Windows" (cutout borders) must appear after the parts that show through them but before any hands that overlap them.
 * The renderer must not sort, reorder, or apply z-index logic — it must use pure document order.
+
+## Building
+
+The app can be built simply with 'PATH="/usr/local/bin:$PATH"'
