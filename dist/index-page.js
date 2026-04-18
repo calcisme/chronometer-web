@@ -404,13 +404,19 @@
       a.href = url.toString();
     });
   }
-  function requestBrowserLocation() {
-    if (!navigator.geolocation) return Promise.resolve(null);
+  function requestBrowserLocation(timeoutMs) {
+    if (!navigator.geolocation) return Promise.resolve({ status: "unavailable" });
     return new Promise((resolve) => {
+      const options = {};
+      if (timeoutMs != null) options.timeout = timeoutMs;
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-        () => resolve(null),
-        { timeout: 5e3 }
+        (pos) => resolve({ status: "success", lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) resolve({ status: "denied" });
+          else if (err.code === err.TIMEOUT) resolve({ status: "timeout" });
+          else resolve({ status: "unavailable" });
+        },
+        options
       );
     });
   }
@@ -516,12 +522,19 @@
   });
   lpUseBrowser.addEventListener("click", async () => {
     lpUseBrowser.textContent = "Requesting\u2026";
-    const loc = await requestBrowserLocation();
-    lpUseBrowser.textContent = browserBtnLabel;
-    if (loc) {
-      applyLocation(loc.lat, loc.lon, "", "", "browser", false);
+    const result = await requestBrowserLocation();
+    if (result.status === "success") {
+      lpUseBrowser.textContent = browserBtnLabel;
+      applyLocation(result.lat, result.lon, "", "", "browser", false);
       writeUrlState({ bloc: true, lat: null, lon: null, city: null });
       updateLinks();
+    } else if (result.status === "denied") {
+      const btn = lpUseBrowser;
+      btn.disabled = true;
+      btn.textContent = browserBtnLabel + " (unavailable)";
+      btn.dataset.tooltip = isFileProtocol ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
+    } else {
+      lpUseBrowser.textContent = browserBtnLabel;
     }
   });
   locationPrompt.querySelector(".lp-backdrop").addEventListener("click", () => {
@@ -645,15 +658,18 @@
       locationSourceType = urlState.city ? "url-city" : "manual";
       updateLinks();
     } else if (urlState.bloc) {
-      const loc = await requestBrowserLocation();
-      if (loc) {
+      const result = await requestBrowserLocation(1e4);
+      if (result.status === "success") {
         hasLocation = true;
-        currentLat = loc.lat;
-        currentLon = loc.lon;
+        currentLat = result.lat;
+        currentLon = result.lon;
         locationSourceType = "browser";
         updateLinks();
-      } else {
+      } else if (result.status === "denied") {
         showPrompt(true);
+        updateLinks();
+      } else {
+        showPrompt(false);
         updateLinks();
       }
     } else {

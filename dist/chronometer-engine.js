@@ -15568,13 +15568,19 @@
   }
 
   // src/engine-entry.ts
-  function requestBrowserLocation() {
-    if (!navigator.geolocation) return Promise.resolve(null);
+  function requestBrowserLocation(timeoutMs) {
+    if (!navigator.geolocation) return Promise.resolve({ status: "unavailable" });
     return new Promise((resolve) => {
+      const options = {};
+      if (timeoutMs != null) options.timeout = timeoutMs;
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-        () => resolve(null),
-        { timeout: 5e3 }
+        (pos) => resolve({ status: "success", lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) resolve({ status: "denied" });
+          else if (err.code === err.TIMEOUT) resolve({ status: "timeout" });
+          else resolve({ status: "unavailable" });
+        },
+        options
       );
     });
   }
@@ -15672,22 +15678,29 @@
         }
       }
     } else if (urlState.bloc) {
-      const loc = await requestBrowserLocation();
-      if (loc) {
-        lat = loc.lat;
-        lon = loc.lon;
+      const result = await requestBrowserLocation(1e4);
+      if (result.status === "success") {
+        lat = result.lat;
+        lon = result.lon;
         locationSource = "from browser";
         locationSourceType = "browser";
         geoPermission = "granted";
         locationTimezone = resolveTimezone(lat, lon, null);
         tzDeltaMs = computeTzDeltaMs(locationTimezone);
-      } else {
+      } else if (result.status === "denied") {
         lat = 0;
         lon = 0;
         locationSource = "";
         locationSourceType = "none";
         needsPrompt = true;
         geoPermission = "denied";
+      } else {
+        lat = 0;
+        lon = 0;
+        locationSource = "";
+        locationSourceType = "none";
+        needsPrompt = true;
+        geoPermission = "unknown";
       }
     } else {
       lat = 0;
@@ -16423,11 +16436,20 @@
     });
     lpUseBrowser.addEventListener("click", async () => {
       lpUseBrowser.textContent = "Requesting\u2026";
-      const loc = await requestBrowserLocation();
-      lpUseBrowser.textContent = browserBtnLabel;
-      if (loc) {
-        applyLocation(loc.lat, loc.lon, "", "", "browser", false, null);
+      const result = await requestBrowserLocation();
+      if (result.status === "success") {
+        lpUseBrowser.textContent = browserBtnLabel;
+        applyLocation(result.lat, result.lon, "", "", "browser", false, null);
         writeUrlState({ bloc: true, lat: null, lon: null, city: null });
+      } else if (result.status === "denied") {
+        geoPermission = "denied";
+        const btn = lpUseBrowser;
+        btn.disabled = true;
+        btn.textContent = browserBtnLabel + " (unavailable)";
+        const isFileUrl = window.location.protocol === "file:";
+        btn.dataset.tooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
+      } else {
+        lpUseBrowser.textContent = browserBtnLabel;
       }
     });
     setLocationBtn.addEventListener("click", () => {

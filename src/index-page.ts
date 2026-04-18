@@ -81,13 +81,25 @@ function updateLinks() {
 // Geolocation
 // ============================================================================
 
-function requestBrowserLocation(): Promise<{ lat: number; lon: number } | null> {
-    if (!navigator.geolocation) return Promise.resolve(null);
+type GeoResult =
+    | { status: 'success'; lat: number; lon: number }
+    | { status: 'denied' }
+    | { status: 'timeout' }
+    | { status: 'unavailable' };
+
+function requestBrowserLocation(timeoutMs?: number): Promise<GeoResult> {
+    if (!navigator.geolocation) return Promise.resolve({ status: 'unavailable' });
     return new Promise((resolve) => {
+        const options: PositionOptions = {};
+        if (timeoutMs != null) options.timeout = timeoutMs;
         navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-            () => resolve(null),
-            { timeout: 5000 },
+            (pos) => resolve({ status: 'success', lat: pos.coords.latitude, lon: pos.coords.longitude }),
+            (err) => {
+                if (err.code === err.PERMISSION_DENIED) resolve({ status: 'denied' });
+                else if (err.code === err.TIMEOUT) resolve({ status: 'timeout' });
+                else resolve({ status: 'unavailable' });
+            },
+            options,
         );
     });
 }
@@ -215,13 +227,23 @@ lpUseCoords.addEventListener('click', () => {
 
 lpUseBrowser.addEventListener('click', async () => {
     lpUseBrowser.textContent = 'Requesting…';
-    const loc = await requestBrowserLocation();
-    lpUseBrowser.textContent = browserBtnLabel;
-    if (loc) {
-        applyLocation(loc.lat, loc.lon, '', '', 'browser', false);
+    const result = await requestBrowserLocation();  // no timeout — wait indefinitely
+    if (result.status === 'success') {
+        lpUseBrowser.textContent = browserBtnLabel;
+        applyLocation(result.lat, result.lon, '', '', 'browser', false);
         // Write bloc=1 and clear lat/lon/city so next reload asks browser again
         writeUrlState({ bloc: true, lat: null, lon: null, city: null });
         updateLinks();
+    } else if (result.status === 'denied') {
+        // User denied — disable the button
+        const btn = lpUseBrowser as HTMLButtonElement;
+        btn.disabled = true;
+        btn.textContent = browserBtnLabel + ' (unavailable)';
+        btn.dataset.tooltip = isFileProtocol
+            ? 'Not all browsers support location access from file:// URLs'
+            : 'Browser location was not granted — check your browser settings to allow it';
+    } else {
+        lpUseBrowser.textContent = browserBtnLabel;
     }
 });
 
@@ -373,17 +395,21 @@ lpCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
         locationSourceType = urlState.city ? 'url-city' : 'manual';
         updateLinks();
     } else if (urlState.bloc) {
-        // bloc=1 set — ask browser for location without showing prompt
-        const loc = await requestBrowserLocation();
-        if (loc) {
+        // bloc=1 set — ask browser for location with 10s timeout
+        const result = await requestBrowserLocation(10000);
+        if (result.status === 'success') {
             hasLocation = true;
-            currentLat = loc.lat;
-            currentLon = loc.lon;
+            currentLat = result.lat;
+            currentLon = result.lon;
             locationSourceType = 'browser';
             updateLinks();
-        } else {
-            // Browser denied — show prompt
+        } else if (result.status === 'denied') {
+            // User explicitly denied — show prompt with button disabled
             showPrompt(true);
+            updateLinks();
+        } else {
+            // Timeout or unavailable — show prompt as if user opened it
+            showPrompt(false);
             updateLinks();
         }
     } else {

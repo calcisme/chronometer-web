@@ -49,13 +49,30 @@ import { resolveTimezone } from './tz-resolve.js';
 const DEMO_LAT = 37.3349;   // Apple Park, Cupertino
 const DEMO_LON = -122.0090;
 
-function requestBrowserLocation(): Promise<{ lat: number; lon: number } | null> {
-    if (!navigator.geolocation) return Promise.resolve(null);
+type GeoResult =
+    | { status: 'success'; lat: number; lon: number }
+    | { status: 'denied' }
+    | { status: 'timeout' }
+    | { status: 'unavailable' };
+
+/**
+ * Request the device location via the browser geolocation API.
+ * @param timeoutMs  If provided, give up after this many ms (TIMEOUT).
+ *                   If omitted, wait indefinitely for user response.
+ */
+function requestBrowserLocation(timeoutMs?: number): Promise<GeoResult> {
+    if (!navigator.geolocation) return Promise.resolve({ status: 'unavailable' });
     return new Promise((resolve) => {
+        const options: PositionOptions = {};
+        if (timeoutMs != null) options.timeout = timeoutMs;
         navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-            () => resolve(null),
-            { timeout: 5000 },
+            (pos) => resolve({ status: 'success', lat: pos.coords.latitude, lon: pos.coords.longitude }),
+            (err) => {
+                if (err.code === err.PERMISSION_DENIED) resolve({ status: 'denied' });
+                else if (err.code === err.TIMEOUT) resolve({ status: 'timeout' });
+                else resolve({ status: 'unavailable' });
+            },
+            options,
         );
     });
 }
@@ -218,22 +235,30 @@ async function main() {
             } catch { /* ignore — not all browsers support this */ }
         }
     } else if (urlState.bloc) {
-        // bloc=1 set — ask browser for location without showing prompt
-        const loc = await requestBrowserLocation();
-        if (loc) {
-            lat = loc.lat; lon = loc.lon;
+        // bloc=1 set — ask browser for location with 10s timeout
+        const result = await requestBrowserLocation(10000);
+        if (result.status === 'success') {
+            lat = result.lat; lon = result.lon;
             locationSource = 'from browser';
             locationSourceType = 'browser';
             geoPermission = 'granted';
             locationTimezone = resolveTimezone(lat, lon, null);
             tzDeltaMs = computeTzDeltaMs(locationTimezone);
-        } else {
-            // Browser denied — fall through to prompt
+        } else if (result.status === 'denied') {
+            // User explicitly denied — show prompt with button disabled
             lat = 0; lon = 0;
             locationSource = '';
             locationSourceType = 'none';
             needsPrompt = true;
             geoPermission = 'denied';
+        } else {
+            // Timeout or unavailable — show prompt as if user opened it
+            // (browser button stays enabled so they can try again)
+            lat = 0; lon = 0;
+            locationSource = '';
+            locationSourceType = 'none';
+            needsPrompt = true;
+            geoPermission = 'unknown';
         }
     } else {
         // No lat/lon and no bloc — go straight to location prompt
@@ -1204,12 +1229,24 @@ async function main() {
     // "Use browser location" button in prompt
     lpUseBrowser.addEventListener('click', async () => {
         lpUseBrowser.textContent = 'Requesting…';
-        const loc = await requestBrowserLocation();
-        lpUseBrowser.textContent = browserBtnLabel;
-        if (loc) {
-            applyLocation(loc.lat, loc.lon, '', '', 'browser', false, null);
+        const result = await requestBrowserLocation();  // no timeout — wait indefinitely
+        if (result.status === 'success') {
+            lpUseBrowser.textContent = browserBtnLabel;
+            applyLocation(result.lat, result.lon, '', '', 'browser', false, null);
             // Write bloc=1 and clear lat/lon/city so next reload asks browser again
             writeUrlState({ bloc: true, lat: null, lon: null, city: null });
+        } else if (result.status === 'denied') {
+            // User denied — disable the button
+            geoPermission = 'denied';
+            const btn = lpUseBrowser as HTMLButtonElement;
+            btn.disabled = true;
+            btn.textContent = browserBtnLabel + ' (unavailable)';
+            const isFileUrl = window.location.protocol === 'file:';
+            btn.dataset.tooltip = isFileUrl
+                ? 'Not all browsers support location access from file:// URLs'
+                : 'Browser location was not granted — check your browser settings to allow it';
+        } else {
+            lpUseBrowser.textContent = browserBtnLabel;
         }
     });
 
