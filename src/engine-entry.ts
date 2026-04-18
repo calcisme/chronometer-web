@@ -252,7 +252,7 @@ async function main() {
         const result = await requestBrowserLocation(10000);
         if (result.status === 'success') {
             lat = result.lat; lon = result.lon;
-            locationSource = 'from browser';
+            locationSource = '';
             locationSourceType = 'browser';
             geoPermission = 'granted';
             locationTimezone = resolveTimezone(lat, lon, null);
