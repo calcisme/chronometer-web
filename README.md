@@ -92,9 +92,6 @@ City and airport search data is derived from [GeoNames](https://www.geonames.org
 
 Map tiles in the location picker are provided by [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL).
 
-### Timezone lookup
-
-Latitude/longitude to timezone mapping uses [tz-lookup](https://github.com/darkskyapp/tz-lookup) by Dark Sky (ISC license).
 
 ## License
 
