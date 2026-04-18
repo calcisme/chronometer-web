@@ -520,6 +520,385 @@
             font-size: 14px;
         }
 
+        /* Terra city customization dialog */
+        #terra-city-dialog {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 40px 16px;
+        }
+
+        @media (min-height: 600px) {
+            #terra-city-dialog {
+                align-items: center;
+                padding: 20px 16px;
+            }
+        }
+
+        #terra-city-dialog .tc-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #terra-city-dialog .tc-dialog {
+            position: relative;
+            background: rgba(26, 26, 46, 0.98);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid #3a3a5e;
+            border-radius: 14px;
+            padding: 28px 32px;
+            min-width: 300px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        #terra-city-dialog .tc-title {
+            font-size: 16px;
+            color: #e0d8c8;
+            margin: 0 0 16px;
+            font-weight: 400;
+        }
+
+        /* Status area */
+        .tc-status {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            border-radius: 8px;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tc-no-selection {
+            color: #556;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        .tc-selected-city {
+            text-align: center;
+        }
+
+        .tc-city-name {
+            color: #ddf;
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .tc-city-tz {
+            color: #776;
+            font-size: 12px;
+        }
+
+        /* Search section */
+        .tc-search-section {
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        .tc-search-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #776;
+            margin-bottom: 5px;
+        }
+
+        .tc-search-input-wrap {
+            position: relative;
+        }
+
+        .tc-search-input-wrap::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23778' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E") center/contain no-repeat;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #tc-city-input {
+            width: 100%;
+            padding: 10px 12px 10px 36px;
+            background: #222240;
+            border: 1px solid #4a4a6e;
+            border-radius: 8px;
+            color: #eee;
+            font-size: 16px;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #tc-city-input:focus {
+            border-color: #6677bb;
+            box-shadow: 0 0 0 2px rgba(102, 119, 187, 0.25);
+        }
+
+        #tc-city-input::placeholder {
+            color: #556;
+        }
+
+        #tc-city-results {
+            position: absolute;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 2px;
+            padding: 4px 0 6px;
+            background: #1e1e38;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        #tc-city-results:empty {
+            display: none;
+        }
+
+        .tc-city-item {
+            padding: 6px 10px;
+            color: #bbc;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.1s;
+        }
+
+        .tc-city-item:hover,
+        .tc-city-item.selected {
+            background: #2a2a4e;
+            color: #ddf;
+        }
+
+        .tc-city-item .iata-tag {
+            display: inline-block;
+            background: #3a3a5e;
+            color: #aac;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-right: 6px;
+            font-family: monospace;
+        }
+
+        .tc-city-loading {
+            color: #666;
+            font-size: 12px;
+            padding: 8px 10px;
+            font-style: italic;
+        }
+
+        /* Slot picker */
+        .tc-slot-picker {
+            margin: 12px 0;
+            padding: 14px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            border-radius: 8px;
+        }
+
+        .tc-slot-label {
+            color: #998;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        .tc-slot-choices {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tc-slot-btn {
+            background: #2a2a4e;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            color: #bbc;
+            font-size: 14px;
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            text-align: left;
+        }
+
+        .tc-slot-btn:hover {
+            background: #3a3a6e;
+            color: #ddf;
+            border-color: #5a5a8e;
+        }
+
+        .tc-slot-btn .tc-slot-city {
+            font-weight: 500;
+            color: #ddf;
+        }
+
+        .tc-slot-btn .tc-slot-offset {
+            font-size: 11px;
+            color: #776;
+            margin-left: 8px;
+        }
+
+        /* Messages (errors, warnings) */
+        .tc-message {
+            margin: 10px 0;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .tc-message.tc-message-warn {
+            background: rgba(180, 130, 40, 0.15);
+            border: 1px solid rgba(180, 130, 40, 0.3);
+            color: #c0a030;
+        }
+
+        .tc-message.tc-message-error {
+            background: rgba(180, 40, 40, 0.15);
+            border: 1px solid rgba(180, 40, 40, 0.3);
+            color: #d06060;
+        }
+
+        .tc-message.tc-message-info {
+            background: rgba(40, 100, 180, 0.15);
+            border: 1px solid rgba(40, 100, 180, 0.3);
+            color: #6090d0;
+        }
+
+        /* Footer */
+        .tc-dialog-footer {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            justify-content: space-between;
+        }
+
+        .tc-btn {
+            background: #2a2a4e;
+            border: 1px solid #3a3a5e;
+            border-radius: 6px;
+            color: #aac;
+            font-size: 13px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .tc-btn:hover {
+            background: #3a3a6e;
+            color: #ddf;
+        }
+
+        .tc-btn-done {
+            background: #2a3a5e;
+            border-color: #3a4a6e;
+            color: #aad;
+            flex: 1;
+        }
+
+        .tc-btn-done:hover {
+            background: #3a4a7e;
+            color: #ccf;
+        }
+
+        .tc-btn-reset {
+            color: #886;
+            border-color: #33334e;
+        }
+
+        .tc-btn-reset:hover {
+            color: #aa8;
+            background: #2a2a3e;
+        }
+
+        .tc-btn-cancel {
+            color: #888;
+            border-color: #33334e;
+        }
+
+        .tc-btn-cancel:hover {
+            color: #aac;
+            background: #2a2a3e;
+        }
+
+        /* Nested confirmation overlay (sits on top of the city dialog) */
+        .tc-confirm-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 110;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+            border-radius: 14px;
+        }
+
+        .tc-confirm-box {
+            background: rgba(30, 30, 50, 0.98);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid #4a4a6e;
+            border-radius: 12px;
+            padding: 24px 28px;
+            text-align: center;
+            box-shadow: 0 6px 32px rgba(0, 0, 0, 0.5);
+            max-width: 300px;
+        }
+
+        .tc-confirm-text {
+            color: #ccc;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 18px;
+        }
+
+        .tc-confirm-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        /* "Change cities" button below the watch face */
+        .change-cities-btn {
+            display: block;
+            margin: 8px auto 6px;
+            background: transparent;
+            border: 1px solid #3a3a5e;
+            border-radius: 6px;
+            color: #887;
+            font-size: 12px;
+            padding: 5px 14px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            font-family: inherit;
+        }
+
+        .change-cities-btn:hover {
+            background: rgba(60, 60, 90, 0.4);
+            color: #aac;
+        }
 
         #back-link {
             position: absolute;
@@ -986,6 +1365,58 @@
             </div>
         </div>
 
+        <!-- Terra city customization dialog (hidden by default) -->
+        <div id="terra-city-dialog" style="display:none">
+            <div class="tc-backdrop"></div>
+            <div class="tc-dialog">
+                <h3 class="tc-title">Change cities on Terra</h3>
+
+                <!-- Status area: shows selected city or placeholder -->
+                <div class="tc-status" id="tc-status">
+                    <div class="tc-no-selection" id="tc-no-selection">No city selected</div>
+                    <div class="tc-selected-city" id="tc-selected-city" style="display:none">
+                        <div class="tc-city-name" id="tc-city-name"></div>
+                        <div class="tc-city-tz" id="tc-city-tz"></div>
+                    </div>
+                </div>
+
+                <!-- City search -->
+                <div class="tc-search-section">
+                    <div class="tc-search-label">Search for a city</div>
+                    <div class="tc-search-input-wrap">
+                        <input type="text" id="tc-city-input" placeholder="Search city or airport code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    </div>
+                    <div id="tc-city-results"></div>
+                </div>
+
+                <!-- Slot picker (shown when city has 2 valid slots) -->
+                <div class="tc-slot-picker" id="tc-slot-picker" style="display:none">
+                    <div class="tc-slot-label">This city can replace either of the following cities:</div>
+                    <div class="tc-slot-choices" id="tc-slot-choices"></div>
+                </div>
+
+                <!-- Error/info messages -->
+                <div class="tc-message" id="tc-message" style="display:none"></div>
+
+                <!-- Footer -->
+                <div class="tc-dialog-footer">
+                    <button class="tc-btn tc-btn-reset" id="tc-reset">Reset to defaults</button>
+                    <button class="tc-btn tc-btn-cancel" id="tc-cancel">Cancel</button>
+                    <button class="tc-btn tc-btn-done" id="tc-done">Done</button>
+                </div>
+            </div>
+
+            <!-- Nested confirmation modal for Reset -->
+            <div class="tc-confirm-overlay" id="tc-confirm-overlay" style="display:none">
+                <div class="tc-confirm-box">
+                    <div class="tc-confirm-text">This will remove all custom city labels on this face.</div>
+                    <div class="tc-confirm-buttons">
+                        <button class="tc-btn tc-btn-cancel" id="tc-confirm-no">Cancel</button>
+                        <button class="tc-btn tc-btn-reset" id="tc-confirm-yes">Reset to defaults</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Time controller popover -->
         <div id="time-popover" style="display:none">

@@ -11,12 +11,12 @@
 import type { TerraSlot } from './watch-env.js';
 import { TERRA_RING_DEFAULTS } from './watch-env.js';
 
-// Constants matching iOS ECFactoryUI.m
-const FIRST_ENV_SLOT = 5;
+// Constants matching iOS ECFactoryUI.m (renumbered 1-based for web)
+const FIRST_ENV_SLOT = 1;
 const UTC_SECTOR_NUMBER = 11;
 
 /**
- * Convert env slot number (5–28) to UTC offset hour (-11 to +12).
+ * Convert env slot number (1–24) to UTC offset hour (-11 to +12).
  */
 export function getSlotOffsetHour(envSlot: number): number {
     return envSlot - FIRST_ENV_SLOT - UTC_SECTOR_NUMBER;
@@ -93,12 +93,12 @@ export function validTZCenteredAt(tzCenter: number, offsetHours: number): boolea
 }
 
 /**
- * Return the list of valid env slot numbers (5–28) for a given timezone.
+ * Return the list of valid env slot numbers (1–24) for a given timezone.
  */
 export function validSlotsForTz(olsonId: string): number[] {
     const tzCenter = computeTzCenter(olsonId);
     const result: number[] = [];
-    for (let slot = 5; slot <= 28; slot++) {
+    for (let slot = 1; slot <= 24; slot++) {
         const offsetHour = getSlotOffsetHour(slot);
         if (validTZCenteredAt(tzCenter, offsetHour)) {
             result.push(slot);

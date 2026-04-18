@@ -8,7 +8,7 @@
   Removed: night mode, buttons, moonNightcast, stars
 -->
 
-<watch name='Venezia I' beatsPerSecond='0' faceWidth='279' statusBarLoc='bottom' bezelColor='rgb(160,160,160)'>
+<watch name='Venezia I' planetSelector='1' beatsPerSecond='0' faceWidth='279' statusBarLoc='bottom' bezelColor='rgb(160,160,160)'>
   <atlas backWidth='128' backHeight='128' frontWidth='512' frontHeight='512' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=279, backerWidth=faceWidth' />
 

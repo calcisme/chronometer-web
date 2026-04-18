@@ -2127,7 +2127,7 @@ function buildTerraRingKnockoutCache(
     oCtx.textBaseline = 'middle';
 
     for (let i = 0; i < 24; i++) {
-        const slot = terraSlots[i + 5]; // ring slots are 5–28
+        const slot = terraSlots[i + 1]; // ring slots are 1–24
         if (!slot) continue;
 
         const slotCenterAngle = i * sectorAngle;
@@ -2204,11 +2204,11 @@ function drawTerraChannelLines(
     ctx.strokeStyle = 'black';
 
     for (let i = 0; i < 24; i++) {
-        const slot = terraSlots[i + 5];
+        const slot = terraSlots[i + 1];
         if (!slot) continue;
 
         const channelR = (i % 2 === 0) ? channelRad1 : channelRad2;
-        const slotNum = i + 5;
+        const slotNum = i + 1;
         const dstRange = getDSTRange(slotNum);
 
         if (dstRange) {
@@ -2338,7 +2338,7 @@ function drawTerraCityDots(
     ctx.save();
     ctx.fillStyle = 'blue';
 
-    for (let slotNum = 5; slotNum <= 28; slotNum++) {
+    for (let slotNum = 1; slotNum <= 24; slotNum++) {
         const slot = terraSlots[slotNum];
         if (!slot) continue;
 

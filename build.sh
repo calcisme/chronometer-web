@@ -89,8 +89,8 @@ for face in $FACES; do
   SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-'"$face"'.js"><\/script>'
   ICON="thumb-${face}.png"
-  # Use terra-specific partial injection for terra face
-  if [ "$face" = "terra" ]; then
+  # Use city-dialog partial injection for faces with city customization
+  if [ "$face" = "terra" ] || [ "$face" = "gaia" ]; then
     INJECTOR=inject_partials_terra
   else
     INJECTOR=inject_partials
@@ -114,7 +114,8 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-firenze.js"><\/script>\
     <script src="face-venezia.js"><\/script>\
     <script src="face-terra.js"><\/script>\
-    <script src="face-miami.js"><\/script>'
+    <script src="face-miami.js"><\/script>\
+    <script src="face-gaia.js"><\/script>'
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \

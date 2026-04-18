@@ -21,6 +21,16 @@ export interface Watch {
     bezelColor: string;
     /** If true, draw a fine noon-indicator line at the top of the bezel. */
     bezelNoonMark: boolean;
+    /** True if this face uses a world-time ring (Terra-style city ring). */
+    worldTimeRing: boolean;
+    /** True if this face uses world-time subdials (Gaia-style). */
+    worldTimeSubdials: boolean;
+    /** True if this face has a planet body selector (Venezia-style). */
+    planetSelector: boolean;
+    /** Number of environment slots (from numEnvironments attribute). */
+    numEnvironments: number;
+    /** Maximum separate locations (from maxSeparateLoc attribute). */
+    maxSeparateLoc: number;
     /** All `<init expr="...">` blocks in document order. */
     initExprs: ASTNode[];
     /** All parts included for the selected mode, in document order. */

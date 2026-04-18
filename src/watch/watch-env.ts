@@ -112,32 +112,32 @@ export interface TerraSlot {
     lon: number;
 }
 
-/** Default ring slot cities (indexed by env slot 5–28). */
+/** Default ring slot cities (indexed by env slot 1–24). */
 export const TERRA_RING_DEFAULTS: Record<number, TerraSlot> = {
-    5:  { cityName: 'Pago Pago',      olsonId: 'Pacific/Pago_Pago',      lat: -14.27806, lon: -170.70250 },
-    6:  { cityName: 'Honolulu',       olsonId: 'Pacific/Honolulu',       lat:  21.30694, lon: -157.85834 },
-    7:  { cityName: 'Anchorage',      olsonId: 'America/Juneau',         lat:  61.21806, lon: -149.90028 },
-    8:  { cityName: 'Los Angeles',    olsonId: 'America/Los_Angeles',    lat:  34.05223, lon: -118.24368 },
-    9:  { cityName: 'Denver',         olsonId: 'America/Denver',         lat:  39.73915, lon: -104.98470 },
-    10: { cityName: 'Chicago',        olsonId: 'America/Chicago',        lat:  41.85003, lon:  -87.65005 },
-    11: { cityName: 'New York',       olsonId: 'America/New_York',       lat:  40.71427, lon:  -74.00597 },
-    12: { cityName: 'Santiago',       olsonId: 'America/Santiago',       lat: -33.42628, lon:  -70.56655 },
-    13: { cityName: 'Rio de Janeiro', olsonId: 'America/Sao_Paulo',      lat: -22.90278, lon:  -43.20750 },
-    14: { cityName: 'Grytviken',      olsonId: 'Atlantic/South_Georgia', lat: -54.27667, lon:  -36.51167 },
-    15: { cityName: 'Dakar',          olsonId: 'Africa/Dakar',           lat:  14.74208, lon:  -17.43978 },
-    16: { cityName: 'London',         olsonId: 'Europe/London',          lat:  51.50842, lon:   -0.12553 },
-    17: { cityName: 'Paris',          olsonId: 'Europe/Paris',           lat:  48.85341, lon:    2.34880 },
-    18: { cityName: 'Cairo',          olsonId: 'Africa/Cairo',           lat:  30.05000, lon:   31.25000 },
-    19: { cityName: 'Moscow',         olsonId: 'Europe/Moscow',          lat:  55.75222, lon:   37.61555 },
-    20: { cityName: 'Dubai',          olsonId: 'Asia/Dubai',             lat:  25.25222, lon:   55.28000 },
-    21: { cityName: 'Delhi',          olsonId: 'Asia/Kolkata',           lat:  28.66667, lon:   77.21666 },
-    22: { cityName: 'Dhaka',          olsonId: 'Asia/Dhaka',             lat:  23.72305, lon:   90.40861 },
-    23: { cityName: 'Bangkok',        olsonId: 'Asia/Bangkok',           lat:  13.75000, lon:  100.51667 },
-    24: { cityName: 'Hong Kong',      olsonId: 'Asia/Hong_Kong',         lat:  22.28401, lon:  114.15007 },
-    25: { cityName: 'Tokyo',          olsonId: 'Asia/Tokyo',             lat:  35.68953, lon:  139.69168 },
-    26: { cityName: 'Sydney',         olsonId: 'Australia/Sydney',       lat: -33.86785, lon:  151.20732 },
-    27: { cityName: 'Nouméa',         olsonId: 'Pacific/Noumea',         lat: -22.26667, lon:  166.45000 },
-    28: { cityName: 'Auckland',       olsonId: 'Pacific/Auckland',       lat: -36.86666, lon:  174.76666 },
+    1:  { cityName: 'Pago Pago',      olsonId: 'Pacific/Pago_Pago',      lat: -14.27806, lon: -170.70250 },
+    2:  { cityName: 'Honolulu',       olsonId: 'Pacific/Honolulu',       lat:  21.30694, lon: -157.85834 },
+    3:  { cityName: 'Anchorage',      olsonId: 'America/Juneau',         lat:  61.21806, lon: -149.90028 },
+    4:  { cityName: 'Los Angeles',    olsonId: 'America/Los_Angeles',    lat:  34.05223, lon: -118.24368 },
+    5:  { cityName: 'Denver',         olsonId: 'America/Denver',         lat:  39.73915, lon: -104.98470 },
+    6:  { cityName: 'Chicago',        olsonId: 'America/Chicago',        lat:  41.85003, lon:  -87.65005 },
+    7:  { cityName: 'New York',       olsonId: 'America/New_York',       lat:  40.71427, lon:  -74.00597 },
+    8:  { cityName: 'Santiago',       olsonId: 'America/Santiago',       lat: -33.42628, lon:  -70.56655 },
+    9:  { cityName: 'Rio de Janeiro', olsonId: 'America/Sao_Paulo',      lat: -22.90278, lon:  -43.20750 },
+    10: { cityName: 'Grytviken',      olsonId: 'Atlantic/South_Georgia', lat: -54.27667, lon:  -36.51167 },
+    11: { cityName: 'Dakar',          olsonId: 'Africa/Dakar',           lat:  14.74208, lon:  -17.43978 },
+    12: { cityName: 'London',         olsonId: 'Europe/London',          lat:  51.50842, lon:   -0.12553 },
+    13: { cityName: 'Paris',          olsonId: 'Europe/Paris',           lat:  48.85341, lon:    2.34880 },
+    14: { cityName: 'Cairo',          olsonId: 'Africa/Cairo',           lat:  30.05000, lon:   31.25000 },
+    15: { cityName: 'Moscow',         olsonId: 'Europe/Moscow',          lat:  55.75222, lon:   37.61555 },
+    16: { cityName: 'Dubai',          olsonId: 'Asia/Dubai',             lat:  25.25222, lon:   55.28000 },
+    17: { cityName: 'Delhi',          olsonId: 'Asia/Kolkata',           lat:  28.66667, lon:   77.21666 },
+    18: { cityName: 'Dhaka',          olsonId: 'Asia/Dhaka',             lat:  23.72305, lon:   90.40861 },
+    19: { cityName: 'Bangkok',        olsonId: 'Asia/Bangkok',           lat:  13.75000, lon:  100.51667 },
+    20: { cityName: 'Hong Kong',      olsonId: 'Asia/Hong_Kong',         lat:  22.28401, lon:  114.15007 },
+    21: { cityName: 'Tokyo',          olsonId: 'Asia/Tokyo',             lat:  35.68953, lon:  139.69168 },
+    22: { cityName: 'Sydney',         olsonId: 'Australia/Sydney',       lat: -33.86785, lon:  151.20732 },
+    23: { cityName: 'Nouméa',         olsonId: 'Pacific/Noumea',         lat: -22.26667, lon:  166.45000 },
+    24: { cityName: 'Auckland',       olsonId: 'Pacific/Auckland',       lat: -36.86666, lon:  174.76666 },
 };
 
 /** Default subdial cities for Gaia (indexed by env slot 2–4; slot 1 = observer). */
@@ -1138,14 +1138,9 @@ function registerTimeFunctions(
     // =========================================================================
     // Terra I — World-time ring functions
     // =========================================================================
-    //
-    // Terra uses 25 environment slots:
-    //   Slot 0: the device's own timezone (unused by the front face directly;
-    //           the front face uses terraIDeviceSlot() which returns a ring slot)
-    //   Slots 5–28: the 24 cities on the worldtime ring
-    //
-    // The iOS ringDefaults[] array from ECFactoryUI.m defines the default
-    // city for each ring slot.  Ring sector 0 corresponds to env slot 5.
+    // Terra uses 24 environment slots (1–24) for the worldtime ring cities.
+    // On iOS these were 5–28; renumbered to 1-based for the web app.
+    // Ring sector 0 corresponds to env slot 1.
 
     // Build working slot data: start with defaults, apply any overrides.
     const terraRingDefaults: Record<number, TerraSlot> = {};
@@ -1252,7 +1247,7 @@ function registerTimeFunctions(
     }
 
     // --- Auto-detect which ring slot matches the user's timezone ---
-    let detectedTopSlot = 16; // default: London (slot 16 = UTC)
+    let detectedTopSlot = 12; // default: London (slot 12 = UTC)
     try {
         // Use the override timezone if set, otherwise fall back to browser timezone
         const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -1264,7 +1259,7 @@ function registerTimeFunctions(
             }
         }
         // If no exact match, match by offset
-        if (detectedTopSlot === 16 && targetTz !== 'Europe/London' && targetTz !== 'UTC') {
+        if (detectedTopSlot === 12 && targetTz !== 'Europe/London' && targetTz !== 'UTC') {
             const nowDate = getNow();
             const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
             let bestDiff = Infinity;

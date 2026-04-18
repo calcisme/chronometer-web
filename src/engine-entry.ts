@@ -36,7 +36,7 @@ import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
-import { readUrlState, writeUrlState, initNavigationLinks } from './url-state.js';
+import { readUrlState, writeUrlState, initNavigationLinks, updateNavigationLinks } from './url-state.js';
 import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './city-search.js';
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
@@ -201,7 +201,18 @@ async function main() {
     // Preload city database in the background so it's ready when the user
     // opens the location dialog. Once loaded, update the location display
     // to show the nearest city name for browser/manual locations.
-    loadCityData().then(() => updateLocationDisplay()).catch(() => {});
+    loadCityData().then(() => {
+        updateLocationDisplay();
+        // Update Gaia-style observer slot names now that city data is available
+        for (const face of faces) {
+            if (face.watch.worldTimeSubdials && face.terraSlotOverrides?.[1]?.cityName === 'Observer') {
+                const closest = findClosestCity(lat, lon);
+                if (closest) {
+                    face.terraSlotOverrides[1].cityName = closest.shortLabel;
+                }
+            }
+        }
+    }).catch(() => {});
 
     // --- Resolve location ---
     const urlState = readUrlState();
@@ -366,17 +377,20 @@ async function main() {
     const getNow = () => timeController.getDisplayTime();
 
     // --- Per-face slot overrides helper ---
-    // Builds slot overrides based on watch name: Terra reads s5..s28 from URL,
-    // Gaia reads s2..s4 (slot 1 = observer). Other faces get no overrides.
-    function buildSlotOverrides(watchName: string): Record<number, TerraSlot> | undefined {
+    // Builds slot overrides based on watch feature flags:
+    // - worldTimeRing: reads r1..r24 from URL (Terra-style ring cities)
+    // - worldTimeSubdials: reads d2..dN from URL, slot 1 = observer (Gaia-style)
+    // Other faces get no overrides.
+    // URL prefixes: 'r' = ring, 'd' = dial/subdial (avoids collision).
+    function buildSlotOverrides(watch: Watch): Record<number, TerraSlot> | undefined {
         const params = new URLSearchParams(window.location.search);
-        if (watchName === 'Terra') {
+        if (watch.worldTimeRing) {
             const overrides: Record<number, TerraSlot> = {};
-            for (let slot = 5; slot <= 28; slot++) {
-                const name = params.get(`s${slot}`);
-                const tz = params.get(`s${slot}tz`);
-                const latStr = params.get(`s${slot}lat`);
-                const lonStr = params.get(`s${slot}lon`);
+            for (let slot = 1; slot <= 24; slot++) {
+                const name = params.get(`r${slot}`);
+                const tz = params.get(`r${slot}tz`);
+                const latStr = params.get(`r${slot}lat`);
+                const lonStr = params.get(`r${slot}lon`);
                 if (name && tz) {
                     overrides[slot] = {
                         cityName: name,
@@ -388,20 +402,26 @@ async function main() {
             }
             return Object.keys(overrides).length > 0 ? overrides : undefined;
         }
-        if (watchName === 'Gaia') {
+        if (watch.worldTimeSubdials) {
+            const nSubdials = watch.maxSeparateLoc || 4;
             const overrides: Record<number, TerraSlot> = {};
-            // Slot 1 = observer location
+            // Slot 1 = observer location — use city name from URL or closest city
+            let observerName = locationSource;
+            if (!observerName && isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
+                const closest = findClosestCity(lat, lon);
+                if (closest) observerName = closest.shortLabel;
+            }
             overrides[1] = {
-                cityName: locationSource || 'Observer',
+                cityName: observerName || 'Observer',
                 olsonId: locationTimezone,
                 lat, lon,
             };
-            // Slots 2–4: URL overrides or defaults
-            for (let slot = 2; slot <= 4; slot++) {
-                const name = params.get(`s${slot}`);
-                const tz = params.get(`s${slot}tz`);
-                const latStr = params.get(`s${slot}lat`);
-                const lonStr = params.get(`s${slot}lon`);
+            // Slots 2–N: URL overrides or defaults
+            for (let slot = 2; slot <= nSubdials; slot++) {
+                const name = params.get(`d${slot}`);
+                const tz = params.get(`d${slot}tz`);
+                const latStr = params.get(`d${slot}lat`);
+                const lonStr = params.get(`d${slot}lon`);
                 if (name && tz) {
                     overrides[slot] = {
                         cityName: name,
@@ -435,7 +455,7 @@ async function main() {
         grid.appendChild(cell);
 
         const watch = parsedWatches[i];
-        const faceOverrides = buildSlotOverrides(watch.name);
+        const faceOverrides = buildSlotOverrides(watch);
         const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides);
 
         const face: FaceInstance = {
@@ -610,7 +630,7 @@ async function main() {
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
 
             // Gaia: draw city name labels and 24-hour numbers on each subdial
-            if (face.watch.name === 'Gaia' && face.terraSlotOverrides) {
+            if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
                 const ctx2d = face.ctx;
                 const fw = face.env.variables.get('faceWidth') || 278;
                 ctx2d.save();
@@ -1123,10 +1143,12 @@ async function main() {
         const locationPanel = document.getElementById('location-panel');
         const timeBarEl = document.getElementById('time-bar');
         const planetSelectorEl = document.getElementById('planet-selector');
+        const changeCitiesBtnEl = document.getElementById('change-cities-btn');
         const panelH = locationPanel ? locationPanel.offsetHeight : 0;
         const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
         const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
-        const height = entry.contentRect.height - panelH - timeBarH - planetSelH;
+        const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
+        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH;
         if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = setTimeout(() => {
             resizeDebounceTimer = null;
@@ -1145,9 +1167,14 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled) continue;
             // Update Gaia slot 1 to match new observer location
-            if (face.watch.name === 'Gaia' && face.terraSlotOverrides) {
+            if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
+                let obsName = locationSource;
+                if (!obsName && isCityDataLoaded() && (newLat !== 0 || newLon !== 0)) {
+                    const closest = findClosestCity(newLat, newLon);
+                    if (closest) obsName = closest.shortLabel;
+                }
                 face.terraSlotOverrides[1] = {
-                    cityName: locationSource || 'Observer',
+                    cityName: obsName || 'Observer',
                     olsonId: locationTimezone,
                     lat: newLat, lon: newLon,
                 };
@@ -2126,12 +2153,12 @@ async function main() {
     }, 60_000);
 
     // =========================================================================
-    // Planet selector (Venezia only, single-face mode)
+    // Planet selector (for faces with planetSelector flag)
     // =========================================================================
     const isSingleFace = faceDataArray.length === 1;
-    const isVenezia = isSingleFace && faceDataArray[0].name === 'Venezia';
+    const planetSelectorFace = faces.find(f => f.watch.planetSelector);
 
-    if (isVenezia) {
+    if (planetSelectorFace && isSingleFace) {
         const selectorEl = document.getElementById('planet-selector');
         const iconsContainer = document.getElementById('planet-icons');
         const nameLabel = document.getElementById('planet-name');
@@ -2231,10 +2258,10 @@ async function main() {
     }
 
     // =========================================================================
-    // Terra city customization (Terra only, single-face mode)
+    // Terra city customization (for faces with worldTimeRing flag, single-face mode)
     // =========================================================================
-    const terraFace = faces.find(f => f.watch.name === 'Terra');
-    if (terraFace) {
+    const terraFace = faces.find(f => f.watch.worldTimeRing);
+    if (terraFace && isSingleFace) {
         const tcDialog = document.getElementById('terra-city-dialog');
         const tcCityInput = document.getElementById('tc-city-input') as HTMLInputElement | null;
         const tcCityResults = document.getElementById('tc-city-results');
@@ -2279,18 +2306,18 @@ async function main() {
             /** Write slot overrides to URL */
             function writeTerraOverridesToUrl() {
                 const params = new URLSearchParams(window.location.search);
-                for (let slot = 5; slot <= 28; slot++) {
-                    params.delete(`s${slot}`);
-                    params.delete(`s${slot}tz`);
-                    params.delete(`s${slot}lat`);
-                    params.delete(`s${slot}lon`);
+                for (let slot = 1; slot <= 24; slot++) {
+                    params.delete(`r${slot}`);
+                    params.delete(`r${slot}tz`);
+                    params.delete(`r${slot}lat`);
+                    params.delete(`r${slot}lon`);
                 }
                 if (terraFace.terraSlotOverrides) {
                     for (const [slotStr, data] of Object.entries(terraFace.terraSlotOverrides)) {
-                        params.set(`s${slotStr}`, data.cityName);
-                        params.set(`s${slotStr}tz`, data.olsonId);
-                        params.set(`s${slotStr}lat`, data.lat.toFixed(3));
-                        params.set(`s${slotStr}lon`, data.lon.toFixed(3));
+                        params.set(`r${slotStr}`, data.cityName);
+                        params.set(`r${slotStr}tz`, data.olsonId);
+                        params.set(`r${slotStr}lat`, data.lat.toFixed(3));
+                        params.set(`r${slotStr}lon`, data.lon.toFixed(3));
                     }
                 }
                 params.delete('long');
@@ -2298,6 +2325,7 @@ async function main() {
                 const qs = params.toString();
                 const newUrl = window.location.pathname + (qs ? '?' + qs : '');
                 history.replaceState(null, '', newUrl);
+                updateNavigationLinks();
             }
 
             /** Rebuild the Terra face after a slot change */
@@ -2528,6 +2556,303 @@ async function main() {
                         });
                         tcSlotChoices!.appendChild(btn);
                     }
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Gaia subdial city customization (for faces with worldTimeSubdials, single-face)
+    // =========================================================================
+    const gaiaFace = faces.find(f => f.watch.worldTimeSubdials);
+    if (gaiaFace && isSingleFace && !terraFace) {
+        // Reuse the same terra-city-dialog HTML elements
+        const tcDialog = document.getElementById('terra-city-dialog');
+        const tcCityInput = document.getElementById('tc-city-input') as HTMLInputElement | null;
+        const tcCityResults = document.getElementById('tc-city-results');
+        const tcSlotPicker = document.getElementById('tc-slot-picker');
+        const tcSlotChoices = document.getElementById('tc-slot-choices');
+        const tcMessage = document.getElementById('tc-message');
+        const tcNoSelection = document.getElementById('tc-no-selection');
+        const tcSelectedCity = document.getElementById('tc-selected-city');
+        const tcCityName = document.getElementById('tc-city-name');
+        const tcCityTz = document.getElementById('tc-city-tz');
+        const tcResetBtn = document.getElementById('tc-reset');
+        const tcCancelBtn = document.getElementById('tc-cancel');
+        const tcDoneBtn = document.getElementById('tc-done');
+        const tcTitle = tcDialog?.querySelector('.tc-title');
+
+        if (tcDialog && tcCityInput && tcCityResults && tcSlotPicker &&
+            tcSlotChoices && tcMessage && tcDoneBtn && tcResetBtn) {
+
+            // Customize the title for Gaia
+            if (tcTitle) tcTitle.textContent = 'Change subdial cities';
+
+            // Subdial slot labels
+            const subdialLabels: Record<number, string> = { 2: 'Upper', 3: 'Right', 4: 'Lower' };
+
+            // Add "Change cities" button
+            const changeCitiesBtn = document.createElement('button');
+            changeCitiesBtn.className = 'change-cities-btn';
+            changeCitiesBtn.textContent = 'Change cities';
+            changeCitiesBtn.id = 'change-cities-btn';
+            const timeBarEl = document.getElementById('time-bar');
+            if (timeBarEl) {
+                timeBarEl.parentElement!.insertBefore(changeCitiesBtn, timeBarEl);
+            }
+
+            /** Write Gaia subdial overrides to URL */
+            function writeGaiaOverridesToUrl() {
+                const params = new URLSearchParams(window.location.search);
+                const nSubdials = gaiaFace.watch.maxSeparateLoc || 4;
+                for (let slot = 2; slot <= nSubdials; slot++) {
+                    params.delete(`d${slot}`);
+                    params.delete(`d${slot}tz`);
+                    params.delete(`d${slot}lat`);
+                    params.delete(`d${slot}lon`);
+                }
+                if (gaiaFace.terraSlotOverrides) {
+                    for (const [slotStr, data] of Object.entries(gaiaFace.terraSlotOverrides)) {
+                        const s = Number(slotStr);
+                        if (s < 2) continue; // don't write observer slot
+                        params.set(`d${slotStr}`, data.cityName);
+                        params.set(`d${slotStr}tz`, data.olsonId);
+                        params.set(`d${slotStr}lat`, data.lat.toFixed(3));
+                        params.set(`d${slotStr}lon`, data.lon.toFixed(3));
+                    }
+                }
+                params.delete('long');
+                params.delete('loc');
+                const qs = params.toString();
+                const newUrl = window.location.pathname + (qs ? '?' + qs : '');
+                history.replaceState(null, '', newUrl);
+                updateNavigationLinks();
+            }
+
+            /** Rebuild Gaia after a slot change */
+            function rebuildGaiaForSlotChange() {
+                for (const face of faces) {
+                    if (!face.enabled) continue;
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+                    if (face.terminatorLeaves.length > 0) {
+                        updateLeafAngles(face.terminatorLeaves, face.env);
+                        resetLeafSchedules(face.terminatorLeaves);
+                        face.lastTerminatorRebuild = 0;
+                    }
+                    const { canvas, watch, env, images, scale } = face;
+                    buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+                    for (const hs of face.handStates) {
+                        hs.nextUpdateTime = 0;
+                    }
+                }
+                stopScheduler();
+                startScheduler();
+            }
+
+            function assignCityToGaiaSlot(slot: number, city: CityResult) {
+                const previousCity = gaiaFace.terraSlotOverrides?.[slot]?.cityName || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || 'Unknown';
+                if (!gaiaFace.terraSlotOverrides) {
+                    gaiaFace.terraSlotOverrides = {};
+                }
+                gaiaFace.terraSlotOverrides[slot] = {
+                    cityName: city.shortLabel,
+                    olsonId: city.timezone,
+                    lat: city.lat,
+                    lon: city.lon,
+                };
+                writeGaiaOverridesToUrl();
+                rebuildGaiaForSlotChange();
+                showGaiaMessage(`${city.shortLabel} replaces ${previousCity} (${subdialLabels[slot]} subdial)`, 'info');
+            }
+
+            function showGaiaMessage(text: string, type: 'info' | 'warn' | 'error') {
+                tcMessage!.textContent = text;
+                tcMessage!.className = `tc-message tc-message-${type}`;
+                tcMessage!.style.display = '';
+            }
+
+            function hideGaiaMessage() {
+                tcMessage!.style.display = 'none';
+            }
+
+            function showGaiaCityStatus(city: CityResult) {
+                if (tcNoSelection) tcNoSelection.style.display = 'none';
+                if (tcSelectedCity) tcSelectedCity.style.display = '';
+                if (tcCityName) tcCityName.textContent = city.shortLabel;
+                if (tcCityTz) tcCityTz.textContent = city.timezone;
+            }
+
+            function resetGaiaCityStatus() {
+                if (tcNoSelection) tcNoSelection.style.display = '';
+                if (tcSelectedCity) tcSelectedCity.style.display = 'none';
+            }
+
+            function showGaiaDialog() {
+                tcDialog!.style.display = '';
+                grid.classList.add('blurred');
+                tcCityInput!.value = '';
+                tcCityResults!.innerHTML = '';
+                tcSlotPicker!.style.display = 'none';
+                hideGaiaMessage();
+                resetGaiaCityStatus();
+                setTimeout(() => tcCityInput?.focus(), 50);
+            }
+
+            function hideGaiaDialog() {
+                tcDialog!.style.display = 'none';
+                grid.classList.remove('blurred');
+            }
+
+            changeCitiesBtn.addEventListener('click', showGaiaDialog);
+            tcDoneBtn.addEventListener('click', hideGaiaDialog);
+            if (tcCancelBtn) tcCancelBtn.addEventListener('click', hideGaiaDialog);
+            tcDialog!.querySelector('.tc-backdrop')?.addEventListener('click', hideGaiaDialog);
+
+            tcResetBtn.addEventListener('click', () => {
+                const overlay = document.getElementById('tc-confirm-overlay');
+                if (overlay) overlay.style.display = '';
+            });
+
+            const confirmYes = document.getElementById('tc-confirm-yes');
+            const confirmNo = document.getElementById('tc-confirm-no');
+            const confirmOverlay = document.getElementById('tc-confirm-overlay');
+
+            if (confirmYes && confirmNo && confirmOverlay) {
+                confirmNo.addEventListener('click', () => {
+                    confirmOverlay.style.display = 'none';
+                });
+                confirmYes.addEventListener('click', () => {
+                    confirmOverlay.style.display = 'none';
+                    // Reset slots 2-4 to defaults, keep slot 1 (observer)
+                    if (gaiaFace.terraSlotOverrides) {
+                        const slot1 = gaiaFace.terraSlotOverrides[1];
+                        gaiaFace.terraSlotOverrides = slot1 ? { 1: slot1 } : {};
+                        for (const [k, v] of Object.entries(GAIA_SUBDIAL_DEFAULTS)) {
+                            gaiaFace.terraSlotOverrides[Number(k)] = { ...v };
+                        }
+                    }
+                    writeGaiaOverridesToUrl();
+                    rebuildGaiaForSlotChange();
+                    showGaiaMessage('All subdials reset to defaults', 'info');
+                    resetGaiaCityStatus();
+                    tcSlotPicker!.style.display = 'none';
+                });
+            }
+
+            // --- City search ---
+            let gaiaSearchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+            function renderGaiaSearchResults(results: CityResult[]) {
+                tcCityResults!.innerHTML = '';
+                if (results.length === 0) {
+                    tcCityResults!.innerHTML = '<div class="tc-city-loading">No results found</div>';
+                    return;
+                }
+                const max = Math.min(results.length, 50);
+                for (let i = 0; i < max; i++) {
+                    const r = results[i];
+                    const div = document.createElement('div');
+                    div.className = 'tc-city-item';
+                    if (r.isAirport) {
+                        div.innerHTML = `<span class="iata-tag">${r.label.split(' ')[0]}</span>${r.label.split(' ').slice(1).join(' ')}`;
+                    } else {
+                        div.textContent = r.label;
+                    }
+                    div.addEventListener('click', () => {
+                        tcCityInput!.value = '';
+                        tcCityResults!.innerHTML = '';
+                        onGaiaCitySelected(r);
+                    });
+                    tcCityResults!.appendChild(div);
+                }
+            }
+
+            async function onGaiaCityInput() {
+                const query = tcCityInput!.value.trim();
+                if (query.length === 0) {
+                    tcCityResults!.innerHTML = '';
+                    return;
+                }
+                try {
+                    if (!isCityDataLoaded()) {
+                        if (loadError) {
+                            tcCityResults!.innerHTML = `<div class="tc-city-loading">City search unavailable: ${loadError}</div>`;
+                            return;
+                        }
+                        tcCityResults!.innerHTML = '<div class="tc-city-loading">Loading city database…</div>';
+                        try {
+                            await loadCityData();
+                        } catch (err) {
+                            tcCityResults!.innerHTML = `<div class="tc-city-loading">Failed to load: ${(err as Error).message}</div>`;
+                            return;
+                        }
+                        const currentQuery = tcCityInput!.value.trim();
+                        if (currentQuery.length === 0) {
+                            tcCityResults!.innerHTML = '';
+                            return;
+                        }
+                    }
+                    const results = searchCities(query, lat, lon);
+                    renderGaiaSearchResults(results);
+                } catch (err) {
+                    tcCityResults!.innerHTML = `<div class="tc-city-loading">Error: ${(err as Error).message}</div>`;
+                }
+            }
+
+            function debounceGaiaSearch() {
+                if (gaiaSearchDebounce) clearTimeout(gaiaSearchDebounce);
+                gaiaSearchDebounce = setTimeout(onGaiaCityInput, 150);
+            }
+
+            tcCityInput.addEventListener('input', debounceGaiaSearch);
+            tcCityInput.addEventListener('keyup', debounceGaiaSearch);
+            tcCityInput.addEventListener('compositionend', debounceGaiaSearch);
+
+            tcCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
+                const items = tcCityResults!.querySelectorAll('.tc-city-item');
+                if (items.length === 0) return;
+                const current = tcCityResults!.querySelector('.tc-city-item.selected');
+                const idx = current ? Array.from(items).indexOf(current) : -1;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const next = idx < items.length - 1 ? idx + 1 : 0;
+                    current?.classList.remove('selected');
+                    items[next].classList.add('selected');
+                    items[next].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const prev = idx > 0 ? idx - 1 : items.length - 1;
+                    current?.classList.remove('selected');
+                    items[prev].classList.add('selected');
+                    items[prev].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter' && current) {
+                    (current as HTMLElement).click();
+                }
+            });
+
+            /** Handle a city selection — always show subdial picker */
+            function onGaiaCitySelected(city: CityResult) {
+                showGaiaCityStatus(city);
+                hideGaiaMessage();
+
+                // Show subdial picker (slots 2-4)
+                tcSlotPicker!.style.display = '';
+                tcSlotChoices!.innerHTML = '';
+                const slotLabel = tcSlotPicker!.querySelector('.tc-slot-label');
+                if (slotLabel) slotLabel.textContent = 'Which subdial should this city replace?';
+
+                const nSubdials = gaiaFace.watch.maxSeparateLoc || 4;
+                for (let slot = 2; slot <= nSubdials; slot++) {
+                    const currentCity = gaiaFace.terraSlotOverrides?.[slot]?.cityName
+                        || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || 'Unknown';
+                    const btn = document.createElement('button');
+                    btn.className = 'tc-slot-btn';
+                    btn.innerHTML = `<span class="tc-slot-city">${currentCity}</span><span class="tc-slot-offset">${subdialLabels[slot] || `Subdial ${slot}`}</span>`;
+                    btn.addEventListener('click', () => {
+                        tcSlotPicker!.style.display = 'none';
+                        assignCityToGaiaSlot(slot, city);
+                    });
+                    tcSlotChoices!.appendChild(btn);
                 }
             }
         }

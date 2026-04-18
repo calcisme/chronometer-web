@@ -9,15 +9,13 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Terra I' numEnvironments='29' bezelColor='rgb(180,150,130)' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='276' statusBarLoc='bottom'>
+<watch name='Terra I' worldTimeRing='1' numEnvironments='29' bezelColor='rgb(180,150,130)' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='276' statusBarLoc='bottom'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=276, backerWidth=faceWidth' />
 
 <!-- env slot specifications -->
-  <!-- The first four env slots, with locations, are allocated to the subdials -->
-  <init expr='subdial0Slot=1, subdial1Slot=2, subdial2Slot=3, subdial3Slot=4' />
-  <!-- The ring starts at env slot 5 and continues on through env slot 28 -->
-  <init expr='firstRingSlot=5, UTRingSlot=16, utSlotOffsetAngle=22*pi/24'/>
+  <!-- The ring uses env slots 1–24 (renumbered from iOS's 5–28) -->
+  <init expr='firstRingSlot=1, UTRingSlot=12, utSlotOffsetAngle=22*pi/24'/>
 
 <!-- sizes, lengths, positions -->
   <init	expr='hour12FS=16, hour12smallFS=10, hour24FS=14, cityFS=10, DSTFS=12, DSTZ=3, DSTThick=0.5, DST2Z=2, DST2Thick=0.25' />
@@ -231,28 +229,28 @@
   <Qhand        name='24hr indic line'   x='0' y='0' z='0' thick='0.5' modes='front' type='rect' width='.5' lineWidth='.5' length='hourWheelOR-2' length2='hourWheelIR+9' strokeColor='0xffc0c0c0' angle='city24HrDialOffset(terraIDeviceSlot(), firstRingSlot)' update='900' dragAnimationType='dragAnimationHack1' animSpeed='iSpeed' />
 
 <!-- an invisible button for each timezone (including the top, to extend the timer): -->
-<button name='rotate 00'   x='butR*sin( 0 * 2*pi/24)-buttonWidth/2' y='butR*cos( 0 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 19) % 24 + 5)' />
-<button name='rotate 01'   x='butR*sin( 1 * 2*pi/24)-buttonWidth/2' y='butR*cos( 1 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 20) % 24 + 5)' />
-<button name='rotate 02'   x='butR*sin( 2 * 2*pi/24)-buttonWidth/2' y='butR*cos( 2 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 21) % 24 + 5)' />
-<button name='rotate 03'   x='butR*sin( 3 * 2*pi/24)-buttonWidth/2' y='butR*cos( 3 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 22) % 24 + 5)' />
-<button name='rotate 04'   x='butR*sin( 4 * 2*pi/24)-buttonWidth/2' y='butR*cos( 4 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 23) % 24 + 5)' />
-<button name='rotate 05'   x='butR*sin( 5 * 2*pi/24)-buttonWidth/2' y='butR*cos( 5 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  0) % 24 + 5)' />
-<button name='rotate 06'   x='butR*sin( 6 * 2*pi/24)-buttonWidth/2' y='butR*cos( 6 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  1) % 24 + 5)' />
-<button name='rotate 07'   x='butR*sin( 7 * 2*pi/24)-buttonWidth/2' y='butR*cos( 7 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  2) % 24 + 5)' />
-<button name='rotate 08'   x='butR*sin( 8 * 2*pi/24)-buttonWidth/2' y='butR*cos( 8 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  3) % 24 + 5)' />
-<button name='rotate 09'   x='butR*sin( 9 * 2*pi/24)-buttonWidth/2' y='butR*cos( 9 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  4) % 24 + 5)' />
-<button name='rotate 10'   x='butR*sin(10 * 2*pi/24)-buttonWidth/2' y='butR*cos(10 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  5) % 24 + 5)' />
-<button name='rotate 11'   x='butR*sin(11 * 2*pi/24)-buttonWidth/2' y='butR*cos(11 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  6) % 24 + 5)' />
-<button name='rotate 12'   x='butR*sin(12 * 2*pi/24)-buttonWidth/2' y='butR*cos(12 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  7) % 24 + 5)' />
-<button name='rotate 13'   x='butR*sin(13 * 2*pi/24)-buttonWidth/2' y='butR*cos(13 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  8) % 24 + 5)' />
-<button name='rotate 14'   x='butR*sin(14 * 2*pi/24)-buttonWidth/2' y='butR*cos(14 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  9) % 24 + 5)' />
-<button name='rotate 15'   x='butR*sin(15 * 2*pi/24)-buttonWidth/2' y='butR*cos(15 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 10) % 24 + 5)' />
-<button name='rotate 16'   x='butR*sin(16 * 2*pi/24)-buttonWidth/2' y='butR*cos(16 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 11) % 24 + 5)' />
-<button name='rotate 17'   x='butR*sin(17 * 2*pi/24)-buttonWidth/2' y='butR*cos(17 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 12) % 24 + 5)' />
-<button name='rotate 18'   x='butR*sin(18 * 2*pi/24)-buttonWidth/2' y='butR*cos(18 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 13) % 24 + 5)' />
-<button name='rotate 19'   x='butR*sin(19 * 2*pi/24)-buttonWidth/2' y='butR*cos(19 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 14) % 24 + 5)' />
-<button name='rotate 20'   x='butR*sin(20 * 2*pi/24)-buttonWidth/2' y='butR*cos(20 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 15) % 24 + 5)' />
-<button name='rotate 21'   x='butR*sin(21 * 2*pi/24)-buttonWidth/2' y='butR*cos(21 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 16) % 24 + 5)' />
-<button name='rotate 22'   x='butR*sin(22 * 2*pi/24)-buttonWidth/2' y='butR*cos(22 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 17) % 24 + 5)' />
-<button name='rotate 23'   x='butR*sin(23 * 2*pi/24)-buttonWidth/2' y='butR*cos(23 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 18) % 24 + 5)' />
+<button name='rotate 00'   x='butR*sin( 0 * 2*pi/24)-buttonWidth/2' y='butR*cos( 0 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 19) % 24 + 1)' />
+<button name='rotate 01'   x='butR*sin( 1 * 2*pi/24)-buttonWidth/2' y='butR*cos( 1 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 20) % 24 + 1)' />
+<button name='rotate 02'   x='butR*sin( 2 * 2*pi/24)-buttonWidth/2' y='butR*cos( 2 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 21) % 24 + 1)' />
+<button name='rotate 03'   x='butR*sin( 3 * 2*pi/24)-buttonWidth/2' y='butR*cos( 3 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 22) % 24 + 1)' />
+<button name='rotate 04'   x='butR*sin( 4 * 2*pi/24)-buttonWidth/2' y='butR*cos( 4 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 23) % 24 + 1)' />
+<button name='rotate 05'   x='butR*sin( 5 * 2*pi/24)-buttonWidth/2' y='butR*cos( 5 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  0) % 24 + 1)' />
+<button name='rotate 06'   x='butR*sin( 6 * 2*pi/24)-buttonWidth/2' y='butR*cos( 6 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  1) % 24 + 1)' />
+<button name='rotate 07'   x='butR*sin( 7 * 2*pi/24)-buttonWidth/2' y='butR*cos( 7 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  2) % 24 + 1)' />
+<button name='rotate 08'   x='butR*sin( 8 * 2*pi/24)-buttonWidth/2' y='butR*cos( 8 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  3) % 24 + 1)' />
+<button name='rotate 09'   x='butR*sin( 9 * 2*pi/24)-buttonWidth/2' y='butR*cos( 9 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  4) % 24 + 1)' />
+<button name='rotate 10'   x='butR*sin(10 * 2*pi/24)-buttonWidth/2' y='butR*cos(10 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  5) % 24 + 1)' />
+<button name='rotate 11'   x='butR*sin(11 * 2*pi/24)-buttonWidth/2' y='butR*cos(11 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  6) % 24 + 1)' />
+<button name='rotate 12'   x='butR*sin(12 * 2*pi/24)-buttonWidth/2' y='butR*cos(12 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  7) % 24 + 1)' />
+<button name='rotate 13'   x='butR*sin(13 * 2*pi/24)-buttonWidth/2' y='butR*cos(13 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  8) % 24 + 1)' />
+<button name='rotate 14'   x='butR*sin(14 * 2*pi/24)-buttonWidth/2' y='butR*cos(14 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() +  9) % 24 + 1)' />
+<button name='rotate 15'   x='butR*sin(15 * 2*pi/24)-buttonWidth/2' y='butR*cos(15 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 10) % 24 + 1)' />
+<button name='rotate 16'   x='butR*sin(16 * 2*pi/24)-buttonWidth/2' y='butR*cos(16 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 11) % 24 + 1)' />
+<button name='rotate 17'   x='butR*sin(17 * 2*pi/24)-buttonWidth/2' y='butR*cos(17 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 12) % 24 + 1)' />
+<button name='rotate 18'   x='butR*sin(18 * 2*pi/24)-buttonWidth/2' y='butR*cos(18 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 13) % 24 + 1)' />
+<button name='rotate 19'   x='butR*sin(19 * 2*pi/24)-buttonWidth/2' y='butR*cos(19 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 14) % 24 + 1)' />
+<button name='rotate 20'   x='butR*sin(20 * 2*pi/24)-buttonWidth/2' y='butR*cos(20 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 15) % 24 + 1)' />
+<button name='rotate 21'   x='butR*sin(21 * 2*pi/24)-buttonWidth/2' y='butR*cos(21 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 16) % 24 + 1)' />
+<button name='rotate 22'   x='butR*sin(22 * 2*pi/24)-buttonWidth/2' y='butR*cos(22 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 17) % 24 + 1)' />
+<button name='rotate 23'   x='butR*sin(23 * 2*pi/24)-buttonWidth/2' y='butR*cos(23 * 2*pi/24)-buttonHeight/2' w='buttonWidth' h='buttonHeight' modes='front' enabled='always' action='overrideTerraITopSlot((terraIDeviceSlot() + 18) % 24 + 1)' />
 </watch>

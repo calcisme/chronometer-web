@@ -56,6 +56,11 @@ export function parseWatchXML(
         faceWidth: parseFloat(attr(watchEl, 'faceWidth') ?? '290'),
         bezelColor: attr(watchEl, 'bezelColor') ?? '',
         bezelNoonMark: (attr(watchEl, 'bezelNoonMark') ?? '') === 'true',
+        worldTimeRing: (attr(watchEl, 'worldTimeRing') ?? '') === '1',
+        worldTimeSubdials: (attr(watchEl, 'worldTimeSubdials') ?? '') === '1',
+        planetSelector: (attr(watchEl, 'planetSelector') ?? '') === '1',
+        numEnvironments: parseInt(attr(watchEl, 'numEnvironments') ?? '1', 10),
+        maxSeparateLoc: parseInt(attr(watchEl, 'maxSeparateLoc') ?? '1', 10),
         initExprs: [],
         parts: [],
     };
