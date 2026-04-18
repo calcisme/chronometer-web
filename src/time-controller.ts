@@ -357,8 +357,15 @@ export class TimeController {
         }
 
         this.rate = rate;
-        // Snap to unit boundary
-        this.tickTime = snapToUnit(prevTime, rate.unit, this.direction);
+        // Only snap to unit boundary for seconds (zeroing milliseconds,
+        // which aren't displayed). For all other rates, preserve sub-unit
+        // fields — snapping would zero out visible hands (e.g., minute/
+        // second hands when scrubbing by hour) causing them to jump.
+        if (rate.unit === 'second') {
+            this.tickTime = snapToUnit(prevTime, rate.unit, this.direction);
+        } else {
+            this.tickTime = prevTime;
+        }
         this.nextTickTime = advanceByUnit(this.tickTime, rate.unit, this.direction);
         this.lastTickRealMs = performance.now();
         this.onTick?.();

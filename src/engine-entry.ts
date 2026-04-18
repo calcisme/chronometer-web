@@ -28,7 +28,7 @@ import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
 import { validSlotsForTz, formatSlotOffset, ensureDeviceTzOnRing } from './watch/terra-slots.js';
 import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
-import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, clearScrubFreeze, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
+import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
 import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
@@ -1972,10 +1972,6 @@ async function main() {
             // Stop at current position and snap animations
             timeController.stop();
             finishAllAnimations();
-            // Clear scrub-freeze state so hands resume normal evaluation
-            for (const face of faces) {
-                clearScrubFreeze(face.handStates);
-            }
             updateTimeUI();
             ensureSchedulerRunning();
             // Write time state to URL on button release

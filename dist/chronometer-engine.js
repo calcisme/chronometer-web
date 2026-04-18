@@ -1498,10 +1498,7 @@
       updateIntervalMs,
       nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
       animSpeed,
-      getNow,
-      preScrubAngle: null,
-      firstScrubTarget: void 0,
-      scrubFrozen: false
+      getNow
     };
   }
   function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0) {
@@ -1510,38 +1507,6 @@
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
         const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
-          if (state.preScrubAngle !== null) {
-            if (state.firstScrubTarget === void 0) {
-              state.firstScrubTarget = newTarget;
-              if (state.part.dynamicState) {
-                state.part.dynamicState.currentAngle = state.preScrubAngle;
-              }
-              state.angle.currentValue = state.preScrubAngle;
-              state.angle.targetValue = state.preScrubAngle;
-              state.angle.animating = false;
-              state.nextUpdateTime = now + tickIntervalMs;
-              continue;
-            }
-            const EPSILON = 1e-9;
-            const targetDelta = Math.abs(newTarget - state.firstScrubTarget);
-            if (targetDelta < EPSILON || Math.abs(targetDelta - 2 * Math.PI) < EPSILON) {
-              state.scrubFrozen = true;
-              if (state.part.dynamicState) {
-                state.part.dynamicState.currentAngle = state.preScrubAngle;
-              }
-              state.angle.currentValue = state.preScrubAngle;
-              state.angle.targetValue = state.preScrubAngle;
-              state.angle.animating = false;
-              state.nextUpdateTime = Infinity;
-              continue;
-            }
-            state.preScrubAngle = null;
-            state.firstScrubTarget = void 0;
-          }
-          if (state.scrubFrozen) {
-            state.nextUpdateTime = Infinity;
-            continue;
-          }
           let ticksUntilUpdate = 1;
           if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
             const updateIntervalSec = state.updateIntervalMs / 1e3;
@@ -1631,16 +1596,6 @@
   function resetHandSchedules(states) {
     for (const s of states) {
       s.nextUpdateTime = 0;
-      s.preScrubAngle = s.part.dynamicState?.currentAngle ?? s.angle.currentValue;
-      s.firstScrubTarget = void 0;
-      s.scrubFrozen = false;
-    }
-  }
-  function clearScrubFreeze(states) {
-    for (const s of states) {
-      s.preScrubAngle = null;
-      s.firstScrubTarget = void 0;
-      s.scrubFrozen = false;
     }
   }
   function startAnimation(state, newTarget, now, durationOverrideMs) {
@@ -15074,7 +15029,11 @@
         return;
       }
       this.rate = rate;
-      this.tickTime = snapToUnit(prevTime, rate.unit, this.direction);
+      if (rate.unit === "second") {
+        this.tickTime = snapToUnit(prevTime, rate.unit, this.direction);
+      } else {
+        this.tickTime = prevTime;
+      }
       this.nextTickTime = advanceByUnit(this.tickTime, rate.unit, this.direction);
       this.lastTickRealMs = performance.now();
       this.onTick?.();
@@ -17108,9 +17067,6 @@
         holdingBtn = null;
         timeController.stop();
         finishAllAnimations();
-        for (const face of faces) {
-          clearScrubFreeze(face.handStates);
-        }
         updateTimeUI();
         ensureSchedulerRunning();
         writeTimeState();
