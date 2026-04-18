@@ -15842,57 +15842,54 @@
       }
     }
     const getNow = () => timeController.getDisplayTime();
-    const isTerra = faceDataArray.length === 1 && faceDataArray[0].name === "Terra";
-    let terraSlotOverrides;
-    if (isTerra) {
+    function buildSlotOverrides(watchName) {
       const params = new URLSearchParams(window.location.search);
-      const overrides = {};
-      for (let slot = 5; slot <= 28; slot++) {
-        const name = params.get(`s${slot}`);
-        const tz = params.get(`s${slot}tz`);
-        const latStr = params.get(`s${slot}lat`);
-        const lonStr = params.get(`s${slot}lon`);
-        if (name && tz) {
-          overrides[slot] = {
-            cityName: name,
-            olsonId: tz,
-            lat: latStr ? parseFloat(latStr) : 0,
-            lon: lonStr ? parseFloat(lonStr) : 0
-          };
+      if (watchName === "Terra") {
+        const overrides = {};
+        for (let slot = 5; slot <= 28; slot++) {
+          const name = params.get(`s${slot}`);
+          const tz = params.get(`s${slot}tz`);
+          const latStr = params.get(`s${slot}lat`);
+          const lonStr = params.get(`s${slot}lon`);
+          if (name && tz) {
+            overrides[slot] = {
+              cityName: name,
+              olsonId: tz,
+              lat: latStr ? parseFloat(latStr) : 0,
+              lon: lonStr ? parseFloat(lonStr) : 0
+            };
+          }
         }
+        return Object.keys(overrides).length > 0 ? overrides : void 0;
       }
-      if (Object.keys(overrides).length > 0) {
-        terraSlotOverrides = overrides;
-      }
-    }
-    const isGaia = faceDataArray.length === 1 && faceDataArray[0].name === "Gaia";
-    if (isGaia) {
-      const params = new URLSearchParams(window.location.search);
-      const overrides = {};
-      overrides[1] = {
-        cityName: locationSource || "Observer",
-        olsonId: locationTimezone,
-        lat,
-        lon
-      };
-      for (let slot = 2; slot <= 4; slot++) {
-        const name = params.get(`s${slot}`);
-        const tz = params.get(`s${slot}tz`);
-        const latStr = params.get(`s${slot}lat`);
-        const lonStr = params.get(`s${slot}lon`);
-        if (name && tz) {
-          overrides[slot] = {
-            cityName: name,
-            olsonId: tz,
-            lat: latStr ? parseFloat(latStr) : 0,
-            lon: lonStr ? parseFloat(lonStr) : 0
-          };
-        } else {
-          const def = GAIA_SUBDIAL_DEFAULTS[slot];
-          if (def) overrides[slot] = { ...def };
+      if (watchName === "Gaia") {
+        const overrides = {};
+        overrides[1] = {
+          cityName: locationSource || "Observer",
+          olsonId: locationTimezone,
+          lat,
+          lon
+        };
+        for (let slot = 2; slot <= 4; slot++) {
+          const name = params.get(`s${slot}`);
+          const tz = params.get(`s${slot}tz`);
+          const latStr = params.get(`s${slot}lat`);
+          const lonStr = params.get(`s${slot}lon`);
+          if (name && tz) {
+            overrides[slot] = {
+              cityName: name,
+              olsonId: tz,
+              lat: latStr ? parseFloat(latStr) : 0,
+              lon: lonStr ? parseFloat(lonStr) : 0
+            };
+          } else {
+            const def = GAIA_SUBDIAL_DEFAULTS[slot];
+            if (def) overrides[slot] = { ...def };
+          }
         }
+        return overrides;
       }
-      terraSlotOverrides = overrides;
+      return void 0;
     }
     let cols = 1, rows = 1;
     const faces = [];
@@ -15904,7 +15901,8 @@
       cell.appendChild(canvas);
       grid.appendChild(cell);
       const watch = parsedWatches[i];
-      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+      const faceOverrides = buildSlotOverrides(watch.name);
+      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides);
       const face = {
         watch,
         env,
@@ -15918,7 +15916,8 @@
         scale: 1,
         terminatorLeaves: [],
         lastTerminatorRebuild: 0,
-        faceDataIndex: i
+        faceDataIndex: i,
+        terraSlotOverrides: faceOverrides
       };
       faces.push(face);
     }
@@ -15981,7 +15980,7 @@
     function rebuildEnvironments() {
       for (const face of faces) {
         if (!face.enabled) continue;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
@@ -16029,7 +16028,7 @@
           }
         }
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
-        if (isGaia && terraSlotOverrides) {
+        if (face.watch.name === "Gaia" && face.terraSlotOverrides) {
           const ctx2d = face.ctx;
           const fw = face.env.variables.get("faceWidth") || 278;
           ctx2d.save();
@@ -16047,7 +16046,7 @@
             // s3 (S)
           ];
           for (const sd of subdials) {
-            const slotData = terraSlotOverrides[sd.slot];
+            const slotData = face.terraSlotOverrides[sd.slot];
             if (!slotData) continue;
             const text = slotData.cityName;
             ctx2d.save();
@@ -16419,17 +16418,17 @@
     function rebuildAllForLocation(newLat, newLon) {
       lat = newLat;
       lon = newLon;
-      if (isGaia && terraSlotOverrides) {
-        terraSlotOverrides[1] = {
-          cityName: locationSource || "Observer",
-          olsonId: locationTimezone,
-          lat: newLat,
-          lon: newLon
-        };
-      }
       for (const face of faces) {
         if (!face.enabled) continue;
-        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, terraSlotOverrides);
+        if (face.watch.name === "Gaia" && face.terraSlotOverrides) {
+          face.terraSlotOverrides[1] = {
+            cityName: locationSource || "Observer",
+            olsonId: locationTimezone,
+            lat: newLat,
+            lon: newLon
+          };
+        }
+        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides);
         if (face.terminatorLeaves.length > 0) {
           updateLeafAngles(face.terminatorLeaves, face.env);
           resetLeafSchedules(face.terminatorLeaves);
@@ -17203,7 +17202,7 @@
           window.history.replaceState({}, "", url.toString());
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -17264,7 +17263,8 @@
         });
       }
     }
-    if (isTerra) {
+    const terraFace = faces.find((f) => f.watch.name === "Terra");
+    if (terraFace) {
       const tcDialog = document.getElementById("terra-city-dialog");
       const tcCityInput = document.getElementById("tc-city-input");
       const tcCityResults = document.getElementById("tc-city-results");
@@ -17284,8 +17284,8 @@
           for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
             slots[Number(k)] = { ...v };
           }
-          if (terraSlotOverrides) {
-            for (const [k, v] of Object.entries(terraSlotOverrides)) {
+          if (terraFace.terraSlotOverrides) {
+            for (const [k, v] of Object.entries(terraFace.terraSlotOverrides)) {
               slots[Number(k)] = { ...v };
             }
           }
@@ -17298,8 +17298,8 @@
             params.delete(`s${slot}lat`);
             params.delete(`s${slot}lon`);
           }
-          if (terraSlotOverrides) {
-            for (const [slotStr, data] of Object.entries(terraSlotOverrides)) {
+          if (terraFace.terraSlotOverrides) {
+            for (const [slotStr, data] of Object.entries(terraFace.terraSlotOverrides)) {
               params.set(`s${slotStr}`, data.cityName);
               params.set(`s${slotStr}tz`, data.olsonId);
               params.set(`s${slotStr}lat`, data.lat.toFixed(3));
@@ -17314,7 +17314,7 @@
         }, rebuildTerraForSlotChange2 = function() {
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -17332,10 +17332,10 @@
         }, assignCityToSlot2 = function(slot, city) {
           const currentSlots = getCurrentSlots2();
           const previousCity = currentSlots[slot]?.cityName || "Unknown";
-          if (!terraSlotOverrides) {
-            terraSlotOverrides = {};
+          if (!terraFace.terraSlotOverrides) {
+            terraFace.terraSlotOverrides = {};
           }
-          terraSlotOverrides[slot] = {
+          terraFace.terraSlotOverrides[slot] = {
             cityName: city.shortLabel,
             olsonId: city.timezone,
             lat: city.lat,
@@ -17450,7 +17450,7 @@
           });
           confirmYes.addEventListener("click", () => {
             confirmOverlay.style.display = "none";
-            terraSlotOverrides = void 0;
+            terraFace.terraSlotOverrides = void 0;
             writeTerraOverridesToUrl2();
             rebuildTerraForSlotChange2();
             showTcMessage2("All cities reset to defaults", "info");

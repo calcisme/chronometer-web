@@ -153,6 +153,8 @@ interface FaceInstance {
     terminatorLeaves: TerminatorLeafState[];
     lastTerminatorRebuild: number;
     faceDataIndex: number;
+    /** Per-face slot overrides for Terra/Gaia world-clock faces. */
+    terraSlotOverrides?: Record<number, TerraSlot>;
 }
 
 // ============================================================================
@@ -363,64 +365,58 @@ async function main() {
 
     const getNow = () => timeController.getDisplayTime();
 
-    // --- Terra slot overrides (read from URL params s5..s28) ---
-    const isTerra = faceDataArray.length === 1 && faceDataArray[0].name === 'Terra';
-    let terraSlotOverrides: Record<number, TerraSlot> | undefined;
-    if (isTerra) {
+    // --- Per-face slot overrides helper ---
+    // Builds slot overrides based on watch name: Terra reads s5..s28 from URL,
+    // Gaia reads s2..s4 (slot 1 = observer). Other faces get no overrides.
+    function buildSlotOverrides(watchName: string): Record<number, TerraSlot> | undefined {
         const params = new URLSearchParams(window.location.search);
-        const overrides: Record<number, TerraSlot> = {};
-        for (let slot = 5; slot <= 28; slot++) {
-            const name = params.get(`s${slot}`);
-            const tz = params.get(`s${slot}tz`);
-            const latStr = params.get(`s${slot}lat`);
-            const lonStr = params.get(`s${slot}lon`);
-            if (name && tz) {
-                overrides[slot] = {
-                    cityName: name,
-                    olsonId: tz,
-                    lat: latStr ? parseFloat(latStr) : 0,
-                    lon: lonStr ? parseFloat(lonStr) : 0,
-                };
+        if (watchName === 'Terra') {
+            const overrides: Record<number, TerraSlot> = {};
+            for (let slot = 5; slot <= 28; slot++) {
+                const name = params.get(`s${slot}`);
+                const tz = params.get(`s${slot}tz`);
+                const latStr = params.get(`s${slot}lat`);
+                const lonStr = params.get(`s${slot}lon`);
+                if (name && tz) {
+                    overrides[slot] = {
+                        cityName: name,
+                        olsonId: tz,
+                        lat: latStr ? parseFloat(latStr) : 0,
+                        lon: lonStr ? parseFloat(lonStr) : 0,
+                    };
+                }
             }
+            return Object.keys(overrides).length > 0 ? overrides : undefined;
         }
-        if (Object.keys(overrides).length > 0) {
-            terraSlotOverrides = overrides;
-        }
-    }
-
-    // --- Gaia slot overrides (s2..s4 from URL; slot 1 = observer) ---
-    const isGaia = faceDataArray.length === 1 && faceDataArray[0].name === 'Gaia';
-    if (isGaia) {
-        const params = new URLSearchParams(window.location.search);
-        const overrides: Record<number, TerraSlot> = {};
-
-        // Slot 1 = observer location
-        overrides[1] = {
-            cityName: locationSource || 'Observer',
-            olsonId: locationTimezone,
-            lat, lon,
-        };
-
-        // Slots 2–4: URL overrides or defaults
-        for (let slot = 2; slot <= 4; slot++) {
-            const name = params.get(`s${slot}`);
-            const tz = params.get(`s${slot}tz`);
-            const latStr = params.get(`s${slot}lat`);
-            const lonStr = params.get(`s${slot}lon`);
-            if (name && tz) {
-                overrides[slot] = {
-                    cityName: name,
-                    olsonId: tz,
-                    lat: latStr ? parseFloat(latStr) : 0,
-                    lon: lonStr ? parseFloat(lonStr) : 0,
-                };
-            } else {
-                // Use defaults
-                const def = GAIA_SUBDIAL_DEFAULTS[slot];
-                if (def) overrides[slot] = { ...def };
+        if (watchName === 'Gaia') {
+            const overrides: Record<number, TerraSlot> = {};
+            // Slot 1 = observer location
+            overrides[1] = {
+                cityName: locationSource || 'Observer',
+                olsonId: locationTimezone,
+                lat, lon,
+            };
+            // Slots 2–4: URL overrides or defaults
+            for (let slot = 2; slot <= 4; slot++) {
+                const name = params.get(`s${slot}`);
+                const tz = params.get(`s${slot}tz`);
+                const latStr = params.get(`s${slot}lat`);
+                const lonStr = params.get(`s${slot}lon`);
+                if (name && tz) {
+                    overrides[slot] = {
+                        cityName: name,
+                        olsonId: tz,
+                        lat: latStr ? parseFloat(latStr) : 0,
+                        lon: lonStr ? parseFloat(lonStr) : 0,
+                    };
+                } else {
+                    const def = GAIA_SUBDIAL_DEFAULTS[slot];
+                    if (def) overrides[slot] = { ...def };
+                }
             }
+            return overrides;
         }
-        terraSlotOverrides = overrides;
+        return undefined;
     }
 
     // --- Build the DOM: one cell + canvas per face ---
@@ -439,7 +435,8 @@ async function main() {
         grid.appendChild(cell);
 
         const watch = parsedWatches[i];
-        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+        const faceOverrides = buildSlotOverrides(watch.name);
+        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides);
 
         const face: FaceInstance = {
             watch,
@@ -455,6 +452,7 @@ async function main() {
             terminatorLeaves: [],
             lastTerminatorRebuild: 0,
             faceDataIndex: i,
+            terraSlotOverrides: faceOverrides,
         };
         faces.push(face);
     }
@@ -542,7 +540,7 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled) continue;
             // Rebuild the environment but keep the same watch/parts
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
             // Preserve terminator leaves — their expressions are evaluated
             // against the env each frame by tickLeafAnimations, so they
             // don't need recreating. Recreating them would destroy animation state.
@@ -612,7 +610,7 @@ async function main() {
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
 
             // Gaia: draw city name labels and 24-hour numbers on each subdial
-            if (isGaia && terraSlotOverrides) {
+            if (face.watch.name === 'Gaia' && face.terraSlotOverrides) {
                 const ctx2d = face.ctx;
                 const fw = face.env.variables.get('faceWidth') || 278;
                 ctx2d.save();
@@ -631,7 +629,7 @@ async function main() {
                 ];
 
                 for (const sd of subdials) {
-                    const slotData = terraSlotOverrides[sd.slot];
+                    const slotData = face.terraSlotOverrides[sd.slot];
                     if (!slotData) continue;
                     const text = slotData.cityName;
 
@@ -1144,18 +1142,18 @@ async function main() {
     function rebuildAllForLocation(newLat: number, newLon: number) {
         lat = newLat;
         lon = newLon;
-        // Update Gaia slot 1 to match new observer location
-        if (isGaia && terraSlotOverrides) {
-            terraSlotOverrides[1] = {
-                cityName: locationSource || 'Observer',
-                olsonId: locationTimezone,
-                lat: newLat, lon: newLon,
-            };
-        }
         for (const face of faces) {
             if (!face.enabled) continue;
+            // Update Gaia slot 1 to match new observer location
+            if (face.watch.name === 'Gaia' && face.terraSlotOverrides) {
+                face.terraSlotOverrides[1] = {
+                    cityName: locationSource || 'Observer',
+                    olsonId: locationTimezone,
+                    lat: newLat, lon: newLon,
+                };
+            }
             // Fresh environment with new lat/lon/tz — same watch/parts
-            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides);
             // Update terminator leaves (preserve for animation interpolation)
             if (face.terminatorLeaves.length > 0) {
                 updateLeafAngles(face.terminatorLeaves, face.env);
@@ -2202,7 +2200,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     // Rebuild environment (picks up new body URL param)
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
                     // Update terminator leaf angles for the new planet's phase
                     // (keep existing leaves so the animation system can interpolate)
                     if (face.terminatorLeaves.length > 0) {
@@ -2235,7 +2233,8 @@ async function main() {
     // =========================================================================
     // Terra city customization (Terra only, single-face mode)
     // =========================================================================
-    if (isTerra) {
+    const terraFace = faces.find(f => f.watch.name === 'Terra');
+    if (terraFace) {
         const tcDialog = document.getElementById('terra-city-dialog');
         const tcCityInput = document.getElementById('tc-city-input') as HTMLInputElement | null;
         const tcCityResults = document.getElementById('tc-city-results');
@@ -2269,8 +2268,8 @@ async function main() {
                 for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
                     slots[Number(k)] = { ...v };
                 }
-                if (terraSlotOverrides) {
-                    for (const [k, v] of Object.entries(terraSlotOverrides)) {
+                if (terraFace.terraSlotOverrides) {
+                    for (const [k, v] of Object.entries(terraFace.terraSlotOverrides)) {
                         slots[Number(k)] = { ...v };
                     }
                 }
@@ -2286,8 +2285,8 @@ async function main() {
                     params.delete(`s${slot}lat`);
                     params.delete(`s${slot}lon`);
                 }
-                if (terraSlotOverrides) {
-                    for (const [slotStr, data] of Object.entries(terraSlotOverrides)) {
+                if (terraFace.terraSlotOverrides) {
+                    for (const [slotStr, data] of Object.entries(terraFace.terraSlotOverrides)) {
                         params.set(`s${slotStr}`, data.cityName);
                         params.set(`s${slotStr}tz`, data.olsonId);
                         params.set(`s${slotStr}lat`, data.lat.toFixed(3));
@@ -2305,7 +2304,7 @@ async function main() {
             function rebuildTerraForSlotChange() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, terraSlotOverrides);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);
@@ -2326,10 +2325,10 @@ async function main() {
             function assignCityToSlot(slot: number, city: CityResult) {
                 const currentSlots = getCurrentSlots();
                 const previousCity = currentSlots[slot]?.cityName || 'Unknown';
-                if (!terraSlotOverrides) {
-                    terraSlotOverrides = {};
+                if (!terraFace.terraSlotOverrides) {
+                    terraFace.terraSlotOverrides = {};
                 }
-                terraSlotOverrides[slot] = {
+                terraFace.terraSlotOverrides[slot] = {
                     cityName: city.shortLabel,
                     olsonId: city.timezone,
                     lat: city.lat,
@@ -2398,7 +2397,7 @@ async function main() {
                 });
                 confirmYes.addEventListener('click', () => {
                     confirmOverlay.style.display = 'none';
-                    terraSlotOverrides = undefined;
+                    terraFace.terraSlotOverrides = undefined;
                     writeTerraOverridesToUrl();
                     rebuildTerraForSlotChange();
                     showTcMessage('All cities reset to defaults', 'info');

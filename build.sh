@@ -114,8 +114,7 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-firenze.js"><\/script>\
     <script src="face-venezia.js"><\/script>\
     <script src="face-terra.js"><\/script>\
-    <script src="face-miami.js"><\/script>\
-    <script src="face-gaia.js"><\/script>'
+    <script src="face-miami.js"><\/script>'
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \
