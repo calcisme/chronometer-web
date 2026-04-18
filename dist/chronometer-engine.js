@@ -15759,7 +15759,7 @@
       if (result.status === "success") {
         lat = result.lat;
         lon = result.lon;
-        locationSource = "from browser";
+        locationSource = "";
         locationSourceType = "browser";
         geoPermission = "granted";
         locationTimezone = resolveTimezone(lat, lon, null);
