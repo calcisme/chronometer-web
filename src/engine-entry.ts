@@ -480,6 +480,8 @@ async function main() {
     // On multi-face pages (all.html), make each face clickable → navigate to its page
     const isMultiFace = faceDataArray.length > 1;
     if (isMultiFace) {
+        // Hide the all-faces grid icon on the all-faces page itself
+        document.body.classList.add('is-all-faces');
         /** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */
         function faceNameToSlug(name: string): string {
             return name

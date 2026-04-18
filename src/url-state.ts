@@ -167,6 +167,13 @@ export function updateNavigationLinks(): void {
         url.search = search;
         backLink.href = url.toString();
     }
+    // Update all-faces-link (grid icon → all.html)
+    const allFacesLink = document.getElementById('all-faces-link') as HTMLAnchorElement | null;
+    if (allFacesLink) {
+        const url = new URL(allFacesLink.getAttribute('data-base-href') || 'all.html', window.location.href);
+        url.search = search;
+        allFacesLink.href = url.toString();
+    }
     // Update face-card links (index page)
     document.querySelectorAll('a.face-card').forEach((a) => {
         const anchor = a as HTMLAnchorElement;
@@ -185,6 +192,10 @@ export function initNavigationLinks(): void {
     const backLink = document.getElementById('back-link') as HTMLAnchorElement | null;
     if (backLink && !backLink.hasAttribute('data-base-href')) {
         backLink.setAttribute('data-base-href', backLink.getAttribute('href') || 'index.html');
+    }
+    const allFacesLink = document.getElementById('all-faces-link') as HTMLAnchorElement | null;
+    if (allFacesLink && !allFacesLink.hasAttribute('data-base-href')) {
+        allFacesLink.setAttribute('data-base-href', allFacesLink.getAttribute('href') || 'all.html');
     }
     document.querySelectorAll('a.face-card').forEach((a) => {
         const anchor = a as HTMLAnchorElement;

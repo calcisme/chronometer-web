@@ -521,10 +521,10 @@
         }
 
 
-        #back-link {
+        #back-link,
+        #all-faces-link {
             position: absolute;
             top: 16px;
-            left: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -538,15 +538,30 @@
             transition: background 0.2s, color 0.2s;
         }
 
-        #back-link:hover {
+        #back-link {
+            left: 16px;
+        }
+
+        #all-faces-link {
+            left: 60px;
+        }
+
+        #back-link:hover,
+        #all-faces-link:hover {
             background: rgba(255,255,255,0.15);
             color: #bbd;
         }
 
-        #back-link svg {
+        #back-link svg,
+        #all-faces-link svg {
             width: 18px;
             height: 18px;
             fill: currentColor;
+        }
+
+        /* Hide all-faces link on the all-faces page itself */
+        body.is-all-faces #all-faces-link {
+            display: none;
         }
 
         /* ============= Time Controller ============= */
@@ -905,6 +920,7 @@
 <body>
     <div id="app">
         <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+        <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></a>
         <div id="watch-grid"></div>
         <div id="planet-selector">
             <div class="planet-icons" id="planet-icons"></div>

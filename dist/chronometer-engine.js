@@ -15235,6 +15235,12 @@
       url.search = search;
       backLink.href = url.toString();
     }
+    const allFacesLink = document.getElementById("all-faces-link");
+    if (allFacesLink) {
+      const url = new URL(allFacesLink.getAttribute("data-base-href") || "all.html", window.location.href);
+      url.search = search;
+      allFacesLink.href = url.toString();
+    }
     document.querySelectorAll("a.face-card").forEach((a) => {
       const anchor = a;
       const url = new URL(anchor.getAttribute("data-base-href") || anchor.getAttribute("href"), window.location.href);
@@ -15246,6 +15252,10 @@
     const backLink = document.getElementById("back-link");
     if (backLink && !backLink.hasAttribute("data-base-href")) {
       backLink.setAttribute("data-base-href", backLink.getAttribute("href") || "index.html");
+    }
+    const allFacesLink = document.getElementById("all-faces-link");
+    if (allFacesLink && !allFacesLink.hasAttribute("data-base-href")) {
+      allFacesLink.setAttribute("data-base-href", allFacesLink.getAttribute("href") || "all.html");
     }
     document.querySelectorAll("a.face-card").forEach((a) => {
       const anchor = a;
@@ -15948,6 +15958,7 @@
         return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
       };
       var faceNameToSlug = faceNameToSlug2;
+      document.body.classList.add("is-all-faces");
       for (let i = 0; i < faces.length; i++) {
         const face = faces[i];
         const slug = faceNameToSlug2(faceDataArray[i].name);
