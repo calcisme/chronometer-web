@@ -295,6 +295,9 @@ function parseQHand(el: Element): QHandPart {
         offsetRadius: attrExpr(el, 'offsetRadius'),
         offsetAngle: attrExpr(el, 'offsetAngle'),
         nRays: attrExpr(el, 'nRays'),
+        text: attr(el, 'text'),
+        fontSize: attrExpr(el, 'fontSize'),
+        fontName: attr(el, 'fontName'),
     };
 }
 
@@ -476,6 +479,7 @@ function parseQDayNightRing(el: Element): QDayNightRingPart {
         fillColor: attrExpr(el, 'fillColor'),
         update: attrExpr(el, 'update'),
         timeBase: attr(el, 'timeBase'),
+        envSlot: attrExpr(el, 'envSlot'),
     };
 }
 

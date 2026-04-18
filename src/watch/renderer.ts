@@ -987,9 +987,41 @@ function drawQHand(
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);
 
+    const handType = part.handType || 'tri';
+
+    // 'spoke' type: text label at offset position (e.g. AM/PM indicators)
+    if (handType === 'spoke') {
+        const offsetRadius = evalAttr(part.offsetRadius, env);
+        const offsetAngle = part.dynamicState
+            ? part.dynamicState.currentOffsetAngle ?? evalAttr(part.offsetAngle, env)
+            : evalAttr(part.offsetAngle, env);
+        const fontSize = evalAttr(part.fontSize, env) || 8;
+        const fontName = part.fontName || 'Arial';
+        const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle + offsetAngle);
+        ctx.translate(0, -offsetRadius);
+        // Counter-rotate text so it stays upright
+        ctx.rotate(-(angle + offsetAngle));
+        // Small correction: iOS spoke text baseline sits ~1 unit lower
+        ctx.translate(0, 1);
+
+        ctx.font = `${fontSize}px ${fontName}`;
+        ctx.fillStyle = strokeColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (part.text) {
+            ctx.fillText(part.text, 0, 0);
+        }
+
+        ctx.restore();
+        return;
+    }
+
     if (length <= 0) return;
 
-    const handType = part.handType || 'tri';
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'rgba(0,0,0,1)';
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : 'rgba(0,0,0,1)';
     const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
@@ -1895,10 +1927,23 @@ function drawQDayNightRing(
     // Each wedge spans a bit more than 2PI/numWedges so they overlap slightly (matching iOS)
     const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
 
-    // Select the leaf angle function based on the time base
-    const fnName = part.timeBase === 'LST' ? 'dayNightLeafAngleLST' : 'dayNightLeafAngle';
-    const leafAngleFn = env.functions.get(fnName) as
-        ((planetNumber: number, leafNumber: number, numLeaves: number) => number) | undefined;
+    // Select the leaf angle function based on time base and envSlot
+    const slotNumber = part.envSlot ? evalAttr(part.envSlot, env) : undefined;
+    let leafAngleFn: ((planetNumber: number, leafNumber: number, numLeaves: number) => number) | undefined;
+
+    if (slotNumber != null && !isNaN(slotNumber)) {
+        // Route through slot's city lat/lon for astronomy
+        const slotFn = env.functions.get('dayNightLeafAngleForSlot') as
+            ((p: number, l: number, n: number, s: number) => number) | undefined;
+        if (slotFn) {
+            leafAngleFn = (p, l, n) => slotFn(p, l, n, slotNumber);
+        }
+    }
+    if (!leafAngleFn) {
+        const fnName = part.timeBase === 'LST' ? 'dayNightLeafAngleLST' : 'dayNightLeafAngle';
+        leafAngleFn = env.functions.get(fnName) as
+            ((planetNumber: number, leafNumber: number, numLeaves: number) => number) | undefined;
+    }
     if (!leafAngleFn) return;
 
     ctx.save();

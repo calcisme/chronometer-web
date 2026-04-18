@@ -149,6 +149,12 @@ export interface QHandPart extends PartBase {
     offsetAngle?: ASTNode;
     /** Number of rays for 'sun' hand type. */
     nRays?: ASTNode;
+    /** Text label (for 'spoke' hand type — e.g. AM/PM indicators). */
+    text?: string;
+    /** Font size for spoke text. */
+    fontSize?: ASTNode;
+    /** Font name for spoke text. */
+    fontName?: string;
 }
 
 // ============================================================================
@@ -333,4 +339,5 @@ export interface QDayNightRingPart extends PartBase {
     fillColor?: ASTNode;
     update?: ASTNode;
     timeBase?: string;         // 'LST' for Local Sidereal Time, omitted for local time
+    envSlot?: ASTNode;         // env slot number — routes astronomy to slot's city lat/lon
 }

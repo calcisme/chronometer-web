@@ -22,7 +22,7 @@ declare global {
 }
 
 import { parseWatchXML } from './watch/xml-parser.js';
-import { createWatchEnvironment, computeTzDeltaMs } from './watch/watch-env.js';
+import { createWatchEnvironment, computeTzDeltaMs, GAIA_SUBDIAL_DEFAULTS } from './watch/watch-env.js';
 import type { TerraSlot } from './watch/watch-env.js';
 import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
 import { validSlotsForTz, formatSlotOffset, ensureDeviceTzOnRing } from './watch/terra-slots.js';
@@ -388,6 +388,41 @@ async function main() {
         }
     }
 
+    // --- Gaia slot overrides (s2..s4 from URL; slot 1 = observer) ---
+    const isGaia = faceDataArray.length === 1 && faceDataArray[0].name === 'Gaia';
+    if (isGaia) {
+        const params = new URLSearchParams(window.location.search);
+        const overrides: Record<number, TerraSlot> = {};
+
+        // Slot 1 = observer location
+        overrides[1] = {
+            cityName: locationSource || 'Observer',
+            olsonId: locationTimezone,
+            lat, lon,
+        };
+
+        // Slots 2–4: URL overrides or defaults
+        for (let slot = 2; slot <= 4; slot++) {
+            const name = params.get(`s${slot}`);
+            const tz = params.get(`s${slot}tz`);
+            const latStr = params.get(`s${slot}lat`);
+            const lonStr = params.get(`s${slot}lon`);
+            if (name && tz) {
+                overrides[slot] = {
+                    cityName: name,
+                    olsonId: tz,
+                    lat: latStr ? parseFloat(latStr) : 0,
+                    lon: lonStr ? parseFloat(lonStr) : 0,
+                };
+            } else {
+                // Use defaults
+                const def = GAIA_SUBDIAL_DEFAULTS[slot];
+                if (def) overrides[slot] = { ...def };
+            }
+        }
+        terraSlotOverrides = overrides;
+    }
+
     // --- Build the DOM: one cell + canvas per face ---
     // cols/rows are recomputed on every resize via optimizeGrid
     let cols = 1, rows = 1;
@@ -575,6 +610,114 @@ async function main() {
                 }
             }
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
+
+            // Gaia: draw city name labels and 24-hour numbers on each subdial
+            if (isGaia && terraSlotOverrides) {
+                const ctx2d = face.ctx;
+                const fw = face.env.variables.get('faceWidth') || 278;
+                ctx2d.save();
+                // Transform to watch coordinates: center of canvas, scale
+                ctx2d.translate(face.canvas.width / 2, face.canvas.height / 2);
+                const pxPerUnit = face.canvas.width / (fw + 2 * BEZEL_THICKNESS_XML);
+                ctx2d.scale(pxPerUnit, pxPerUnit);
+
+                // Subdial positions, label radii, and 24-hour number radii
+                // labelR: city name arc radius; numR: 24-hour number radius; numFS: number font size
+                const subdials = [
+                    { slot: 1, x: -58.5, y: 0, labelR: 82.5, fs: 12.5, numR: 72, numFS: 9, sp: 0 },   // local (W)
+                    { slot: 2, x: 32.19, y: 77.716, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 1 },  // s1 (N)
+                    { slot: 3, x: 84.12, y: 0, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 2 },       // s2 (E)
+                    { slot: 4, x: 32.19, y: -77.72, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 3 },  // s3 (S)
+                ];
+
+                for (const sd of subdials) {
+                    const slotData = terraSlotOverrides[sd.slot];
+                    if (!slotData) continue;
+                    const text = slotData.cityName;
+
+                    ctx2d.save();
+                    // Move to subdial center (Y-flip: negate y)
+                    ctx2d.translate(sd.x, -sd.y);
+
+                    // --- City name (curved along bottom arc) ---
+                    ctx2d.fillStyle = 'black';
+                    ctx2d.font = `${sd.fs}px Arial`;
+                    ctx2d.textAlign = 'center';
+                    ctx2d.textBaseline = 'alphabetic';
+
+                    const radius = sd.labelR;
+                    const charWidths: number[] = [];
+                    let totalWidth = 0;
+                    for (let i = 0; i < text.length; i++) {
+                        const w = ctx2d.measureText(text[i]).width;
+                        charWidths.push(w);
+                        totalWidth += w;
+                    }
+                    const cityTotalAngle = totalWidth / radius;
+                    // Bottom half: chars flip π, step counter-clockwise
+                    let currentAngle = Math.PI + cityTotalAngle / 2;
+                    for (let i = 0; i < text.length; i++) {
+                        const charAngle = charWidths[i] / radius;
+                        const midAngle = currentAngle - charAngle / 2;
+                        ctx2d.save();
+                        ctx2d.rotate(midAngle);
+                        ctx2d.translate(0, -radius + sd.fs / 2);
+                        ctx2d.rotate(Math.PI);  // flip for bottom-half readability
+                        ctx2d.fillText(text[i], 0, 0);
+                        ctx2d.restore();
+                        currentAngle -= charAngle;
+                    }
+
+                    // --- 24-hour markers (numbers + dots, matching iOS specialSubdial) ---
+                    const cityExclusionHalf = cityTotalAngle / 2 + 10 / radius;
+
+                    // Hardcoded inter-dial occlusion skips (from iOS specialParameter)
+                    // sp=0: local/W, sp=1: N, sp=2: E, sp=3: S
+                    const skipSet = new Set<number>(
+                        sd.sp === 0 ? [15, 16] :
+                        sd.sp === 2 ? [9, 10, 11] :
+                        sd.sp === 3 ? [8, 9, 10, 13, 14, 15] :
+                        []  // sp=1 (N): no skips
+                    );
+
+                    ctx2d.font = `${sd.numFS}px Arial`;
+                    ctx2d.textAlign = 'center';
+                    ctx2d.textBaseline = 'middle';
+
+                    for (let i = 1; i < 24; i++) {
+                        // Hardcoded inter-dial skip
+                        if (skipSet.has(i)) continue;
+
+                        // iOS angle: pointAngle = π * (18 - i) / 12
+                        const pointAngle = Math.PI * (18 - i) / 12;
+
+                        // City text exclusion: angular distance from bottom (hour 0)
+                        const angularDistFromBottom = (i < 12 ? i : (24 - i)) * Math.PI / 12;
+                        if (angularDistFromBottom <= cityExclusionHalf) continue;
+
+                        if (i % 2 === 1) {
+                            // Odd hours: small dot (half-alpha)
+                            const dotX = sd.numR * Math.cos(pointAngle);
+                            const dotY = -sd.numR * Math.sin(pointAngle); // canvas Y-flip
+                            ctx2d.save();
+                            ctx2d.globalAlpha = 0.5;
+                            ctx2d.beginPath();
+                            ctx2d.arc(dotX, dotY, 0.5, 0, 2 * Math.PI);
+                            ctx2d.fill();
+                            ctx2d.restore();
+                        } else {
+                            // Even hours: upright number
+                            const numX = sd.numR * Math.cos(pointAngle);
+                            const numY = -sd.numR * Math.sin(pointAngle); // canvas Y-flip
+                            ctx2d.fillText(i.toString(), numX, numY);
+                        }
+                    }
+
+                    ctx2d.restore();
+                }
+
+                ctx2d.restore();
+            }
             if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
         }
         // Update mini-bar time display (using frameRealTime captured at beginFrame)
@@ -1001,6 +1144,14 @@ async function main() {
     function rebuildAllForLocation(newLat: number, newLon: number) {
         lat = newLat;
         lon = newLon;
+        // Update Gaia slot 1 to match new observer location
+        if (isGaia && terraSlotOverrides) {
+            terraSlotOverrides[1] = {
+                cityName: locationSource || 'Observer',
+                olsonId: locationTimezone,
+                lat: newLat, lon: newLon,
+            };
+        }
         for (const face of faces) {
             if (!face.enabled) continue;
             // Fresh environment with new lat/lon/tz — same watch/parts

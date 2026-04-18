@@ -618,7 +618,10 @@
       yAnchor: attrExpr(el, "yAnchor"),
       offsetRadius: attrExpr(el, "offsetRadius"),
       offsetAngle: attrExpr(el, "offsetAngle"),
-      nRays: attrExpr(el, "nRays")
+      nRays: attrExpr(el, "nRays"),
+      text: attr(el, "text"),
+      fontSize: attrExpr(el, "fontSize"),
+      fontName: attr(el, "fontName")
     };
   }
   function parseWheel(el, variant) {
@@ -790,7 +793,8 @@
       strokeColor: attrExpr(el, "strokeColor"),
       fillColor: attrExpr(el, "fillColor"),
       update: attrExpr(el, "update"),
-      timeBase: attr(el, "timeBase")
+      timeBase: attr(el, "timeBase"),
+      envSlot: attrExpr(el, "envSlot")
     };
   }
   function attr(el, name) {
@@ -11942,6 +11946,11 @@
     27: { cityName: "Noum\xE9a", olsonId: "Pacific/Noumea", lat: -22.26667, lon: 166.45 },
     28: { cityName: "Auckland", olsonId: "Pacific/Auckland", lat: -36.86666, lon: 174.76666 }
   };
+  var GAIA_SUBDIAL_DEFAULTS = {
+    2: { cityName: "New York", olsonId: "America/New_York", lat: 40.71427, lon: -74.00597 },
+    3: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
+    4: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 }
+  };
   function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
@@ -12507,6 +12516,7 @@
     functions.set("tzOffset", () => tzOffsetSeconds);
     functions.set("tzOffsetAngle", () => tzOffsetSeconds * Math.PI / (12 * 3600));
     functions.set("longitude", () => OBSERVER_LON);
+    functions.set("latitude", () => OBSERVER_LAT);
     functions.set("calendarWeekdayStart", () => 0);
     functions.set("terminatorAngle", terminatorAngle);
     functions.set("EOTAngle", () => {
@@ -12883,6 +12893,57 @@
       const t = getLocalTimeInZone(data.olsonId, getNow());
       return t.weekday * 2 * Math.PI / 7;
     });
+    functions.set("weekdayNumberN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      return getLocalTimeInZone(data.olsonId, getNow()).weekday;
+    });
+    functions.set("hour24NumberN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      return getLocalTimeInZone(data.olsonId, getNow()).h24;
+    });
+    functions.set("hour24ValueAngleN", (slot) => {
+      const data = terraRingDefaults[slot];
+      if (!data) return 0;
+      const t = getLocalTimeInZone(data.olsonId, getNow());
+      const ms = getNow().getMilliseconds();
+      const s = t.sec + ms / 1e3;
+      const m = t.min + s / 60;
+      const h = t.h24 + m / 60;
+      return h * 2 * Math.PI / 24;
+    });
+    functions.set(
+      "dayNightLeafAngleForSlot",
+      (planetNumber, leafNumber, numLeaves, slotNumber) => {
+        const slot = terraRingDefaults[slotNumber];
+        if (!slot) {
+          return computeDayNightLeafAngle(
+            planetNumber,
+            leafNumber,
+            numLeaves,
+            getNow,
+            OBSERVER_LAT,
+            OBSERVER_LON,
+            pool,
+            tzOffsetSeconds
+          );
+        }
+        const slotLat = slot.lat * Math.PI / 180;
+        const slotLon = slot.lon * Math.PI / 180;
+        const slotTzOffset = getTzOffsetSeconds(slot.olsonId, getNow());
+        return computeDayNightLeafAngle(
+          planetNumber,
+          leafNumber,
+          numLeaves,
+          getNow,
+          slotLat,
+          slotLon,
+          pool,
+          slotTzOffset
+        );
+      }
+    );
     releaseCachePool(pool);
   }
   function dayNightLeafAngle(riseNotSet, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
@@ -13862,8 +13923,30 @@
     const length = evalAttr(part.length, env);
     const width = evalAttr(part.width, env);
     const tail = evalAttr(part.tail, env);
-    if (length <= 0) return;
     const handType = part.handType || "tri";
+    if (handType === "spoke") {
+      const offsetRadius = evalAttr(part.offsetRadius, env);
+      const offsetAngle = part.dynamicState ? part.dynamicState.currentOffsetAngle ?? evalAttr(part.offsetAngle, env) : evalAttr(part.offsetAngle, env);
+      const fontSize = evalAttr(part.fontSize, env) || 8;
+      const fontName = part.fontName || "Arial";
+      const strokeColor2 = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle + offsetAngle);
+      ctx.translate(0, -offsetRadius);
+      ctx.rotate(-(angle + offsetAngle));
+      ctx.translate(0, 1);
+      ctx.font = `${fontSize}px ${fontName}`;
+      ctx.fillStyle = strokeColor2;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      if (part.text) {
+        ctx.fillText(part.text, 0, 0);
+      }
+      ctx.restore();
+      return;
+    }
+    if (length <= 0) return;
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
     const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
@@ -14421,8 +14504,18 @@
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "white";
     const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
-    const fnName = part.timeBase === "LST" ? "dayNightLeafAngleLST" : "dayNightLeafAngle";
-    const leafAngleFn = env.functions.get(fnName);
+    const slotNumber = part.envSlot ? evalAttr(part.envSlot, env) : void 0;
+    let leafAngleFn;
+    if (slotNumber != null && !isNaN(slotNumber)) {
+      const slotFn = env.functions.get("dayNightLeafAngleForSlot");
+      if (slotFn) {
+        leafAngleFn = (p, l, n) => slotFn(p, l, n, slotNumber);
+      }
+    }
+    if (!leafAngleFn) {
+      const fnName = part.timeBase === "LST" ? "dayNightLeafAngleLST" : "dayNightLeafAngle";
+      leafAngleFn = env.functions.get(fnName);
+    }
     if (!leafAngleFn) return;
     ctx.save();
     ctx.translate(cx, cy);
@@ -15813,6 +15906,35 @@
         terraSlotOverrides = overrides;
       }
     }
+    const isGaia = faceDataArray.length === 1 && faceDataArray[0].name === "Gaia";
+    if (isGaia) {
+      const params = new URLSearchParams(window.location.search);
+      const overrides = {};
+      overrides[1] = {
+        cityName: locationSource || "Observer",
+        olsonId: locationTimezone,
+        lat,
+        lon
+      };
+      for (let slot = 2; slot <= 4; slot++) {
+        const name = params.get(`s${slot}`);
+        const tz = params.get(`s${slot}tz`);
+        const latStr = params.get(`s${slot}lat`);
+        const lonStr = params.get(`s${slot}lon`);
+        if (name && tz) {
+          overrides[slot] = {
+            cityName: name,
+            olsonId: tz,
+            lat: latStr ? parseFloat(latStr) : 0,
+            lon: lonStr ? parseFloat(lonStr) : 0
+          };
+        } else {
+          const def = GAIA_SUBDIAL_DEFAULTS[slot];
+          if (def) overrides[slot] = { ...def };
+        }
+      }
+      terraSlotOverrides = overrides;
+    }
     let cols = 1, rows = 1;
     const faces = [];
     for (let i = 0; i < parsedWatches.length; i++) {
@@ -15948,6 +16070,86 @@
           }
         }
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
+        if (isGaia && terraSlotOverrides) {
+          const ctx2d = face.ctx;
+          const fw = face.env.variables.get("faceWidth") || 278;
+          ctx2d.save();
+          ctx2d.translate(face.canvas.width / 2, face.canvas.height / 2);
+          const pxPerUnit = face.canvas.width / (fw + 2 * BEZEL_THICKNESS_XML);
+          ctx2d.scale(pxPerUnit, pxPerUnit);
+          const subdials = [
+            { slot: 1, x: -58.5, y: 0, labelR: 82.5, fs: 12.5, numR: 72, numFS: 9, sp: 0 },
+            // local (W)
+            { slot: 2, x: 32.19, y: 77.716, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 1 },
+            // s1 (N)
+            { slot: 3, x: 84.12, y: 0, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 2 },
+            // s2 (E)
+            { slot: 4, x: 32.19, y: -77.72, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 3 }
+            // s3 (S)
+          ];
+          for (const sd of subdials) {
+            const slotData = terraSlotOverrides[sd.slot];
+            if (!slotData) continue;
+            const text = slotData.cityName;
+            ctx2d.save();
+            ctx2d.translate(sd.x, -sd.y);
+            ctx2d.fillStyle = "black";
+            ctx2d.font = `${sd.fs}px Arial`;
+            ctx2d.textAlign = "center";
+            ctx2d.textBaseline = "alphabetic";
+            const radius = sd.labelR;
+            const charWidths = [];
+            let totalWidth = 0;
+            for (let i = 0; i < text.length; i++) {
+              const w = ctx2d.measureText(text[i]).width;
+              charWidths.push(w);
+              totalWidth += w;
+            }
+            const cityTotalAngle = totalWidth / radius;
+            let currentAngle = Math.PI + cityTotalAngle / 2;
+            for (let i = 0; i < text.length; i++) {
+              const charAngle = charWidths[i] / radius;
+              const midAngle = currentAngle - charAngle / 2;
+              ctx2d.save();
+              ctx2d.rotate(midAngle);
+              ctx2d.translate(0, -radius + sd.fs / 2);
+              ctx2d.rotate(Math.PI);
+              ctx2d.fillText(text[i], 0, 0);
+              ctx2d.restore();
+              currentAngle -= charAngle;
+            }
+            const cityExclusionHalf = cityTotalAngle / 2 + 10 / radius;
+            const skipSet = new Set(
+              sd.sp === 0 ? [15, 16] : sd.sp === 2 ? [9, 10, 11] : sd.sp === 3 ? [8, 9, 10, 13, 14, 15] : []
+              // sp=1 (N): no skips
+            );
+            ctx2d.font = `${sd.numFS}px Arial`;
+            ctx2d.textAlign = "center";
+            ctx2d.textBaseline = "middle";
+            for (let i = 1; i < 24; i++) {
+              if (skipSet.has(i)) continue;
+              const pointAngle = Math.PI * (18 - i) / 12;
+              const angularDistFromBottom = (i < 12 ? i : 24 - i) * Math.PI / 12;
+              if (angularDistFromBottom <= cityExclusionHalf) continue;
+              if (i % 2 === 1) {
+                const dotX = sd.numR * Math.cos(pointAngle);
+                const dotY = -sd.numR * Math.sin(pointAngle);
+                ctx2d.save();
+                ctx2d.globalAlpha = 0.5;
+                ctx2d.beginPath();
+                ctx2d.arc(dotX, dotY, 0.5, 0, 2 * Math.PI);
+                ctx2d.fill();
+                ctx2d.restore();
+              } else {
+                const numX = sd.numR * Math.cos(pointAngle);
+                const numY = -sd.numR * Math.sin(pointAngle);
+                ctx2d.fillText(i.toString(), numX, numY);
+              }
+            }
+            ctx2d.restore();
+          }
+          ctx2d.restore();
+        }
         if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
       }
       {
@@ -16258,6 +16460,14 @@
     function rebuildAllForLocation(newLat, newLon) {
       lat = newLat;
       lon = newLon;
+      if (isGaia && terraSlotOverrides) {
+        terraSlotOverrides[1] = {
+          cityName: locationSource || "Observer",
+          olsonId: locationTimezone,
+          lat: newLat,
+          lon: newLon
+        };
+      }
       for (const face of faces) {
         if (!face.enabled) continue;
         face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, terraSlotOverrides);

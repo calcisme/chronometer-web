@@ -139,6 +139,13 @@ export const TERRA_RING_DEFAULTS: Record<number, TerraSlot> = {
     27: { cityName: 'Nouméa',         olsonId: 'Pacific/Noumea',         lat: -22.26667, lon:  166.45000 },
     28: { cityName: 'Auckland',       olsonId: 'Pacific/Auckland',       lat: -36.86666, lon:  174.76666 },
 };
+
+/** Default subdial cities for Gaia (indexed by env slot 2–4; slot 1 = observer). */
+export const GAIA_SUBDIAL_DEFAULTS: Record<number, TerraSlot> = {
+    2: { cityName: 'New York', olsonId: 'America/New_York', lat: 40.71427, lon: -74.00597 },
+    3: { cityName: 'London',   olsonId: 'Europe/London',    lat: 51.50842, lon:  -0.12553 },
+    4: { cityName: 'Sydney',   olsonId: 'Australia/Sydney',  lat: -33.86785, lon: 151.20732 },
+};
 export function createWatchEnvironment(
     watch: Watch,
     observerLatDeg: number = DEFAULT_LAT_DEG,
@@ -931,6 +938,9 @@ function registerTimeFunctions(
     // Observer longitude in radians (used by Mauna Kea angle expressions)
     functions.set('longitude', () => OBSERVER_LON);
 
+    // Observer latitude in radians (used by Gaia to flip moon for southern hemisphere)
+    functions.set('latitude', () => OBSERVER_LAT);
+
     // Calendar wheel helpers
     functions.set('calendarWeekdayStart', () => 0);
 
@@ -1423,6 +1433,54 @@ function registerTimeFunctions(
         const t = getLocalTimeInZone(data.olsonId, getNow());
         return t.weekday * 2 * Math.PI / 7;
     });
+
+    // weekdayNumberN(slot): integer weekday (0=Sun, 6=Sat) — NOT an angle
+    functions.set('weekdayNumberN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        return getLocalTimeInZone(data.olsonId, getNow()).weekday;
+    });
+
+    // hour24NumberN(slot): 24-hour integer (0–23) in the slot's timezone
+    functions.set('hour24NumberN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        return getLocalTimeInZone(data.olsonId, getNow()).h24;
+    });
+
+    // hour24ValueAngleN(slot): continuous 24-hour angle in the slot's timezone
+    functions.set('hour24ValueAngleN', (slot: number) => {
+        const data = terraRingDefaults[slot];
+        if (!data) return 0;
+        const t = getLocalTimeInZone(data.olsonId, getNow());
+        const ms = getNow().getMilliseconds();
+        const s = t.sec + ms / 1000;
+        const m = t.min + s / 60;
+        const h = t.h24 + m / 60;
+        return h * 2 * Math.PI / 24;
+    });
+
+    // dayNightLeafAngleForSlot(planet, leaf, numLeaves, slotNumber):
+    // Like dayNightLeafAngle but uses the slot's city lat/lon for astronomy.
+    functions.set('dayNightLeafAngleForSlot',
+        (planetNumber: number, leafNumber: number, numLeaves: number, slotNumber: number) => {
+            const slot = terraRingDefaults[slotNumber];
+            if (!slot) {
+                // Fallback to observer location
+                return computeDayNightLeafAngle(
+                    planetNumber, leafNumber, numLeaves,
+                    getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds,
+                );
+            }
+            const slotLat = slot.lat * Math.PI / 180;
+            const slotLon = slot.lon * Math.PI / 180;
+            const slotTzOffset = getTzOffsetSeconds(slot.olsonId, getNow());
+            return computeDayNightLeafAngle(
+                planetNumber, leafNumber, numLeaves,
+                getNow, slotLat, slotLon, pool, slotTzOffset,
+            );
+        },
+    );
 
     // Release the cache pool
     releaseCachePool(pool);
