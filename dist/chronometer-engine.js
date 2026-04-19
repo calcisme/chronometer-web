@@ -14305,6 +14305,44 @@
       ctx.lineTo(0, -(length - oTail));
       ctx.lineTo(-hw, midY);
       ctx.closePath();
+    } else if (handType === "breguet") {
+      const widthScaler = width / (length * 0.16);
+      const lengthScaler = (length - 81) / 10;
+      const armWidth = length * 0.04 * widthScaler;
+      const centerRadius = length * 0.08 * widthScaler;
+      const breOuterCenter = length * 0.71 + lengthScaler;
+      const breInnerCenter = length * 0.725 + lengthScaler * 0.8;
+      const breOuterRadius = length * 0.075 * widthScaler;
+      const breInnerRadius = length * 0.05 * widthScaler;
+      const breBase = breOuterCenter - breOuterRadius;
+      const tipBase = breOuterCenter + breOuterRadius;
+      const tipWidth = length * 0.045 * widthScaler;
+      ctx.beginPath();
+      ctx.arc(0, 0, centerRadius, 0, 2 * Math.PI);
+      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-armWidth / 2, -centerRadius);
+      ctx.lineTo(-armWidth / 10, -breBase);
+      ctx.lineTo(armWidth / 10, -breBase);
+      ctx.lineTo(armWidth / 2, -centerRadius);
+      ctx.closePath();
+      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -breOuterCenter, breOuterRadius, 0, 2 * Math.PI);
+      ctx.moveTo(breInnerRadius, -breInnerCenter);
+      ctx.arc(0, -breInnerCenter, breInnerRadius, 0, 2 * Math.PI, true);
+      if (fillColor !== "rgba(0,0,0,0)") ctx.fill("evenodd");
+      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-tipWidth / 2, -tipBase);
+      ctx.lineTo(0, -length);
+      ctx.lineTo(tipWidth / 2, -tipBase);
+      ctx.closePath();
+      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+      return;
     } else {
       const hw = width / 2;
       if (length2 > 0) {
