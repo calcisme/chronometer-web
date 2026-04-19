@@ -675,7 +675,8 @@
       tickWidth: attrExpr(el, "tickWidth"),
       calendar: attr(el, "calendar"),
       calendarStartDay: attr(el, "calendarStartDay"),
-      calendarWeekendColor: attrExpr(el, "calendarWeekendColor")
+      calendarWeekendColor: attrExpr(el, "calendarWeekendColor"),
+      z: attrExpr(el, "z")
     };
   }
   function parseQText(el) {
@@ -15197,6 +15198,14 @@
     const sunCol = (7 - calendarWeekdayStart) % 7;
     ctx.save();
     ctx.translate(x, y);
+    const z = evalAttr(part.z, env);
+    let shadowSigma = 0;
+    let shadowScale = 1;
+    if (z && z > 0) {
+      shadowSigma = (z + 2) / 2;
+      const transform = ctx.getTransform();
+      shadowScale = Math.abs(transform.a);
+    }
     ctx.rotate(angle);
     const calType = part.calendar || "";
     const quadrants = getCalendarQuadrants(calType, calendarWeekdayStart);
@@ -15206,13 +15215,36 @@
       ctx.save();
       ctx.rotate(-qi * Math.PI / 2);
       ctx.translate(0, -(radius - calHeight / 2));
+      if (z && z > 0) {
+        ctx.shadowColor = `rgba(0,0,0,0.4)`;
+        ctx.shadowBlur = shadowSigma * shadowScale;
+        ctx.shadowOffsetX = z / 4.3 * shadowScale;
+        ctx.shadowOffsetY = z / 2.15 * shadowScale;
+      }
       ctx.fillStyle = bgColor;
       if (q.startColumn > 0) {
         const firstCellX = -calWidth / 2 + q.startColumn * cellWidth;
-        ctx.fillRect(firstCellX, -calHeight / 2 - 1, calWidth / 2 - firstCellX + calWidth / 2, cellHeight + 2);
-        ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1 + cellHeight + 2, calWidth, calHeight - cellHeight);
+        const top = -calHeight / 2 - 1;
+        const row1Top = top + cellHeight + 2;
+        const fullRight = calWidth / 2;
+        const fullLeft = -calWidth / 2;
+        ctx.beginPath();
+        ctx.moveTo(firstCellX, top);
+        ctx.lineTo(fullRight, top);
+        ctx.lineTo(fullRight, top + calHeight + 2);
+        ctx.lineTo(fullLeft, top + calHeight + 2);
+        ctx.lineTo(fullLeft, row1Top);
+        ctx.lineTo(firstCellX, row1Top);
+        ctx.closePath();
+        ctx.fill();
       } else {
         ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1, calWidth, calHeight + 2);
+      }
+      if (z && z > 0) {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
       }
       ctx.font = `${fontSize}px "${fontName}"`;
       ctx.textAlign = "center";
@@ -15300,28 +15332,74 @@
     ctx.beginPath();
     ctx.rect(-calWidth / 2 - xOffset - 1, gridTop - calHeight / 2 - 2, calWidth + 2, calHeight + 4);
     ctx.clip();
+    let coverX = 0, coverY = 0, coverW = 0, coverH = 0;
     switch (coverType) {
       case "row1Left": {
-        const cy = gridTop - calHeight / 2 + cellHeight / 2;
-        const cyAdj = cy - 1;
+        const cy = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+        coverX = -calWidth / 2;
+        coverY = cy - cellHeight / 2;
+        coverW = 4 * cellWidth;
+        coverH = cellHeight;
+        break;
+      }
+      case "row1Right": {
+        const cy = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+        coverX = -calWidth / 2;
+        coverY = cy - cellHeight / 2;
+        coverW = 5 * cellWidth;
+        coverH = cellHeight;
+        break;
+      }
+      case "row56Right": {
+        const cy4 = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2 - (1 - 4 / 5);
+        coverX = -calWidth / 2;
+        coverY = cy4 - cellHeight / 2;
+        coverW = 7 * cellWidth;
+        coverH = 2 * cellHeight;
+        break;
+      }
+      case "row6Left": {
+        const cy5 = gridTop - calHeight / 2 + 5 * cellHeight + cellHeight / 2 - (1 - 5 / 5);
+        coverX = -calWidth / 2;
+        coverY = cy5 - cellHeight / 2;
+        coverW = 7 * cellWidth;
+        coverH = cellHeight;
+        break;
+      }
+    }
+    const isTopUnderlay = coverType === "row1Left" || coverType === "row1Right";
+    const z = evalAttr(part.z, env);
+    if (z && z > 0 && !isTopUnderlay) {
+      const sigma = (z + 2) / 2;
+      const transform = ctx.getTransform();
+      const scale = Math.abs(transform.a);
+      ctx.shadowColor = `rgba(0,0,0,0.4)`;
+      ctx.shadowBlur = sigma * scale;
+      ctx.shadowOffsetX = z / 4.3 * scale;
+      ctx.shadowOffsetY = z / 2.15 * scale;
+    }
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(coverX, coverY, coverW, coverH);
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    switch (coverType) {
+      case "row1Left": {
+        const cyAdj = gridTop - calHeight / 2 + cellHeight / 2 - 1;
         for (let col = 0; col < 4; col++) {
           const day = 23 + col;
           const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
           ctx.fillStyle = fontColor;
           ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
         }
         break;
       }
       case "row1Right": {
-        const cy = gridTop - calHeight / 2 + cellHeight / 2;
-        const cyAdj = cy - 1;
+        const cyAdj = gridTop - calHeight / 2 + cellHeight / 2 - 1;
         for (let col = 0; col < 5; col++) {
           const day = 27 + col;
           const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
           ctx.fillStyle = fontColor;
           ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
         }
@@ -15335,8 +15413,6 @@
             const gridRow = 4 + row;
             const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
             const cyAdj = cy - (1 - gridRow / 5);
-            ctx.fillStyle = bgColor;
-            ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
             ctx.fillStyle = fontColor;
             ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
           }
@@ -15350,8 +15426,6 @@
           const gridRow = 5;
           const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
           const cyAdj = cy - (1 - gridRow / 5);
-          ctx.fillStyle = bgColor;
-          ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
           ctx.fillStyle = fontColor;
           ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
         }

@@ -2678,6 +2678,17 @@ function drawCalendarWheel(
 
     ctx.save();
     ctx.translate(x, y);
+
+    // Compute shadow parameters once (applied per-quadrant to follow rotation)
+    const z = evalAttr(part.z, env);
+    let shadowSigma = 0;
+    let shadowScale = 1;
+    if (z && z > 0) {
+        shadowSigma = (z + 2) / 2;
+        const transform = ctx.getTransform();
+        shadowScale = Math.abs(transform.a);
+    }
+
     ctx.rotate(angle);
 
     // Determine which quadrants to draw based on calendar type
@@ -2696,16 +2707,43 @@ function drawCalendarWheel(
         // Position at the top of the wheel (twelve orientation)
         ctx.translate(0, -(radius - calHeight / 2));
 
-        // Draw background — skip cells before the 1st in row 0 so covers show through
+        // Draw background as a single path (with cutout for startColumn)
+        // and apply shadow so the wheel casts a unified shadow matching its shape.
+        if (z && z > 0) {
+            ctx.shadowColor = `rgba(0,0,0,0.4)`;
+            ctx.shadowBlur = shadowSigma * shadowScale;
+            ctx.shadowOffsetX = (z / 4.3) * shadowScale;
+            ctx.shadowOffsetY = (z / 2.15) * shadowScale;
+        }
+
         ctx.fillStyle = bgColor;
         if (q.startColumn > 0) {
-            // Row 0: only fill from startColumn to end
+            // L-shaped background: row 0 starts at startColumn, rows 1+ full width.
+            // Draw as a single path so shadow follows the L-shape.
             const firstCellX = -calWidth / 2 + q.startColumn * cellWidth;
-            ctx.fillRect(firstCellX, -calHeight / 2 - 1, calWidth / 2 - firstCellX + calWidth / 2, cellHeight + 2);
-            // Rows 1+: full width
-            ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1 + cellHeight + 2, calWidth, calHeight - cellHeight);
+            const top = -calHeight / 2 - 1;
+            const row1Top = top + cellHeight + 2;
+            const fullRight = calWidth / 2;
+            const fullLeft = -calWidth / 2;
+            ctx.beginPath();
+            ctx.moveTo(firstCellX, top);
+            ctx.lineTo(fullRight, top);
+            ctx.lineTo(fullRight, top + calHeight + 2);
+            ctx.lineTo(fullLeft, top + calHeight + 2);
+            ctx.lineTo(fullLeft, row1Top);
+            ctx.lineTo(firstCellX, row1Top);
+            ctx.closePath();
+            ctx.fill();
         } else {
             ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1, calWidth, calHeight + 2);
+        }
+
+        // Clear shadow for text
+        if (z && z > 0) {
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
         }
 
         // Draw day numbers
@@ -2843,43 +2881,88 @@ function drawCalendarRowCover(
     ctx.rect(-calWidth / 2 - xOffset - 1, gridTop - calHeight / 2 - 2, calWidth + 2, calHeight + 4);
     ctx.clip();
 
+    // Compute bounding rectangle for the whole cover piece
+    let coverX = 0, coverY = 0, coverW = 0, coverH = 0;
     switch (coverType) {
         case 'row1Left': {
-            // iOS fixed content: days 23-26 in columns 0-3
-            const cy = gridTop - calHeight / 2 + cellHeight / 2;
-            const cyAdj = cy - 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+            coverX = -calWidth / 2;
+            coverY = cy - cellHeight / 2;
+            coverW = 4 * cellWidth;
+            coverH = cellHeight;
+            break;
+        }
+        case 'row1Right': {
+            const cy = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+            coverX = -calWidth / 2;
+            coverY = cy - cellHeight / 2;
+            coverW = 5 * cellWidth;
+            coverH = cellHeight;
+            break;
+        }
+        case 'row56Right': {
+            const cy4 = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2 - (1 - 4 / 5.0);
+            coverX = -calWidth / 2;
+            coverY = cy4 - cellHeight / 2;
+            coverW = 7 * cellWidth;
+            coverH = 2 * cellHeight;
+            break;
+        }
+        case 'row6Left': {
+            const cy5 = gridTop - calHeight / 2 + 5 * cellHeight + cellHeight / 2 - (1 - 5 / 5.0);
+            coverX = -calWidth / 2;
+            coverY = cy5 - cellHeight / 2;
+            coverW = 7 * cellWidth;
+            coverH = cellHeight;
+            break;
+        }
+    }
+
+    // Only bottom covers (row6Left, row56Right) cast shadows — they sit ON TOP of the wheels.
+    // Top covers (row1Left, row1Right) are underlays beneath the wheels, no shadow.
+    const isTopUnderlay = coverType === 'row1Left' || coverType === 'row1Right';
+    const z = evalAttr(part.z, env);
+    if (z && z > 0 && !isTopUnderlay) {
+        const sigma = (z + 2) / 2;
+        const transform = ctx.getTransform();
+        const scale = Math.abs(transform.a);
+        ctx.shadowColor = `rgba(0,0,0,0.4)`;
+        ctx.shadowBlur = sigma * scale;
+        ctx.shadowOffsetX = (z / 4.3) * scale;
+        ctx.shadowOffsetY = (z / 2.15) * scale;
+    }
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(coverX, coverY, coverW, coverH);
+
+    // Clear shadow for cell contents
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Draw text labels on top (no shadow)
+    switch (coverType) {
+        case 'row1Left': {
+            const cyAdj = gridTop - calHeight / 2 + cellHeight / 2 - 1;
             for (let col = 0; col < 4; col++) {
                 const day = 23 + col;
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-
-                ctx.fillStyle = bgColor;
-                ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
-
                 ctx.fillStyle = fontColor;
                 ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
             }
             break;
         }
         case 'row1Right': {
-            // iOS fixed content: days 27-31 in columns 0-4
-            const cy = gridTop - calHeight / 2 + cellHeight / 2;
-            const cyAdj = cy - 1;
+            const cyAdj = gridTop - calHeight / 2 + cellHeight / 2 - 1;
             for (let col = 0; col < 5; col++) {
                 const day = 27 + col;
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-
-                ctx.fillStyle = bgColor;
-                ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
-
                 ctx.fillStyle = fontColor;
                 ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
             }
             break;
         }
         case 'row56Right': {
-            // iOS fixed content: two rows (swapped for Canvas Y-down)
-            //   row 0 (visual row 4): days 1-7
-            //   row 1 (visual row 5): days 8-14
             for (let row = 0; row < 2; row++) {
                 for (let col = 0; col < 7; col++) {
                     const day = row === 0 ? col + 1 : col + 8;
@@ -2887,10 +2970,6 @@ function drawCalendarRowCover(
                     const gridRow = 4 + row;
                     const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
                     const cyAdj = cy - (1 - gridRow / 5.0);
-
-                    ctx.fillStyle = bgColor;
-                    ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
-
                     ctx.fillStyle = fontColor;
                     ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
                 }
@@ -2898,17 +2977,12 @@ function drawCalendarRowCover(
             break;
         }
         case 'row6Left': {
-            // iOS fixed content: days 1-7 in row 5
             for (let col = 0; col < 7; col++) {
                 const day = col + 1;
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
                 const gridRow = 5;
                 const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
                 const cyAdj = cy - (1 - gridRow / 5.0);
-
-                ctx.fillStyle = bgColor;
-                ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
-
                 ctx.fillStyle = fontColor;
                 ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
             }

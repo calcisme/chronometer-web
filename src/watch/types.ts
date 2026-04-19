@@ -220,6 +220,8 @@ export interface WheelPart extends PartBase {
     calendarStartDay?: string;
     /** Color for weekend day numbers in the calendar grid. */
     calendarWeekendColor?: ASTNode;
+    /** Height above dial surface (for shadow casting). */
+    z?: ASTNode;
 }
 
 // ============================================================================

@@ -357,6 +357,7 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel' | 'TWheel'): Wheel
         calendar: attr(el, 'calendar'),
         calendarStartDay: attr(el, 'calendarStartDay'),
         calendarWeekendColor: attrExpr(el, 'calendarWeekendColor'),
+        z: attrExpr(el, 'z'),
     };
 }
 
