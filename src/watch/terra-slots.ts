@@ -119,66 +119,28 @@ export function formatSlotOffset(envSlot: number): string {
 }
 
 /**
- * Check if the device timezone is represented on the ring.
- * If not, find the best slot to temporarily override.
- *
- * @param deviceOlsonId  The device's (or globally overridden) timezone
- * @param slots          Current ring slot data (defaults + user overrides)
- * @returns Override info if needed, or null if device TZ is already on ring
+ * Get the standard-time (non-DST) UTC offset in minutes for a timezone.
+ * Returns the minimum of the January and July offsets, which corresponds
+ * to the standard-time offset for both northern and southern hemispheres.
  */
-export function ensureDeviceTzOnRing(
-    deviceOlsonId: string,
-    slots: Record<number, TerraSlot>,
-): { overriddenSlot: number; originalCity: string; newCityName: string; newSlot: TerraSlot } | null {
-    // Check if device TZ is already represented
-    for (const [, data] of Object.entries(slots)) {
-        if (data.olsonId === deviceOlsonId) {
-            return null; // Already on ring
-        }
+export function getStandardOffsetMinutes(olsonId: string): number {
+    try {
+        const now = new Date();
+        const jan = new Date(now.getFullYear(), 0, 1);
+        const jul = new Date(now.getFullYear(), 6, 1);
+        const janOff = getTzOffsetMinutes(olsonId, jan);
+        const julOff = getTzOffsetMinutes(olsonId, jul);
+        return Math.min(janOff, julOff);
+    } catch {
+        return 0;
     }
-
-    // Check by offset match (same offset = compatible)
-    const deviceCenter = computeTzCenter(deviceOlsonId);
-    for (const [, data] of Object.entries(slots)) {
-        const slotCenter = computeTzCenter(data.olsonId);
-        if (Math.abs(slotCenter - deviceCenter) < 1) {
-            return null; // Close enough offset match
-        }
-    }
-
-    // Device TZ not on ring — find valid slots
-    const validSlots = validSlotsForTz(deviceOlsonId);
-    if (validSlots.length === 0) {
-        // Shouldn't happen for any real Olson timezone
-        console.warn(`[TerraSlots] No valid slot for device timezone ${deviceOlsonId}`);
-        return null;
-    }
-
-    // Pick the first valid slot
-    const targetSlot = validSlots[0];
-    const originalCity = slots[targetSlot]?.cityName ?? 'Unknown';
-
-    // Look up a city name for the device timezone
-    const deviceCityName = olsonIdToCityName(deviceOlsonId);
-
-    return {
-        overriddenSlot: targetSlot,
-        originalCity,
-        newCityName: deviceCityName,
-        newSlot: {
-            cityName: deviceCityName,
-            olsonId: deviceOlsonId,
-            lat: 0,  // These will be refined when the location is known
-            lon: 0,
-        },
-    };
 }
 
 /**
  * Extract a reasonable city name from an Olson timezone ID.
  * e.g., "America/New_York" → "New York", "Asia/Kolkata" → "Kolkata"
  */
-function olsonIdToCityName(olsonId: string): string {
+export function olsonIdToCityName(olsonId: string): string {
     const parts = olsonId.split('/');
     const city = parts[parts.length - 1];
     return city.replace(/_/g, ' ');

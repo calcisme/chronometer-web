@@ -153,6 +153,7 @@ export function createWatchEnvironment(
     getNow: () => Date = () => new Date(),
     olsonTimezone?: string,
     slotOverrides?: Record<number, TerraSlot>,
+    globalLocationSlot?: number,
 ): Environment {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
@@ -186,7 +187,7 @@ export function createWatchEnvironment(
     env.variables.set('planetNeptune', ECPlanetNumber.Neptune);
 
     // Register time functions (uses the provided getNow source)
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides, globalLocationSlot);
 
     // Evaluate all init blocks in document order
     for (const expr of watch.initExprs) {
@@ -271,6 +272,7 @@ function registerTimeFunctions(
     getNow: () => Date = () => new Date(),
     olsonTimezone?: string,
     slotOverrides?: Record<number, TerraSlot>,
+    globalLocationSlot?: number,
 ): void {
     const { functions } = env;
 
@@ -1246,34 +1248,40 @@ function registerTimeFunctions(
         }
     }
 
-    // --- Auto-detect which ring slot matches the user's timezone ---
+    // --- Determine which ring slot goes at the top (12 o'clock) ---
+    // If the caller specified a global-location slot, use it directly.
+    // Otherwise, auto-detect from the timezone (fallback for non-Terra faces).
     let detectedTopSlot = 12; // default: London (slot 12 = UTC)
-    try {
-        // Use the override timezone if set, otherwise fall back to browser timezone
-        const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        // First try exact Olson ID match
-        for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-            if (data.olsonId === targetTz) {
-                detectedTopSlot = parseInt(slotStr, 10);
-                break;
-            }
-        }
-        // If no exact match, match by offset
-        if (detectedTopSlot === 12 && targetTz !== 'Europe/London' && targetTz !== 'UTC') {
-            const nowDate = getNow();
-            const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
-            let bestDiff = Infinity;
+    if (globalLocationSlot !== undefined) {
+        detectedTopSlot = globalLocationSlot;
+    } else {
+        try {
+            // Use the override timezone if set, otherwise fall back to browser timezone
+            const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            // First try exact Olson ID match
             for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-                const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
-                const diff = Math.abs(slotOffset - targetOffset);
-                if (diff < bestDiff) {
-                    bestDiff = diff;
+                if (data.olsonId === targetTz) {
                     detectedTopSlot = parseInt(slotStr, 10);
+                    break;
                 }
             }
+            // If no exact match, match by offset
+            if (detectedTopSlot === 12 && targetTz !== 'Europe/London' && targetTz !== 'UTC') {
+                const nowDate = getNow();
+                const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
+                let bestDiff = Infinity;
+                for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
+                    const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
+                    const diff = Math.abs(slotOffset - targetOffset);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        detectedTopSlot = parseInt(slotStr, 10);
+                    }
+                }
+            }
+        } catch {
+            // keep default
         }
-    } catch {
-        // keep default
     }
 
     // terraIDeviceSlot(): returns the ring slot for the "top" city (12 o'clock)

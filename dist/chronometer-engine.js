@@ -11911,7 +11911,7 @@
     3: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
     4: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 }
   };
-  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides) {
+  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides, globalLocationSlot) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
@@ -11935,7 +11935,7 @@
     env.variables.set("planetSaturn", 7 /* Saturn */);
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
-    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides);
+    registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides, globalLocationSlot);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
     }
@@ -11983,7 +11983,7 @@
     const b = v & 255;
     return `rgba(${r},${g},${b},${a.toFixed(3)})`;
   }
-  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides) {
+  function registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides, globalLocationSlot) {
     const { functions } = env;
     const now = getNow();
     const dateInterval = dateToDateInterval(now);
@@ -12722,28 +12722,32 @@
       }
     }
     let detectedTopSlot = 12;
-    try {
-      const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-      for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-        if (data.olsonId === targetTz) {
-          detectedTopSlot = parseInt(slotStr, 10);
-          break;
-        }
-      }
-      if (detectedTopSlot === 12 && targetTz !== "Europe/London" && targetTz !== "UTC") {
-        const nowDate = getNow();
-        const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
-        let bestDiff = Infinity;
+    if (globalLocationSlot !== void 0) {
+      detectedTopSlot = globalLocationSlot;
+    } else {
+      try {
+        const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
         for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-          const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
-          const diff = Math.abs(slotOffset - targetOffset);
-          if (diff < bestDiff) {
-            bestDiff = diff;
+          if (data.olsonId === targetTz) {
             detectedTopSlot = parseInt(slotStr, 10);
+            break;
           }
         }
+        if (detectedTopSlot === 12 && targetTz !== "Europe/London" && targetTz !== "UTC") {
+          const nowDate = getNow();
+          const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
+          let bestDiff = Infinity;
+          for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
+            const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
+            const diff = Math.abs(slotOffset - targetOffset);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              detectedTopSlot = parseInt(slotStr, 10);
+            }
+          }
+        }
+      } catch {
       }
-    } catch {
     }
     functions.set("terraIDeviceSlot", () => detectedTopSlot);
     functions.set("overrideTerraITopSlot", (_n) => 0);
@@ -13307,6 +13311,23 @@
     if (h === 0) return "UTC\xB10";
     const sign = h > 0 ? "+" : "";
     return `UTC${sign}${h}`;
+  }
+  function getStandardOffsetMinutes(olsonId) {
+    try {
+      const now = /* @__PURE__ */ new Date();
+      const jan = new Date(now.getFullYear(), 0, 1);
+      const jul = new Date(now.getFullYear(), 6, 1);
+      const janOff = getTzOffsetMinutes(olsonId, jan);
+      const julOff = getTzOffsetMinutes(olsonId, jul);
+      return Math.min(janOff, julOff);
+    } catch {
+      return 0;
+    }
+  }
+  function olsonIdToCityName(olsonId) {
+    const parts = olsonId.split("/");
+    const city = parts[parts.length - 1];
+    return city.replace(/_/g, " ");
   }
 
   // src/watch/renderer.ts
@@ -15725,6 +15746,15 @@
             face.terraSlotOverrides[1].cityName = closest.shortLabel;
           }
         }
+        if (face.watch.worldTimeRing && face.globalLocationSlot !== void 0) {
+          const glSlot = face.terraSlotOverrides?.[face.globalLocationSlot];
+          if (glSlot && !locationSource && (lat !== 0 || lon !== 0)) {
+            const closest = findClosestCity(lat, lon);
+            if (closest) {
+              glSlot.cityName = closest.shortLabel;
+            }
+          }
+        }
       }
     }).catch(() => {
     });
@@ -15870,14 +15900,14 @@
     function buildSlotOverrides(watch) {
       const params = new URLSearchParams(window.location.search);
       if (watch.worldTimeRing) {
-        const overrides = {};
+        const userOverrides = {};
         for (let slot = 1; slot <= 24; slot++) {
           const name = params.get(`r${slot}`);
           const tz = params.get(`r${slot}tz`);
           const latStr = params.get(`r${slot}lat`);
           const lonStr = params.get(`r${slot}lon`);
           if (name && tz) {
-            overrides[slot] = {
+            userOverrides[slot] = {
               cityName: name,
               olsonId: tz,
               lat: latStr ? parseFloat(latStr) : 0,
@@ -15885,7 +15915,57 @@
             };
           }
         }
-        return Object.keys(overrides).length > 0 ? overrides : void 0;
+        const overrides = { ...userOverrides };
+        let globalSlot;
+        if (locationTimezone && (lat !== 0 || lon !== 0)) {
+          const validSlots = validSlotsForTz(locationTimezone);
+          if (validSlots.length === 1) {
+            globalSlot = validSlots[0];
+          } else if (validSlots.length > 1) {
+            const nonOverridden = validSlots.filter((s) => !(s in userOverrides));
+            const overridden = validSlots.filter((s) => s in userOverrides);
+            if (nonOverridden.length >= 1 && overridden.length >= 1) {
+              globalSlot = nonOverridden[0];
+            } else {
+              const globalStdOff = getStandardOffsetMinutes(locationTimezone);
+              let bestSlot = validSlots[0];
+              let bestDiff = Infinity;
+              for (const s of validSlots) {
+                const slotCity = userOverrides[s] || TERRA_RING_DEFAULTS[s];
+                if (!slotCity) continue;
+                const slotStdOff = getStandardOffsetMinutes(slotCity.olsonId);
+                const diff = Math.abs(slotStdOff - globalStdOff);
+                if (diff < bestDiff) {
+                  bestDiff = diff;
+                  bestSlot = s;
+                }
+              }
+              globalSlot = bestSlot;
+            }
+          } else if (validSlots.length === 0) {
+            console.warn(`[Terra] No valid slot for timezone ${locationTimezone}`);
+          }
+          if (globalSlot !== void 0) {
+            let cityName = locationSource;
+            if (!cityName && isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
+              const closest = findClosestCity(lat, lon);
+              if (closest) cityName = closest.shortLabel;
+            }
+            if (!cityName && locationTimezone) {
+              cityName = olsonIdToCityName(locationTimezone);
+            }
+            overrides[globalSlot] = {
+              cityName: cityName || "Local",
+              olsonId: locationTimezone,
+              lat,
+              lon
+            };
+          }
+        }
+        return {
+          overrides: Object.keys(overrides).length > 0 ? overrides : {},
+          globalLocationSlot: globalSlot
+        };
       }
       if (watch.worldTimeSubdials) {
         const nSubdials = watch.maxSeparateLoc || 4;
@@ -15918,7 +15998,7 @@
             if (def) overrides[slot] = { ...def };
           }
         }
-        return overrides;
+        return { overrides };
       }
       return void 0;
     }
@@ -15932,8 +16012,9 @@
       cell.appendChild(canvas);
       grid.appendChild(cell);
       const watch = parsedWatches[i];
-      const faceOverrides = buildSlotOverrides(watch);
-      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides);
+      const slotResult = buildSlotOverrides(watch);
+      const faceOverrides = slotResult?.overrides;
+      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
       const face = {
         watch,
         env,
@@ -15948,7 +16029,8 @@
         terminatorLeaves: [],
         lastTerminatorRebuild: 0,
         faceDataIndex: i,
-        terraSlotOverrides: faceOverrides
+        terraSlotOverrides: faceOverrides,
+        globalLocationSlot: slotResult?.globalLocationSlot
       };
       faces.push(face);
     }
@@ -16012,7 +16094,7 @@
     function rebuildEnvironments() {
       for (const face of faces) {
         if (!face.enabled) continue;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
@@ -16454,6 +16536,11 @@
       lon = newLon;
       for (const face of faces) {
         if (!face.enabled) continue;
+        if (face.watch.worldTimeRing) {
+          const slotResult = buildSlotOverrides(face.watch);
+          face.terraSlotOverrides = slotResult?.overrides;
+          face.globalLocationSlot = slotResult?.globalLocationSlot;
+        }
         if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
           let obsName = locationSource;
           if (!obsName && isCityDataLoaded() && (newLat !== 0 || newLon !== 0)) {
@@ -16467,7 +16554,7 @@
             lon: newLon
           };
         }
-        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides);
+        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
         if (face.terminatorLeaves.length > 0) {
           updateLeafAngles(face.terminatorLeaves, face.env);
           resetLeafSchedules(face.terminatorLeaves);
@@ -17241,7 +17328,7 @@
           window.history.replaceState({}, "", url.toString());
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -17352,9 +17439,14 @@
           history.replaceState(null, "", newUrl);
           updateNavigationLinks();
         }, rebuildTerraForSlotChange2 = function() {
+          const slotResult = buildSlotOverrides(terraFace.watch);
+          if (slotResult) {
+            terraFace.terraSlotOverrides = slotResult.overrides;
+            terraFace.globalLocationSlot = slotResult.globalLocationSlot;
+          }
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -17372,6 +17464,7 @@
         }, assignCityToSlot2 = function(slot, city) {
           const currentSlots = getCurrentSlots2();
           const previousCity = currentSlots[slot]?.cityName || "Unknown";
+          const isGlobalSlot = slot === terraFace.globalLocationSlot;
           if (!terraFace.terraSlotOverrides) {
             terraFace.terraSlotOverrides = {};
           }
@@ -17383,7 +17476,11 @@
           };
           writeTerraOverridesToUrl2();
           rebuildTerraForSlotChange2();
-          showTcMessage2(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, "info");
+          if (isGlobalSlot) {
+            showTcMessage2(`${city.shortLabel} saved for ${formatSlotOffset(slot)}, but your location may override this slot`, "warn");
+          } else {
+            showTcMessage2(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, "info");
+          }
         }, showTcMessage2 = function(text, type) {
           tcMessage.textContent = text;
           tcMessage.className = `tc-message tc-message-${type}`;
@@ -17446,6 +17543,9 @@
             return;
           }
           if (validSlots.length === 1) {
+            if (validSlots[0] === terraFace.globalLocationSlot) {
+              showTcMessage2(`Note: this slot currently shows your location`, "warn");
+            }
             assignCityToSlot2(validSlots[0], city);
           } else {
             tcSlotPicker.style.display = "";
@@ -17453,9 +17553,11 @@
             const currentSlots = getCurrentSlots2();
             for (const slot of validSlots) {
               const currentCity = currentSlots[slot]?.cityName || "Unknown";
+              const isGlobalSlot = slot === terraFace.globalLocationSlot;
               const btn = document.createElement("button");
               btn.className = "tc-slot-btn";
-              btn.innerHTML = `<span class="tc-slot-city">${currentCity}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}</span>`;
+              const label = isGlobalSlot ? `${currentCity} \u2605` : currentCity;
+              btn.innerHTML = `<span class="tc-slot-city">${label}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}${isGlobalSlot ? " (your location)" : ""}</span>`;
               btn.addEventListener("click", () => {
                 tcSlotPicker.style.display = "none";
                 assignCityToSlot2(slot, city);
@@ -17601,7 +17703,7 @@
         }, rebuildGaiaForSlotChange2 = function() {
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);

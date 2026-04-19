@@ -25,7 +25,7 @@ import { parseWatchXML } from './watch/xml-parser.js';
 import { createWatchEnvironment, computeTzDeltaMs, GAIA_SUBDIAL_DEFAULTS } from './watch/watch-env.js';
 import type { TerraSlot } from './watch/watch-env.js';
 import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
-import { validSlotsForTz, formatSlotOffset, ensureDeviceTzOnRing } from './watch/terra-slots.js';
+import { validSlotsForTz, formatSlotOffset, getStandardOffsetMinutes, olsonIdToCityName } from './watch/terra-slots.js';
 import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
@@ -155,6 +155,8 @@ interface FaceInstance {
     faceDataIndex: number;
     /** Per-face slot overrides for Terra/Gaia world-clock faces. */
     terraSlotOverrides?: Record<number, TerraSlot>;
+    /** For worldTimeRing faces: which ring slot holds the global location (1–24). */
+    globalLocationSlot?: number;
 }
 
 // ============================================================================
@@ -209,6 +211,16 @@ async function main() {
                 const closest = findClosestCity(lat, lon);
                 if (closest) {
                     face.terraSlotOverrides[1].cityName = closest.shortLabel;
+                }
+            }
+            // Update Terra global-location slot city name if it fell back to Olson
+            if (face.watch.worldTimeRing && face.globalLocationSlot !== undefined) {
+                const glSlot = face.terraSlotOverrides?.[face.globalLocationSlot];
+                if (glSlot && !locationSource && (lat !== 0 || lon !== 0)) {
+                    const closest = findClosestCity(lat, lon);
+                    if (closest) {
+                        glSlot.cityName = closest.shortLabel;
+                    }
                 }
             }
         }
@@ -378,21 +390,27 @@ async function main() {
 
     // --- Per-face slot overrides helper ---
     // Builds slot overrides based on watch feature flags:
-    // - worldTimeRing: reads r1..r24 from URL (Terra-style ring cities)
+    // - worldTimeRing: reads r1..r24 from URL, then injects the global
+    //   location into the best matching slot (placed at top of dial).
     // - worldTimeSubdials: reads d2..dN from URL, slot 1 = observer (Gaia-style)
     // Other faces get no overrides.
     // URL prefixes: 'r' = ring, 'd' = dial/subdial (avoids collision).
-    function buildSlotOverrides(watch: Watch): Record<number, TerraSlot> | undefined {
+    interface SlotOverrideResult {
+        overrides: Record<number, TerraSlot>;
+        globalLocationSlot?: number;
+    }
+    function buildSlotOverrides(watch: Watch): SlotOverrideResult | undefined {
         const params = new URLSearchParams(window.location.search);
         if (watch.worldTimeRing) {
-            const overrides: Record<number, TerraSlot> = {};
+            // Collect user overrides from URL
+            const userOverrides: Record<number, TerraSlot> = {};
             for (let slot = 1; slot <= 24; slot++) {
                 const name = params.get(`r${slot}`);
                 const tz = params.get(`r${slot}tz`);
                 const latStr = params.get(`r${slot}lat`);
                 const lonStr = params.get(`r${slot}lon`);
                 if (name && tz) {
-                    overrides[slot] = {
+                    userOverrides[slot] = {
                         cityName: name,
                         olsonId: tz,
                         lat: latStr ? parseFloat(latStr) : 0,
@@ -400,7 +418,67 @@ async function main() {
                     };
                 }
             }
-            return Object.keys(overrides).length > 0 ? overrides : undefined;
+
+            // Start with user overrides
+            const overrides: Record<number, TerraSlot> = { ...userOverrides };
+
+            // Determine which slot to use for the global location
+            let globalSlot: number | undefined;
+            if (locationTimezone && (lat !== 0 || lon !== 0)) {
+                const validSlots = validSlotsForTz(locationTimezone);
+                if (validSlots.length === 1) {
+                    globalSlot = validSlots[0];
+                } else if (validSlots.length > 1) {
+                    // Tie-break: prefer the slot NOT overridden by the user
+                    const nonOverridden = validSlots.filter(s => !(s in userOverrides));
+                    const overridden = validSlots.filter(s => s in userOverrides);
+                    if (nonOverridden.length >= 1 && overridden.length >= 1) {
+                        // Only one is non-overridden → pick it
+                        globalSlot = nonOverridden[0];
+                    } else {
+                        // Neither or both overridden → pick by standard-time match
+                        const globalStdOff = getStandardOffsetMinutes(locationTimezone);
+                        let bestSlot = validSlots[0];
+                        let bestDiff = Infinity;
+                        for (const s of validSlots) {
+                            const slotCity = userOverrides[s] || TERRA_RING_DEFAULTS[s];
+                            if (!slotCity) continue;
+                            const slotStdOff = getStandardOffsetMinutes(slotCity.olsonId);
+                            const diff = Math.abs(slotStdOff - globalStdOff);
+                            if (diff < bestDiff) {
+                                bestDiff = diff;
+                                bestSlot = s;
+                            }
+                        }
+                        globalSlot = bestSlot;
+                    }
+                } else if (validSlots.length === 0) {
+                    // Shouldn't happen for real timezones — fall back to offset match
+                    console.warn(`[Terra] No valid slot for timezone ${locationTimezone}`);
+                }
+
+                // Inject the global location into the chosen slot
+                if (globalSlot !== undefined) {
+                    let cityName = locationSource;
+                    if (!cityName && isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
+                        const closest = findClosestCity(lat, lon);
+                        if (closest) cityName = closest.shortLabel;
+                    }
+                    if (!cityName && locationTimezone) {
+                        cityName = olsonIdToCityName(locationTimezone);
+                    }
+                    overrides[globalSlot] = {
+                        cityName: cityName || 'Local',
+                        olsonId: locationTimezone,
+                        lat, lon,
+                    };
+                }
+            }
+
+            return {
+                overrides: Object.keys(overrides).length > 0 ? overrides : {},
+                globalLocationSlot: globalSlot,
+            };
         }
         if (watch.worldTimeSubdials) {
             const nSubdials = watch.maxSeparateLoc || 4;
@@ -434,7 +512,7 @@ async function main() {
                     if (def) overrides[slot] = { ...def };
                 }
             }
-            return overrides;
+            return { overrides };
         }
         return undefined;
     }
@@ -455,8 +533,9 @@ async function main() {
         grid.appendChild(cell);
 
         const watch = parsedWatches[i];
-        const faceOverrides = buildSlotOverrides(watch);
-        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides);
+        const slotResult = buildSlotOverrides(watch);
+        const faceOverrides = slotResult?.overrides;
+        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
 
         const face: FaceInstance = {
             watch,
@@ -473,6 +552,7 @@ async function main() {
             lastTerminatorRebuild: 0,
             faceDataIndex: i,
             terraSlotOverrides: faceOverrides,
+            globalLocationSlot: slotResult?.globalLocationSlot,
         };
         faces.push(face);
     }
@@ -562,7 +642,7 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled) continue;
             // Rebuild the environment but keep the same watch/parts
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             // Preserve terminator leaves — their expressions are evaluated
             // against the env each frame by tickLeafAnimations, so they
             // don't need recreating. Recreating them would destroy animation state.
@@ -1168,6 +1248,13 @@ async function main() {
         lon = newLon;
         for (const face of faces) {
             if (!face.enabled) continue;
+            // Re-run slot overrides for Terra (worldTimeRing) faces — the global
+            // location slot may change when the user changes their location.
+            if (face.watch.worldTimeRing) {
+                const slotResult = buildSlotOverrides(face.watch);
+                face.terraSlotOverrides = slotResult?.overrides;
+                face.globalLocationSlot = slotResult?.globalLocationSlot;
+            }
             // Update Gaia slot 1 to match new observer location
             if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
                 let obsName = locationSource;
@@ -1182,7 +1269,7 @@ async function main() {
                 };
             }
             // Fresh environment with new lat/lon/tz — same watch/parts
-            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides);
+            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             // Update terminator leaves (preserve for animation interpolation)
             if (face.terminatorLeaves.length > 0) {
                 updateLeafAngles(face.terminatorLeaves, face.env);
@@ -2229,7 +2316,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     // Rebuild environment (picks up new body URL param)
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     // Update terminator leaf angles for the new planet's phase
                     // (keep existing leaves so the animation system can interpolate)
                     if (face.terminatorLeaves.length > 0) {
@@ -2332,9 +2419,16 @@ async function main() {
 
             /** Rebuild the Terra face after a slot change */
             function rebuildTerraForSlotChange() {
+                // Re-run buildSlotOverrides to re-inject the global location
+                // override on top of whatever the user just changed.
+                const slotResult = buildSlotOverrides(terraFace.watch);
+                if (slotResult) {
+                    terraFace.terraSlotOverrides = slotResult.overrides;
+                    terraFace.globalLocationSlot = slotResult.globalLocationSlot;
+                }
                 for (const face of faces) {
                     if (!face.enabled) continue;
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);
@@ -2355,6 +2449,8 @@ async function main() {
             function assignCityToSlot(slot: number, city: CityResult) {
                 const currentSlots = getCurrentSlots();
                 const previousCity = currentSlots[slot]?.cityName || 'Unknown';
+                // Check if this is the global-location slot BEFORE rebuild changes it
+                const isGlobalSlot = slot === terraFace.globalLocationSlot;
                 if (!terraFace.terraSlotOverrides) {
                     terraFace.terraSlotOverrides = {};
                 }
@@ -2366,7 +2462,11 @@ async function main() {
                 };
                 writeTerraOverridesToUrl();
                 rebuildTerraForSlotChange();
-                showTcMessage(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, 'info');
+                if (isGlobalSlot) {
+                    showTcMessage(`${city.shortLabel} saved for ${formatSlotOffset(slot)}, but your location may override this slot`, 'warn');
+                } else {
+                    showTcMessage(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, 'info');
+                }
             }
 
             function showTcMessage(text: string, type: 'info' | 'warn' | 'error') {
@@ -2541,6 +2641,10 @@ async function main() {
                 }
 
                 if (validSlots.length === 1) {
+                    // If the only valid slot is the global-location slot, warn
+                    if (validSlots[0] === terraFace.globalLocationSlot) {
+                        showTcMessage(`Note: this slot currently shows your location`, 'warn');
+                    }
                     assignCityToSlot(validSlots[0], city);
                 } else {
                     // Multiple valid slots — show slot picker
@@ -2549,9 +2653,11 @@ async function main() {
                     const currentSlots = getCurrentSlots();
                     for (const slot of validSlots) {
                         const currentCity = currentSlots[slot]?.cityName || 'Unknown';
+                        const isGlobalSlot = slot === terraFace.globalLocationSlot;
                         const btn = document.createElement('button');
                         btn.className = 'tc-slot-btn';
-                        btn.innerHTML = `<span class="tc-slot-city">${currentCity}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}</span>`;
+                        const label = isGlobalSlot ? `${currentCity} ★` : currentCity;
+                        btn.innerHTML = `<span class="tc-slot-city">${label}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}${isGlobalSlot ? ' (your location)' : ''}</span>`;
                         btn.addEventListener('click', () => {
                             tcSlotPicker!.style.display = 'none';
                             assignCityToSlot(slot, city);
@@ -2635,7 +2741,7 @@ async function main() {
             function rebuildGaiaForSlotChange() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);
