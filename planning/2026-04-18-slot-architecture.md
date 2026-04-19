@@ -48,6 +48,35 @@ The XML `firstRingSlot` variable is set to `1`, and `UTRingSlot` to `12`.
 All 24 QWedge date-color hands and Qhand dot references use
 `firstRingSlot + N` where N ranges from 0 to 23.
 
+#### Global Location Override
+
+The user's current location (from browser, URL params, city picker, or
+manual coordinate entry) **always overrides one ring slot** and is placed at
+the top of the dial (12 o'clock). The override happens silently at runtime.
+
+`buildSlotOverrides` selects which slot to use via `validSlotsForTz()`:
+
+1. If exactly **one** valid slot → use it.
+2. If **multiple** valid slots (common for DST boundaries — e.g.
+   `Pacific/Honolulu` is valid for both slots 1 and 2):
+   - If only one slot has a user URL override → pick the **other**
+     (non-overridden) slot, preserving the user's explicit choice.
+   - If neither or both are user-overridden → pick the slot whose
+     **standard-time** UTC offset (via `getStandardOffsetMinutes()`) most
+     closely matches the global location's standard-time offset.
+
+The chosen slot number is stored as `globalLocationSlot` on the
+`FaceInstance` and passed to `createWatchEnvironment`, which uses it to set
+`detectedTopSlot` (the `terraIDeviceSlot()` function return value).
+This bypasses the older auto-detection logic that searched
+`TERRA_RING_DEFAULTS` for a timezone match.
+
+The global location's city name is resolved in priority order:
+1. `locationSource` (from city-picker or URL `city=` param)
+2. `findClosestCity()` (once the city database loads)
+3. `olsonIdToCityName()` (e.g. "Los Angeles" from "America/Los_Angeles")
+4. Fallback: "Local"
+
 ### `worldTimeSubdials` (e.g. Gaia)
 
 | Slot | Purpose                    |
@@ -92,24 +121,45 @@ behavior.
 ## Slot Override Flow
 
 ```
-URL params → buildSlotOverrides(watch)
-                 ↓
-         Record<number, TerraSlot> | undefined
-                 ↓
-         createWatchEnvironment(watch, lat, lon, getNow, tz, overrides)
-                 ↓
-         env._terraSlots  ← merged defaults + overrides
-                 ↓
+URL params ──→ buildSlotOverrides(watch)
+                  │
+                  │  1. Read user URL overrides (r1..r24 or d2..dN)
+                  │  2. For worldTimeRing: inject global location into
+                  │     best matching slot (overrides user choice there)
+                  │
+                  ↓
+         SlotOverrideResult {
+             overrides: Record<number, TerraSlot>
+             globalLocationSlot?: number
+         }
+                  ↓
+         createWatchEnvironment(watch, lat, lon, getNow, tz, overrides, globalLocationSlot)
+                  ↓
+         env._terraSlots    ← merged defaults + overrides
+         detectedTopSlot    ← globalLocationSlot (or auto-detected fallback)
+                  ↓
          Renderer reads _terraSlots for labels, channels, dots
          Engine reads _terraSlots for post-render overlays (Gaia 24hr labels)
 ```
 
+When the user changes their global location (`rebuildAllForLocation`),
+`buildSlotOverrides` is re-run for `worldTimeRing` faces so the global slot
+is recalculated. When the user changes a city via the dialog
+(`rebuildTerraForSlotChange`), `buildSlotOverrides` is also re-run to
+re-inject the global location on top of the new URL overrides.
+
 ### `buildSlotOverrides(watch: Watch)`
 
-Located in `engine-entry.ts`. Checks the watch's feature flags:
+Located in `engine-entry.ts`. Returns a `SlotOverrideResult` with the
+overrides record and (for `worldTimeRing`) the `globalLocationSlot` number.
+Checks the watch's feature flags:
 
-1. **`worldTimeRing`**: Reads `r1`..`r24` from URL. Returns overrides only
-   for slots that have URL data; unfilled slots use `TERRA_RING_DEFAULTS`.
+1. **`worldTimeRing`**: Reads `r1`..`r24` from URL as **user overrides**.
+   Then determines the best ring slot for the global location via the
+   tie-breaking algorithm (see "Global Location Override" above) and
+   injects the global location into that slot, overriding any user
+   choice there. The result always contains at least the global
+   location slot (if a location is available).
 
 2. **`worldTimeSubdials`**: Always creates slot 1 (observer), then reads
    `d2`..`dN` from URL for the remaining subdials. Slots without URL data
@@ -124,7 +174,13 @@ engine wires it up differently per feature:
 
 - **Terra**: User searches for a city → engine validates which ring slots
   (UTC offsets) are compatible → assigns to slot. Uses `validSlotsForTz()`
-  from `terra-slots.ts`.
+  from `terra-slots.ts`. When multiple slots are valid, the slot picker
+  annotates the global-location slot with a ★ marker and "(your location)"
+  label. If the user assigns to the global-location slot, the override is
+  persisted to the URL but a warning is shown ("your location may override
+  this slot"). At runtime, the global location always wins for that slot;
+  the user's choice becomes visible only if the global location later
+  moves to a different timezone.
 
 - **Gaia**: User searches for a city → always shown the subdial picker
   (Upper / Right / Lower) → assigns to chosen subdial. No timezone
@@ -142,7 +198,7 @@ face environment.
 | `src/watch/types.ts` | `Watch` interface with feature flag fields |
 | `src/watch/xml-parser.ts` | Parses `worldTimeRing`, `worldTimeSubdials`, `planetSelector` from XML |
 | `src/watch/watch-env.ts` | `TERRA_RING_DEFAULTS`, `GAIA_SUBDIAL_DEFAULTS`, creates environment with slot data |
-| `src/watch/terra-slots.ts` | Slot↔offset conversion, timezone validation for ring slots |
+| `src/watch/terra-slots.ts` | Slot↔offset conversion, timezone validation, `getStandardOffsetMinutes()`, `olsonIdToCityName()` |
 | `src/watch/renderer.ts` | Reads `_terraSlots` for city labels, channel lines, dots |
 | `src/engine-entry.ts` | `buildSlotOverrides()`, city dialog wiring, URL param I/O |
 | `src/watch/assets/terra/Terra-I.xml` | `firstRingSlot=1`, `UTRingSlot=12`, all 24 Qhand/QWedge refs |
