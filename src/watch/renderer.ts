@@ -98,14 +98,20 @@ export function buildStaticBlockCaches(
             // Draw the static block's children with internal window handling
             renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, true);
 
-            // Draw preceding window borders, THEN cut holes.
+            // Draw preceding window borders, THEN cut holes, THEN draw inner shadows.
             // The cutout erases the inner half of the border stroke,
             // leaving only the outer half visible (matching iOS).
+            // Inner shadows are drawn AFTER the holes so they paint semi-transparent
+            // gradients onto the transparent hole area — when composited at frame time,
+            // these correctly darken the wheel content showing through.
             for (const win of part.precedingWindows) {
                 drawWindowBorder(ctx, win, env);
             }
             for (const win of part.precedingWindows) {
                 cutWindowHole(ctx, win, env);
+            }
+            for (const win of part.precedingWindows) {
+                drawWindowInnerShadow(ctx, win, env);
             }
 
             part.cachedCanvas = cache;
@@ -473,7 +479,7 @@ function renderPartsWithWindows(
     }
 
     // Leftover pending windows (between-part windows with no following part)
-    // Draw borders first, then cut holes (inner half of border gets erased).
+    // Draw borders first, then cut holes, then inner shadows.
     for (const win of pendingWindows) {
         drawWindowBorder(ctx, win, env);
     }
@@ -482,8 +488,13 @@ function renderPartsWithWindows(
             cutWindowHole(ctx, win, env);
         }
     }
+    for (const win of pendingWindows) {
+        if (applyTrailingCutouts) {
+            drawWindowInnerShadow(ctx, win, env);
+        }
+    }
 
-    // Leading windows: draw borders first, then cut holes.
+    // Leading windows: draw borders first, then cut holes, then inner shadows.
     // The cutout erases the inner half of the border stroke,
     // leaving only the outer half visible (matching iOS).
     for (const win of leadingWindows) {
@@ -491,6 +502,9 @@ function renderPartsWithWindows(
     }
     for (const win of leadingWindows) {
         cutWindowHole(ctx, win, env);
+    }
+    for (const win of leadingWindows) {
+        drawWindowInnerShadow(ctx, win, env);
     }
 }
 
@@ -528,6 +542,11 @@ function renderWithWindowCutouts(
     // Cut window holes using destination-out
     for (const win of windows) {
         cutWindowHole(tctx, win, env);
+    }
+
+    // Draw inner shadows on top of the transparent holes
+    for (const win of windows) {
+        drawWindowInnerShadow(tctx, win, env);
     }
 
     // Composite temp canvas onto main context (reset transform first)
@@ -2078,20 +2097,9 @@ function drawWindowBorder(
     const cx = isPorthole ? xVal : xVal + w / 2;
     const cy = isPorthole ? -yVal : -(yVal + h / 2);
 
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Shadow
-    const shadowOpacity = evalAttr(part.shadowOpacity, env);
-    if (shadowOpacity > 0) {
-        const shadowSigma = evalAttr(part.shadowSigma, env) || 1;
-        ctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`;
-        ctx.shadowBlur = shadowSigma * 2;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = evalAttr(part.shadowOffset, env);
-    }
-
     if (border > 0) {
+        ctx.save();
+        ctx.translate(cx, cy);
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = border;
 
@@ -2103,9 +2111,138 @@ function drawWindowBorder(
         } else {
             ctx.strokeRect(-w / 2, -h / 2, w, h);
         }
+
+        ctx.restore();
+    }
+}
+/**
+ * Draw inner shadow gradients inside a window opening.
+ *
+ * Must be called AFTER cutWindowHole() so the shadow is painted onto
+ * the transparent hole area. When the static cache is composited at
+ * frame time, these semi-transparent pixels correctly darken the
+ * wheel content showing through the window.
+ *
+ * shadowSigma controls how far the shadow fades inward from the edge.
+ * shadowOffset shifts the shadow vertically:
+ *   positive = light from above → stronger shadow on bottom inner edge
+ *   negative = light from below → stronger shadow on top inner edge
+ *   zero     = uniform shadow on all inner edges
+ */
+function drawWindowInnerShadow(
+    ctx: RenderContext,
+    part: WindowPart,
+    env: Environment,
+): void {
+    const rawShadowOpacity = evalAttr(part.shadowOpacity, env);
+    if (!(rawShadowOpacity > 0)) return;
+    // Global intensity multiplier — tune to match iOS appearance
+    const shadowOpacity = rawShadowOpacity * 0.5;
+
+    const xVal = evalAttr(part.x, env);
+    const yVal = evalAttr(part.y, env);
+    const w = evalAttr(part.w, env);
+    const h = evalAttr(part.h, env);
+    const isPorthole = part.windowType === 'porthole';
+
+    if (w <= 0 || h <= 0) return;
+
+    const cx = isPorthole ? xVal : xVal + w / 2;
+    const cy = isPorthole ? -yVal : -(yVal + h / 2);
+
+    const shadowSigma = evalAttr(part.shadowSigma, env) || 1;
+    const shadowOffset = evalAttr(part.shadowOffset, env);
+    // Fade distance — extends to 4σ for a very gradual tail
+    const fade = shadowSigma * 4;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Clip to window interior
+    ctx.beginPath();
+    if (isPorthole) {
+        const r = Math.min(w, h) / 2;
+        ctx.arc(0, 0, r, 0, 2 * Math.PI);
+    } else {
+        ctx.rect(-w / 2, -h / 2, w, h);
+    }
+    ctx.clip();
+
+    // Compute per-edge opacity multipliers based on shadowOffset.
+    // Positive offset = light from above = stronger shadow on bottom edge.
+    const offsetFactor = fade > 0 ? Math.min(Math.abs(shadowOffset) / fade, 0.8) : 0;
+    const topMul    = shadowOffset > 0 ? 1 - offsetFactor : 1 + offsetFactor;
+    const bottomMul = shadowOffset > 0 ? 1 + offsetFactor : 1 - offsetFactor;
+
+    if (isPorthole) {
+        // Radial gradient from the edge inward
+        const r = Math.min(w, h) / 2;
+        const innerR = Math.max(0, r - fade);
+        const grad = ctx.createRadialGradient(0, 0, innerR, 0, 0, r);
+        addGaussianStops(grad, shadowOpacity);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, 2 * Math.PI);
+        ctx.fill();
+    } else {
+        // Linear gradients along each edge
+        const hw = w / 2;
+        const hh = h / 2;
+
+        // Top edge (gradient from top downward)
+        const topOpacity = Math.min(shadowOpacity * topMul, 1);
+        if (topOpacity > 0) {
+            const grad = ctx.createLinearGradient(0, -hh, 0, -hh + fade);
+            addGaussianStops(grad, topOpacity);
+            ctx.fillStyle = grad;
+            ctx.fillRect(-hw, -hh, w, fade);
+        }
+
+        // Bottom edge (gradient from bottom upward)
+        const bottomOpacity = Math.min(shadowOpacity * bottomMul, 1);
+        if (bottomOpacity > 0) {
+            const grad = ctx.createLinearGradient(0, hh, 0, hh - fade);
+            addGaussianStops(grad, bottomOpacity);
+            ctx.fillStyle = grad;
+            ctx.fillRect(-hw, hh - fade, w, fade);
+        }
+
+        // Left edge (gradient from left rightward)
+        if (shadowOpacity > 0) {
+            const grad = ctx.createLinearGradient(-hw, 0, -hw + fade, 0);
+            addGaussianStops(grad, shadowOpacity);
+            ctx.fillStyle = grad;
+            ctx.fillRect(-hw, -hh, fade, h);
+        }
+
+        // Right edge (gradient from right leftward)
+        if (shadowOpacity > 0) {
+            const grad = ctx.createLinearGradient(hw, 0, hw - fade, 0);
+            addGaussianStops(grad, shadowOpacity);
+            ctx.fillStyle = grad;
+            ctx.fillRect(hw - fade, -hh, fade, h);
+        }
     }
 
     ctx.restore();
+}
+
+/**
+ * Add color stops to a gradient that approximate a Gaussian falloff.
+ * Position 0 = peak (at the window edge), position 1 = tail (inward).
+ * Uses e^(-x²/2) sampled at multiple points for a smooth fade.
+ */
+function addGaussianStops(grad: CanvasGradient, peakOpacity: number): void {
+    // Sample the Gaussian at regular intervals across 4σ.
+    // e^(-(t*4)²/2) where t goes from 0 to 1 maps to 0σ to 4σ.
+    const nStops = 8;
+    for (let i = 0; i <= nStops; i++) {
+        const t = i / nStops;                    // 0 → 1  (edge → center)
+        const x = t * 4;                          // 0 → 4σ
+        const gaussian = Math.exp(-x * x / 2);    // 1.0 → 0.0003 (smooth tail)
+        const alpha = peakOpacity * gaussian;
+        grad.addColorStop(t, `rgba(0,0,0,${alpha})`);
+    }
 }
 
 // ============================================================================

@@ -13610,6 +13610,9 @@
         for (const win of part.precedingWindows) {
           cutWindowHole(ctx, win, env);
         }
+        for (const win of part.precedingWindows) {
+          drawWindowInnerShadow(ctx, win, env);
+        }
         part.cachedCanvas = cache;
       } else {
         pendingWindows.length = 0;
@@ -13830,11 +13833,19 @@
         cutWindowHole(ctx, win, env);
       }
     }
+    for (const win of pendingWindows) {
+      if (applyTrailingCutouts) {
+        drawWindowInnerShadow(ctx, win, env);
+      }
+    }
     for (const win of leadingWindows) {
       drawWindowBorder(ctx, win, env);
     }
     for (const win of leadingWindows) {
       cutWindowHole(ctx, win, env);
+    }
+    for (const win of leadingWindows) {
+      drawWindowInnerShadow(ctx, win, env);
     }
   }
   function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale, images) {
@@ -13848,6 +13859,9 @@
     }
     for (const win of windows) {
       cutWindowHole(tctx, win, env);
+    }
+    for (const win of windows) {
+      drawWindowInnerShadow(tctx, win, env);
     }
     ctx.save();
     ctx.resetTransform();
@@ -14845,17 +14859,9 @@
     if (w <= 0 || h <= 0) return;
     const cx = isPorthole ? xVal : xVal + w / 2;
     const cy = isPorthole ? -yVal : -(yVal + h / 2);
-    ctx.save();
-    ctx.translate(cx, cy);
-    const shadowOpacity = evalAttr(part.shadowOpacity, env);
-    if (shadowOpacity > 0) {
-      const shadowSigma = evalAttr(part.shadowSigma, env) || 1;
-      ctx.shadowColor = `rgba(0,0,0,${shadowOpacity})`;
-      ctx.shadowBlur = shadowSigma * 2;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = evalAttr(part.shadowOffset, env);
-    }
     if (border > 0) {
+      ctx.save();
+      ctx.translate(cx, cy);
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = border;
       if (isPorthole) {
@@ -14866,8 +14872,87 @@
       } else {
         ctx.strokeRect(-w / 2, -h / 2, w, h);
       }
+      ctx.restore();
+    }
+  }
+  function drawWindowInnerShadow(ctx, part, env) {
+    const rawShadowOpacity = evalAttr(part.shadowOpacity, env);
+    if (!(rawShadowOpacity > 0)) return;
+    const shadowOpacity = rawShadowOpacity * 0.5;
+    const xVal = evalAttr(part.x, env);
+    const yVal = evalAttr(part.y, env);
+    const w = evalAttr(part.w, env);
+    const h = evalAttr(part.h, env);
+    const isPorthole = part.windowType === "porthole";
+    if (w <= 0 || h <= 0) return;
+    const cx = isPorthole ? xVal : xVal + w / 2;
+    const cy = isPorthole ? -yVal : -(yVal + h / 2);
+    const shadowSigma = evalAttr(part.shadowSigma, env) || 1;
+    const shadowOffset = evalAttr(part.shadowOffset, env);
+    const fade = shadowSigma * 4;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    if (isPorthole) {
+      const r = Math.min(w, h) / 2;
+      ctx.arc(0, 0, r, 0, 2 * Math.PI);
+    } else {
+      ctx.rect(-w / 2, -h / 2, w, h);
+    }
+    ctx.clip();
+    const offsetFactor = fade > 0 ? Math.min(Math.abs(shadowOffset) / fade, 0.8) : 0;
+    const topMul = shadowOffset > 0 ? 1 - offsetFactor : 1 + offsetFactor;
+    const bottomMul = shadowOffset > 0 ? 1 + offsetFactor : 1 - offsetFactor;
+    if (isPorthole) {
+      const r = Math.min(w, h) / 2;
+      const innerR = Math.max(0, r - fade);
+      const grad = ctx.createRadialGradient(0, 0, innerR, 0, 0, r);
+      addGaussianStops(grad, shadowOpacity);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, 2 * Math.PI);
+      ctx.fill();
+    } else {
+      const hw = w / 2;
+      const hh = h / 2;
+      const topOpacity = Math.min(shadowOpacity * topMul, 1);
+      if (topOpacity > 0) {
+        const grad = ctx.createLinearGradient(0, -hh, 0, -hh + fade);
+        addGaussianStops(grad, topOpacity);
+        ctx.fillStyle = grad;
+        ctx.fillRect(-hw, -hh, w, fade);
+      }
+      const bottomOpacity = Math.min(shadowOpacity * bottomMul, 1);
+      if (bottomOpacity > 0) {
+        const grad = ctx.createLinearGradient(0, hh, 0, hh - fade);
+        addGaussianStops(grad, bottomOpacity);
+        ctx.fillStyle = grad;
+        ctx.fillRect(-hw, hh - fade, w, fade);
+      }
+      if (shadowOpacity > 0) {
+        const grad = ctx.createLinearGradient(-hw, 0, -hw + fade, 0);
+        addGaussianStops(grad, shadowOpacity);
+        ctx.fillStyle = grad;
+        ctx.fillRect(-hw, -hh, fade, h);
+      }
+      if (shadowOpacity > 0) {
+        const grad = ctx.createLinearGradient(hw, 0, hw - fade, 0);
+        addGaussianStops(grad, shadowOpacity);
+        ctx.fillStyle = grad;
+        ctx.fillRect(hw - fade, -hh, fade, h);
+      }
     }
     ctx.restore();
+  }
+  function addGaussianStops(grad, peakOpacity) {
+    const nStops = 8;
+    for (let i = 0; i <= nStops; i++) {
+      const t = i / nStops;
+      const x = t * 4;
+      const gaussian = Math.exp(-x * x / 2);
+      const alpha = peakOpacity * gaussian;
+      grad.addColorStop(t, `rgba(0,0,0,${alpha})`);
+    }
   }
   function drawTerraRingWithKnockouts(ctx, part, env, images) {
     const terraSlots = env._terraSlots;
