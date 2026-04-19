@@ -94,8 +94,8 @@
   <terminator   name='term'         x=' 0'  y='termY'  modes='front'   radius='termR+1' leavesPerQuadrant='termLeaves' incremental='0' leafBorderColor='0xff383838' leafFillColor='0xff080808' leafAnchorRadius='0' update='60' updateOffset='0' phaseAngle='moonAgeAngle()' rotation='moonRelativePositionAngle()'/>
   <window	name='term hole'    x= '0'  y='termY'  w='termR*2' h='termR*2' type='porthole'  border='1' strokeColor='0x7f202020' />
 
-  <window	name='mr am/pm'	    x='-rsampmX-21'	y='riseSetY-5'	    modes='front' w='17' h='12' border='0.5' strokeColor='black' />
-  <window	name='ms am/pm'	    x='rsampmX+4'	y='riseSetY-5'	    modes='front' w='17' h='12' border='0.5' strokeColor='black' />
+  <window	name='mr am/pm'	    x='-rsampmX-21'	y='riseSetY-5'	    modes='front' w='17' h='12' border='0.5' strokeColor='black' shadowOpacity='0.4' shadowSigma='1.5' shadowOffset='-1' shadowOffsetX='-1' />
+  <window	name='ms am/pm'	    x='rsampmX+4'	y='riseSetY-5'	    modes='front' w='17' h='12' border='0.5' strokeColor='black' shadowOpacity='0.4' shadowSigma='1.5' shadowOffset='-1' shadowOffsetX='-1' />
   <window	name='month win b'  x='monthX+24'	y='dateY-7' modes='front' w='42' h='16' border='2  ' strokeColor='0x7f202020' shadowOpacity='0.4' shadowSigma='1.5' shadowOffset='0' />  <!-- month -->
   <window	name='day win b'    x='firstDateX+25'	y='dateY-7' modes='front' w='24' h='16' border='2  ' strokeColor='0x7f202020' shadowOpacity='0.4' shadowSigma='1.5' shadowOffset='0' />  <!-- days -->
   <window	name='wkday win b'  x='-37' y='-weekdayRadius+10'    modes='front' w='74' h='13' border='2  ' strokeColor='0x7f202020' shadowOpacity='0.3' shadowSigma='1.5' shadowOffset='0' />  <!-- weekday -->
@@ -143,8 +143,6 @@
 -->
   </static>
 
-  <Image        name='mr winsh b'     x='-rsampmX-13' y='riseSetY+1' modes='front' src='pm-window-border-shadow.png' />
-  <Image        name='ms winsh b'     x='rsampmX+12' y='riseSetY+1' modes='front' src='pm-window-border-shadow.png' />
 
     <Qhand	name='nxt rs hr'    x='riseX'    y='riseSetY'	z='1.8' thick='0.8' modes='front'	length=' 18' width='1.2'	update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayHour12ValueAngle() : 0'/>
     <Qhand	name='nxt rs mn'    x='riseX'    y='riseSetY'	z='1.8' thick='0.8' modes='front'	length=' 23' width='1'	update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayMinuteValueAngle() : 0'/>

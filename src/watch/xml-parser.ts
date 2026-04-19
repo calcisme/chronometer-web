@@ -429,6 +429,7 @@ function parseWindow(el: Element): WindowPart {
         shadowOpacity: attrExpr(el, 'shadowOpacity'),
         shadowSigma: attrExpr(el, 'shadowSigma'),
         shadowOffset: attrExpr(el, 'shadowOffset'),
+        shadowOffsetX: attrExpr(el, 'shadowOffsetX'),
     };
 }
 

@@ -2168,11 +2168,18 @@ function drawWindowInnerShadow(
     }
     ctx.clip();
 
-    // Compute per-edge opacity multipliers based on shadowOffset.
-    // Positive offset = light from above = stronger shadow on bottom edge.
+    // Compute per-edge opacity multipliers based on shadowOffset (vertical)
+    // and shadowOffsetX (horizontal).
+    // Positive vertical offset = light from above = stronger shadow on bottom edge.
+    // Negative horizontal offset = light from right = stronger shadow on left edge.
     const offsetFactor = fade > 0 ? Math.min(Math.abs(shadowOffset) / fade, 0.8) : 0;
     const topMul    = shadowOffset > 0 ? 1 - offsetFactor : 1 + offsetFactor;
     const bottomMul = shadowOffset > 0 ? 1 + offsetFactor : 1 - offsetFactor;
+
+    const shadowOffsetX = evalAttr(part.shadowOffsetX, env);
+    const offsetFactorX = fade > 0 ? Math.min(Math.abs(shadowOffsetX) / fade, 0.8) : 0;
+    const leftMul  = shadowOffsetX > 0 ? 1 - offsetFactorX : 1 + offsetFactorX;
+    const rightMul = shadowOffsetX > 0 ? 1 + offsetFactorX : 1 - offsetFactorX;
 
     if (isPorthole) {
         // Radial gradient from the edge inward
@@ -2208,17 +2215,19 @@ function drawWindowInnerShadow(
         }
 
         // Left edge (gradient from left rightward)
-        if (shadowOpacity > 0) {
+        const leftOpacity = Math.min(shadowOpacity * leftMul, 1);
+        if (leftOpacity > 0) {
             const grad = ctx.createLinearGradient(-hw, 0, -hw + fade, 0);
-            addGaussianStops(grad, shadowOpacity);
+            addGaussianStops(grad, leftOpacity);
             ctx.fillStyle = grad;
             ctx.fillRect(-hw, -hh, fade, h);
         }
 
         // Right edge (gradient from right leftward)
-        if (shadowOpacity > 0) {
+        const rightOpacity = Math.min(shadowOpacity * rightMul, 1);
+        if (rightOpacity > 0) {
             const grad = ctx.createLinearGradient(hw, 0, hw - fade, 0);
-            addGaussianStops(grad, shadowOpacity);
+            addGaussianStops(grad, rightOpacity);
             ctx.fillStyle = grad;
             ctx.fillRect(hw - fade, -hh, fade, h);
         }

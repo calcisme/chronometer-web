@@ -284,6 +284,7 @@ export interface WindowPart extends PartBase {
     shadowOpacity?: ASTNode;
     shadowSigma?: ASTNode;
     shadowOffset?: ASTNode;
+    shadowOffsetX?: ASTNode;
 }
 
 // ============================================================================
