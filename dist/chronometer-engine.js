@@ -16568,6 +16568,16 @@
       }
       updateLocationDisplay();
       updateTimezoneDisplay();
+      requestAnimationFrame(() => {
+        const appEl = grid.parentElement;
+        const W = appEl.clientWidth;
+        const totalH = appEl.clientHeight;
+        const locPanelH = document.getElementById("location-panel")?.offsetHeight ?? 0;
+        const tbH = document.getElementById("time-bar")?.offsetHeight ?? 0;
+        const psH = document.getElementById("planet-selector")?.offsetHeight ?? 0;
+        const ccH = document.getElementById("change-cities-btn")?.offsetHeight ?? 0;
+        onGridResize(W, totalH - locPanelH - tbH - psH - ccH);
+      });
       stopScheduler();
       startScheduler();
     }

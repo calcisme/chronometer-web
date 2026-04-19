@@ -1286,6 +1286,19 @@ async function main() {
         }
         updateLocationDisplay();
         updateTimezoneDisplay();
+        // The location panel may have changed height (e.g. city name now shown).
+        // The ResizeObserver watches #app (viewport-sized) so it won't fire.
+        // Defer a manual resize recalc so the face size accounts for the new panel height.
+        requestAnimationFrame(() => {
+            const appEl = grid.parentElement!;
+            const W = appEl.clientWidth;
+            const totalH = appEl.clientHeight;
+            const locPanelH = document.getElementById('location-panel')?.offsetHeight ?? 0;
+            const tbH = document.getElementById('time-bar')?.offsetHeight ?? 0;
+            const psH = document.getElementById('planet-selector')?.offsetHeight ?? 0;
+            const ccH = document.getElementById('change-cities-btn')?.offsetHeight ?? 0;
+            onGridResize(W, totalH - locPanelH - tbH - psH - ccH);
+        });
         // Kick the scheduler to start animating immediately
         stopScheduler();
         startScheduler();
