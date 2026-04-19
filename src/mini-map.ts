@@ -111,14 +111,8 @@ export async function renderGlobe(canvas: HTMLCanvasElement, lat: number, lon: n
     ctx.putImageData(imgData, 0, 0);
 
     // Marker dot at center (globe is centered on the location)
-    const dotR = Math.max(3, r * 0.06);
-    ctx.beginPath();
-    ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
     ctx.fillStyle = '#ff4444';
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
 
     // Subtle edge ring
     ctx.beginPath();

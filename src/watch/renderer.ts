@@ -1008,12 +1008,17 @@ function drawQDial(
  *   X offset = +z / 4.3 (light from left → shadow to right)
  *   Y offset = +z / 2.15 (light from above → shadow below)
  *
+ * For image hands (isImageHand=true), the thin-hand adjustment is skipped
+ * because drawImage() is a single draw call and doesn't suffer from
+ * per-primitive shadow stacking like QHand's multiple strokes/fills.
+ *
  * Returns true if shadow was set up and needs to be cleared after drawing.
  */
 function setupHandShadow(
     ctx: RenderContext,
     part: QHandPart,
     env: Environment,
+    isImageHand = false,
 ): boolean {
     const z = evalAttr(part.z, env);
     if (!z || z === 0) return false;
@@ -1024,9 +1029,10 @@ function setupHandShadow(
     // iOS: thin hands get sharper shadows + higher opacity (works for pre-rendered bitmaps).
     // Canvas: each stroke/fill creates its own shadow, so thin hands look too harsh.
     // We invert: thin hands get MORE blur and LESS opacity for a softer, more diffuse look.
+    // Image hands: drawImage() is a single call — no stacking problem — use full opacity.
     let sigma = (z + 2) / 2;
     let percentOpacity = 40;
-    if (thick < 3.0) {
+    if (thick < 3.0 && !isImageHand) {
         sigma *= 1.25;                                 // more diffuse for thin hands
         percentOpacity *= thick / 3.0;                 // fade opacity for thin hands
     }
@@ -1895,7 +1901,7 @@ function drawImageHand(
     const drawH = bitmap.height * imgScale;
 
     ctx.save();
-    setupHandShadow(ctx, part, env);
+    setupHandShadow(ctx, part, env, /* isImageHand */ true);
     ctx.translate(x, y);
 
     if (offsetRadius > 0) {

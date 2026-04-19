@@ -14174,13 +14174,13 @@
     }
     ctx.restore();
   }
-  function setupHandShadow(ctx, part, env) {
+  function setupHandShadow(ctx, part, env, isImageHand = false) {
     const z = evalAttr(part.z, env);
     if (!z || z === 0) return false;
     const thick = evalAttr(part.thick, env) || 3;
     let sigma = (z + 2) / 2;
     let percentOpacity = 40;
-    if (thick < 3) {
+    if (thick < 3 && !isImageHand) {
       sigma *= 1.25;
       percentOpacity *= thick / 3;
     }
@@ -14726,7 +14726,13 @@
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;
     ctx.save();
-    setupHandShadow(ctx, part, env);
+    setupHandShadow(
+      ctx,
+      part,
+      env,
+      /* isImageHand */
+      true
+    );
     ctx.translate(x, y);
     if (offsetRadius > 0) {
       const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
@@ -16281,14 +16287,8 @@
       }
     }
     ctx.putImageData(imgData, 0, 0);
-    const dotR = Math.max(3, r * 0.06);
-    ctx.beginPath();
-    ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
     ctx.fillStyle = "#ff4444";
-    ctx.fill();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.strokeStyle = "rgba(100, 160, 255, 0.2)";
