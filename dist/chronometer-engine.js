@@ -1520,6 +1520,8 @@
     for (const part of parts) {
       if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
         out.push(createHandState(part, env, now, getNow));
+      } else if (part.type === "CalendarRowCover") {
+        out.push(createCalendarCoverState(part, env, now, getNow));
       } else if (part.type === "Static") {
         collectDynamicParts(part.children, env, now, out, getNow);
       }
@@ -1562,6 +1564,60 @@
       } : null,
       xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
       yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
+      updateIntervalMs,
+      nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
+      animSpeed,
+      getNow
+    };
+  }
+  function computeCalendarCoverOffset(part, env) {
+    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
+    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
+    const monthNum = (env.functions.get("monthNumber")?.() ?? 0) + 1;
+    const yearNum = env.functions.get("yearNumber")?.() ?? 2024;
+    const firstOfMonth = new Date(yearNum, monthNum - 1, 1);
+    const thisMonthStartCol = (7 + firstOfMonth.getDay() - calendarWeekdayStart) % 7;
+    const daysInMonth2 = new Date(yearNum, monthNum, 0).getDate();
+    const daysInPrevMonth = new Date(yearNum, monthNum - 1, 0).getDate();
+    const nextMonth = new Date(yearNum, monthNum, 1);
+    const nextMonthStartCol = (7 + nextMonth.getDay() - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((daysInMonth2 + thisMonthStartCol) / 7);
+    const coverType = part.coverType || "";
+    let columnMotion = 7;
+    if (coverType === "row1Left") {
+      columnMotion = thisMonthStartCol + 22 - daysInPrevMonth;
+      if (columnMotion < -4) columnMotion = -4;
+    } else if (coverType === "row1Right") {
+      columnMotion = thisMonthStartCol + 26 - daysInPrevMonth;
+      if (columnMotion < -5) columnMotion = -5;
+    } else if (coverType === "row56Right") {
+      columnMotion = nextMonthStartRow === 4 ? nextMonthStartCol : 7;
+    } else if (coverType === "row6Left") {
+      if (nextMonthStartRow === 5) {
+        columnMotion = nextMonthStartCol;
+      } else if (nextMonthStartRow === 4) {
+        columnMotion = nextMonthStartCol - 7;
+      } else {
+        columnMotion = 7;
+      }
+    }
+    return Math.round(columnMotion * cellWidth);
+  }
+  function createCalendarCoverState(part, env, now, getNow) {
+    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
+    const updateIntervalMs = updateIntervalSec * 1e3;
+    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
+    const initialXOffset = computeCalendarCoverOffset(part, env);
+    part.dynamicState = {
+      currentAngle: 0,
+      currentXMotion: initialXOffset
+    };
+    return {
+      part,
+      angle: makeAnimatingValue(0, now),
+      offsetAngle: null,
+      xMotion: makeAnimatingValue(initialXOffset, now),
+      yMotion: null,
       updateIntervalMs,
       nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
       animSpeed,
@@ -1621,6 +1677,10 @@
             const newYM = evalAttr(qhand.yMotion, env);
             startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
           }
+        }
+        if (state.part.type === "CalendarRowCover" && state.xMotion) {
+          const newXM = computeCalendarCoverOffset(state.part, env);
+          startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
         }
       }
       const angle = interpolate(state.angle, now);
@@ -15111,59 +15171,58 @@
     const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
     const cellHeight = env.variables.get("calendarCellHeight") ?? 11;
     const calRadius = evalAttr(part.calendarRadius, env) || 117;
-    const calYOffset = env.variables.get("calendarYOffset") ?? 51;
-    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
-    const getLocalCS = () => {
-      const cs2 = {
-        month: (env.functions.get("monthNumber")?.() ?? 0) + 1,
-        // 1-indexed
-        year: env.functions.get("yearNumber")?.() ?? 2024,
-        era: env.functions.get("eraNumber")?.() ?? 1,
-        day: (env.functions.get("dayNumber")?.() ?? 0) + 1
-        // 1-indexed
-      };
-      return cs2;
-    };
-    const cs = getLocalCS();
-    const firstOfMonth = new Date(cs.year, cs.month - 1, 1);
-    const firstWeekday = firstOfMonth.getDay();
-    const firstCol = (7 + firstWeekday - calendarWeekdayStart) % 7;
-    const daysInMonth2 = new Date(cs.year, cs.month, 0).getDate();
-    const daysInPrevMonth = new Date(cs.year, cs.month - 1, 0).getDate();
-    const nextMonth = new Date(cs.year, cs.month, 1);
-    const nextWeekday = nextMonth.getDay();
-    const nextFirstCol = (7 + nextWeekday - calendarWeekdayStart) % 7;
-    const nextMonthStartRow = Math.floor((daysInMonth2 + firstCol) / 7);
     const coverType = part.coverType || "";
+    const xOffset = part.dynamicState?.currentXMotion ?? 0;
+    const gridTop = -(calRadius - calHeight / 2);
+    let rowY;
+    if (coverType === "row56Right" || coverType === "row6Left") {
+      rowY = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2;
+    } else {
+      rowY = gridTop - calHeight / 2 + cellHeight / 2;
+    }
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(x + xOffset, y);
     ctx.font = `${fontSize}px "${fontName}"`;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    const gridTop = -(calRadius - calHeight / 2);
+    ctx.beginPath();
+    ctx.rect(-calWidth / 2 - xOffset - 1, gridTop - calHeight / 2 - 2, calWidth + 2, calHeight + 4);
+    ctx.clip();
     switch (coverType) {
       case "row1Left": {
-        if (firstCol > 0) {
-          for (let col = 0; col < firstCol && col < 4; col++) {
-            const day = daysInPrevMonth - firstCol + 1 + col;
-            const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-            const cy = gridTop - calHeight / 2 + cellHeight / 2;
-            const cyAdj = cy - 1;
-            ctx.fillStyle = bgColor;
-            ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
-            ctx.fillStyle = fontColor;
-            ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
-          }
+        const cy = gridTop - calHeight / 2 + cellHeight / 2;
+        const cyAdj = cy - 1;
+        for (let col = 0; col < 4; col++) {
+          const day = 23 + col;
+          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+          ctx.fillStyle = fontColor;
+          ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
         }
         break;
       }
       case "row1Right": {
-        if (firstCol > 4) {
-          for (let col = 4; col < firstCol; col++) {
-            const day = daysInPrevMonth - firstCol + 1 + col;
+        const cy = gridTop - calHeight / 2 + cellHeight / 2;
+        const cyAdj = cy - 1;
+        for (let col = 0; col < 5; col++) {
+          const day = 27 + col;
+          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+          ctx.fillStyle = fontColor;
+          ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+        }
+        break;
+      }
+      case "row56Right": {
+        for (let row = 0; row < 2; row++) {
+          for (let col = 0; col < 7; col++) {
+            const day = row === 0 ? col + 1 : col + 8;
             const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-            const cy = gridTop - calHeight / 2 + cellHeight / 2;
-            const cyAdj = cy - 1;
+            const gridRow = 4 + row;
+            const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
+            const cyAdj = cy - (1 - gridRow / 5);
             ctx.fillStyle = bgColor;
             ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
             ctx.fillStyle = fontColor;
@@ -15172,25 +15231,17 @@
         }
         break;
       }
-      case "row6Left":
-      case "row56Right": {
-        const targetRow = coverType === "row6Left" ? 5 : 4;
-        if (nextMonthStartRow <= targetRow) {
-          let nextDay = 1;
-          const startRow = nextMonthStartRow;
-          for (let row = startRow; row < 6; row++) {
-            const startCol = row === startRow ? nextFirstCol : 0;
-            for (let col = startCol; col < 7; col++) {
-              const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-              const cy = gridTop - calHeight / 2 + row * cellHeight + cellHeight / 2;
-              const cyAdj = cy - (1 - row / 5);
-              ctx.fillStyle = bgColor;
-              ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
-              ctx.fillStyle = fontColor;
-              ctx.fillText(String(nextDay), cx, cyAdj + textVisualCenterY(ctx, String(nextDay)));
-              nextDay++;
-            }
-          }
+      case "row6Left": {
+        for (let col = 0; col < 7; col++) {
+          const day = col + 1;
+          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+          const gridRow = 5;
+          const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
+          const cyAdj = cy - (1 - gridRow / 5);
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+          ctx.fillStyle = fontColor;
+          ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
         }
         break;
       }

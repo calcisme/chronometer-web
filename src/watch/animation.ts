@@ -18,7 +18,7 @@
  * - Otherwise, use the normal speed-based duration (slow parts).
  */
 
-import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart } from './types.js';
+import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, CalendarRowCoverPart } from './types.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './watch-env.js';
 
@@ -119,6 +119,8 @@ function collectDynamicParts(
     for (const part of parts) {
         if (part.type === 'QHand' || part.type === 'Wheel' || part.type === 'QWedge') {
             out.push(createHandState(part, env, now, getNow));
+        } else if (part.type === 'CalendarRowCover') {
+            out.push(createCalendarCoverState(part as CalendarRowCoverPart, env, now, getNow));
         } else if (part.type === 'Static') {
             collectDynamicParts(part.children, env, now, out, getNow);
         }
@@ -176,6 +178,88 @@ function createHandState(
         } : null,
         xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
         yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
+        updateIntervalMs,
+        nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
+        animSpeed,
+        getNow,
+    };
+}
+
+/**
+ * Compute the xOffset for a CalendarRowCover part.
+ * Ported from iOS calendarRowCoverOffsetForType / calendarRowUnderlayOffsetForType.
+ */
+function computeCalendarCoverOffset(
+    part: CalendarRowCoverPart,
+    env: Environment,
+): number {
+    const calendarWeekdayStart = env.functions.get('calendarWeekdayStart')?.() ?? 0;
+    const cellWidth = env.variables.get('calendarCellWidth') ?? 13.3;
+
+    const monthNum = (env.functions.get('monthNumber')?.() ?? 0) + 1;
+    const yearNum = env.functions.get('yearNumber')?.() ?? 2024;
+
+    const firstOfMonth = new Date(yearNum, monthNum - 1, 1);
+    const thisMonthStartCol = (7 + firstOfMonth.getDay() - calendarWeekdayStart) % 7;
+
+    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+    const daysInPrevMonth = new Date(yearNum, monthNum - 1, 0).getDate();
+
+    const nextMonth = new Date(yearNum, monthNum, 1);
+    const nextMonthStartCol = (7 + nextMonth.getDay() - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((daysInMonth + thisMonthStartCol) / 7);
+
+    const coverType = part.coverType || '';
+    let columnMotion = 7;
+
+    if (coverType === 'row1Left') {
+        columnMotion = thisMonthStartCol + 22 - daysInPrevMonth;
+        if (columnMotion < -4) columnMotion = -4;
+    } else if (coverType === 'row1Right') {
+        columnMotion = thisMonthStartCol + 26 - daysInPrevMonth;
+        if (columnMotion < -5) columnMotion = -5;
+    } else if (coverType === 'row56Right') {
+        columnMotion = nextMonthStartRow === 4 ? nextMonthStartCol : 7;
+    } else if (coverType === 'row6Left') {
+        if (nextMonthStartRow === 5) {
+            columnMotion = nextMonthStartCol;
+        } else if (nextMonthStartRow === 4) {
+            columnMotion = nextMonthStartCol - 7;
+        } else {
+            columnMotion = 7;
+        }
+    }
+
+    return Math.round(columnMotion * cellWidth);
+}
+
+/**
+ * Create animation state for a CalendarRowCover part.
+ * These parts animate via xMotion (horizontal sliding) — no angle.
+ */
+function createCalendarCoverState(
+    part: CalendarRowCoverPart,
+    env: Environment,
+    now: number,
+    getNow: () => Date,
+): HandState {
+    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
+    const updateIntervalMs = updateIntervalSec * 1000;
+    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1.0;
+
+    const initialXOffset = computeCalendarCoverOffset(part, env);
+
+    part.dynamicState = {
+        currentAngle: 0,
+        currentXMotion: initialXOffset,
+    };
+
+    return {
+        part,
+        angle: makeAnimatingValue(0, now),
+        offsetAngle: null,
+        xMotion: makeAnimatingValue(initialXOffset, now),
+        yMotion: null,
         updateIntervalMs,
         nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
         animSpeed,
@@ -280,7 +364,7 @@ export function tickAnimations(
                 state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
             }
 
-            // Evaluate xMotion/yMotion (QHand only, calendar day-indicator wires)
+            // Evaluate xMotion/yMotion (QHand day-indicator wires)
             if (state.part.type === 'QHand') {
                 const qhand = state.part as QHandPart;
                 if (state.xMotion && qhand.xMotion) {
@@ -291,6 +375,11 @@ export function tickAnimations(
                     const newYM = evalAttr(qhand.yMotion, env);
                     startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
                 }
+            }
+            // CalendarRowCover xMotion — recompute offset from current month
+            if (state.part.type === 'CalendarRowCover' && state.xMotion) {
+                const newXM = computeCalendarCoverOffset(state.part as CalendarRowCoverPart, env);
+                startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
             }
         }
 
