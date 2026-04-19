@@ -14173,6 +14173,24 @@
     }
     ctx.restore();
   }
+  function setupHandShadow(ctx, part, env) {
+    const z = evalAttr(part.z, env);
+    if (!z || z === 0) return false;
+    const thick = evalAttr(part.thick, env) || 3;
+    let sigma = (z + 2) / 2;
+    let percentOpacity = 40;
+    if (thick < 3) {
+      sigma *= 1.25;
+      percentOpacity *= thick / 3;
+    }
+    const transform = ctx.getTransform();
+    const scale = Math.abs(transform.a);
+    ctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
+    ctx.shadowBlur = sigma * scale;
+    ctx.shadowOffsetX = z / 4.3 * scale;
+    ctx.shadowOffsetY = z / 2.15 * scale;
+    return true;
+  }
   function drawQHand(ctx, part, env) {
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
@@ -14208,6 +14226,7 @@
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
     const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
     ctx.save();
+    const hasShadow = setupHandShadow(ctx, part, env);
     ctx.translate(x, y);
     if (part.dynamicState) {
       const xm = part.dynamicState.currentXMotion ?? 0;
@@ -14706,6 +14725,7 @@
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;
     ctx.save();
+    setupHandShadow(ctx, part, env);
     ctx.translate(x, y);
     if (offsetRadius > 0) {
       const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;

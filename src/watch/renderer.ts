@@ -999,6 +999,61 @@ function drawQDial(
 // QHand — drawn clock hand
 // ============================================================================
 
+/**
+ * Set up Canvas shadow properties for a hand with z > 0.
+ *
+ * Matches the iOS shadow algorithm from makeOneShadow.pl:
+ *   sigma = (z + 2) / 2, reduced for thin hands (thick < 3)
+ *   opacity = 50%, increased to 100% for thin hands
+ *   X offset = +z / 4.3 (light from left → shadow to right)
+ *   Y offset = +z / 2.15 (light from above → shadow below)
+ *
+ * Returns true if shadow was set up and needs to be cleared after drawing.
+ */
+function setupHandShadow(
+    ctx: RenderContext,
+    part: QHandPart,
+    env: Environment,
+): boolean {
+    const z = evalAttr(part.z, env);
+    if (!z || z === 0) return false;
+
+    const thick = evalAttr(part.thick, env) || 3;
+
+    // Shadow blur sigma — adapted from iOS makeOneShadow.pl.
+    // iOS: thin hands get sharper shadows + higher opacity (works for pre-rendered bitmaps).
+    // Canvas: each stroke/fill creates its own shadow, so thin hands look too harsh.
+    // We invert: thin hands get MORE blur and LESS opacity for a softer, more diffuse look.
+    let sigma = (z + 2) / 2;
+    let percentOpacity = 40;
+    if (thick < 3.0) {
+        sigma *= 1.25;                                 // more diffuse for thin hands
+        percentOpacity *= thick / 3.0;                 // fade opacity for thin hands
+    }
+
+    // Canvas shadowBlur and offsets are in the untransformed canvas pixel space.
+    // We need to multiply by the current scale to convert from XML units.
+    const transform = ctx.getTransform();
+    const scale = Math.abs(transform.a);  // Assumes uniform scaling
+
+    ctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
+    ctx.shadowBlur = sigma * scale;
+    // iOS: xOffset = +z/4.3, yOffset = -z/2.15 (iOS Y-up)
+    // Canvas: Y is down, so yOffset = +z/2.15
+    ctx.shadowOffsetX = (z / 4.3) * scale;
+    ctx.shadowOffsetY = (z / 2.15) * scale;
+
+    return true;
+}
+
+/** Clear shadow properties after drawing a hand. */
+function clearHandShadow(ctx: RenderContext): void {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+}
+
 function drawQHand(
     ctx: CanvasRenderingContext2D,
     part: QHandPart,
@@ -1054,6 +1109,7 @@ function drawQHand(
     const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
 
     ctx.save();
+    const hasShadow = setupHandShadow(ctx, part, env);
     ctx.translate(x, y);
 
     // Apply xMotion/yMotion linear translation (calendar day-indicator wires)
@@ -1839,6 +1895,7 @@ function drawImageHand(
     const drawH = bitmap.height * imgScale;
 
     ctx.save();
+    setupHandShadow(ctx, part, env);
     ctx.translate(x, y);
 
     if (offsetRadius > 0) {
