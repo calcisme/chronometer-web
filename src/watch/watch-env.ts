@@ -944,7 +944,88 @@ function registerTimeFunctions(
     functions.set('latitude', () => OBSERVER_LAT);
 
     // Calendar wheel helpers
-    functions.set('calendarWeekdayStart', () => 0);
+    // Derive calendarWeekdayStart from browser locale (Intl.Locale.getWeekInfo().firstDay).
+    // getWeekInfo returns 1=Monday..7=Sunday; iOS uses 0=Sunday..6=Saturday.
+    let calendarWeekdayStart = 0;  // default Sunday
+    try {
+        const locale = new Intl.Locale(navigator.language);
+        // getWeekInfo is the modern standard; some browsers may also have .weekInfo property.
+        const weekInfo = (locale as any).getWeekInfo?.() ?? (locale as any).weekInfo;
+        if (weekInfo && typeof weekInfo.firstDay === 'number') {
+            // Convert: getWeekInfo 1=Mon..7=Sun → iOS 0=Sun..6=Sat
+            calendarWeekdayStart = weekInfo.firstDay % 7;
+        }
+    } catch { /* leave as Sunday */ }
+    env.variables.set('calendarWeekdayStart', calendarWeekdayStart);
+    functions.set('calendarWeekdayStart', () => calendarWeekdayStart);
+
+    // weekdayNumber: 0=Sunday through 6=Saturday (ported from ECWatchTime.m weekdayNumberUsingEnv)
+    // iOS uses local epoch arithmetic. For the web, we can use the tz-shifted date's getDay().
+    const weekdayNumber = (): number => {
+        return liveDate().getDay();
+    };
+
+    // weekdayNumberAsCalendarColumn: adjusts weekday by calendarWeekdayStart
+    // (ported from ECWatchTime.m weekdayNumberAsCalendarColumnUsingEnv)
+    const weekdayNumberAsCalendarColumn = (): number => {
+        return (7 + weekdayNumber() - calendarWeekdayStart) % 7;
+    };
+
+    // columnOfFirstOfMonth: computes which column (0-6) the 1st of the current month falls in.
+    // (ported from ECGLWatch.m columnOfFirstOfMonth)
+    // Note: Does not work for October 1582 after the transition — that's handled separately.
+    const columnOfFirstOfMonth = (): number => {
+        const cs = getLocalComponents();
+        const dayOfMonth = cs.day - 1;  // 0-indexed (1st = 0)
+        const wd = weekdayNumberAsCalendarColumn();
+        return (wd + 7 - (dayOfMonth % 7)) % 7;
+    };
+
+    functions.set('calendarColumn', () => weekdayNumberAsCalendarColumn());
+
+    // calendarRow: which row (0-based) the current day falls in within the month grid.
+    // (ported from ECGLWatch.m calendarRow, with October 1582 handling)
+    functions.set('calendarRow', () => {
+        const cs = getLocalComponents();
+        let dayNumber = cs.day - 1;  // 0-indexed
+        let firstCol = columnOfFirstOfMonth();
+        // October 1582 CE: days 5-14 were skipped
+        if (cs.year === 1582 && (cs.month - 1) === 9 && cs.era === 1 && dayNumber > 4) {
+            dayNumber -= 10;
+            firstCol = (8 - calendarWeekdayStart) % 7;  // Oct 1582 started on a Monday
+        }
+        const cellNumber = dayNumber + firstCol;
+        return Math.floor(cellNumber / 7);
+    });
+
+    // rotationForCalendarWheel012B(weekdayStart): rotation angle for the "012B" calendar wheel.
+    // (ported from ECGLWatch.m rotationForCalendarWheel012BDesignedForWeekdayStart)
+    functions.set('rotationForCalendarWheel012B', (wheelWeekdayStart: number) => {
+        if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+        const wd1 = columnOfFirstOfMonth();
+        if (wd1 > 2) return 3 * Math.PI / 2;  // The cutout section
+        return wd1 * Math.PI / 2;
+    });
+
+    // rotationForCalendarWheel3456(weekdayStart): rotation angle for the "3456" calendar wheel.
+    // (ported from ECGLWatch.m rotationForCalendarWheel3456DesignedForWeekdayStart)
+    functions.set('rotationForCalendarWheel3456', (wheelWeekdayStart: number) => {
+        if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+        const wd1 = columnOfFirstOfMonth();
+        if (wd1 < 4) return 0;
+        return (wd1 - 3) * Math.PI / 2;
+    });
+
+    // rotationForCalendarWheelOct1582(weekdayStart): special case for October 1582.
+    // (ported from ECGLWatch.m rotationForCalendarWheelOct1582DesignedForWeekdayStart)
+    functions.set('rotationForCalendarWheelOct1582', (wheelWeekdayStart: number) => {
+        if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+        const cs = getLocalComponents();
+        if (cs.year === 1582 && (cs.month - 1) === 9) {
+            return 0;  // It IS October 1582
+        }
+        return Math.PI / 2;  // The cutout section
+    });
 
     // --- Terminator leaf function (5 args) ---
     functions.set('terminatorAngle', terminatorAngle);

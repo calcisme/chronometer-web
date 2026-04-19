@@ -29,6 +29,8 @@ import type {
     QRectPart,
     QWedgePart,
     QDayNightRingPart,
+    CalendarRowCoverPart,
+    CalendarHeaderPart,
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
 import type { LoadedImage } from './image-loader.js';
@@ -610,6 +612,12 @@ function drawStaticPart(
         case 'QDayNightRing':
             drawQDayNightRing(ctx, part, env);
             break;
+        case 'CalendarRowCover':
+            drawCalendarRowCover(ctx, part, env);
+            break;
+        case 'CalendarHeader':
+            drawCalendarHeader(ctx, part, env);
+            break;
         case 'Window':
             // Standalone window (no following part to clip) — just draw border
             drawWindowBorder(ctx, part, env);
@@ -1028,6 +1036,16 @@ function drawQHand(
 
     ctx.save();
     ctx.translate(x, y);
+
+    // Apply xMotion/yMotion linear translation (calendar day-indicator wires)
+    if (part.dynamicState) {
+        const xm = part.dynamicState.currentXMotion ?? 0;
+        const ym = part.dynamicState.currentYMotion ?? 0;
+        if (xm !== 0 || ym !== 0) {
+            ctx.translate(xm, -ym);  // Negate Y: XML Y-up → Canvas Y-down
+        }
+    }
+
     ctx.rotate(angle);
 
     // Main hand body (rect stops short by oTail so ornament overlaps cleanly)
@@ -1327,6 +1345,12 @@ function drawWheel(
     part: WheelPart,
     env: Environment,
 ): void {
+    // Calendar wheels use a completely different rendering path
+    if (part.calendar) {
+        drawCalendarWheel(ctx, part, env);
+        return;
+    }
+
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);  // Negate Y: XML Y-up → Canvas Y-down
     const radius = evalAttr(part.radius, env);
@@ -2349,6 +2373,354 @@ function drawTerraCityDots(
         ctx.beginPath();
         ctx.arc(px, py, 1.5, 0, 2 * Math.PI);
         ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// Calendar Wheel — Babylon-style monthly day-number grid
+// ============================================================================
+
+/**
+ * A calendar SWheel has 4 quadrants (90° apart), each showing a month grid
+ * for a different starting-column configuration. The wheel's angle selects
+ * which quadrant is visible through the calendar window.
+ *
+ * calendarWheel3456: quadrants for first-of-month starting in columns 3,4,5,6
+ * calendarWheel012B: quadrants for columns 0,1,2, and a blank cutout
+ * calendarWheelOct1582: Oct 1582 (Gregorian switchover) + cutout
+ */
+function drawCalendarWheel(
+    ctx: RenderContext,
+    part: WheelPart,
+    env: Environment,
+): void {
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    const radius = evalAttr(part.radius, env);
+    const angle = part.dynamicState
+        ? part.dynamicState.currentAngle
+        : evalAttr(part.angle, env);
+
+    const fontSize = evalAttr(part.fontSize, env) || 8;
+    const fontName = part.fontName || 'Arial';
+    const bgColor = evalColor(part.bgColor, env);
+    const weekendColor = part.calendarWeekendColor
+        ? evalColor(part.calendarWeekendColor, env)
+        : 'rgba(0,0,255,1)';
+    const weekdayColor = 'rgba(0,0,0,1)';
+
+    // Read calendarWeekdayStart from env
+    const calendarWeekdayStart = env.functions.get('calendarWeekdayStart')?.() ?? 0;
+
+    // Cell dimensions from XML init vars
+    const cellWidth = env.variables.get('calendarCellWidth') ?? 13.3;
+    const cellHeight = env.variables.get('calendarCellHeight') ?? 11;
+    const calHeight = env.variables.get('calendarHeight') ?? 66;
+    const calWidth = env.variables.get('calendarWidth') ?? 96;
+
+    // Weekend column indices (relative to calendarWeekdayStart)
+    const satCol = (6 - calendarWeekdayStart + 7) % 7;
+    const sunCol = (7 - calendarWeekdayStart) % 7;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // Determine which quadrants to draw based on calendar type
+    const calType = part.calendar || '';
+
+    // Each quadrant is drawn at 0°, 90°, 180°, 270° (i.e. offset by i*π/2)
+    // The active one is whichever the wheel's angle brings to 0°
+    const quadrants = getCalendarQuadrants(calType, calendarWeekdayStart);
+
+    for (let qi = 0; qi < quadrants.length; qi++) {
+        const q = quadrants[qi];
+        if (q.blank) continue;  // Cutout quadrant — just leave empty
+
+        ctx.save();
+        ctx.rotate(-qi * Math.PI / 2);
+        // Position at the top of the wheel (twelve orientation)
+        ctx.translate(0, -(radius - calHeight / 2));
+
+        // Draw background — skip cells before the 1st in row 0 so covers show through
+        ctx.fillStyle = bgColor;
+        if (q.startColumn > 0) {
+            // Row 0: only fill from startColumn to end
+            const firstCellX = -calWidth / 2 + q.startColumn * cellWidth;
+            ctx.fillRect(firstCellX, -calHeight / 2 - 1, calWidth / 2 - firstCellX + calWidth / 2, cellHeight + 2);
+            // Rows 1+: full width
+            ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1 + cellHeight + 2, calWidth, calHeight - cellHeight);
+        } else {
+            ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1, calWidth, calHeight + 2);
+        }
+
+        // Draw day numbers
+        ctx.font = `${fontSize}px "${fontName}"`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+
+        let dayNumber = 1;
+        const maxDay = q.isOct1582 ? 31 : 31;  // always 31 slots; unused ones just won't draw
+        let startCol = q.startColumn;
+
+        for (let row = 0; dayNumber <= maxDay && row < 6; row++) {
+            for (let col = 0; col < 7 && dayNumber <= maxDay; col++) {
+                if (row === 0 && col < startCol) continue;  // Skip empty cells before 1st
+
+                const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+                const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
+                // hack: shift rows slightly (matching iOS)
+                const cyAdj = cy - (1 - row / 5.0);
+
+                // Weekend coloring
+                ctx.fillStyle = (col === satCol || col === sunCol) ? weekendColor : weekdayColor;
+
+                ctx.fillText(
+                    String(dayNumber),
+                    cx,
+                    cyAdj + textVisualCenterY(ctx, String(dayNumber)),
+                );
+
+                dayNumber++;
+                // October 1582 hack: skip days 5-14
+                if (q.isOct1582 && dayNumber === 5) {
+                    dayNumber = 15;
+                }
+            }
+        }
+
+        ctx.restore();
+    }
+
+    ctx.restore();
+}
+
+interface CalendarQuadrant {
+    startColumn: number;
+    blank: boolean;
+    isOct1582: boolean;
+}
+
+function getCalendarQuadrants(calType: string, weekdayStart: number): CalendarQuadrant[] {
+    switch (calType) {
+        case 'calendarWheel3456':
+            return [
+                { startColumn: 3, blank: false, isOct1582: false },
+                { startColumn: 4, blank: false, isOct1582: false },
+                { startColumn: 5, blank: false, isOct1582: false },
+                { startColumn: 6, blank: false, isOct1582: false },
+            ];
+        case 'calendarWheel012B':
+            return [
+                { startColumn: 0, blank: false, isOct1582: false },
+                { startColumn: 1, blank: false, isOct1582: false },
+                { startColumn: 2, blank: false, isOct1582: false },
+                { startColumn: 0, blank: true,  isOct1582: false },  // cutout
+            ];
+        case 'calendarWheelOct1582':
+            return [
+                { startColumn: (8 - weekdayStart) % 7, blank: false, isOct1582: true },
+                { startColumn: 0, blank: true, isOct1582: false },  // cutout
+                { startColumn: 0, blank: true, isOct1582: false },
+                { startColumn: 0, blank: true, isOct1582: false },
+            ];
+        default:
+            return [];
+    }
+}
+
+// ============================================================================
+// CalendarRowCover — covers partial weeks at top/bottom of calendar grid
+// ============================================================================
+
+/**
+ * Covers unused cells in the first or last row of the calendar grid with
+ * previous/next month day numbers (in a muted color).
+ *
+ * coverType:
+ *   row1Left / row1Right: previous-month days before the 1st
+ *   row6Left / row56Right: next-month days after the last day
+ */
+function drawCalendarRowCover(
+    ctx: RenderContext,
+    part: CalendarRowCoverPart,
+    env: Environment,
+): void {
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    const bgColor = evalColor(part.bgColor, env);
+    const fontColor = evalColor(part.fontColor, env);
+    const fontSize = evalAttr(part.fontSize, env) || 8;
+    const fontName = part.fontName || 'Arial';
+
+    const calWidth = env.variables.get('calendarWidth') ?? 96;
+    const calHeight = env.variables.get('calendarHeight') ?? 66;
+    const cellWidth = env.variables.get('calendarCellWidth') ?? 13.3;
+    const cellHeight = env.variables.get('calendarCellHeight') ?? 11;
+    const calRadius = evalAttr(part.calendarRadius, env) || 117;
+    const calYOffset = env.variables.get('calendarYOffset') ?? 51;
+
+    const calendarWeekdayStart = env.functions.get('calendarWeekdayStart')?.() ?? 0;
+
+    // Get current month info from env functions
+    const getLocalCS = () => {
+        const cs = {
+            month: (env.functions.get('monthNumber')?.() ?? 0) + 1,  // 1-indexed
+            year: env.functions.get('yearNumber')?.() ?? 2024,
+            era: env.functions.get('eraNumber')?.() ?? 1,
+            day: (env.functions.get('dayNumber')?.() ?? 0) + 1,  // 1-indexed
+        };
+        return cs;
+    };
+    const cs = getLocalCS();
+
+    // Compute weekday of first of this month
+    const firstOfMonth = new Date(cs.year, cs.month - 1, 1);
+    const firstWeekday = firstOfMonth.getDay();
+    const firstCol = (7 + firstWeekday - calendarWeekdayStart) % 7;
+
+    // Days in this month
+    const daysInMonth = new Date(cs.year, cs.month, 0).getDate();
+
+    // Days in previous month
+    const daysInPrevMonth = new Date(cs.year, cs.month - 1, 0).getDate();
+
+    // Compute first of next month info
+    const nextMonth = new Date(cs.year, cs.month, 1);
+    const nextWeekday = nextMonth.getDay();
+    const nextFirstCol = (7 + nextWeekday - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((daysInMonth + firstCol) / 7);
+
+    const coverType = part.coverType || '';
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.font = `${fontSize}px "${fontName}"`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+
+    // Calendar grid position (top of grid is at calRadius - calYOffset area)
+    const gridTop = -(calRadius - calHeight / 2);
+
+    switch (coverType) {
+        case 'row1Left': {
+            // Previous month days in the first row, left of the 1st
+            if (firstCol > 0) {
+                for (let col = 0; col < firstCol && col < 4; col++) {
+                    const day = daysInPrevMonth - firstCol + 1 + col;
+                    const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+                    const cy = gridTop - calHeight / 2 + cellHeight / 2;
+                    const cyAdj = cy - 1;
+
+                    // Background
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+
+                    // Day number
+                    ctx.fillStyle = fontColor;
+                    ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+                }
+            }
+            break;
+        }
+        case 'row1Right': {
+            // Previous month days in the first row, right portion
+            if (firstCol > 4) {
+                for (let col = 4; col < firstCol; col++) {
+                    const day = daysInPrevMonth - firstCol + 1 + col;
+                    const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+                    const cy = gridTop - calHeight / 2 + cellHeight / 2;
+                    const cyAdj = cy - 1;
+
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+
+                    ctx.fillStyle = fontColor;
+                    ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+                }
+            }
+            break;
+        }
+        case 'row6Left':
+        case 'row56Right': {
+            // Next month days after the last day
+            const targetRow = coverType === 'row6Left' ? 5 : 4;
+            if (nextMonthStartRow <= targetRow) {
+                let nextDay = 1;
+                const startRow = nextMonthStartRow;
+                for (let row = startRow; row < 6; row++) {
+                    const startCol = (row === startRow) ? nextFirstCol : 0;
+                    for (let col = startCol; col < 7; col++) {
+                        const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+                        const cy = gridTop - calHeight / 2 + row * cellHeight + cellHeight / 2;
+                        const cyAdj = cy - (1 - row / 5.0);
+
+                        ctx.fillStyle = bgColor;
+                        ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+
+                        ctx.fillStyle = fontColor;
+                        ctx.fillText(String(nextDay), cx, cyAdj + textVisualCenterY(ctx, String(nextDay)));
+                        nextDay++;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// CalendarHeader — weekday abbreviation row (S M T W T F S)
+// ============================================================================
+
+/**
+ * Renders the weekday abbreviation header row for the calendar grid.
+ * Only the header matching the runtime calendarWeekdayStart is drawn;
+ * all others are parked offscreen.
+ */
+function drawCalendarHeader(
+    ctx: RenderContext,
+    part: CalendarHeaderPart,
+    env: Environment,
+): void {
+    const calendarWeekdayStart = env.functions.get('calendarWeekdayStart')?.() ?? 0;
+    const headerStart = parseInt(part.weekdayStart || '0', 10);
+
+    // Only draw the header that matches the runtime week start
+    if (headerStart !== calendarWeekdayStart) return;
+
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    const fontSize = evalAttr(part.fontSize, env) || 8;
+    const fontName = part.fontName || 'Arial';
+    const weekdayColor = evalColor(part.weekdayColor, env);
+    const weekendColor = evalColor(part.weekendColor, env);
+
+    const calWidth = env.variables.get('calendarWidth') ?? 96;
+    const cellWidth = env.variables.get('calendarCellWidth') ?? 13.3;
+
+    // Weekday names starting from Sunday
+    const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+    ctx.save();
+    ctx.translate(x, y - fontSize);
+
+    ctx.font = `${fontSize}px "${fontName}"`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+
+    for (let col = 0; col < 7; col++) {
+        const dayIndex = (col + headerStart) % 7;
+        const isWeekend = dayIndex === 0 || dayIndex === 6;
+        ctx.fillStyle = isWeekend ? weekendColor : weekdayColor;
+
+        const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2;
+        ctx.fillText(dayNames[dayIndex], cx, textVisualCenterY(ctx, dayNames[dayIndex]));
     }
 
     ctx.restore();

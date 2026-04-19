@@ -83,7 +83,10 @@ export interface HandState {
     animSpeed: number;
     /** Time source for scheduling aligned updates. */
     getNow: () => Date;
-
+    /** X-axis linear motion (calendar day-indicator wires). */
+    xMotion: AnimatingValue | null;
+    /** Y-axis linear motion (calendar day-indicator wires). */
+    yMotion: AnimatingValue | null;
 }
 
 
@@ -145,6 +148,15 @@ function createHandState(
         currentAngle: initialAngle,
         ...(hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}),
     };
+    // Evaluate initial xMotion/yMotion if present (calendar day-indicator wires)
+    const hasXMotion = part.type === 'QHand' && part.xMotion;
+    const hasYMotion = part.type === 'QHand' && part.yMotion;
+    const initialXMotion = hasXMotion ? evalAttr((part as QHandPart).xMotion!, env) : 0;
+    const initialYMotion = hasYMotion ? evalAttr((part as QHandPart).yMotion!, env) : 0;
+    if (hasXMotion || hasYMotion) {
+        part.dynamicState!.currentXMotion = initialXMotion;
+        part.dynamicState!.currentYMotion = initialYMotion;
+    }
 
     return {
         part,
@@ -162,11 +174,12 @@ function createHandState(
             animationStopTime: now,
             animating: false,
         } : null,
+        xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
+        yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
         updateIntervalMs,
         nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
         animSpeed,
         getNow,
-
     };
 }
 
@@ -266,6 +279,19 @@ export function tickAnimations(
                 }
                 state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
             }
+
+            // Evaluate xMotion/yMotion (QHand only, calendar day-indicator wires)
+            if (state.part.type === 'QHand') {
+                const qhand = state.part as QHandPart;
+                if (state.xMotion && qhand.xMotion) {
+                    const newXM = evalAttr(qhand.xMotion, env);
+                    startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
+                }
+                if (state.yMotion && qhand.yMotion) {
+                    const newYM = evalAttr(qhand.yMotion, env);
+                    startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
+                }
+            }
         }
 
         // Interpolate if animating (uses real time for smooth rendering)
@@ -283,6 +309,20 @@ export function tickAnimations(
             const oa = interpolateRaw(state.offsetAngle, now);
             if (state.part.dynamicState) {
                 state.part.dynamicState.currentOffsetAngle = oa;
+            }
+        }
+
+        // Interpolate xMotion/yMotion if present (linear, no angle wrapping)
+        if (state.xMotion) {
+            const xm = interpolateLinear(state.xMotion, now);
+            if (state.part.dynamicState) {
+                state.part.dynamicState.currentXMotion = xm;
+            }
+        }
+        if (state.yMotion) {
+            const ym = interpolateLinear(state.yMotion, now);
+            if (state.part.dynamicState) {
+                state.part.dynamicState.currentYMotion = ym;
             }
         }
     }
@@ -312,6 +352,8 @@ export function anyAnimating(states: HandState[]): boolean {
     for (const s of states) {
         if (s.angle.animating) return true;
         if (s.offsetAngle && s.offsetAngle.animating) return true;
+        if (s.xMotion && s.xMotion.animating) return true;
+        if (s.yMotion && s.yMotion.animating) return true;
     }
     return false;
 }
@@ -336,6 +378,20 @@ export function finishAnimations(states: HandState[]): void {
             s.offsetAngle.animating = false;
             if (s.part.dynamicState) {
                 s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
+            }
+        }
+        if (s.xMotion && s.xMotion.animating) {
+            s.xMotion.currentValue = s.xMotion.targetValue;
+            s.xMotion.animating = false;
+            if (s.part.dynamicState) {
+                s.part.dynamicState.currentXMotion = s.xMotion.currentValue;
+            }
+        }
+        if (s.yMotion && s.yMotion.animating) {
+            s.yMotion.currentValue = s.yMotion.targetValue;
+            s.yMotion.animating = false;
+            if (s.part.dynamicState) {
+                s.part.dynamicState.currentYMotion = s.yMotion.currentValue;
             }
         }
         // Prevent the scheduler from re-evaluating while stopped
@@ -573,4 +629,70 @@ function nextLocalMidnight(): number {
 function fmod(value: number, modulus: number): number {
     const result = value % modulus;
     return result < 0 ? result + modulus : result;
+}
+
+/**
+ * Start a linear animation (no angle wrapping) for xMotion/yMotion.
+ * Uses the same speed model as angular animation but treats values as pixels.
+ */
+function startLinearAnimation(
+    val: AnimatingValue,
+    newTarget: number,
+    now: number,
+    animSpeed: number = 1.0,
+): void {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+
+    if (speed === 0 || animSpeed === 0) {
+        val.currentValue = newTarget;
+        val.targetValue = newTarget;
+        val.animating = false;
+        return;
+    }
+
+    if (val.animating && val.targetValue === newTarget) return;
+
+    if (val.animating) {
+        interpolateLinear(val, now);
+    }
+
+    if (val.currentValue === newTarget) {
+        val.animating = false;
+        return;
+    }
+
+    val.targetValue = newTarget;
+
+    // Linear distance, no wrapping
+    const delta = Math.abs(newTarget - val.currentValue);
+    // Scale: treat ~100 pixels like ~π radians for speed purposes
+    const durationMs = (delta / (speed * 30)) * 1000;
+
+    if (durationMs < kECGLFrameRate * 1000) {
+        val.currentValue = newTarget;
+        val.animating = false;
+        return;
+    }
+
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + durationMs;
+}
+
+/**
+ * Linear interpolation (no angle wrapping) for xMotion/yMotion values.
+ */
+function interpolateLinear(val: AnimatingValue, now: number): number {
+    if (!val.animating) return val.currentValue;
+
+    if (now >= val.animationStopTime) {
+        val.animating = false;
+        val.currentValue = val.targetValue;
+        return val.currentValue;
+    }
+
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
 }

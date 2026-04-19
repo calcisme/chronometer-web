@@ -440,6 +440,7 @@
       planetSelector: (attr(watchEl, "planetSelector") ?? "") === "1",
       numEnvironments: parseInt(attr(watchEl, "numEnvironments") ?? "1", 10),
       maxSeparateLoc: parseInt(attr(watchEl, "maxSeparateLoc") ?? "1", 10),
+      calendarWeekStart: (attr(watchEl, "calendarWeekStart") ?? "") === "1",
       initExprs: [],
       parts: []
     };
@@ -525,6 +526,16 @@
       case "qdaynightring":
         if (matchesMode(el, mode)) {
           parts.push(parseQDayNightRing(el));
+        }
+        break;
+      case "calendarrowcover":
+        if (matchesMode(el, mode)) {
+          parts.push(parseCalendarRowCover(el));
+        }
+        break;
+      case "calendarheader":
+        if (matchesMode(el, mode)) {
+          parts.push(parseCalendarHeader(el));
         }
         break;
       case "tick":
@@ -626,7 +637,9 @@
       nRays: attrExpr(el, "nRays"),
       text: attr(el, "text"),
       fontSize: attrExpr(el, "fontSize"),
-      fontName: attr(el, "fontName")
+      fontName: attr(el, "fontName"),
+      xMotion: attrExpr(el, "xMotion"),
+      yMotion: attrExpr(el, "yMotion")
     };
   }
   function parseWheel(el, variant) {
@@ -659,7 +672,10 @@
       kind: attr(el, "kind"),
       halfAndHalf: attrExpr(el, "halfAndHalf"),
       ticks: attrExpr(el, "ticks"),
-      tickWidth: attrExpr(el, "tickWidth")
+      tickWidth: attrExpr(el, "tickWidth"),
+      calendar: attr(el, "calendar"),
+      calendarStartDay: attr(el, "calendarStartDay"),
+      calendarWeekendColor: attrExpr(el, "calendarWeekendColor")
     };
   }
   function parseQText(el) {
@@ -800,6 +816,42 @@
       update: attrExpr(el, "update"),
       timeBase: attr(el, "timeBase"),
       envSlot: attrExpr(el, "envSlot")
+    };
+  }
+  function parseCalendarRowCover(el) {
+    return {
+      type: "CalendarRowCover",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      coverType: attr(el, "coverType"),
+      fontName: attr(el, "fontName"),
+      fontSize: attrExpr(el, "fontSize"),
+      fontColor: attrExpr(el, "fontColor"),
+      bgColor: attrExpr(el, "bgColor"),
+      calendarRadius: attrExpr(el, "calendarRadius"),
+      update: attrExpr(el, "update"),
+      animSpeed: attrExpr(el, "animSpeed"),
+      z: attrExpr(el, "z")
+    };
+  }
+  function parseCalendarHeader(el) {
+    return {
+      type: "CalendarHeader",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      weekdayStart: attr(el, "weekdayStart"),
+      weekdayColor: attrExpr(el, "weekdayColor"),
+      weekendColor: attrExpr(el, "weekendColor"),
+      bodyFontSize: attrExpr(el, "bodyFontSize"),
+      bodyFontName: attr(el, "bodyFontName"),
+      fontSize: attrExpr(el, "fontSize"),
+      fontName: attr(el, "fontName"),
+      parkX: attrExpr(el, "parkX"),
+      parkY: attrExpr(el, "parkY")
     };
   }
   function attr(el, name) {
@@ -1484,6 +1536,14 @@
       currentAngle: initialAngle,
       ...hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}
     };
+    const hasXMotion = part.type === "QHand" && part.xMotion;
+    const hasYMotion = part.type === "QHand" && part.yMotion;
+    const initialXMotion = hasXMotion ? evalAttr(part.xMotion, env) : 0;
+    const initialYMotion = hasYMotion ? evalAttr(part.yMotion, env) : 0;
+    if (hasXMotion || hasYMotion) {
+      part.dynamicState.currentXMotion = initialXMotion;
+      part.dynamicState.currentYMotion = initialYMotion;
+    }
     return {
       part,
       angle: {
@@ -1500,6 +1560,8 @@
         animationStopTime: now,
         animating: false
       } : null,
+      xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
+      yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
       updateIntervalMs,
       nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
       animSpeed,
@@ -1549,6 +1611,17 @@
           }
           state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
         }
+        if (state.part.type === "QHand") {
+          const qhand = state.part;
+          if (state.xMotion && qhand.xMotion) {
+            const newXM = evalAttr(qhand.xMotion, env);
+            startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
+          }
+          if (state.yMotion && qhand.yMotion) {
+            const newYM = evalAttr(qhand.yMotion, env);
+            startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
+          }
+        }
       }
       const angle = interpolate(state.angle, now);
       if (!state.part.dynamicState) {
@@ -1560,6 +1633,18 @@
         const oa = interpolateRaw(state.offsetAngle, now);
         if (state.part.dynamicState) {
           state.part.dynamicState.currentOffsetAngle = oa;
+        }
+      }
+      if (state.xMotion) {
+        const xm = interpolateLinear(state.xMotion, now);
+        if (state.part.dynamicState) {
+          state.part.dynamicState.currentXMotion = xm;
+        }
+      }
+      if (state.yMotion) {
+        const ym = interpolateLinear(state.yMotion, now);
+        if (state.part.dynamicState) {
+          state.part.dynamicState.currentYMotion = ym;
         }
       }
     }
@@ -1575,6 +1660,8 @@
     for (const s of states) {
       if (s.angle.animating) return true;
       if (s.offsetAngle && s.offsetAngle.animating) return true;
+      if (s.xMotion && s.xMotion.animating) return true;
+      if (s.yMotion && s.yMotion.animating) return true;
     }
     return false;
   }
@@ -1593,6 +1680,20 @@
         s.offsetAngle.animating = false;
         if (s.part.dynamicState) {
           s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
+        }
+      }
+      if (s.xMotion && s.xMotion.animating) {
+        s.xMotion.currentValue = s.xMotion.targetValue;
+        s.xMotion.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentXMotion = s.xMotion.currentValue;
+        }
+      }
+      if (s.yMotion && s.yMotion.animating) {
+        s.yMotion.currentValue = s.yMotion.targetValue;
+        s.yMotion.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentYMotion = s.yMotion.currentValue;
         }
       }
       s.nextUpdateTime = Infinity;
@@ -1706,6 +1807,46 @@
   function fmod2(value, modulus) {
     const result = value % modulus;
     return result < 0 ? result + modulus : result;
+  }
+  function startLinearAnimation(val, newTarget, now, animSpeed = 1) {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+    if (speed === 0 || animSpeed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateLinear(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    const delta = Math.abs(newTarget - val.currentValue);
+    const durationMs = delta / (speed * 30) * 1e3;
+    if (durationMs < kECGLFrameRate * 1e3) {
+      val.currentValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + durationMs;
+  }
+  function interpolateLinear(val, now) {
+    if (!val.animating) return val.currentValue;
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = val.targetValue;
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
   }
 
   // src/astronomy/es-sidereal.ts
@@ -12477,7 +12618,61 @@
     functions.set("tzOffsetAngle", () => tzOffsetSeconds * Math.PI / (12 * 3600));
     functions.set("longitude", () => OBSERVER_LON);
     functions.set("latitude", () => OBSERVER_LAT);
-    functions.set("calendarWeekdayStart", () => 0);
+    let calendarWeekdayStart = 0;
+    try {
+      const locale = new Intl.Locale(navigator.language);
+      const weekInfo = locale.getWeekInfo?.() ?? locale.weekInfo;
+      if (weekInfo && typeof weekInfo.firstDay === "number") {
+        calendarWeekdayStart = weekInfo.firstDay % 7;
+      }
+    } catch {
+    }
+    env.variables.set("calendarWeekdayStart", calendarWeekdayStart);
+    functions.set("calendarWeekdayStart", () => calendarWeekdayStart);
+    const weekdayNumber = () => {
+      return liveDate().getDay();
+    };
+    const weekdayNumberAsCalendarColumn = () => {
+      return (7 + weekdayNumber() - calendarWeekdayStart) % 7;
+    };
+    const columnOfFirstOfMonth = () => {
+      const cs = getLocalComponents();
+      const dayOfMonth = cs.day - 1;
+      const wd = weekdayNumberAsCalendarColumn();
+      return (wd + 7 - dayOfMonth % 7) % 7;
+    };
+    functions.set("calendarColumn", () => weekdayNumberAsCalendarColumn());
+    functions.set("calendarRow", () => {
+      const cs = getLocalComponents();
+      let dayNumber = cs.day - 1;
+      let firstCol = columnOfFirstOfMonth();
+      if (cs.year === 1582 && cs.month - 1 === 9 && cs.era === 1 && dayNumber > 4) {
+        dayNumber -= 10;
+        firstCol = (8 - calendarWeekdayStart) % 7;
+      }
+      const cellNumber = dayNumber + firstCol;
+      return Math.floor(cellNumber / 7);
+    });
+    functions.set("rotationForCalendarWheel012B", (wheelWeekdayStart) => {
+      if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+      const wd1 = columnOfFirstOfMonth();
+      if (wd1 > 2) return 3 * Math.PI / 2;
+      return wd1 * Math.PI / 2;
+    });
+    functions.set("rotationForCalendarWheel3456", (wheelWeekdayStart) => {
+      if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+      const wd1 = columnOfFirstOfMonth();
+      if (wd1 < 4) return 0;
+      return (wd1 - 3) * Math.PI / 2;
+    });
+    functions.set("rotationForCalendarWheelOct1582", (wheelWeekdayStart) => {
+      if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+      const cs = getLocalComponents();
+      if (cs.year === 1582 && cs.month - 1 === 9) {
+        return 0;
+      }
+      return Math.PI / 2;
+    });
     functions.set("terminatorAngle", terminatorAngle);
     functions.set("EOTAngle", () => {
       const di = dateToDateInterval(getNow());
@@ -13648,6 +13843,12 @@
       case "QDayNightRing":
         drawQDayNightRing(ctx, part, env);
         break;
+      case "CalendarRowCover":
+        drawCalendarRowCover(ctx, part, env);
+        break;
+      case "CalendarHeader":
+        drawCalendarHeader(ctx, part, env);
+        break;
       case "Window":
         drawWindowBorder(ctx, part, env);
         break;
@@ -13933,6 +14134,13 @@
     const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
     ctx.save();
     ctx.translate(x, y);
+    if (part.dynamicState) {
+      const xm = part.dynamicState.currentXMotion ?? 0;
+      const ym = part.dynamicState.currentYMotion ?? 0;
+      if (xm !== 0 || ym !== 0) {
+        ctx.translate(xm, -ym);
+      }
+    }
     ctx.rotate(angle);
     const oTail = evalAttr(part.oTail, env);
     const length2 = evalAttr(part.length2, env);
@@ -14119,6 +14327,10 @@
     }
   }
   function drawWheel(ctx, part, env) {
+    if (part.calendar) {
+      drawCalendarWheel(ctx, part, env);
+      return;
+    }
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const radius = evalAttr(part.radius, env);
@@ -14753,6 +14965,224 @@
       ctx.beginPath();
       ctx.arc(px, py, 1.5, 0, 2 * Math.PI);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawCalendarWheel(ctx, part, env) {
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    const radius = evalAttr(part.radius, env);
+    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
+    const fontSize = evalAttr(part.fontSize, env) || 8;
+    const fontName = part.fontName || "Arial";
+    const bgColor = evalColor(part.bgColor, env);
+    const weekendColor = part.calendarWeekendColor ? evalColor(part.calendarWeekendColor, env) : "rgba(0,0,255,1)";
+    const weekdayColor = "rgba(0,0,0,1)";
+    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
+    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
+    const cellHeight = env.variables.get("calendarCellHeight") ?? 11;
+    const calHeight = env.variables.get("calendarHeight") ?? 66;
+    const calWidth = env.variables.get("calendarWidth") ?? 96;
+    const satCol = (6 - calendarWeekdayStart + 7) % 7;
+    const sunCol = (7 - calendarWeekdayStart) % 7;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    const calType = part.calendar || "";
+    const quadrants = getCalendarQuadrants(calType, calendarWeekdayStart);
+    for (let qi = 0; qi < quadrants.length; qi++) {
+      const q = quadrants[qi];
+      if (q.blank) continue;
+      ctx.save();
+      ctx.rotate(-qi * Math.PI / 2);
+      ctx.translate(0, -(radius - calHeight / 2));
+      ctx.fillStyle = bgColor;
+      if (q.startColumn > 0) {
+        const firstCellX = -calWidth / 2 + q.startColumn * cellWidth;
+        ctx.fillRect(firstCellX, -calHeight / 2 - 1, calWidth / 2 - firstCellX + calWidth / 2, cellHeight + 2);
+        ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1 + cellHeight + 2, calWidth, calHeight - cellHeight);
+      } else {
+        ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1, calWidth, calHeight + 2);
+      }
+      ctx.font = `${fontSize}px "${fontName}"`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      let dayNumber = 1;
+      const maxDay = q.isOct1582 ? 31 : 31;
+      let startCol = q.startColumn;
+      for (let row = 0; dayNumber <= maxDay && row < 6; row++) {
+        for (let col = 0; col < 7 && dayNumber <= maxDay; col++) {
+          if (row === 0 && col < startCol) continue;
+          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+          const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
+          const cyAdj = cy - (1 - row / 5);
+          ctx.fillStyle = col === satCol || col === sunCol ? weekendColor : weekdayColor;
+          ctx.fillText(
+            String(dayNumber),
+            cx,
+            cyAdj + textVisualCenterY(ctx, String(dayNumber))
+          );
+          dayNumber++;
+          if (q.isOct1582 && dayNumber === 5) {
+            dayNumber = 15;
+          }
+        }
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function getCalendarQuadrants(calType, weekdayStart) {
+    switch (calType) {
+      case "calendarWheel3456":
+        return [
+          { startColumn: 3, blank: false, isOct1582: false },
+          { startColumn: 4, blank: false, isOct1582: false },
+          { startColumn: 5, blank: false, isOct1582: false },
+          { startColumn: 6, blank: false, isOct1582: false }
+        ];
+      case "calendarWheel012B":
+        return [
+          { startColumn: 0, blank: false, isOct1582: false },
+          { startColumn: 1, blank: false, isOct1582: false },
+          { startColumn: 2, blank: false, isOct1582: false },
+          { startColumn: 0, blank: true, isOct1582: false }
+          // cutout
+        ];
+      case "calendarWheelOct1582":
+        return [
+          { startColumn: (8 - weekdayStart) % 7, blank: false, isOct1582: true },
+          { startColumn: 0, blank: true, isOct1582: false },
+          // cutout
+          { startColumn: 0, blank: true, isOct1582: false },
+          { startColumn: 0, blank: true, isOct1582: false }
+        ];
+      default:
+        return [];
+    }
+  }
+  function drawCalendarRowCover(ctx, part, env) {
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    const bgColor = evalColor(part.bgColor, env);
+    const fontColor = evalColor(part.fontColor, env);
+    const fontSize = evalAttr(part.fontSize, env) || 8;
+    const fontName = part.fontName || "Arial";
+    const calWidth = env.variables.get("calendarWidth") ?? 96;
+    const calHeight = env.variables.get("calendarHeight") ?? 66;
+    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
+    const cellHeight = env.variables.get("calendarCellHeight") ?? 11;
+    const calRadius = evalAttr(part.calendarRadius, env) || 117;
+    const calYOffset = env.variables.get("calendarYOffset") ?? 51;
+    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
+    const getLocalCS = () => {
+      const cs2 = {
+        month: (env.functions.get("monthNumber")?.() ?? 0) + 1,
+        // 1-indexed
+        year: env.functions.get("yearNumber")?.() ?? 2024,
+        era: env.functions.get("eraNumber")?.() ?? 1,
+        day: (env.functions.get("dayNumber")?.() ?? 0) + 1
+        // 1-indexed
+      };
+      return cs2;
+    };
+    const cs = getLocalCS();
+    const firstOfMonth = new Date(cs.year, cs.month - 1, 1);
+    const firstWeekday = firstOfMonth.getDay();
+    const firstCol = (7 + firstWeekday - calendarWeekdayStart) % 7;
+    const daysInMonth2 = new Date(cs.year, cs.month, 0).getDate();
+    const daysInPrevMonth = new Date(cs.year, cs.month - 1, 0).getDate();
+    const nextMonth = new Date(cs.year, cs.month, 1);
+    const nextWeekday = nextMonth.getDay();
+    const nextFirstCol = (7 + nextWeekday - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((daysInMonth2 + firstCol) / 7);
+    const coverType = part.coverType || "";
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.font = `${fontSize}px "${fontName}"`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    const gridTop = -(calRadius - calHeight / 2);
+    switch (coverType) {
+      case "row1Left": {
+        if (firstCol > 0) {
+          for (let col = 0; col < firstCol && col < 4; col++) {
+            const day = daysInPrevMonth - firstCol + 1 + col;
+            const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2;
+            const cyAdj = cy - 1;
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+            ctx.fillStyle = fontColor;
+            ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+          }
+        }
+        break;
+      }
+      case "row1Right": {
+        if (firstCol > 4) {
+          for (let col = 4; col < firstCol; col++) {
+            const day = daysInPrevMonth - firstCol + 1 + col;
+            const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2;
+            const cyAdj = cy - 1;
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+            ctx.fillStyle = fontColor;
+            ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+          }
+        }
+        break;
+      }
+      case "row6Left":
+      case "row56Right": {
+        const targetRow = coverType === "row6Left" ? 5 : 4;
+        if (nextMonthStartRow <= targetRow) {
+          let nextDay = 1;
+          const startRow = nextMonthStartRow;
+          for (let row = startRow; row < 6; row++) {
+            const startCol = row === startRow ? nextFirstCol : 0;
+            for (let col = startCol; col < 7; col++) {
+              const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+              const cy = gridTop - calHeight / 2 + row * cellHeight + cellHeight / 2;
+              const cyAdj = cy - (1 - row / 5);
+              ctx.fillStyle = bgColor;
+              ctx.fillRect(cx - cellWidth / 2 - 1, cyAdj - cellHeight / 2, cellWidth + 1, cellHeight);
+              ctx.fillStyle = fontColor;
+              ctx.fillText(String(nextDay), cx, cyAdj + textVisualCenterY(ctx, String(nextDay)));
+              nextDay++;
+            }
+          }
+        }
+        break;
+      }
+    }
+    ctx.restore();
+  }
+  function drawCalendarHeader(ctx, part, env) {
+    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
+    const headerStart = parseInt(part.weekdayStart || "0", 10);
+    if (headerStart !== calendarWeekdayStart) return;
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    const fontSize = evalAttr(part.fontSize, env) || 8;
+    const fontName = part.fontName || "Arial";
+    const weekdayColor = evalColor(part.weekdayColor, env);
+    const weekendColor = evalColor(part.weekendColor, env);
+    const calWidth = env.variables.get("calendarWidth") ?? 96;
+    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
+    const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    ctx.save();
+    ctx.translate(x, y - fontSize);
+    ctx.font = `${fontSize}px "${fontName}"`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    for (let col = 0; col < 7; col++) {
+      const dayIndex = (col + headerStart) % 7;
+      const isWeekend = dayIndex === 0 || dayIndex === 6;
+      ctx.fillStyle = isWeekend ? weekendColor : weekdayColor;
+      const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2;
+      ctx.fillText(dayNames[dayIndex], cx, textVisualCenterY(ctx, dayNames[dayIndex]));
     }
     ctx.restore();
   }

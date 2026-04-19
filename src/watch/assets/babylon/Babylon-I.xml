@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Babylon I.xml
+  Emerald Chronometer
+
+  Copied from Babylon.xml 2017 May 16
+ 
+  Created by Steve Pucci circa 2011 Dec 24
+  Copyright Emerald Sequoia LLC 2011. All rights reserved.
+-->
+
+<watch name='Babylon I' beatsPerSecond='1' faceWidth='276' statusBarLoc='bottom' bezelColor='rgb(180,160,140)' calendarWeekStart='1'>
+  <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='256' nightWidth='1024' nightHeight='1024'/>
+  <init expr='faceWidth=276, backerWidth=faceWidth' />
+
+<!-- sizes, lengths, positions  -->
+  <init	expr='hour12FS=24, hour12smallFS=20' />
+  <init	expr='faceR=136' />
+  <init expr='hour12OR=faceR' />
+  <init expr='calendarFontSize=8, calendarRadius=117, calendarWidth=96, calendarHeight=66, calendarYOffset=51' />
+  <init expr='calendarCellWidth=13.3, calendarCellHeight=11' />
+  <init expr='xCal=0.5, yCal=-26, calWheelZ=1.5, calDIZ=1.5, calRowCoverZ=1.0, calDIThick=2.0' />
+  <init expr='yearX=27, yearY=-58' />
+  <init expr='calendarWheelAnimationSpeed=1, calendarRowAnimationSpeed=1' />
+  <init	expr='logoX=53, logoY=-20.5, moonX=-45, moonY=-45, moonR=40' />
+  <init expr='parkX=0, parkY=0' />
+  <init expr='monthRadius=113, monthFS=10.5' />
+  <init expr='hrLen=100, hrWidth=15, minLen=126, minWidth=13, secLen=129, secWidth=2' />
+  <init	expr='r=143, ri=r-5, th=26, bx=r*cos(th*pi/180), by=r*sin(th*pi/180), dr=8, mx=dr*cos(th*pi/180), my=dr*sin(th*pi/180)' />
+
+<!-- colors -->
+  <init	expr='fgColor=black, alph=1, shadowClr=black, bgclr=white, fgclr=black, calbackclr=0xffefe6e2, breBlue=black, secColor=0xff600000' />
+  <init         expr='calendarBack=0xf3eae4ff, calendarDayIndicatorClr=0xffa00000, calendarBgColor=0xfff0f0f0, coverColor=0xffefe6e3, coverFontColor=0xff707070' />
+  <init         expr='calendarHeaderWeekendColor=black, calendarHeaderWeekdayColor=black' />
+  <init         expr='calendarWeekendColor=0xff0000ff' />
+
+  <QRect	name='month back'   x='-37'		y='monthRadius-8' modes='front' w='74' h='15' />
+  <Swheel	name='Qmonths'    x=' 0'	      y='-7'      dragAnimationType='dragAnimationAlways' modes='front'  radius='monthRadius+11'
+                orientation='twelve' update='3600'	angle='monthNumberAngle()' fontSize='monthFS' fontName='Arial'
+                text='January,February,March,April,May,June,July,August,September,October,November,December' />
+
+<!-- Calendar starts here -->
+  <!-- First the back -->
+  <QRect	name='cal bak'	    x='xCal-calendarWidth/2 - 2' y='yCal+calendarYOffset - 2' w='calendarWidth + 4' h='calendarHeight + 4' bgColor='calbackclr' />
+
+  <!-- First the previous-month row "covers" (really underlays) -->
+  <CalendarRowCover  name='cal week1 left underlay' x='xCal' y='yCal'  z='calRowCoverZ' modes='front' coverType='row1Left'  fontName='Arial' fontSize='calendarFontSize' fontColor='coverFontColor' bgColor='coverColor'
+                     calendarRadius='calendarRadius'   update='3600'       animSpeed='calendarRowAnimationSpeed' />
+  <CalendarRowCover  name='cal week1 right underlay' x='xCal' y='yCal' z='calRowCoverZ' modes='front' coverType='row1Right' fontName='Arial' fontSize='calendarFontSize' fontColor='coverFontColor' bgColor='coverColor' calendarRadius='calendarRadius'   update='3600'       animSpeed='calendarRowAnimationSpeed' />
+
+  <!-- Then the wheels — calendarStartDay matches runtime calendarWeekdayStart -->
+  <SWheel	name='calendar3456'	    x='xCal' y='yCal' z='calWheelZ' dragAnimationType='dragAnimationAlways' modes='front'  radius='calendarRadius' orientation='twelve'
+                bgColor='calendarBgColor'   calendarStartDay='0'  calendarWeekendColor='calendarWeekendColor'
+                update='3600'  angle='rotationForCalendarWheel3456(calendarWeekdayStart)' fontSize='calendarFontSize' fontName='Arial' calendar='calendarWheel3456' animSpeed='calendarWheelAnimationSpeed' />
+  <SWheel	name='calendar012B'	    x='xCal' y='yCal' z='calWheelZ' dragAnimationType='dragAnimationAlways' modes='front'  radius='calendarRadius' orientation='twelve'
+                bgColor='calendarBgColor'   calendarStartDay='0'  calendarWeekendColor='calendarWeekendColor'
+                update='3600'  angle='rotationForCalendarWheel012B(calendarWeekdayStart)' fontSize='calendarFontSize' fontName='Arial' calendar='calendarWheel012B' animSpeed='calendarWheelAnimationSpeed'  />
+  <SWheel	name='calendarOct1582'    x='xCal' y='yCal' z='calWheelZ' dragAnimationType='dragAnimationAlways' modes='front'  radius='calendarRadius' orientation='twelve'
+                bgColor='calendarBgColor'   calendarStartDay='0'  calendarWeekendColor='calendarWeekendColor'
+                update='3600'  angle='rotationForCalendarWheelOct1582(calendarWeekdayStart)' fontSize='calendarFontSize' fontName='Arial' calendar='calendarWheelOct1582' animSpeed='calendarWheelAnimationSpeed'  />
+
+  <!-- Then the row covers.  Ordering is very important-->
+  <CalendarRowCover  name='cal week6 left cover' x='xCal' y='yCal' z='calRowCoverZ' modes='front' coverType='row6Left' fontName='Arial' fontSize='calendarFontSize' fontColor='coverFontColor' bgColor='coverColor'
+                     calendarRadius='calendarRadius'   update='3600'       animSpeed='calendarRowAnimationSpeed' />
+  <CalendarRowCover  name='cal week56 right cover' x='xCal' y='yCal' z='calRowCoverZ' modes='front' coverType='row56Right' fontName='Arial' fontSize='calendarFontSize' fontColor='coverFontColor' bgColor='coverColor'
+                     calendarRadius='calendarRadius'   update='3600'       animSpeed='calendarRowAnimationSpeed' />
+
+  <!-- Finally the day-indicator wires -->
+  <QHand        name='cal dayIndicatorLeft' x='xCal + 0.7' y='yCal'  z='calDIZ' modes='front' type='wire' width='1.0' lineWidth='1.0' thick='calDIThick'
+                length='calendarRadius' length2='calendarRadius - calendarHeight' strokeColor='calendarDayIndicatorClr' angle='0'
+                xMotion='round((calendarColumn() - 3.5) * calendarCellWidth + 1) - 0.5'
+                yMotion='0'
+                dragAnimationType='dragAnimationAlways'
+                animSpeed='3.0' update='3600'/>
+  <QHand        name='cal dayIndicatorRight' x='xCal + 0.7' y='yCal'  z='calDIZ' modes='front' type='wire' width='1.0' lineWidth='1.0' thick='calDIThick'
+                length='calendarRadius' length2='calendarRadius - calendarHeight' strokeColor='calendarDayIndicatorClr' angle='0'
+                xMotion='0 + round((calendarColumn() - 2.5) * calendarCellWidth) - 0.5'
+                yMotion='0'
+                dragAnimationType='dragAnimationAlways'
+                animSpeed='3.0' update='3600'/>
+  <QHand        name='cal dayIndicatorTop' x='xCal-calendarWidth/2' y='yCal+calendarRadius-1'  z='calDIZ' modes='front' type='wire' width='1.0' lineWidth='1.0' thick='calDIThick'
+                length='calendarWidth' length2='0' strokeColor='calendarDayIndicatorClr' angle='pi/2'
+                xMotion='0'
+                yMotion='-calendarRow()*calendarCellHeight'
+                dragAnimationType='dragAnimationAlways'
+                animSpeed='3.0' update='3600'/>
+  <QHand        name='cal dayIndicatorBottom' x='xCal-calendarWidth/2' y='yCal+calendarRadius-10.5'  z='calDIZ' modes='front' type='wire' width='1.0' lineWidth='1.0' thick='calDIThick'
+                length='calendarWidth' length2='0' strokeColor='calendarDayIndicatorClr' angle='pi/2'
+                xMotion='0'
+                yMotion='-calendarRow()*calendarCellHeight'
+                dragAnimationType='dragAnimationAlways'
+                animSpeed='3.0' update='3600'/>
+
+<!-- Calendar ends here -->
+    <QRect	name='year bak'	    x='yearX' y='yearY-7' w='40' h='14' bgColor='bgclr' panes='4' />
+    <SWheel	name='year'	    x='yearX+7' y='yearY-0.5'  dragAnimationType='dragAnimationAlways' modes='front'  radius='32' orientation='three' update='3600' angle='fmod(yearNumber(),             10)*2*pi/10' fontSize='14' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9'  strokeColor='fgclr' bgColor='bgclr' />
+    <SWheel	refName='year'	    x='yearX-3' y='yearY-0.5'  dragAnimationType='dragAnimationAlways' modes='front'  radius='32' orientation='three' update='3600' angle='fmod(floor(yearNumber()/10),   10)*2*pi/10' fontSize='14' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='fgclr' bgColor='bgclr'  />
+    <SWheel	refName='year'	    x='yearX-13' y='yearY-0.5'  dragAnimationType='dragAnimationAlways' modes='front'  radius='32' orientation='three' update='3600' angle='fmod(floor(yearNumber()/100),  10)*2*pi/10' fontSize='14' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9'  strokeColor='fgclr' bgColor='bgclr' />
+    <SWheel	refName='year'	    x='yearX-23' y='yearY-0.5'  dragAnimationType='dragAnimationAlways' modes='front'  radius='32' orientation='three' update='3600' angle='fmod(floor(yearNumber()/1000), 10)*2*pi/10' fontSize='14' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9'  strokeColor='fgclr' bgColor='bgclr' />
+    <Qhand	name='bce cover'    x='yearX-8' y='yearY' modes='front' length='48' width='12' tail='0' type='rect' update='1 * days()' angle='eraNumber() == 1 ? 0 : pi/2' strokeColor='0x60ff0000' fillColor='0x60ff0000' />
+    
+  <hand         name='littlemoon'   x='moonX' y='moonY'  modes='front'  src='../partsBin/moonES80.png'    update='updateAtEnvChangeOnly'	angle='latitude()>0 ? 0 : pi' />
+  <terminator   name='term'         x='moonX' y='moonY'  modes='front'  radius='moonR' leavesPerQuadrant='10' incremental='0' leafBorderColor='0xff282828' leafFillColor='0xff171717' leafAnchorRadius='0' update='1 * hours()' updateOffset='0' phaseAngle=		'moonAgeAngle()' rotation='latitude()>0 ? 0 : pi'/>
+  <window	name='term cover'   x='moonX' y='moonY'  w='moonR*2' h='moonR*2' type='porthole'  border='1' strokeColor='0x7f202020' />
+  <window	name='month win'    x='-29'		y='monthRadius-8' modes='front' w='58' h='12'  border='2' strokeColor='0x7f202020'
+                shadowOpacity='0.4' shadowSigma='2.5' shadowOffset='1.5' />  <!-- month -->
+  <window	name='year win'	    x='yearX'           y='yearY-7'       modes='front' w='40' h='13' border='2' strokeColor='darkGray'
+                shadowOpacity='0.4' shadowSigma='2.5' shadowOffset='1.5' />
+  <window	name='cal win' modes='front' x='xCal-calendarWidth/2+1'    y='yCal+calendarYOffset' w='calendarWidth-2' h='calendarHeight' border='.25' strokeColor='shadowClr'
+                shadowOpacity='0.3' shadowSigma='1.5' shadowOffset='0' />
+    
+  <static   name='front'	modes='front' >
+    <QRect      name='maskRect' x='-backerWidth/2' y='-backerWidth/2'  modes='front'  w='backerWidth' h='backerWidth' bgColor='black'/>
+    <Image	name='face f'	    x='0' y='   0'	modes='front'	src='../partsBin/HD/rose/face.png' />
+    <QDial	name='face borderf' x='0' y='0'	modes='front' radius='faceR' bgColor='clear' strokeColor='black' marks='outer'  markWidth='.5' />
+    <Image	name='logo'	    x='logoX' y='logoY'	modes='front'	src='../partsBin/logos/black.png' />
+    <QDial	name='hr  ticf'     x='0' y='0'	modes='front' radius='hour12OR' markWidth='2.0' marks='tickOut' nMarks='12' mSize=' 9' bgColor='clear' />
+    <QDial	name='min ticf'     x='0' y='0'	modes='front' radius='hour12OR' markWidth='1.0' marks='tickOut' nMarks='60' mSize=' 6' bgColor='clear' />
+    <QDial	name='submin ticf'  x='0' y='0'	modes='front' radius='hour12OR' markWidth='.5' marks='tickOut' nMarks='240' mSize=' 3' bgColor='clear' />
+    <QDial	name='12 numsf'     x='0' y='0'	modes='front' radius='hour12OR+6' orientation='upright' fontSize='hour12FS'      fontName='Times New Roman' bgColor='clear' strokeColor='fgColor' text=' ,,,3,,,6,,,9,,' />
+    <QDial	name='12 numsfa'    x='0' y='0'	modes='front' radius='hour12OR+3' orientation='upright' fontSize='hour12smallFS' fontName='Times New Roman' bgColor='clear' strokeColor='fgColor' text=', ,2,,4,5,,7,8,,10, ' />
+  </static>
+
+<!-- calendar weekdays header -->
+  <CalendarHeader name='cal header 0' x='xCal+2' y='yCal+calendarRadius-2' modes='front' parkX='parkX' parkY='parkY' weekdayColor='calendarHeaderWeekdayColor' weekendColor='calendarHeaderWeekendColor'
+                  bodyFontSize='calendarFontSize' bodyFontName='Arial' fontSize='calendarFontSize' fontName='Arial' weekdayStart='0' />
+  <CalendarHeader name='cal header 1' x='xCal+2' y='yCal+calendarRadius-2' modes='front' parkX='parkX' parkY='parkY' weekdayColor='calendarHeaderWeekdayColor' weekendColor='calendarHeaderWeekendColor'
+                  bodyFontSize='calendarFontSize' bodyFontName='Arial' fontSize='calendarFontSize' fontName='Arial' weekdayStart='1' />
+  <CalendarHeader name='cal header 6' x='xCal+2' y='yCal+calendarRadius-2' modes='front' parkX='parkX' parkY='parkY' weekdayColor='calendarHeaderWeekdayColor' weekendColor='calendarHeaderWeekendColor'
+                  bodyFontSize='calendarFontSize' bodyFontName='Arial' fontSize='calendarFontSize' fontName='Arial' weekdayStart='6' />
+
+<!-- front hands -->
+    <Qhand    name='hr'		z='3' x='0'   y='0'   modes='front'	kind='hour12Kind'  type='breguet'  length='hrLen' width='hrWidth' update='1' angle='hour12ValueAngle()' strokeColor='breBlue' fillColor='breBlue'/>
+    <Qhand    name='min'	z='3' x='0'   y='0'   modes='front'	kind='minuteKind'  type='breguet'  length='minLen' width='minWidth' update='1' angle='minuteValueAngle()' strokeColor='breBlue' fillColor='breBlue'/>
+    <Qhand    name='second'	z='3' x='0'   y='0'   modes='front'   length='secLen' width='secWidth'	update='1' tail='40' oCenter='2' oRadius='5' oLineWidth='1' strokeColor='secColor' fillColor='secColor' oStrokeColor='secColor' oFillColor='clear' angle='secondValueAngle()' kind='secondKind' />
+
+</watch>

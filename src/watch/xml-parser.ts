@@ -20,6 +20,8 @@ import type {
     TerminatorPart,
     QWedgePart,
     QDayNightRingPart,
+    CalendarRowCoverPart,
+    CalendarHeaderPart,
 } from './types.js';
 import { parse } from '../expr/parser.js';
 import type { ASTNode } from '../expr/parser.js';
@@ -61,6 +63,7 @@ export function parseWatchXML(
         planetSelector: (attr(watchEl, 'planetSelector') ?? '') === '1',
         numEnvironments: parseInt(attr(watchEl, 'numEnvironments') ?? '1', 10),
         maxSeparateLoc: parseInt(attr(watchEl, 'maxSeparateLoc') ?? '1', 10),
+        calendarWeekStart: (attr(watchEl, 'calendarWeekStart') ?? '') === '1',
         initExprs: [],
         parts: [],
     };
@@ -175,6 +178,18 @@ function processElement(
         case 'qdaynightring':
             if (matchesMode(el, mode)) {
                 parts.push(parseQDayNightRing(el));
+            }
+            break;
+
+        case 'calendarrowcover':
+            if (matchesMode(el, mode)) {
+                parts.push(parseCalendarRowCover(el));
+            }
+            break;
+
+        case 'calendarheader':
+            if (matchesMode(el, mode)) {
+                parts.push(parseCalendarHeader(el));
             }
             break;
 
@@ -303,6 +318,8 @@ function parseQHand(el: Element): QHandPart {
         text: attr(el, 'text'),
         fontSize: attrExpr(el, 'fontSize'),
         fontName: attr(el, 'fontName'),
+        xMotion: attrExpr(el, 'xMotion'),
+        yMotion: attrExpr(el, 'yMotion'),
     };
 }
 
@@ -337,6 +354,9 @@ function parseWheel(el: Element, variant: 'SWheel' | 'QWheel' | 'TWheel'): Wheel
         halfAndHalf: attrExpr(el, 'halfAndHalf'),
         ticks: attrExpr(el, 'ticks'),
         tickWidth: attrExpr(el, 'tickWidth'),
+        calendar: attr(el, 'calendar'),
+        calendarStartDay: attr(el, 'calendarStartDay'),
+        calendarWeekendColor: attrExpr(el, 'calendarWeekendColor'),
     };
 }
 
@@ -485,6 +505,44 @@ function parseQDayNightRing(el: Element): QDayNightRingPart {
         update: attrExpr(el, 'update'),
         timeBase: attr(el, 'timeBase'),
         envSlot: attrExpr(el, 'envSlot'),
+    };
+}
+
+function parseCalendarRowCover(el: Element): CalendarRowCoverPart {
+    return {
+        type: 'CalendarRowCover',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        coverType: attr(el, 'coverType'),
+        fontName: attr(el, 'fontName'),
+        fontSize: attrExpr(el, 'fontSize'),
+        fontColor: attrExpr(el, 'fontColor'),
+        bgColor: attrExpr(el, 'bgColor'),
+        calendarRadius: attrExpr(el, 'calendarRadius'),
+        update: attrExpr(el, 'update'),
+        animSpeed: attrExpr(el, 'animSpeed'),
+        z: attrExpr(el, 'z'),
+    };
+}
+
+function parseCalendarHeader(el: Element): CalendarHeaderPart {
+    return {
+        type: 'CalendarHeader',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        weekdayStart: attr(el, 'weekdayStart'),
+        weekdayColor: attrExpr(el, 'weekdayColor'),
+        weekendColor: attrExpr(el, 'weekendColor'),
+        bodyFontSize: attrExpr(el, 'bodyFontSize'),
+        bodyFontName: attr(el, 'bodyFontName'),
+        fontSize: attrExpr(el, 'fontSize'),
+        fontName: attr(el, 'fontName'),
+        parkX: attrExpr(el, 'parkX'),
+        parkY: attrExpr(el, 'parkY'),
     };
 }
 

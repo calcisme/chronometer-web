@@ -22,7 +22,7 @@ $ESBUILD "$SRC/engine-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/chronometer-engine.js"
 
 echo "=== Building face data modules ==="
-FACES="haleakala hana chandra selene mauna-kea geneva basel firenze venezia terra miami gaia"
+FACES="haleakala hana chandra selene mauna-kea geneva basel firenze venezia terra miami gaia babylon"
 for face in $FACES; do
   echo "  → face-$face.js"
   $ESBUILD "$SRC/faces/face-$face.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
@@ -80,6 +80,7 @@ get_title() {
     terra)      echo "Terra" ;;
     miami)      echo "Miami" ;;
     gaia)       echo "Gaia" ;;
+    babylon)    echo "Babylon" ;;
   esac
 }
 
@@ -115,7 +116,8 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-venezia.js"><\/script>\
     <script src="face-terra.js"><\/script>\
     <script src="face-miami.js"><\/script>\
-    <script src="face-gaia.js"><\/script>'
+    <script src="face-gaia.js"><\/script>\
+    <script src="face-babylon.js"><\/script>'
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \

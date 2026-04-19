@@ -31,6 +31,8 @@ export interface Watch {
     numEnvironments: number;
     /** Maximum separate locations (from maxSeparateLoc attribute). */
     maxSeparateLoc: number;
+    /** True if this face uses a calendar grid (Babylon-style). */
+    calendarWeekStart: boolean;
     /** All `<init expr="...">` blocks in document order. */
     initExprs: ASTNode[];
     /** All parts included for the selected mode, in document order. */
@@ -53,7 +55,9 @@ export type WatchPart =
     | QRectPart
     | TerminatorPart
     | QWedgePart
-    | QDayNightRingPart;
+    | QDayNightRingPart
+    | CalendarRowCoverPart
+    | CalendarHeaderPart;
 
 // ============================================================================
 // Shared base for all parts
@@ -68,7 +72,10 @@ export interface DynamicState {
     currentAngle: number;
     /** Current interpolated offsetAngle (radians), for offset-orbit hands like the Moon. */
     currentOffsetAngle?: number;
-    // Future: currentX, currentY for linear animation
+    /** Current xMotion translation (pixels), for calendar day-indicator wires. */
+    currentXMotion?: number;
+    /** Current yMotion translation (pixels), for calendar day-indicator wires. */
+    currentYMotion?: number;
 }
 
 export interface PartBase {
@@ -165,6 +172,10 @@ export interface QHandPart extends PartBase {
     fontSize?: ASTNode;
     /** Font name for spoke text. */
     fontName?: string;
+    /** X-axis linear motion expression (calendar day-indicator wires). */
+    xMotion?: ASTNode;
+    /** Y-axis linear motion expression (calendar day-indicator wires). */
+    yMotion?: ASTNode;
 }
 
 // ============================================================================
@@ -203,6 +214,12 @@ export interface WheelPart extends PartBase {
     ticks?: ASTNode;
     /** Width of tick marks. */
     tickWidth?: ASTNode;
+    /** Calendar wheel type: 'calendarWheel3456' | 'calendarWheel012B' | 'calendarWheelOct1582'. */
+    calendar?: string;
+    /** Which weekday the calendar grid starts on (0=Sunday). */
+    calendarStartDay?: string;
+    /** Color for weekend day numbers in the calendar grid. */
+    calendarWeekendColor?: ASTNode;
 }
 
 // ============================================================================
@@ -350,4 +367,40 @@ export interface QDayNightRingPart extends PartBase {
     update?: ASTNode;
     timeBase?: string;         // 'LST' for Local Sidereal Time, omitted for local time
     envSlot?: ASTNode;         // env slot number — routes astronomy to slot's city lat/lon
+}
+
+// ============================================================================
+// CalendarRowCover — covers partial weeks at top/bottom of calendar grid
+// ============================================================================
+
+export interface CalendarRowCoverPart extends PartBase {
+    type: 'CalendarRowCover';
+    /** Cover type: 'row1Left' | 'row1Right' | 'row6Left' | 'row56Right'. */
+    coverType?: string;
+    fontName?: string;
+    fontSize?: ASTNode;
+    fontColor?: ASTNode;
+    bgColor?: ASTNode;
+    calendarRadius?: ASTNode;
+    update?: ASTNode;
+    animSpeed?: ASTNode;
+    z?: ASTNode;
+}
+
+// ============================================================================
+// CalendarHeader — weekday abbreviation row (S M T W T F S)
+// ============================================================================
+
+export interface CalendarHeaderPart extends PartBase {
+    type: 'CalendarHeader';
+    /** Which weekday the header starts on (0=Sunday, 1=Monday, 6=Saturday). */
+    weekdayStart?: string;
+    weekdayColor?: ASTNode;
+    weekendColor?: ASTNode;
+    bodyFontSize?: ASTNode;
+    bodyFontName?: string;
+    fontSize?: ASTNode;
+    fontName?: string;
+    parkX?: ASTNode;
+    parkY?: ASTNode;
 }
