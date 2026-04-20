@@ -2230,6 +2230,23 @@ async function main() {
         hidePopover();
     });
 
+    // --- Info button & popup ---
+    const infoBtn = document.getElementById('info-btn');
+    const infoOverlay = document.getElementById('info-overlay');
+    const infoClose = document.getElementById('info-close');
+    if (infoBtn && infoOverlay && infoClose) {
+        infoBtn.addEventListener('click', () => {
+            infoOverlay.classList.add('visible');
+        });
+        infoClose.addEventListener('click', () => {
+            infoOverlay.classList.remove('visible');
+        });
+        infoOverlay.addEventListener('click', (e) => {
+            if (e.target === infoOverlay) {
+                infoOverlay.classList.remove('visible');
+            }
+        });
+    }
 
 
     // =========================================================================

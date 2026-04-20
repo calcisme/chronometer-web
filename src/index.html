@@ -102,11 +102,113 @@
             border-radius: 12px;
         }
 
+        #info-btn {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+            color: #889;
+            text-decoration: none;
+            z-index: 10;
+            transition: background 0.2s, color 0.2s;
+            cursor: pointer;
+            border: none;
+            font-size: 18px;
+            font-family: serif;
+            font-style: italic;
+            font-weight: 700;
+            padding: 0;
+        }
+
+        #info-btn:hover {
+            background: rgba(255,255,255,0.15);
+            color: #bbd;
+        }
+
+        #info-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #info-overlay.visible {
+            display: flex;
+        }
+
+        #info-popup {
+            background: rgba(30, 30, 50, 0.98);
+            border: 1px solid #3a3a5e;
+            border-radius: 16px;
+            padding: 28px 32px;
+            max-width: 420px;
+            width: 90%;
+            color: #bbc;
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+            position: relative;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #info-popup h2 {
+            margin: 0 0 12px;
+            font-size: 18px;
+            color: #dde;
+            font-weight: 600;
+        }
+
+        #info-popup a {
+            color: #8af;
+            text-decoration: none;
+        }
+
+        #info-popup a:hover {
+            text-decoration: underline;
+        }
+
+        #info-close {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            background: none;
+            border: none;
+            color: #667;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 2px 6px;
+            line-height: 1;
+            transition: color 0.15s;
+        }
+
+        #info-close:hover {
+            color: #ccf;
+        }
+
         /* {{LOCATION_CSS}} */
     </style>
 </head>
 
 <body>
+    <button id="info-btn" title="About Chronometer">ℹ</button>
+    <div id="info-overlay">
+        <div id="info-popup">
+            <button id="info-close">&times;</button>
+            <h2>Chronometer for the Web</h2>
+            <p>A web port of <a href="https://emeraldsequoia.com" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
+            <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a>.</p>
+        </div>
+    </div>
     <header>
         <h1>Emerald Chronometer</h1>
         <p>Select a watch face</p>
@@ -202,6 +304,18 @@
     <!-- {{LOCATION_DIALOG}} -->
 
     <script src="index-page.js"></script>
+    <script>
+        const infoBtn = document.getElementById('info-btn');
+        const infoOverlay = document.getElementById('info-overlay');
+        const infoClose = document.getElementById('info-close');
+        if (infoBtn && infoOverlay && infoClose) {
+            infoBtn.addEventListener('click', () => infoOverlay.classList.add('visible'));
+            infoClose.addEventListener('click', () => infoOverlay.classList.remove('visible'));
+            infoOverlay.addEventListener('click', (e) => {
+                if (e.target === infoOverlay) infoOverlay.classList.remove('visible');
+            });
+        }
+    </script>
 </body>
 
 </html>

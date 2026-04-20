@@ -522,7 +522,8 @@
 
 
         #back-link,
-        #all-faces-link {
+        #all-faces-link,
+        #info-btn {
             position: absolute;
             top: 16px;
             display: flex;
@@ -546,8 +547,35 @@
             left: 60px;
         }
 
+        #info-btn {
+            right: 16px;
+            cursor: pointer;
+            border: none;
+            font-size: 18px;
+            font-family: serif;
+            font-style: italic;
+            font-weight: 700;
+            padding: 0;
+        }
+
+        #face-name {
+            position: absolute;
+            top: 16px;
+            right: 60px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            z-index: 10;
+            color: #778;
+            font-size: 24px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            user-select: none;
+        }
+
         #back-link:hover,
-        #all-faces-link:hover {
+        #all-faces-link:hover,
+        #info-btn:hover {
             background: rgba(255,255,255,0.15);
             color: #bbd;
         }
@@ -559,9 +587,75 @@
             fill: currentColor;
         }
 
-        /* Hide all-faces link on the all-faces page itself */
-        body.is-all-faces #all-faces-link {
+        /* Hide nav elements on the all-faces page */
+        body.is-all-faces #all-faces-link,
+        body.is-all-faces #face-name {
             display: none;
+        }
+
+        /* Info popup overlay */
+        #info-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #info-overlay.visible {
+            display: flex;
+        }
+
+        #info-popup {
+            background: rgba(30, 30, 50, 0.98);
+            border: 1px solid #3a3a5e;
+            border-radius: 16px;
+            padding: 28px 32px;
+            max-width: 420px;
+            width: 90%;
+            color: #bbc;
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+            position: relative;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #info-popup h2 {
+            margin: 0 0 12px;
+            font-size: 18px;
+            color: #dde;
+            font-weight: 600;
+        }
+
+        #info-popup a {
+            color: #8af;
+            text-decoration: none;
+        }
+
+        #info-popup a:hover {
+            text-decoration: underline;
+        }
+
+        #info-close {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            background: none;
+            border: none;
+            color: #667;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 2px 6px;
+            line-height: 1;
+            transition: color 0.15s;
+        }
+
+        #info-close:hover {
+            color: #ccf;
         }
 
         /* ============= Time Controller ============= */
@@ -921,6 +1015,16 @@
     <div id="app">
         <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
         <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></a>
+        <span id="face-name">Chandra</span>
+        <button id="info-btn" title="About this face">ℹ</button>
+        <div id="info-overlay">
+            <div id="info-popup">
+                <button id="info-close">&times;</button>
+                <h2>Chronometer for the Web</h2>
+                <p>A web port of <a href="https://emeraldsequoia.com" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
+                <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a>.</p>
+            </div>
+        </div>
         <div id="watch-grid"></div>
         <div id="planet-selector">
             <div class="planet-icons" id="planet-icons"></div>
