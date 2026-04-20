@@ -13711,39 +13711,77 @@
     if (!watch.bezelColor) return;
     const faceRadius = watch.faceWidth / 2;
     const outerRadius2 = faceRadius + BEZEL_THICKNESS_XML;
+    const midRadius = (faceRadius + outerRadius2) / 2;
     ctx.save();
     const baseGrad = ctx.createRadialGradient(0, 0, faceRadius, 0, 0, outerRadius2);
-    baseGrad.addColorStop(0, darkenColor(watch.bezelColor, 0.45));
-    baseGrad.addColorStop(0.08, darkenColor(watch.bezelColor, 0.65));
-    baseGrad.addColorStop(0.25, watch.bezelColor);
-    baseGrad.addColorStop(0.5, lightenColor(watch.bezelColor, 1.12));
-    baseGrad.addColorStop(0.75, watch.bezelColor);
-    baseGrad.addColorStop(0.92, darkenColor(watch.bezelColor, 0.7));
-    baseGrad.addColorStop(1, darkenColor(watch.bezelColor, 0.4));
+    baseGrad.addColorStop(0, darkenColor(watch.bezelColor, 0.3));
+    baseGrad.addColorStop(0.06, darkenColor(watch.bezelColor, 0.55));
+    baseGrad.addColorStop(0.15, watch.bezelColor);
+    baseGrad.addColorStop(0.35, lightenColor(watch.bezelColor, 1.25));
+    baseGrad.addColorStop(0.5, lightenColor(watch.bezelColor, 1.3));
+    baseGrad.addColorStop(0.65, lightenColor(watch.bezelColor, 1.25));
+    baseGrad.addColorStop(0.85, watch.bezelColor);
+    baseGrad.addColorStop(0.94, darkenColor(watch.bezelColor, 0.55));
+    baseGrad.addColorStop(1, darkenColor(watch.bezelColor, 0.3));
     ctx.beginPath();
     ctx.arc(0, 0, outerRadius2, 0, 2 * Math.PI, false);
     ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
     ctx.fillStyle = baseGrad;
     ctx.fill("evenodd");
     ctx.beginPath();
-    ctx.arc(0, 0, outerRadius2 - 0.5, 0, 2 * Math.PI, false);
-    ctx.arc(0, 0, faceRadius + 0.5, 0, 2 * Math.PI, true);
-    const highlightGrad = ctx.createLinearGradient(0, -outerRadius2, 0, outerRadius2);
-    highlightGrad.addColorStop(0, "rgba(255,255,255,0.35)");
-    highlightGrad.addColorStop(0.3, "rgba(255,255,255,0.12)");
-    highlightGrad.addColorStop(0.5, "rgba(0,0,0,0)");
-    highlightGrad.addColorStop(0.7, "rgba(0,0,0,0.08)");
-    highlightGrad.addColorStop(1, "rgba(0,0,0,0.15)");
-    ctx.fillStyle = highlightGrad;
+    ctx.arc(0, 0, outerRadius2 - 0.3, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius + 0.3, 0, 2 * Math.PI, true);
+    const dirGrad = ctx.createLinearGradient(0, -outerRadius2, 0, outerRadius2);
+    dirGrad.addColorStop(0, "rgba(255,255,255,0.45)");
+    dirGrad.addColorStop(0.2, "rgba(255,255,255,0.20)");
+    dirGrad.addColorStop(0.45, "rgba(0,0,0,0)");
+    dirGrad.addColorStop(0.65, "rgba(0,0,0,0.10)");
+    dirGrad.addColorStop(1, "rgba(0,0,0,0.22)");
+    ctx.fillStyle = dirGrad;
     ctx.fill("evenodd");
+    const conicGrad = ctx.createConicGradient(
+      -Math.PI * 0.72,
+      // start angle: upper-left
+      0,
+      0
+    );
+    conicGrad.addColorStop(0, "rgba(255,255,255,0)");
+    conicGrad.addColorStop(0.02, "rgba(255,255,255,0.15)");
+    conicGrad.addColorStop(0.06, "rgba(255,255,255,0.55)");
+    conicGrad.addColorStop(0.1, "rgba(255,255,255,0.60)");
+    conicGrad.addColorStop(0.14, "rgba(255,255,255,0.55)");
+    conicGrad.addColorStop(0.2, "rgba(255,255,255,0.12)");
+    conicGrad.addColorStop(0.28, "rgba(255,255,255,0)");
+    conicGrad.addColorStop(0.52, "rgba(255,255,255,0)");
+    conicGrad.addColorStop(0.57, "rgba(255,255,255,0.08)");
+    conicGrad.addColorStop(0.62, "rgba(255,255,255,0.08)");
+    conicGrad.addColorStop(0.67, "rgba(255,255,255,0)");
+    conicGrad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.beginPath();
+    ctx.arc(0, 0, outerRadius2 - 0.3, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius + 0.3, 0, 2 * Math.PI, true);
+    ctx.globalCompositeOperation = "screen";
+    ctx.fillStyle = conicGrad;
+    ctx.fill("evenodd");
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 0.12;
+    for (let i = 1; i <= 5; i++) {
+      const r = faceRadius + BEZEL_THICKNESS_XML * (i / 6);
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, 2 * Math.PI);
+      ctx.strokeStyle = i % 2 === 0 ? "rgba(255,255,255,1)" : "rgba(0,0,0,1)";
+      ctx.lineWidth = 0.25;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(0,0,0,0.6)";
-    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    ctx.lineWidth = 0.7;
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(0, 0, outerRadius2, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.strokeStyle = "rgba(255,255,255,0.20)";
     ctx.lineWidth = 0.4;
     ctx.stroke();
     if (watch.bezelNoonMark) {
@@ -13758,8 +13796,8 @@
       ctx.beginPath();
       ctx.moveTo(0.5, -markInner);
       ctx.lineTo(0.5, -markOuter);
-      ctx.strokeStyle = "rgba(255,255,255,0.2)";
-      ctx.lineWidth = 0.3;
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 0.35;
       ctx.stroke();
     }
     ctx.restore();

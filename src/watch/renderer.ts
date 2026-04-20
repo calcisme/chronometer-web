@@ -297,27 +297,27 @@ function drawQHandsInParts(
     }
 }
 
-/** Draw the bezel ring if the watch specifies one, with a 3D metallic look. */
+/** Draw the bezel ring if the watch specifies one, with a polished-metal look. */
 function drawBezel(ctx: RenderContext, watch: Watch): void {
     if (!watch.bezelColor) return;
     const faceRadius = watch.faceWidth / 2;
     const outerRadius = faceRadius + BEZEL_THICKNESS_XML;
+    const midRadius = (faceRadius + outerRadius) / 2;
 
-    // Parse the base bezel color to derive highlight/shadow variants
     ctx.save();
 
-    // --- 1. Base bezel band with radial gradient (dark edges, bright centre) ---
+    // --- 1. Base bezel band — high-contrast convex profile ---
+    // Steeper transitions simulate a convex cross-section that catches light sharply.
     const baseGrad = ctx.createRadialGradient(0, 0, faceRadius, 0, 0, outerRadius);
-    // Inner edge: darken for a shadowed lip
-    baseGrad.addColorStop(0,    darkenColor(watch.bezelColor, 0.45));
-    baseGrad.addColorStop(0.08, darkenColor(watch.bezelColor, 0.65));
-    // Main body
-    baseGrad.addColorStop(0.25, watch.bezelColor);
-    baseGrad.addColorStop(0.50, lightenColor(watch.bezelColor, 1.12));
-    baseGrad.addColorStop(0.75, watch.bezelColor);
-    // Outer edge: darken for a rolled-over lip
-    baseGrad.addColorStop(0.92, darkenColor(watch.bezelColor, 0.70));
-    baseGrad.addColorStop(1,    darkenColor(watch.bezelColor, 0.40));
+    baseGrad.addColorStop(0,    darkenColor(watch.bezelColor, 0.30));  // dark inner lip
+    baseGrad.addColorStop(0.06, darkenColor(watch.bezelColor, 0.55));
+    baseGrad.addColorStop(0.15, watch.bezelColor);
+    baseGrad.addColorStop(0.35, lightenColor(watch.bezelColor, 1.25)); // bright crown
+    baseGrad.addColorStop(0.50, lightenColor(watch.bezelColor, 1.30)); // peak
+    baseGrad.addColorStop(0.65, lightenColor(watch.bezelColor, 1.25));
+    baseGrad.addColorStop(0.85, watch.bezelColor);
+    baseGrad.addColorStop(0.94, darkenColor(watch.bezelColor, 0.55));
+    baseGrad.addColorStop(1,    darkenColor(watch.bezelColor, 0.30));  // dark outer lip
 
     ctx.beginPath();
     ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI, false);
@@ -325,36 +325,77 @@ function drawBezel(ctx: RenderContext, watch: Watch): void {
     ctx.fillStyle = baseGrad;
     ctx.fill('evenodd');
 
-    // --- 2. Specular highlight sweep (upper portion, simulated light from above) ---
+    // --- 2. Directional light (top-lit) — stronger contrast ---
     ctx.beginPath();
-    ctx.arc(0, 0, outerRadius - 0.5, 0, 2 * Math.PI, false);
-    ctx.arc(0, 0, faceRadius + 0.5,  0, 2 * Math.PI, true);
-    // Linear gradient from top to bottom for directional light
-    const highlightGrad = ctx.createLinearGradient(0, -outerRadius, 0, outerRadius);
-    highlightGrad.addColorStop(0,    'rgba(255,255,255,0.35)');
-    highlightGrad.addColorStop(0.30, 'rgba(255,255,255,0.12)');
-    highlightGrad.addColorStop(0.50, 'rgba(0,0,0,0)');
-    highlightGrad.addColorStop(0.70, 'rgba(0,0,0,0.08)');
-    highlightGrad.addColorStop(1,    'rgba(0,0,0,0.15)');
-    ctx.fillStyle = highlightGrad;
+    ctx.arc(0, 0, outerRadius - 0.3, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius + 0.3,  0, 2 * Math.PI, true);
+    const dirGrad = ctx.createLinearGradient(0, -outerRadius, 0, outerRadius);
+    dirGrad.addColorStop(0,    'rgba(255,255,255,0.45)');   // strong top light
+    dirGrad.addColorStop(0.20, 'rgba(255,255,255,0.20)');
+    dirGrad.addColorStop(0.45, 'rgba(0,0,0,0)');
+    dirGrad.addColorStop(0.65, 'rgba(0,0,0,0.10)');
+    dirGrad.addColorStop(1,    'rgba(0,0,0,0.22)');         // shadow at bottom
+    ctx.fillStyle = dirGrad;
     ctx.fill('evenodd');
 
-    // --- 3. Fine inner ring (shadow where bezel meets glass) ---
+    // --- 3. Conic specular — tight focused reflection band ---
+    // A concentrated bright band at ~10–11 o'clock with a sharp falloff,
+    // like a window or studio light reflecting on polished metal.
+    const conicGrad = ctx.createConicGradient(
+        -Math.PI * 0.72,  // start angle: upper-left
+        0, 0,
+    );
+    conicGrad.addColorStop(0,    'rgba(255,255,255,0)');
+    conicGrad.addColorStop(0.02, 'rgba(255,255,255,0.15)');
+    conicGrad.addColorStop(0.06, 'rgba(255,255,255,0.55)');  // sharp peak
+    conicGrad.addColorStop(0.10, 'rgba(255,255,255,0.60)');  // bright core
+    conicGrad.addColorStop(0.14, 'rgba(255,255,255,0.55)');
+    conicGrad.addColorStop(0.20, 'rgba(255,255,255,0.12)');
+    conicGrad.addColorStop(0.28, 'rgba(255,255,255,0)');
+    // Faint secondary reflection opposite side
+    conicGrad.addColorStop(0.52, 'rgba(255,255,255,0)');
+    conicGrad.addColorStop(0.57, 'rgba(255,255,255,0.08)');
+    conicGrad.addColorStop(0.62, 'rgba(255,255,255,0.08)');
+    conicGrad.addColorStop(0.67, 'rgba(255,255,255,0)');
+    conicGrad.addColorStop(1,    'rgba(255,255,255,0)');
+
+    ctx.beginPath();
+    ctx.arc(0, 0, outerRadius - 0.3, 0, 2 * Math.PI, false);
+    ctx.arc(0, 0, faceRadius + 0.3,  0, 2 * Math.PI, true);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = conicGrad;
+    ctx.fill('evenodd');
+    ctx.globalCompositeOperation = 'source-over';
+
+    // --- 4. Fine concentric hairlines — brushed-metal texture ---
+    // Several thin bright/dark rings to break up the smooth gradient and
+    // suggest a polished surface with very fine circular machining marks.
+    ctx.globalAlpha = 0.12;
+    for (let i = 1; i <= 5; i++) {
+        const r = faceRadius + BEZEL_THICKNESS_XML * (i / 6);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, 2 * Math.PI);
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(255,255,255,1)' : 'rgba(0,0,0,1)';
+        ctx.lineWidth = 0.25;
+        ctx.stroke();
+    }
+    ctx.globalAlpha = 1.0;
+
+    // --- 5. Fine inner ring (shadow where bezel meets glass) ---
     ctx.beginPath();
     ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 0.7;
     ctx.stroke();
 
-
-    // --- 4. Fine outer edge highlight ---
+    // --- 6. Fine outer edge highlight ---
     ctx.beginPath();
     ctx.arc(0, 0, outerRadius, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
     ctx.lineWidth = 0.4;
     ctx.stroke();
 
-    // --- 5. Solar noon indicator mark (etched line at 12 o'clock) ---
+    // --- 7. Solar noon indicator mark (etched line at 12 o'clock) ---
     if (watch.bezelNoonMark) {
         const markInner = faceRadius;
         const markOuter = faceRadius + BEZEL_THICKNESS_XML * 0.55;
@@ -369,8 +410,8 @@ function drawBezel(ctx: RenderContext, watch: Watch): void {
         ctx.beginPath();
         ctx.moveTo(0.5, -markInner);
         ctx.lineTo(0.5, -markOuter);
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 0.3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 0.35;
         ctx.stroke();
     }
 
