@@ -65,6 +65,20 @@ Other useful commands:
 | `npx tsc --noEmit` | Run the TypeScript compiler in check-only mode |
 | `npx vitest` | Run the test suite |
 
+### Reference repositories
+
+The iOS/Android source code can be cloned locally for reference during development:
+
+```bash
+./scripts/clone-refs.sh
+```
+
+This clones the four reference repos (`.chronometer-ref`, `.esastro-ref`, `.eslocation-ref`, `.estime-ref`). They are not required for building or running the web app, but are essential for porting new faces or tracing algorithm implementations. See [docs/ios-reference.md](docs/ios-reference.md) for a guide to navigating these repos.
+
+### Implementation docs
+
+The [`docs/`](docs/) directory contains permanent, subsystem-focused reference documentation covering rendering, animation, astronomy, shadows, expressions, and more. Start with [docs/README.md](docs/README.md) for a table of contents.
+
 ## Architecture
 
 The app is structured as a pure client-side renderer:

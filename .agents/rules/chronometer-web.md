@@ -2,11 +2,11 @@
 trigger: always_on
 ---
 
-An iPhone and iPad app that was written by me and a partner lives at https://github.com/EmeraldSequoia/Chronometer.
+An iPhone and iPad app that was written by Steve Pucci & Bill Arnett lives at https://github.com/EmeraldSequoia/Chronometer.
 
-This project is about porting that app from its current implementation in Objective-C, C++, and C that runs on an iOS device to a web app that runs in a user's browser.
+This project is a port of that app from the implementation in Objective-C, C++, and C that runs on an iOS device to a web app that runs in a user's browser. There is also an Android port of this code, but it is not available in github other than the XML files for Android.
 
-Like the existing app, which never needs to contact any servers and uses only the time and location from the user's device, I want the web app to not contact any backend servers at all either. It should be a static app that runs entirely in TypeScript; this will allow it to run directly from the GitHub IO directory
+The web app is to not contact any backend servers at all either for any core functionality. It should be a static app that runs entirely in TypeScript. This will allow it to run from any web server simply by serving the static files.
 
 The original iOS app has two variants:
 * "Henry", a preprocessor app that also runs on iOS (typically a simulator) reads XML files for each watch face, and creates two artifacts for each face:
@@ -17,13 +17,4 @@ The original iOS app has two variants:
     * It reads the texture atlas files and keeps them in memory
     * It reads the "archive" binary file and uses that to know where, when, and how to update the hands
 
-## Rendering Order
-
-Parts must be rendered in exactly the order they appear in the XML file. This order is critical for correct visual layering:
-* Hands that overlap other hands must appear later in the XML than the hands they overlap.
-* "Windows" (cutout borders) must appear after the parts that show through them but before any hands that overlap them.
-* The renderer must not sort, reorder, or apply z-index logic — it must use pure document order.
-
-## Building
-
-The app can be built simply with 'PATH="/usr/local/bin:$PATH"'
+For **all** tasks and queries to the agent when developing this project, **always** refer to the document in docs/development-rules.md and follow those rules explicitly. Also use any other documents in that directory to provide background information useful to the query or task.
