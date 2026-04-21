@@ -25,6 +25,7 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 - [**Astronomy**](astronomy.md) — Ported astronomical routines, opcode tracing guide
 - [**World-Time Slots**](world-time-slots.md) — Slot architecture for Terra/Gaia world-time features
 - [**Location & Cities**](location-and-cities.md) — Location system, GeoNames city picker, `file://` limitations
+- [**Help System**](help-system.md) — Per-face help content, Android source extraction, lazy-loading architecture
 
 ### Development
 - [**Face Porting Guide**](face-porting-guide.md) — Step-by-step procedure for porting a new watch face

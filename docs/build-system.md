@@ -49,7 +49,7 @@ The all-faces page (`index.html`) includes all face scripts.
 
 ## Adding a New Face
 
-`build.sh` must be updated in **three places**:
+`build.sh` must be updated in **three places** (plus an optional fourth for help):
 
 ### 1. `FACES` Variable
 
@@ -78,6 +78,10 @@ Add the face script to the all-faces page script list:
 ALL_SCRIPTS="dist/face-mauna-kea.js dist/face-hana.js ..."
 ```
 
+### 4. Help Content (if applicable)
+
+If the new face has a help file in `src/help/<face>.html`, the `get_help_file()` function will automatically find it by convention (it looks for `src/help/<face-slug>.html`). No explicit mapping is needed — just place the help fragment file with the correct slug name. See [Help System](help-system.md) for details on creating help files.
+
 ## Engine Bundling Implications
 
 Since `watch-env.ts` is bundled into the shared engine:
@@ -98,9 +102,17 @@ dist/
 ├── face-hana.js
 ├── ...
 ├── cities-data.js               # City database
+├── help/
+│   └── images/                  # Help content images (copied from src/help/images/)
+│       ├── extlink.png
+│       ├── geneva/
+│       ├── terra/
+│       └── ...
 ├── apple-touch-icon.png         # PWA icon
 └── *.png                        # Thumbnail images
 ```
+
+Note: Help HTML fragments are injected directly into each face's HTML file at build time (inside a `<template>` element), so they do not appear as separate files in `dist/`.
 
 ## `file://` Deployment
 
@@ -137,6 +149,8 @@ npx vitest
 | `src/face-template.html` | HTML template for individual face pages |
 | `src/index.html` | All-faces grid page source |
 | `src/faces/face-*.ts` | Per-face registration entry points |
+| `src/help/*.html` | Per-face help content fragments (injected at build time) |
+| `src/help/images/` | Help content images (copied to `dist/help/images/`) |
 | `tsconfig.json` | TypeScript configuration |
 | `package.json` | Dependencies (esbuild) |
 
@@ -144,3 +158,4 @@ npx vitest
 
 - [Face Porting Guide](face-porting-guide.md) — How to add a new face (includes build steps)
 - [Architecture Overview](architecture-overview.md) — Overall app structure
+- [Help System](help-system.md) — Help content architecture

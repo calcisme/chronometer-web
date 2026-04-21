@@ -93,6 +93,25 @@ If the face has hands with `offsetRadius > 0` (e.g., moon orbit, subdial hands),
 
 If the face has interactive features (body selector, city picker), see [Development Rules §7–§8](development-rules.md#7-interactive-controller-patterns) for the URL parameter and animation-preserving patterns.
 
+## 11. Help Content
+
+Each face should have a help file that describes what the face displays. Help content is sourced from the Android (Wear OS) help files.
+
+1. **Find the source**: Locate the Android help file in `/Users/spucci/aw/<dir>/<face>_i.html` (see [Help System](help-system.md) for the directory mapping)
+2. **Extract the body**: Copy only the content between the `<!-- Boilerplate code above here -->` and `<!-- Boilerplate code below here -->` markers
+3. **Adapt the content**:
+   - Strip Android-specific text (ambient mode, gear button, long press instructions)
+   - Strip the banner image and any buy/download links
+   - Rewrite cross-face links to point to our pages (e.g., `../miami/venezia_i.html` → `venezia.html`)
+   - Rewrite image `src` paths to `help/images/<dir>/imagename.png`
+   - Remove or rewrite links to `emeraldsequoia.com`
+   - Keep Wikipedia and other educational external links (with `extlink.png` icon)
+4. **Save as fragment**: Write the adapted HTML (no `<html>`/`<head>`/`<body>` tags) to `src/help/<face-slug>.html`
+5. **Copy images**: Copy any referenced inline images from the Android directory to `src/help/images/<dir>/`
+6. **Verify**: Run `bash build.sh`, open the face page, click ℹ, and confirm the help content appears correctly below the separator
+
+See [Help System](help-system.md) for the full architecture and extraction rules.
+
 ## Related Docs
 
 - [XML Parsing](xml-parsing.md) — Part type taxonomy and attribute conventions
@@ -101,3 +120,4 @@ If the face has interactive features (body selector, city picker), see [Developm
 - [iOS Reference](ios-reference.md) — Navigating the reference repos
 - [Build System](build-system.md) — Three-place registration
 - [Development Rules](development-rules.md) — Critical invariants
+- [Help System](help-system.md) — Help content architecture and source material
