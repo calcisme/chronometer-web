@@ -766,6 +766,11 @@
             infoOverlay.addEventListener('click', (e) => {
                 if (e.target === infoOverlay) infoOverlay.classList.remove('visible');
             });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && infoOverlay.classList.contains('visible')) {
+                    infoOverlay.classList.remove('visible');
+                }
+            });
         }
     </script>
 </body>

@@ -17508,10 +17508,31 @@
       }
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && locationPrompt.style.display !== "none") {
+      if (e.key !== "Escape") return;
+      const confirmOverlay = document.getElementById("tc-confirm-overlay");
+      if (confirmOverlay && confirmOverlay.style.display !== "none") {
+        confirmOverlay.style.display = "none";
+        return;
+      }
+      const tcDialog = document.getElementById("terra-city-dialog");
+      if (tcDialog && tcDialog.style.display !== "none") {
+        tcDialog.style.display = "none";
+        grid.classList.remove("blurred");
+        return;
+      }
+      if (infoOverlay && infoOverlay.classList.contains("visible")) {
+        infoOverlay.classList.remove("visible");
+        return;
+      }
+      if (popoverOpen) {
+        hidePopover();
+        return;
+      }
+      if (locationPrompt.style.display !== "none") {
         if (!needsPrompt || (lat !== 0 || lon !== 0)) {
           dismissLocationPrompt();
         }
+        return;
       }
     });
     lpDoneBtn.addEventListener("click", () => {

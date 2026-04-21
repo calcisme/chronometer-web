@@ -1541,12 +1541,43 @@ async function main() {
         }
     });
 
-    // Close prompt with Escape key (same condition as backdrop)
+    // Close any open modal dialog with Escape key (topmost first)
     document.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && locationPrompt.style.display !== 'none') {
+        if (e.key !== 'Escape') return;
+
+        // 1. Reset confirm overlay (inside city dialog)
+        const confirmOverlay = document.getElementById('tc-confirm-overlay');
+        if (confirmOverlay && confirmOverlay.style.display !== 'none') {
+            confirmOverlay.style.display = 'none';
+            return;
+        }
+
+        // 2. Terra/Gaia city dialog
+        const tcDialog = document.getElementById('terra-city-dialog');
+        if (tcDialog && tcDialog.style.display !== 'none') {
+            tcDialog.style.display = 'none';
+            grid.classList.remove('blurred');
+            return;
+        }
+
+        // 3. Info overlay
+        if (infoOverlay && infoOverlay.classList.contains('visible')) {
+            infoOverlay.classList.remove('visible');
+            return;
+        }
+
+        // 4. Time popover
+        if (popoverOpen) {
+            hidePopover();
+            return;
+        }
+
+        // 5. Location prompt
+        if (locationPrompt.style.display !== 'none') {
             if (!needsPrompt || (lat !== 0 || lon !== 0)) {
                 dismissLocationPrompt();
             }
+            return;
         }
     });
 
