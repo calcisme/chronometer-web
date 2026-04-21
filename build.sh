@@ -41,26 +41,30 @@ echo "=== Generating HTML files ==="
 # Replaces lines containing {{LOCATION_CSS}}, {{LOCATION_DIALOG}},
 # {{TIME_CSS}}, {{TIME_CONTROLLER}}, and terra city dialog placeholders.
 inject_partials() {
-    awk -v P="$SRC/partials" '
+    local HELP_FILE="${1:-}"
+    awk -v P="$SRC/partials" -v H="$HELP_FILE" '
     /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
     /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
     /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
     /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
     /\{\{TERRA_CITY_CSS\}\}/ { next }
     /\{\{TERRA_CITY_DIALOG\}\}/ { next }
+    /\{\{HELP_CONTENT\}\}/ { if (H != "") { while ((getline line < H) > 0) print line; close(H) }; next }
     { print }
     '
 }
 
 # Same as inject_partials but includes terra city dialog content.
 inject_partials_terra() {
-    awk -v P="$SRC/partials" '
+    local HELP_FILE="${1:-}"
+    awk -v P="$SRC/partials" -v H="$HELP_FILE" '
     /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
     /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
     /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
     /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
     /\{\{TERRA_CITY_CSS\}\}/ { while ((getline line < (P"/terra-city-dialog.css")) > 0) print line; close(P"/terra-city-dialog.css"); next }
     /\{\{TERRA_CITY_DIALOG\}\}/ { while ((getline line < (P"/terra-city-dialog.html")) > 0) print line; close(P"/terra-city-dialog.html"); next }
+    /\{\{HELP_CONTENT\}\}/ { if (H != "") { while ((getline line < H) > 0) print line; close(H) }; next }
     { print }
     '
 }
@@ -84,6 +88,14 @@ get_title() {
   esac
 }
 
+# Helper to get help file path for each face
+get_help_file() {
+  local f="$SRC/help/$1.html"
+  if [ -f "$f" ]; then
+    echo "$f"
+  fi
+}
+
 # Per-face HTML
 for face in $FACES; do
   TITLE=$(get_title "$face")
@@ -96,10 +108,11 @@ for face in $FACES; do
   else
     INJECTOR=inject_partials
   fi
+  HELP_FILE=$(get_help_file "$face")
   sed -e "s|{{TITLE}}|$TITLE|g" \
       -e "s|{{SCRIPTS}}|$SCRIPTS|g" \
       -e "s|{{ICON}}|$ICON|g" \
-      "$SRC/face-template.html" | $INJECTOR > "$DIST/$face.html"
+      "$SRC/face-template.html" | $INJECTOR "$HELP_FILE" > "$DIST/$face.html"
   echo "  → $face.html"
 done
 
@@ -138,6 +151,15 @@ fi
 for f in "$SRC"/faces/thumb-*.png "$SRC"/apple-touch-icon.png; do
   [ -f "$f" ] && cp "$f" "$DIST/" && echo "  → $(basename "$f")"
 done
+
+# Copy help images to dist
+if [ -d "$SRC/help/images" ]; then
+  echo ""
+  echo "=== Copying help images ==="
+  mkdir -p "$DIST/help/images"
+  cp -r "$SRC"/help/images/* "$DIST/help/images/"
+  echo "  → help/images/ ($(find "$DIST/help/images" -type f | wc -l | tr -d ' ') files)"
+fi
 
 echo ""
 echo "=== Build complete ==="

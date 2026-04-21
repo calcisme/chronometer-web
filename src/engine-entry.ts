@@ -2265,9 +2265,18 @@ async function main() {
     const infoBtn = document.getElementById('info-btn');
     const infoOverlay = document.getElementById('info-overlay');
     const infoClose = document.getElementById('info-close');
+    const helpContent = document.getElementById('help-content');
+    const helpTemplate = document.getElementById('help-template') as HTMLTemplateElement | null;
+    let helpLoaded = false;
     if (infoBtn && infoOverlay && infoClose) {
         infoBtn.addEventListener('click', () => {
             infoOverlay.classList.add('visible');
+            // Clone help template into DOM on first open
+            // (images only start loading once cloned into the live DOM)
+            if (!helpLoaded && helpContent && helpTemplate?.content) {
+                helpLoaded = true;
+                helpContent.appendChild(helpTemplate.content.cloneNode(true));
+            }
         });
         infoClose.addEventListener('click', () => {
             infoOverlay.classList.remove('visible');

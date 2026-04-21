@@ -615,8 +615,10 @@
             border: 1px solid #3a3a5e;
             border-radius: 16px;
             padding: 28px 32px;
-            max-width: 420px;
+            max-width: 600px;
             width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
             color: #bbc;
             box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
             position: relative;
@@ -656,6 +658,78 @@
 
         #info-close:hover {
             color: #ccf;
+        }
+
+        /* Help content styles */
+        .help-separator {
+            border: none;
+            border-top: 1px solid #3a3a5e;
+            margin: 16px 0;
+        }
+
+        #help-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 4px 0;
+        }
+
+        #help-content img[align="left"] {
+            max-width: 45%;
+            margin: 4px 12px 4px 0;
+            float: left;
+        }
+
+        #help-content img[align="right"] {
+            max-width: 45%;
+            margin: 4px 0 4px 12px;
+            float: right;
+        }
+
+        #help-content img[src*="extlink"] {
+            display: inline;
+            width: 12px;
+            height: 12px;
+            vertical-align: middle;
+            margin: 0 1px;
+            border-radius: 0;
+        }
+
+        #help-content p,
+        #help-content br[clear] {
+            clear: both;
+        }
+
+        #help-content center {
+            display: block;
+            text-align: center;
+        }
+
+        #help-content center img {
+            max-width: 60%;
+        }
+
+        #help-content details {
+            margin: 12px 0;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+
+        #help-content details summary {
+            cursor: pointer;
+            color: #8af;
+            font-size: 14px;
+        }
+
+        #help-content details summary:hover {
+            text-decoration: underline;
+        }
+
+        #help-content h3 {
+            font-size: 16px;
+            color: #dde;
+            margin: 16px 0 8px;
         }
 
         /* ============= Time Controller ============= */
@@ -1021,10 +1095,32 @@
             <div id="info-popup">
                 <button id="info-close">&times;</button>
                 <h2>Chronometer for the Web</h2>
-                <p>A web port of <a href="https://emeraldsequoia.com/h/index.html" target="_blank" rel="noopener">Emerald Chronometer</a> (<a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">GitHub</a>), an astronomical watch-face app originally built for iPhone and iPad.</p>
+                <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
                 <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a></p>
+                <hr class="help-separator">
+                <div id="help-content">
+                    <!-- Populated from help-template on first info click -->
+                </div>
             </div>
         </div>
+        <template id="help-template">
+<b>Miami</b> shows the rise and set times of all of the classical "planets" at the same time.
+The innermost ring represents
+the <span style="color:black"><span style="background-color:#a9a9fc">Moon</span></span>,
+followed by <span style="color:black"><span style="background-color:#CA9CA9"> Mercury,</span><span style="background-color:#fcfca9"> Venus,</span><span style="background-color:#fca9fc"> Mars,</span><span style="background-color:#a9fca9"> Jupiter,</span><span style="background-color:#a9fcfc"> Saturn</span></span>
+and finally the <span style="color:black;background-color:#e7e7e7">Sun</span></span>
+on the outside.
+The colored part of each ring represents the time interval when the planet is above the horizon.
+The light gray region for the Sun (which represents daytime) is reproduced on all the rings.
+<p>
+The single hand shows the current 24-hour time (with midnight on top).  A planet is currently above the horizon if the hand intersects the colored part of its ring.
+<p>
+<img src="help/images/miami/front.png" align=right>
+So in the example to the right: the time is about 5:15am, about 45 minutes before sunrise;
+the Moon, Mars and Jupiter are up;
+Venus is just rising;
+and Mercury and Saturn are below the horizon.
+        </template>
         <div id="watch-grid"></div>
         <div id="planet-selector">
             <div class="planet-icons" id="planet-icons"></div>

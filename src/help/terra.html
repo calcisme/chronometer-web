@@ -1,0 +1,74 @@
+<b>Terra</b> and <a href="gaia.html">Gaia</a> are world-time faces.
+<p>
+On Terra, there are 24 cities arrayed around the outer edge of the front of the face; you may customize the selection of cities from the 80,000-city database (see <a href="#Settings">below</a>).  Each city has an associated "dot hand" which indicates that city's time against the 24-hour ring (in black and white, just inside of the city ring).  If the city's time zone uses Daylight Saving Time (DST, also called Summer Time in some locales), then the dot hand will move along its "channel" twice a year when DST transitions for that city; each dot moves independently of the others according to the rules for its city's time zone.  If the city's time zone does not use DST, there will not be a channel for the dot, but instead a dashed line under the city to associate the city with the dot.
+<p>
+The city fully underneath the clear overlay indicator at the top of the face is used to determine the time shown by the large "main" 12-hour hands in the center of the face, along with the date and day of the week shown in the windows.  Below the selected city, over the 24-hour dial, is a smaller clear indicator with a hairline center; this will be aligned with the top city's dot, and thus will indicate the 24-hour time of the selected city on the 24-hour dial.  If you tap on a city name, the city ring will rotate around to that position, and the main time hands will display the time for that city.  (To avoid confusion, the time reverts to the time of the watch device after 10 seconds with no taps).
+<p>
+For example, in the picture below,
+New York is the selected city (and thus New York's time will be displayed in the central dial).  New York has a solid channel for its dot, so its time zone uses Daylight Saving Time, and DST is in effect (the dot is at the right end of its channel).  We can see from Santiago's dot that the times in Santiago and New York are the same at the current time, but that Santiago is not on DST at the current time (its dot is at the left of its channel).
+<img width='103'  src="help/images/terra/IndicatorAndDots.png" align=left>
+The time in New York (and Santiago) is about 22:15, or 10:15pm, since the dots for those cities are aligned with that time on the 24-hour dial (we also know it's evening because the time is in the dark "night" zone from 6pm to 6am).
+<p>
+<img src="help/images/terra/UTCHand.png" align="right">
+In the picture at right, it may be seen that Dakar does <i>not</i> use DST, because it has a dashed line in place of the dot-motion channel.  In this picture we can also see the green UTC hour hand in the black portion of the 24-hour dial (Dakar's timezone is at UTC+0 year-round).
+<p>
+<p>
+The city labels are "laser etched" into the ring so that the background shows through, and underneath the
+ring are colored background parts that move to change the apparent color of the city labels.  If the city label is black, it means that the city is on the same day as the central "main" time, and thus the city's day may be read from the central windows.  <img width='85' src="help/images/terra/IndicatorDotsLondon.png" align=left>If the city label is green, 
+it means the city is on the next day (relative to the central windows), and if the city label is red,<img width='90' src="help/images/terra/IndicatorDotsParis.png" align=right> it means the city is on the previous day.  These two pictures show the same time (11:30pm in London, 12:30am the next day in Paris) with the outer ring in two different positions; when London is selected by the clear overlay, Paris is on the next day and is green, but when Paris is selected, London is on the previous day and is red.
+<p>
+There are 24 blue dots on the central world map, and they indicate the locations of the 24 cities arrayed around the city ring:
+<center>
+<img src="help/images/terra/CityDots.png">
+</center>
+<p>
+Because the cities are at different latitudes (and offsets 
+<img src="help/images/terra/Hr24-18.png" align='left'/>
+from the nominal longitudinal time zone meridian), it is not possible to display the actual times of sunrise and sunset (and thus the daytime and nighttime hours) for all 24 cities,
+<img src="help/images/terra/Hr24-6.png"  align='right'/>
+and so the day/night ring on this face is fixed with 12 hours of day (white) and 12 hours of night (black).  Contrast this with <a href="mauna-kea.html">Mauna Kea</a>, and with <a href="gaia.html">Gaia</a>, where the actual times of day and night, based on the sunrise and sunset times at a single location, are shown.
+<p>
+Nearly all cities will have their dot either to the left or the right of the city label center, rather than directly underneath the center.  
+<img src="help/images/terra/NYC-winter-summer.png" align='left'/>
+This is done to minimize the distance the dot must be from the label when DST is in effect; for example, when New York is on standard time (EST, UTC-5), the dot is slightly to the left of the label center, but when it is on daylight time
+ (EDT, UTC-4), the dot is slightly to the right of the label center.
+The same placement rule is followed for cities that do not have DST, so that the cities can be evenly spaced around the ring; this has the additional advantage that such cities can usually appear in two different positions on the ring, thus giving more flexibility to the choice of cities (see below).
+<p>
+  <hr size=1>
+<a name="Settings">
+  <h3><b>Settings (customization)</b></h3></a>
+<p>
+  This face allows you to customize the cities that are shown on the outer ring.  Use the "Change cities" button below the face to search for and select cities.
+<p>
+  <b>NOTE:</b> To avoid confusion, one of the cities on the ring must display the time in the timezone your device has been set to.  Usually this is not an issue, but in certain rare circumstances your choice may be overridden if that choice would mean there is not a slot that can display the device time.
+
+<details>
+<summary><b>Timezone Slot Rules</b> (tap to expand)</summary>
+<p>
+<i>Note:  It is not necessary to know these rules in order to use Terra.  They are provided as background information for the curious.</i>
+<p>
+<b>Rules</b> for which slot(s) of the World Time Ring that a city may appear in:
+<p>
+The general rule is that a city may appear only in the slot(s) which minimize the maximum travel of the "dot hand" from the center of the city label.  Labels are centered at an angular position which corresponds to a time halfway between two integral UTC hour offsets, so that cities with DST will have their two offset times arrayed on either side of the label center.
+<img width='66' src="help/images/terra/UTCDots.png" align=left>
+For example, notice that the green UTC hand is at 3:30am, and that the label for London is *centered* at 4am, 30 minutes to the right of UTC, meaning UTC+0:30, and the label for Dakar is *centered* at 3am, 30 minutes to the left of UTC, meaning UTC-0:30.  Each of the labels is similarly on a :30 UTC offset, even though the city *dots* are typically on integral UTC hour offsets (as with London and Dakar here, whose dots coincide with UTC+0 at 3:30am).
+<p>
+This minimization of the dot's distance from the label means that a city which has DST can typically appear in only one slot, <i>unless</i> the two offsets are exactly 30 minutes from an integral UTC hour offset.  For example, 
+<img width='107' src="help/images/terra/NYCdot.png" align=left>
+New York City has offsets of UTC-5 in the winter and UTC-4 in the summer; the minimum-dot-travel requirement means it can only appear in the slot whose city label is centered at UTC-4:30.  In the picture above, it clearly can't go either where Chicago or Santiago is, given its dot's travel range.
+<p>
+But Adelaide, Australia has offsets at UTC+10:30
+in the summer and UTC+9:30 in the winter; it can go either in the slot whose label is centered at UTC+9:30 or the slot centered at UTC+10:30, 
+<img src="help/images/terra/Adelaide.png" align=left>
+because either choice results in the dot being a maximum of one hour from the label center.  Here we've put it in both slots just to illustrate the capability.
+<p>
+On the other hand, a city with no DST but which has an integral UTC hour offset can also go in two slots.  For example, Honolulu, with its unchanging offset of UTC-10, can go either in the slot whose label is centered at UTC-10:30 
+<img width='78' src="help/images/terra/Honolulu.png" align=left>
+or the slot centered at UTC-9:30; each choice results in the dot being 30 minutes from the label center.  Here again we've put it in both slots for illustration.
+<p>
+Finally, a city with no DST but with a non-integral UTC hour offset can only go in one slot.  For example, Delhi, with an unchanging offset of UTC+5:30,
+<img src="help/images/terra/Delhi.png" align=left>
+can only go in the slot whose label is centered at UTC+5:30; at that position its dot is directly underneath the label center.
+<p>
+In addition to these rules, there is a more complex rule that the device's time zone must appear in one of the 24 slots, so that the slot may be selected and the main time hands can show the time of the device.  This rule is invoked when the slot normally associated with the device time zone contains a city with different DST rules.  In this situation a message is displayed and your choice is overridden.
+</details>

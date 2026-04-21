@@ -615,8 +615,10 @@
             border: 1px solid #3a3a5e;
             border-radius: 16px;
             padding: 28px 32px;
-            max-width: 420px;
+            max-width: 600px;
             width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
             color: #bbc;
             box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
             position: relative;
@@ -656,6 +658,78 @@
 
         #info-close:hover {
             color: #ccf;
+        }
+
+        /* Help content styles */
+        .help-separator {
+            border: none;
+            border-top: 1px solid #3a3a5e;
+            margin: 16px 0;
+        }
+
+        #help-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 4px 0;
+        }
+
+        #help-content img[align="left"] {
+            max-width: 45%;
+            margin: 4px 12px 4px 0;
+            float: left;
+        }
+
+        #help-content img[align="right"] {
+            max-width: 45%;
+            margin: 4px 0 4px 12px;
+            float: right;
+        }
+
+        #help-content img[src*="extlink"] {
+            display: inline;
+            width: 12px;
+            height: 12px;
+            vertical-align: middle;
+            margin: 0 1px;
+            border-radius: 0;
+        }
+
+        #help-content p,
+        #help-content br[clear] {
+            clear: both;
+        }
+
+        #help-content center {
+            display: block;
+            text-align: center;
+        }
+
+        #help-content center img {
+            max-width: 60%;
+        }
+
+        #help-content details {
+            margin: 12px 0;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+
+        #help-content details summary {
+            cursor: pointer;
+            color: #8af;
+            font-size: 14px;
+        }
+
+        #help-content details summary:hover {
+            text-decoration: underline;
+        }
+
+        #help-content h3 {
+            font-size: 16px;
+            color: #dde;
+            margin: 16px 0 8px;
         }
 
         /* ============= Time Controller ============= */
@@ -1021,10 +1095,36 @@
             <div id="info-popup">
                 <button id="info-close">&times;</button>
                 <h2>Chronometer for the Web</h2>
-                <p>A web port of <a href="https://emeraldsequoia.com/h/index.html" target="_blank" rel="noopener">Emerald Chronometer</a> (<a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">GitHub</a>), an astronomical watch-face app originally built for iPhone and iPad.</p>
+                <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
                 <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a></p>
+                <hr class="help-separator">
+                <div id="help-content">
+                    <!-- Populated from help-template on first info click -->
+                </div>
             </div>
         </div>
+        <template id="help-template">
+<b>Venezia</b> shows info about one planet at a time but lets you select which one.
+You can use the planet selector buttons below the face to cycle through the available planets.
+<p>
+In addition to the 5 planets visible to the naked eye, the Sun, and the Moon, all of which are shown on <a href="miami.html">Miami</a> and <a href="firenze.html">Firenze</a>, this face also can show information about Uranus and Neptune, which can, with a little effort and the knowledge of where to look, be seen with binoculars or a small telescope.
+<p>
+The three subdials show the rise, transit, and set times for the selected planet on the current day.
+The tiny dot above 12 on each one is black for PM, white for AM, and
+red if there is no such time for the selected planet for this day.
+(There is always a transit time, which is defined as the time at which the planet crosses the meridian, though at high latitudes it may be below the horizon.)
+<p>
+The long cyan hand indicates the selected planet's azimuth read against the outermost dial.
+The shorter magenta hand indicates its altitude read against the magenta half-dial.
+And the yellow hand indicates its position in the zodiac read against the yellow arc on the right.
+In addition, three tiny sun icons always show the position of the Sun on these dials.
+<p>
+Near the top of the dial is a display indicating which planet is selected (a different image is displayed for each planet), with a phase indicator like that of <a href='chandra.html'>Chandra</a>.  The same phase indicator is also shown for the planets, though only the inner planets (Mercury and Venus) have any appreciable phase to display.
+<p>
+In example at the top of the page, the selected planet (actually the Moon in this case) is almost exactly due west at 272 degrees azimuth, at 7 degrees above the horizon, 123 degrees west of and lower than the Sun.
+<p>
+The large central hands show hours and minutes in ordinary 12-hour format (but with no dial).  The dot just above the six o'clock position is black for PM and white for AM.
+        </template>
         <div id="watch-grid"></div>
         <div id="planet-selector">
             <div class="planet-icons" id="planet-icons"></div>

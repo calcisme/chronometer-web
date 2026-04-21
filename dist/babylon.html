@@ -615,8 +615,10 @@
             border: 1px solid #3a3a5e;
             border-radius: 16px;
             padding: 28px 32px;
-            max-width: 420px;
+            max-width: 600px;
             width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
             color: #bbc;
             box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
             position: relative;
@@ -656,6 +658,78 @@
 
         #info-close:hover {
             color: #ccf;
+        }
+
+        /* Help content styles */
+        .help-separator {
+            border: none;
+            border-top: 1px solid #3a3a5e;
+            margin: 16px 0;
+        }
+
+        #help-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 4px 0;
+        }
+
+        #help-content img[align="left"] {
+            max-width: 45%;
+            margin: 4px 12px 4px 0;
+            float: left;
+        }
+
+        #help-content img[align="right"] {
+            max-width: 45%;
+            margin: 4px 0 4px 12px;
+            float: right;
+        }
+
+        #help-content img[src*="extlink"] {
+            display: inline;
+            width: 12px;
+            height: 12px;
+            vertical-align: middle;
+            margin: 0 1px;
+            border-radius: 0;
+        }
+
+        #help-content p,
+        #help-content br[clear] {
+            clear: both;
+        }
+
+        #help-content center {
+            display: block;
+            text-align: center;
+        }
+
+        #help-content center img {
+            max-width: 60%;
+        }
+
+        #help-content details {
+            margin: 12px 0;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+
+        #help-content details summary {
+            cursor: pointer;
+            color: #8af;
+            font-size: 14px;
+        }
+
+        #help-content details summary:hover {
+            text-decoration: underline;
+        }
+
+        #help-content h3 {
+            font-size: 16px;
+            color: #dde;
+            margin: 16px 0 8px;
         }
 
         /* ============= Time Controller ============= */
@@ -1021,10 +1095,60 @@
             <div id="info-popup">
                 <button id="info-close">&times;</button>
                 <h2>Chronometer for the Web</h2>
-                <p>A web port of <a href="https://emeraldsequoia.com/h/index.html" target="_blank" rel="noopener">Emerald Chronometer</a> (<a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">GitHub</a>), an astronomical watch-face app originally built for iPhone and iPad.</p>
+                <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
                 <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a></p>
+                <hr class="help-separator">
+                <div id="help-content">
+                    <!-- Populated from help-template on first info click -->
+                </div>
             </div>
         </div>
+        <template id="help-template">
+<b>Babylon</b> takes its name from the ancient city
+of <a href="http://en.m.wikipedia.org/wiki/Babylon">Babylon<img src="help/images/extlink.png"></a>,
+where early calendars were invented.
+<p>
+Babylon displays a whole-month calendar in the usual format, including
+the last days of the previous month
+and the first days of the following month.  See <a href="#mechanical">below</a> for a description of the mechanics being simulated.
+<p>
+Two sets of red indicator wires (two horizontal and two vertical) move linearly to indicate the current day of the month (more precisely, the two horizontal indicators show the week, the two vertical ones show the weekday, and their intersection shows the current day).
+<p>
+A moon phase indicator like that of <a href="chandra.html">Chandra</a> is present at the lower left, along with a month display at the top and a year display at the lower right.
+<p>
+<a name="mechanical"><b>Mechanical model</b></a>
+<p>
+The calendar display is implemented with stacked wheels which rotate to show the 
+configuration for the current month in the window at the top of the dial.
+There are two primary wheels:
+<p>
+<center>
+<img src="help/images/babylon/SundayWheel012@2x.png" width='240'/>
+<img src="help/images/babylon/SundayWheel3456@2x.png" width='239'/>
+</center>
+<p>
+Spread over these two wheels are the seven possible 31-day month
+configurations, corresponding to the seven weekdays that the first
+falls on.  The bottom wheel shows four of these seven, and the top one
+shows the remaining three and has a "cutout" in the fourth position.
+When one of the top wheel's configurations is needed for the current month, that
+configuration rotates around to be at the top and thus visible in the
+window; when one of the bottom wheel's configurations is needed, the
+top wheel rotates so its cutout section is at the top, letting the
+bottom wheel show through.
+<p>
+Since all of the configurations on the primary wheels display 31-day months, covers slide in from the right to cover days which don't exist in the current month (for example, as shown below, the missing days 30 and 31 in a leap-year February).  These covers are inscribed with the days of the following month, and their numbers align with the correct days of the week:
+<p>
+<center>
+<img src="help/images/babylon/NextMonthCovers@2x.png" width='110'/>
+</center>
+<p>
+Similarly, the last few days of the previous month are shown with sliders that slide underneath the current month, sliding to show the days in their proper weekday positions:
+<p>
+<center>
+<img src="help/images/babylon/PrevMonthUnderlays@2x.png" width='106'/>
+</center>
+        </template>
         <div id="watch-grid"></div>
         <div id="planet-selector">
             <div class="planet-icons" id="planet-icons"></div>
