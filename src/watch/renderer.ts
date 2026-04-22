@@ -2808,8 +2808,6 @@ function drawCalendarWheel(
 
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
                 const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
-                // hack: shift rows slightly (matching iOS)
-                const cyAdj = cy - (1 - row / 5.0);
 
                 // Weekend coloring
                 ctx.fillStyle = (col === satCol || col === sunCol) ? weekendColor : weekdayColor;
@@ -2817,7 +2815,7 @@ function drawCalendarWheel(
                 ctx.fillText(
                     String(dayNumber),
                     cx,
-                    cyAdj + textVisualCenterY(ctx, String(dayNumber)),
+                    cy + textVisualCenterY(ctx, String(dayNumber)),
                 );
 
                 dayNumber++;
@@ -2932,7 +2930,7 @@ function drawCalendarRowCover(
     let coverX = 0, coverY = 0, coverW = 0, coverH = 0;
     switch (coverType) {
         case 'row1Left': {
-            const cy = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2;
             coverX = -calWidth / 2;
             coverY = cy - cellHeight / 2;
             coverW = 4 * cellWidth;
@@ -2940,7 +2938,7 @@ function drawCalendarRowCover(
             break;
         }
         case 'row1Right': {
-            const cy = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2;
             coverX = -calWidth / 2;
             coverY = cy - cellHeight / 2;
             coverW = 5 * cellWidth;
@@ -2948,7 +2946,7 @@ function drawCalendarRowCover(
             break;
         }
         case 'row56Right': {
-            const cy4 = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2 - (1 - 4 / 5.0);
+            const cy4 = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2;
             coverX = -calWidth / 2;
             coverY = cy4 - cellHeight / 2;
             coverW = 7 * cellWidth;
@@ -2956,7 +2954,7 @@ function drawCalendarRowCover(
             break;
         }
         case 'row6Left': {
-            const cy5 = gridTop - calHeight / 2 + 5 * cellHeight + cellHeight / 2 - (1 - 5 / 5.0);
+            const cy5 = gridTop - calHeight / 2 + 5 * cellHeight + cellHeight / 2;
             coverX = -calWidth / 2;
             coverY = cy5 - cellHeight / 2;
             coverW = 7 * cellWidth;
@@ -2990,22 +2988,22 @@ function drawCalendarRowCover(
     // Draw text labels on top (no shadow)
     switch (coverType) {
         case 'row1Left': {
-            const cyAdj = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2;
             for (let col = 0; col < 4; col++) {
                 const day = 23 + col;
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
                 ctx.fillStyle = fontColor;
-                ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+                ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
             }
             break;
         }
         case 'row1Right': {
-            const cyAdj = gridTop - calHeight / 2 + cellHeight / 2 - 1;
+            const cy = gridTop - calHeight / 2 + cellHeight / 2;
             for (let col = 0; col < 5; col++) {
                 const day = 27 + col;
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
                 ctx.fillStyle = fontColor;
-                ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+                ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
             }
             break;
         }
@@ -3016,9 +3014,8 @@ function drawCalendarRowCover(
                     const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
                     const gridRow = 4 + row;
                     const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
-                    const cyAdj = cy - (1 - gridRow / 5.0);
                     ctx.fillStyle = fontColor;
-                    ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+                    ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
                 }
             }
             break;
@@ -3029,9 +3026,8 @@ function drawCalendarRowCover(
                 const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
                 const gridRow = 5;
                 const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
-                const cyAdj = cy - (1 - gridRow / 5.0);
                 ctx.fillStyle = fontColor;
-                ctx.fillText(String(day), cx, cyAdj + textVisualCenterY(ctx, String(day)));
+                ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
             }
             break;
         }
