@@ -12837,7 +12837,7 @@
     functions.set("rotationForCalendarWheelOct1582", (wheelWeekdayStart) => {
       if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
       const cs = getLocalComponents();
-      if (cs.year === 1582 && cs.month - 1 === 9) {
+      if (cs.year === 1582 && cs.month - 1 === 9 && cs.era === 1) {
         return 0;
       }
       return Math.PI / 2;

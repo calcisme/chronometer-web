@@ -1034,8 +1034,8 @@ function registerTimeFunctions(
     functions.set('rotationForCalendarWheelOct1582', (wheelWeekdayStart: number) => {
         if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
         const cs = getLocalComponents();
-        if (cs.year === 1582 && (cs.month - 1) === 9) {
-            return 0;  // It IS October 1582
+        if (cs.year === 1582 && (cs.month - 1) === 9 && cs.era === 1) {
+            return 0;  // It IS October 1582 CE
         }
         return Math.PI / 2;  // The cutout section
     });
