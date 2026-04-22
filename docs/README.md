@@ -16,6 +16,7 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 - [**Animation**](animation.md) — Two-time-base system, update intervals, scrubbing, adaptive compression
 - [**Expressions**](expressions.md) — Expression parser/evaluator pipeline, pre-parsed AST, `evalAttr` API
 - [**XML Parsing**](xml-parsing.md) — Watch XML structure, part type taxonomy, asset resolution
+- [**XML Syntax Reference**](xml-syntax.md) — Complete element and attribute reference for watch face XML
 
 ### Visual Effects
 - [**Shadows**](shadows.md) — Window inner shadows, hand shadows, calendar wheel shadows
