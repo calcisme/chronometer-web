@@ -1646,8 +1646,8 @@
     const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
     const monthNum = (env.functions.get("monthNumber")?.() ?? 0) + 1;
     const yearNum = env.functions.get("yearNumber")?.() ?? 2024;
-    const era = yearNum <= 0 ? 0 : 1;
-    const absYear = yearNum <= 0 ? 1 - yearNum : yearNum;
+    const era = env.functions.get("eraNumber")?.() ?? 1;
+    const absYear = yearNum;
     const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
     const thisMonthStartCol = (7 + weekdayFromTimeInterval(firstOfMonthDI, 0) - calendarWeekdayStart) % 7;
     const dim = daysInMonth(era, absYear, monthNum);
@@ -12337,7 +12337,7 @@
     });
     functions.set("yearNumber", () => {
       const cs = getLocalComponents();
-      return cs.era === 0 ? -cs.year : cs.year;
+      return cs.year;
     });
     functions.set("eraNumber", () => getLocalComponents().era);
     functions.set("GregorianEra", () => {

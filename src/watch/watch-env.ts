@@ -351,7 +351,7 @@ function registerTimeFunctions(
     });
     functions.set('yearNumber', () => {
         const cs = getLocalComponents();
-        return cs.era === 0 ? -cs.year : cs.year;  // negative for BCE
+        return cs.year;  // Always positive; era is from eraNumber()
     });
     functions.set('eraNumber', () => getLocalComponents().era);
 

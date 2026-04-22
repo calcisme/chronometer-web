@@ -205,10 +205,8 @@ function computeCalendarCoverOffset(
 
     const monthNum = (env.functions.get('monthNumber')?.() ?? 0) + 1;
     const yearNum = env.functions.get('yearNumber')?.() ?? 2024;
-
-    // Convert yearNum (negative for BCE) to era/year format for es-calendar
-    const era = yearNum <= 0 ? 0 : 1;
-    const absYear = yearNum <= 0 ? 1 - yearNum : yearNum;
+    const era = env.functions.get('eraNumber')?.() ?? 1;
+    const absYear = yearNum;
 
     // First of this month: compute weekday via epoch arithmetic
     const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
