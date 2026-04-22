@@ -21,6 +21,10 @@
 import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, CalendarRowCoverPart } from './types.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './watch-env.js';
+import {
+    timeIntervalFromUTCComponents, daysInMonth as calendarDaysInMonth,
+    weekdayFromTimeInterval,
+} from '../astronomy/es-calendar.js';
 
 // Constants used by the scheduler
 export const SCHEDULER_LOOKAHEAD_MS = 50; // arm setTimeout this many ms early to avoid skipping boundaries
@@ -188,6 +192,9 @@ function createHandState(
 /**
  * Compute the xOffset for a CalendarRowCover part.
  * Ported from iOS calendarRowCoverOffsetForType / calendarRowUnderlayOffsetForType.
+ *
+ * Uses the hybrid Julian/Gregorian calendar system (via es-calendar.ts)
+ * for first-of-month weekday and month-length calculations.
  */
 function computeCalendarCoverOffset(
     part: CalendarRowCoverPart,
@@ -199,15 +206,49 @@ function computeCalendarCoverOffset(
     const monthNum = (env.functions.get('monthNumber')?.() ?? 0) + 1;
     const yearNum = env.functions.get('yearNumber')?.() ?? 2024;
 
-    const firstOfMonth = new Date(yearNum, monthNum - 1, 1);
-    const thisMonthStartCol = (7 + firstOfMonth.getDay() - calendarWeekdayStart) % 7;
+    // Convert yearNum (negative for BCE) to era/year format for es-calendar
+    const era = yearNum <= 0 ? 0 : 1;
+    const absYear = yearNum <= 0 ? 1 - yearNum : yearNum;
 
-    const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-    const daysInPrevMonth = new Date(yearNum, monthNum - 1, 0).getDate();
+    // First of this month: compute weekday via epoch arithmetic
+    const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
+    const thisMonthStartCol = (7 + weekdayFromTimeInterval(firstOfMonthDI, 0) - calendarWeekdayStart) % 7;
 
-    const nextMonth = new Date(yearNum, monthNum, 1);
-    const nextMonthStartCol = (7 + nextMonth.getDay() - calendarWeekdayStart) % 7;
-    const nextMonthStartRow = Math.floor((daysInMonth + thisMonthStartCol) / 7);
+    // Days in this month and previous month (hybrid calendar)
+    const dim = calendarDaysInMonth(era, absYear, monthNum);
+    // Previous month: handle January → December of prior year
+    let prevEra = era;
+    let prevYear = absYear;
+    let prevMonth = monthNum - 1;
+    if (prevMonth < 1) {
+        prevMonth = 12;
+        if (era === 1 && absYear === 1) {
+            prevEra = 0; prevYear = 1;  // 1 CE - 1 = 1 BCE
+        } else if (era === 0) {
+            prevYear = absYear + 1;      // further into BCE
+        } else {
+            prevYear = absYear - 1;
+        }
+    }
+    const daysInPrevMonth = calendarDaysInMonth(prevEra, prevYear, prevMonth);
+
+    // Next month: compute weekday and start row
+    let nextEra = era;
+    let nextYear = absYear;
+    let nextMonth = monthNum + 1;
+    if (nextMonth > 12) {
+        nextMonth = 1;
+        if (era === 0 && absYear === 1) {
+            nextEra = 1; nextYear = 1;  // 1 BCE + 1 = 1 CE
+        } else if (era === 0) {
+            nextYear = absYear - 1;      // towards CE
+        } else {
+            nextYear = absYear + 1;
+        }
+    }
+    const nextMonthFirstDI = timeIntervalFromUTCComponents(nextEra, nextYear, nextMonth, 1, 12, 0, 0);
+    const nextMonthStartCol = (7 + weekdayFromTimeInterval(nextMonthFirstDI, 0) - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((dim + thisMonthStartCol) / 7);
 
     const coverType = part.coverType || '';
     let columnMotion = 7;

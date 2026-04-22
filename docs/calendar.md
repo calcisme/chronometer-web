@@ -36,7 +36,11 @@ JavaScript's `Date` object always uses the **proleptic Gregorian calendar** — 
 | `utcComponentsFromTimeInterval()` | Decompose an `ESTimeInterval` into hybrid calendar components (UTC) |
 | `localComponentsFromTimeInterval()` | Same, but with timezone offset applied |
 | `timeIntervalFromUTCComponents()` | Convert hybrid calendar components back to `ESTimeInterval` |
+| `timeIntervalFromLocalComponents()` | Same, from local time with timezone correction |
 | `daysInMonth()` | Number of days in a month, respecting the hybrid calendar's leap year rules |
+| `weekdayFromTimeInterval()` | Weekday via epoch arithmetic — correct for all dates |
+| `addMonthsToTimeInterval()` | Calendar-aware month addition/subtraction with day clamping |
+| `addYearsToTimeInterval()` | Calendar-aware year addition/subtraction with day clamping |
 | `gregorianToHybrid()` | Convert a Gregorian date to the hybrid calendar |
 | `hybridToGregorian()` | Convert a hybrid calendar date to Gregorian |
 
@@ -51,6 +55,7 @@ The expression environment registers calendar functions that the XML watch defin
 | `dayNumber`, `dayNumberAngle` | ✅ Uses `getLocalComponents()` → `es-calendar.ts` |
 | `monthNumber`, `monthNumberAngle` | ✅ Uses `getLocalComponents()` → `es-calendar.ts` |
 | `yearNumber`, `eraNumber` | ✅ Uses `getLocalComponents()` → `es-calendar.ts` |
+| `weekdayNumber`, `weekdayNumberAngle` | ✅ Uses `weekdayFromTimeInterval()` (epoch arithmetic) |
 | `monthLen` | ✅ Uses `calendarDaysInMonth()` from `es-calendar.ts` |
 | `leapYearIndicatorAngle` | ✅ Uses `getLocalComponents()` with correct Julian/Gregorian logic |
 | `calendarRow` | ✅ Uses `getLocalComponents()` with Oct 1582 handling |
@@ -69,72 +74,42 @@ return (int)floor(weekday);
 
 This works because `ESTimeInterval` is a continuous count of seconds since a known epoch, so dividing by 86400 and taking mod 7 directly gives the day-of-week without needing to know which calendar system is in effect. The `+1` constant aligns the epoch (Jan 1, 2001, which was a Monday) so that 0=Sunday.
 
+The web code uses `weekdayFromTimeInterval()` in `es-calendar.ts` — a faithful port of this iOS function.
+
 > [!WARNING]
 > Using `Date.getDay()` produces **incorrect weekday values** for dates before Oct 15, 1582 because JavaScript's `Date` uses the proleptic Gregorian calendar, not the hybrid Julian/Gregorian calendar. Any code computing weekday for arbitrary dates must use epoch arithmetic or `es-calendar.ts`.
 
-## Known Issues
+### Time bar display
 
-> [!CAUTION]
-> The following places in the codebase use JavaScript `Date` methods for calendar operations. These work correctly for present-day dates (which are in the Gregorian section of the hybrid calendar) but will produce incorrect results when the time controller scrubs to dates before Oct 15, 1582.
+The time bar at the bottom of each face page uses hybrid calendar decomposition:
 
-### `weekdayNumberAngle` in `watch-env.ts`
+- **`formatSimTime`** decomposes dates via `localComponentsFromTimeInterval`:
+  - Shows `"BCE"` suffix for era 0 (e.g., `"Mar 15, 44 BCE  12:00:00"`)
+  - Shows `"(Julian)"` suffix for dates before the Oct 15, 1582 switchover
+- **`updateTimeUI`** populates the date picker inputs from hybrid calendar components
+- **`formatOffset`** uses hybrid calendar year/month differencing
+- **Date input "Apply"** constructs dates via `timeIntervalFromLocalComponents`
+- **BCE toggle** in the time controller popover switches between CE and BCE eras
 
-```typescript
-// CURRENT (uses JS Date):
-functions.set('weekdayNumberAngle', () => liveDate().getDay() * 2 * Math.PI / 7);
-```
+## Notes on Remaining JS `Date` Usage
 
-Uses `liveDate().getDay()`, which returns the proleptic Gregorian weekday. The iOS code uses epoch arithmetic for this.
+> [!NOTE]
+> The following uses of JavaScript `Date` methods are **intentional** and correct:
 
-### `weekdayNumber` in `watch-env.ts`
-
-```typescript
-// CURRENT (uses JS Date):
-const weekdayNumber = (): number => {
-    return liveDate().getDay();
-};
-```
-
-Same issue — should use epoch arithmetic like the iOS `ESCalendar_localWeekdayFromTimeInterval`.
-
-### `computeCalendarCoverOffset` in `animation.ts`
-
-```typescript
-const firstOfMonth = new Date(yearNum, monthNum - 1, 1);
-const thisMonthStartCol = (7 + firstOfMonth.getDay() - calendarWeekdayStart) % 7;
-const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-```
-
-Constructs JavaScript `Date` objects to determine first-of-month weekday and month length. Both `getDay()` and `getDate()` will give wrong answers for pre-1582 dates.
-
-### `advanceByUnit` / `snapToUnit` in `time-controller.ts`
-
-```typescript
-d.setMonth(d.getMonth() + direction);
-const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-```
-
-Uses JavaScript `Date` for month/year arithmetic when scrubbing. This uses proleptic Gregorian month lengths (e.g., February in non-leap centuries). For dates within the Julian era, this will skip or add wrong numbers of days.
-
-### Time bar display in `engine-entry.ts`
-
-**`formatSimTime`** — Formats the date string shown in the time bar at the bottom of each face page. Uses `td.getMonth()`, `td.getDate()`, `td.getFullYear()` which are proleptic Gregorian. For pre-1582 dates, the displayed month/day/year may not match what the watch face shows.
-
-**`updateTimeUI`** — Populates the date picker inputs (year, month, day, hour, minute) using `tzSim.getFullYear()`, `tzSim.getMonth()`, `tzSim.getDate()`. Same issue.
-
-**`formatOffset`** — Computes the human-readable time offset display (e.g., "+3y 2mo 5d") using `getFullYear()` and `getMonth()` for calendar differencing.
-
-**Date input "Apply"** — Constructs a `new Date(yr, mo, dy, hr, mn)` from user-entered values, which round-trips through the proleptic Gregorian calendar. Entering a Julian-era date (e.g., March 1, 1200) will produce the wrong `ESTimeInterval`.
+- **`DSTNumber`** (`watch-env.ts`): Uses `getFullYear()` to probe the system's DST offset at Jan/Jul. DST is a modern concept, so proleptic Gregorian is fine here.
+- **`moonDeltaEclipticLongitudeAtDeltaDay`** (`watch-env.ts`): Uses JS `Date` to find midnight ± n days. This is an astronomy offset calculation, not calendar display.
+- **`delOnDayTintColor` family** (`watch-env.ts`): Uses `liveDate().getTime() / MS_PER_DAY` for parity-based color alternation — this is continuous epoch arithmetic, not calendar decomposition.
+- **`second`/`minute`/`hour`/`day` stepping** (`time-controller.ts`): Uses JS `Date.setSeconds()` etc. — these are continuous timestamp operations that don't involve calendar decomposition.
 
 ## Rules for New Code
 
-1. **Never use `Date.getDay()`** for weekday if the date might be before Oct 15, 1582. Use epoch arithmetic: `Math.floor(fmod(localTimeInterval / 86400 + 1, 7))`.
+1. **Never use `Date.getDay()`** for weekday if the date might be before Oct 15, 1582. Use `weekdayFromTimeInterval()` from `es-calendar.ts`.
 
 2. **Never use `new Date(year, month, 0).getDate()`** for month length. Use `daysInMonth()` from `es-calendar.ts`.
 
-3. **Never construct `new Date(year, month, day)`** to determine day-of-week for calendar grids. Use `timeIntervalFromUTCComponents()` → epoch arithmetic.
+3. **Never construct `new Date(year, month, day)`** to determine day-of-week for calendar grids. Use `timeIntervalFromUTCComponents()` → `weekdayFromTimeInterval()`.
 
-4. **The `time-controller.ts` month/year stepping** is a known compromise — JavaScript `Date` arithmetic is used for convenience. Fixing this requires porting `ESCalendar_addMonthsToTimeInterval` and `ESCalendar_addYearsToTimeInterval` from `ESCalendar.cpp`.
+4. **For month/year stepping**, use `addMonthsToTimeInterval()` / `addYearsToTimeInterval()` from `es-calendar.ts`.
 
 5. **Test with scrubbed dates** in the Julian era (e.g., year 1200 CE) and across the 1582 switchover to verify calendar correctness.
 

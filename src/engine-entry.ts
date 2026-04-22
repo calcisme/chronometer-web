@@ -41,6 +41,11 @@ import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadErro
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
 import { resolveTimezone } from './tz-resolve.js';
+import {
+    localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
+    kECJulianGregorianSwitchoverTimeInterval,
+} from './astronomy/es-calendar.js';
+import { dateToDateInterval, dateIntervalToDate } from './astronomy/es-time.js';
 
 // ============================================================================
 // Location helpers
@@ -1804,16 +1809,33 @@ async function main() {
         return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
     }
 
+    /**
+     * Get the actual UTC offset (east-positive, in seconds) of the target timezone
+     * at a given instant.  This is what localComponentsFromTimeInterval expects.
+     *
+     * tzDeltaMs is the delta between target tz and browser tz, so we add the
+     * browser's own UTC offset (from getTimezoneOffset, negated for east-positive).
+     */
+    function targetTzOffsetSec(d: Date): number {
+        return -d.getTimezoneOffset() * 60 + tzDeltaMs / 1000;
+    }
+
     function formatSimTime(d: Date): string {
-        const td = toTzDate(d);
+        const di = dateToDateInterval(d);
+        const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
         const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const mo = months[td.getMonth()];
-        const day = td.getDate();
-        const yr = td.getFullYear();
-        const h = td.getHours().toString().padStart(2, '0');
-        const m = td.getMinutes().toString().padStart(2, '0');
-        const s = td.getSeconds().toString().padStart(2, '0');
-        return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
+        const mo = months[cs.month - 1] || 'Jan';
+        const h = cs.hour.toString().padStart(2, '0');
+        const m = cs.minute.toString().padStart(2, '0');
+        const s = Math.floor(cs.seconds).toString().padStart(2, '0');
+        let suffix = '';
+        if (cs.era === 0) {
+            suffix = ' BCE';
+        }
+        if (di < kECJulianGregorianSwitchoverTimeInterval) {
+            suffix += ' (Julian)';
+        }
+        return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
     }
 
     /** Rebuild the transport bar buttons based on current state. */
@@ -1900,13 +1922,21 @@ async function main() {
         // Rebuild transport bar
         renderTransport();
 
-        // Populate date inputs with current sim time
-        const tzSim = toTzDate(sim);
-        (document.getElementById('tp-year') as HTMLInputElement).value = tzSim.getFullYear().toString();
-        (document.getElementById('tp-month') as HTMLInputElement).value = (tzSim.getMonth() + 1).toString();
-        (document.getElementById('tp-day') as HTMLInputElement).value = tzSim.getDate().toString();
-        (document.getElementById('tp-hour') as HTMLInputElement).value = tzSim.getHours().toString();
-        (document.getElementById('tp-minute') as HTMLInputElement).value = tzSim.getMinutes().toString();
+        // Populate date inputs with current sim time (hybrid calendar)
+        const simDI = dateToDateInterval(sim);
+        const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
+        (document.getElementById('tp-year') as HTMLInputElement).value = simCs.year.toString();
+        (document.getElementById('tp-month') as HTMLInputElement).value = simCs.month.toString();
+        (document.getElementById('tp-day') as HTMLInputElement).value = simCs.day.toString();
+        (document.getElementById('tp-hour') as HTMLInputElement).value = simCs.hour.toString();
+        (document.getElementById('tp-minute') as HTMLInputElement).value = simCs.minute.toString();
+        // Update BCE toggle state
+        const bceBtn = document.getElementById('tp-bce');
+        if (bceBtn) {
+            const isBCE = simCs.era === 0;
+            bceBtn.textContent = isBCE ? 'BCE' : 'CE';
+            bceBtn.classList.toggle('active', isBCE);
+        }
     }
 
     /** Format the difference between sim and real time as a human-readable string.
@@ -1916,43 +1946,63 @@ async function main() {
         const sign = ms < 0 ? '-' : '+';
         if (Math.abs(ms) < 2000) return '';
 
-        // Truncate to whole seconds to avoid sub-second jitter
-        // between sim capture time and new Date() call
+        // Use hybrid calendar decomposition for year/month differencing
         const fromMs = (ms < 0 ? sim : real).getTime();
         const toMs   = (ms < 0 ? real : sim).getTime();
         const from = new Date(Math.floor(fromMs / 1000) * 1000);
         const to   = new Date(Math.floor(toMs / 1000) * 1000);
 
+        const fromDI = dateToDateInterval(from);
+        const toDI = dateToDateInterval(to);
+        const fromCs = localComponentsFromTimeInterval(fromDI, 0);
+        const toCs = localComponentsFromTimeInterval(toDI, 0);
+
         // Calendar difference: years, months
-        let years = to.getFullYear() - from.getFullYear();
-        let months = to.getMonth() - from.getMonth();
-        let cursor = new Date(from);
-        cursor.setFullYear(cursor.getFullYear() + years);
-        cursor.setMonth(cursor.getMonth() + months);
-        if (cursor > to) {
-            months--;
-            if (months < 0) { years--; months += 12; }
-            cursor = new Date(from);
-            cursor.setFullYear(cursor.getFullYear() + years);
-            cursor.setMonth(cursor.getMonth() + months);
+        const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
+        const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
+        let years = toSigned - fromSigned;
+        let months = toCs.month - fromCs.month;
+        if (months < 0) { years--; months += 12; }
+
+        // Estimate cursor after year+month offset, then compute remaining seconds
+        // Use a simple approximation: recompose fromDate + years/months
+        let cursorDI = fromDI;
+        if (years > 0 || months > 0) {
+            // Build approximate cursor from fromCs + offset
+            let cursorSigned = fromSigned + years;
+            let cursorMonth = fromCs.month + months;
+            if (cursorMonth > 12) { cursorSigned++; cursorMonth -= 12; }
+            const cursorEra = cursorSigned <= 0 ? 0 : 1;
+            const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+            cursorDI = timeIntervalFromLocalComponents(
+                0, cursorEra, cursorYear, cursorMonth, fromCs.day,
+                fromCs.hour, fromCs.minute, fromCs.seconds,
+            );
+            if (cursorDI > toDI) {
+                months--;
+                if (months < 0) { years--; months += 12; }
+                cursorSigned = fromSigned + years;
+                cursorMonth = fromCs.month + months;
+                if (cursorMonth > 12) { cursorSigned++; cursorMonth -= 12; }
+                if (cursorMonth < 1) { cursorSigned--; cursorMonth += 12; }
+                const ce = cursorSigned <= 0 ? 0 : 1;
+                const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+                cursorDI = timeIntervalFromLocalComponents(
+                    0, ce, cy, cursorMonth, fromCs.day,
+                    fromCs.hour, fromCs.minute, fromCs.seconds,
+                );
+            }
         }
 
-        // Remaining difference in seconds
-        let remainSec = Math.round((to.getTime() - cursor.getTime()) / 1000);
+        let remainSec = Math.round(toDI - cursorDI);
 
-        // Round to the least significant displayed unit:
-        //   years shown → round to nearest hour
-        //   months/days shown → round to nearest minute
-        //   otherwise → show exact seconds
         let days: number, hrs: number, mins: number, sec: number;
         if (years > 0 || months > 0) {
-            // Round to nearest hour
             remainSec = Math.round(remainSec / 3600) * 3600;
             days = Math.floor(remainSec / 86400); remainSec %= 86400;
             hrs  = Math.floor(remainSec / 3600);
             mins = 0; sec = 0;
         } else if (remainSec >= 86400) {
-            // Round to nearest minute
             remainSec = Math.round(remainSec / 60) * 60;
             days = Math.floor(remainSec / 86400); remainSec %= 86400;
             hrs  = Math.floor(remainSec / 3600);  remainSec %= 3600;
@@ -1965,7 +2015,6 @@ async function main() {
             sec  = remainSec;
         }
 
-        // Handle rounding overflow (e.g. 23.5h rounds to 24h → +1 day)
         if (hrs >= 24) { days += Math.floor(hrs / 24); hrs %= 24; }
 
         const parts = [];
@@ -2221,39 +2270,53 @@ async function main() {
         });
     });
 
-    // --- Date input Apply ---
-    document.getElementById('tp-apply')!.addEventListener('click', (e) => {
-        e.stopPropagation();
+    // --- Shared: read date inputs and apply via hybrid calendar ---
+    function applyDateInputs() {
         const yr = parseInt((document.getElementById('tp-year') as HTMLInputElement).value, 10);
-        const mo = parseInt((document.getElementById('tp-month') as HTMLInputElement).value, 10) - 1;
+        const mo = parseInt((document.getElementById('tp-month') as HTMLInputElement).value, 10);
         const dy = parseInt((document.getElementById('tp-day') as HTMLInputElement).value, 10);
         const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
         const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
         if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-        const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
-        timeController.setTime(d);
-        updateTimeUI();
-        ensureSchedulerRunning();
-        writeTimeState();
-    });
 
-    // Auto-apply when any date/time input changes (not just via Apply button)
+        // Read BCE toggle state
+        const bceBtn = document.getElementById('tp-bce');
+        const isBCE = bceBtn?.classList.contains('active') ?? false;
+        const era = isBCE ? 0 : 1;
+
+        // Use hybrid calendar to construct the time interval
+        // For the Apply action, use current sim time to determine which tz offset to use
+        const refDate = timeController.getDisplayTime();
+        const tzOff = targetTzOffsetSec(refDate);
+        const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
+        const d = dateIntervalToDate(di);
+        timeController.setTime(d);
+        finishAllAnimations();
+        resetAllSchedules();
+        updateTimeUI();
+        stopScheduler();
+        startScheduler();
+        writeTimeState();
+    }
+
+    // Auto-apply when any date/time input changes (fires on blur / Enter)
     ['tp-year', 'tp-month', 'tp-day', 'tp-hour', 'tp-minute'].forEach(id => {
         document.getElementById(id)!.addEventListener('change', () => {
-            // Trigger the same logic as the Apply button
-            const yr = parseInt((document.getElementById('tp-year') as HTMLInputElement).value, 10);
-            const mo = parseInt((document.getElementById('tp-month') as HTMLInputElement).value, 10) - 1;
-            const dy = parseInt((document.getElementById('tp-day') as HTMLInputElement).value, 10);
-            const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
-            const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
-            if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-            const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
-            timeController.setTime(d);
-            updateTimeUI();
-            ensureSchedulerRunning();
-            writeTimeState();
+            applyDateInputs();
         });
     });
+
+    // --- BCE toggle ---
+    const tpBce = document.getElementById('tp-bce');
+    if (tpBce) {
+        tpBce.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isActive = tpBce.classList.toggle('active');
+            tpBce.textContent = isActive ? 'BCE' : 'CE';
+            // Re-apply with the new era
+            applyDateInputs();
+        });
+    }
 
     // --- Close button in popover ---
     tpClose.addEventListener('click', (e) => {

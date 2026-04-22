@@ -53,13 +53,27 @@ export function displaySecondsPerTick(unit: TimeUnit): number {
     }
 }
 
+import {
+    addMonthsToTimeInterval, addYearsToTimeInterval,
+    localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
+} from './astronomy/es-calendar.js';
+import { dateToDateInterval, dateIntervalToDate } from './astronomy/es-time.js';
+
 // ============================================================================
 // Calendar-aware time arithmetic
 // ============================================================================
 
 /**
  * Advance a Date by one calendar unit in the given direction.
- * For month/year, uses Date manipulation to handle varying lengths.
+ *
+ * For second/minute/hour/day: uses continuous timestamp arithmetic (correct
+ * for all dates regardless of calendar system).
+ *
+ * For month/year: uses the hybrid Julian/Gregorian calendar system via
+ * es-calendar.ts, which handles the Julian/Gregorian switchover correctly.
+ *
+ * tzOffsetSeconds is 0 when not available (time controller operates in UTC
+ * internally; timezone adjustments are applied at the display layer).
  */
 function advanceByUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
     const d = new Date(date.getTime());
@@ -77,25 +91,17 @@ function advanceByUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
             d.setDate(d.getDate() + direction);
             break;
         case 'month': {
-            // Calendar-correct month stepping: Jan 31 + 1 month → Feb 28
-            const origDay = d.getDate();
-            d.setDate(1); // avoid overflow during month change
-            d.setMonth(d.getMonth() + direction);
-            // Clamp day to the last day of the new month
-            const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-            d.setDate(Math.min(origDay, maxDay));
-            break;
+            // Use hybrid calendar month addition (handles Julian/Gregorian
+            // switchover, day clamping like Jan 31 + 1 month → Feb 28)
+            const di = dateToDateInterval(date);
+            const newDI = addMonthsToTimeInterval(di, 0, direction);
+            return dateIntervalToDate(newDI);
         }
         case 'year': {
-            // Calendar-correct year stepping: Feb 29 + 1 year → Feb 28
-            const origDay = d.getDate();
-            const origMonth = d.getMonth();
-            d.setDate(1);
-            d.setFullYear(d.getFullYear() + direction);
-            const maxDay = new Date(d.getFullYear(), origMonth + 1, 0).getDate();
-            d.setMonth(origMonth);
-            d.setDate(Math.min(origDay, maxDay));
-            break;
+            // Use hybrid calendar year addition (handles Feb 29 clamping)
+            const di = dateToDateInterval(date);
+            const newDI = addYearsToTimeInterval(di, 0, direction);
+            return dateIntervalToDate(newDI);
         }
     }
     return d;
@@ -104,6 +110,9 @@ function advanceByUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
 /**
  * Snap a Date to the nearest integer multiple of the given unit,
  * rounding in the given direction (forward or backward).
+ *
+ * For month/year cases: uses hybrid calendar decomposition/recomposition
+ * so snapping works correctly across the Julian/Gregorian switchover.
  */
 function snapToUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
     const d = new Date(date.getTime());
@@ -138,30 +147,32 @@ function snapToUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
                 d.setDate(d.getDate() + 1);
             }
             break;
-        case 'month':
-            d.setMilliseconds(0);
-            d.setSeconds(0);
-            d.setMinutes(0);
-            d.setHours(0);
-            d.setDate(1);
-            if (direction > 0 && date.getDate() > 1) {
-                d.setMonth(d.getMonth() + 1);
+        case 'month': {
+            // Snap to first of month using hybrid calendar decomposition
+            const di = dateToDateInterval(date);
+            const cs = localComponentsFromTimeInterval(di, 0);
+            const needAdvance = direction > 0 && (cs.day > 1 || cs.hour > 0 || cs.minute > 0 || cs.seconds > 0);
+            let snapDI = timeIntervalFromLocalComponents(0, cs.era, cs.year, cs.month, 1, 0, 0, 0);
+            if (needAdvance) {
+                snapDI = addMonthsToTimeInterval(snapDI, 0, 1);
             }
-            break;
-        case 'year':
-            d.setMilliseconds(0);
-            d.setSeconds(0);
-            d.setMinutes(0);
-            d.setHours(0);
-            d.setDate(1);
-            d.setMonth(0);
-            if (direction > 0 && (date.getMonth() > 0 || date.getDate() > 1)) {
-                d.setFullYear(d.getFullYear() + 1);
+            return dateIntervalToDate(snapDI);
+        }
+        case 'year': {
+            // Snap to Jan 1 using hybrid calendar decomposition
+            const di = dateToDateInterval(date);
+            const cs = localComponentsFromTimeInterval(di, 0);
+            const needAdvance = direction > 0 && (cs.month > 1 || cs.day > 1 || cs.hour > 0 || cs.minute > 0 || cs.seconds > 0);
+            let snapDI = timeIntervalFromLocalComponents(0, cs.era, cs.year, 1, 1, 0, 0, 0);
+            if (needAdvance) {
+                snapDI = addYearsToTimeInterval(snapDI, 0, 1);
             }
-            break;
+            return dateIntervalToDate(snapDI);
+        }
     }
     return d;
 }
+
 
 // ============================================================================
 // TimeController

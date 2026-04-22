@@ -16,7 +16,7 @@ import { dateToDateInterval } from '../astronomy/es-time.js';
 import {
     utcComponentsFromTimeInterval, localComponentsFromTimeInterval,
     daysInMonth as calendarDaysInMonth, kECJulianGregorianSwitchoverTimeInterval,
-    timeIntervalFromUTCComponents,
+    timeIntervalFromUTCComponents, weekdayFromTimeInterval,
 } from '../astronomy/es-calendar.js';
 import {
     EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT,
@@ -345,7 +345,10 @@ function registerTimeFunctions(
     });
     functions.set('monthNumber', () => getLocalComponents().month - 1);  // 0-indexed to match JS convention
     functions.set('monthNumberAngle', () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
-    functions.set('weekdayNumberAngle', () => liveDate().getDay() * 2 * Math.PI / 7);
+    functions.set('weekdayNumberAngle', () => {
+        const di = dateToDateInterval(getNow());
+        return weekdayFromTimeInterval(di, tzOffsetSeconds) * 2 * Math.PI / 7;
+    });
     functions.set('yearNumber', () => {
         const cs = getLocalComponents();
         return cs.era === 0 ? -cs.year : cs.year;  // negative for BCE
@@ -962,7 +965,8 @@ function registerTimeFunctions(
     // weekdayNumber: 0=Sunday through 6=Saturday (ported from ECWatchTime.m weekdayNumberUsingEnv)
     // iOS uses local epoch arithmetic. For the web, we can use the tz-shifted date's getDay().
     const weekdayNumber = (): number => {
-        return liveDate().getDay();
+        const di = dateToDateInterval(getNow());
+        return weekdayFromTimeInterval(di, tzOffsetSeconds);
     };
 
     // weekdayNumberAsCalendarColumn: adjusts weekday by calendarWeekdayStart
@@ -989,9 +993,11 @@ function registerTimeFunctions(
         const cs = getLocalComponents();
         let dayNumber = cs.day - 1;  // 0-indexed
         let firstCol = columnOfFirstOfMonth();
-        // October 1582 CE: days 5-14 were skipped
+        // October 1582 CE: days 5-14 were skipped.  The calendar wheel inserts
+        // a 7-slot (one-row) blank gap where the missing days were, so days 15+
+        // need dayNumber reduced by only 3 (10 skipped days - 7 gap slots).
         if (cs.year === 1582 && (cs.month - 1) === 9 && cs.era === 1 && dayNumber > 4) {
-            dayNumber -= 10;
+            dayNumber -= 3;
             firstCol = (8 - calendarWeekdayStart) % 7;  // Oct 1582 started on a Monday
         }
         const cellNumber = dayNumber + firstCol;
@@ -1002,6 +1008,10 @@ function registerTimeFunctions(
     // (ported from ECGLWatch.m rotationForCalendarWheel012BDesignedForWeekdayStart)
     functions.set('rotationForCalendarWheel012B', (wheelWeekdayStart: number) => {
         if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+        // Oct 1582: the special Oct1582 wheel is visible; keep this one
+        // at its cutout angle to avoid animation glitches during the transition.
+        const cs = getLocalComponents();
+        if (cs.year === 1582 && (cs.month - 1) === 9 && cs.era === 1) return 3 * Math.PI / 2;
         const wd1 = columnOfFirstOfMonth();
         if (wd1 > 2) return 3 * Math.PI / 2;  // The cutout section
         return wd1 * Math.PI / 2;
@@ -1011,6 +1021,9 @@ function registerTimeFunctions(
     // (ported from ECGLWatch.m rotationForCalendarWheel3456DesignedForWeekdayStart)
     functions.set('rotationForCalendarWheel3456', (wheelWeekdayStart: number) => {
         if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+        // Oct 1582: keep at quadrant 0 (which shows startColumn=3, hidden behind Oct1582 wheel)
+        const cs = getLocalComponents();
+        if (cs.year === 1582 && (cs.month - 1) === 9 && cs.era === 1) return 0;
         const wd1 = columnOfFirstOfMonth();
         if (wd1 < 4) return 0;
         return (wd1 - 3) * Math.PI / 2;

@@ -2798,31 +2798,38 @@ function drawCalendarWheel(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
 
+        // Draw days using a linear slot counter.  For Oct 1582, we insert 7
+        // blank slots after day 4 to create a one-row visual gap where the
+        // missing days 5–14 were.  This keeps weekday columns aligned and makes
+        // Oct 31 line up with the November slider.
+        let slot = q.startColumn;  // first day starts at startColumn
         let dayNumber = 1;
-        const maxDay = q.isOct1582 ? 31 : 31;  // always 31 slots; unused ones just won't draw
-        let startCol = q.startColumn;
+        const maxDay = 31;
 
-        for (let row = 0; dayNumber <= maxDay && row < 6; row++) {
-            for (let col = 0; col < 7 && dayNumber <= maxDay; col++) {
-                if (row === 0 && col < startCol) continue;  // Skip empty cells before 1st
+        while (dayNumber <= maxDay && slot < 6 * 7) {
+            const row = Math.floor(slot / 7);
+            const col = slot % 7;
 
-                const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-                const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
+            const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+            const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
 
-                // Weekend coloring
-                ctx.fillStyle = (col === satCol || col === sunCol) ? weekendColor : weekdayColor;
+            // Weekend coloring
+            ctx.fillStyle = (col === satCol || col === sunCol) ? weekendColor : weekdayColor;
 
-                ctx.fillText(
-                    String(dayNumber),
-                    cx,
-                    cy + textVisualCenterY(ctx, String(dayNumber)),
-                );
+            ctx.fillText(
+                String(dayNumber),
+                cx,
+                cy + textVisualCenterY(ctx, String(dayNumber)),
+            );
 
-                dayNumber++;
-                // October 1582 hack: skip days 5-14
-                if (q.isOct1582 && dayNumber === 5) {
-                    dayNumber = 15;
-                }
+            dayNumber++;
+            slot++;
+
+            // October 1582: after drawing day 4, skip to day 15 and advance
+            // by 7 blank slots (one full week row of empty space).
+            if (q.isOct1582 && dayNumber === 5) {
+                dayNumber = 15;
+                slot += 7;
             }
         }
 

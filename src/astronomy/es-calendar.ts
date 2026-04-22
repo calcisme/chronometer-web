@@ -353,3 +353,99 @@ export function timeIntervalFromLocalComponents(
     const localT = timeIntervalFromUTCComponents(era, year, month, day, hour, minute, seconds);
     return localT - tzOffsetSeconds;
 }
+
+// ============================================================================
+// Weekday from time interval (epoch arithmetic)
+// ============================================================================
+
+/**
+ * Return the weekday (0=Sunday, 6=Saturday) for a given time interval
+ * in a timezone specified by its offset in seconds (east-positive).
+ *
+ * Uses epoch arithmetic — does NOT depend on which calendar system is in
+ * effect. This is the correct approach for all dates (Julian, Gregorian,
+ * or across the switchover).
+ *
+ * Ported from ESCalendar_localWeekdayFromTimeInterval() in ESCalendar.cpp.
+ */
+export function weekdayFromTimeInterval(dateInterval: number, tzOffsetSeconds: number): number {
+    const localNow = dateInterval + tzOffsetSeconds;
+    const localNowDays = localNow / (24 * 3600);
+    // fmod that always returns non-negative: (x % m + m) % m
+    const weekday = ((localNowDays + 1) % 7 + 7) % 7;
+    return Math.floor(weekday);
+}
+
+// ============================================================================
+// Calendar-aware month/year addition
+// ============================================================================
+
+/**
+ * Add (or subtract) calendar months from a time interval.
+ * Handles day clamping (e.g., Jan 31 + 1 month → Feb 28).
+ *
+ * Ported from ESCalendar_addMonthsToTimeInterval() in ESCalendar.cpp.
+ */
+export function addMonthsToTimeInterval(
+    now: number, tzOffsetSeconds: number, months: number,
+): number {
+    const cs = localComponentsFromTimeInterval(now, tzOffsetSeconds);
+    const signedYearNow = cs.era === 0 ? 1 - cs.year : cs.year;
+    const zeroMonthNow = cs.month - 1;
+
+    const yearMonthThen = signedYearNow + (zeroMonthNow + months) / 12.0;
+    const signedYearThen = Math.floor(yearMonthThen);
+    const zeroMonthThen = Math.round((yearMonthThen - signedYearThen) * 12);
+    const monthThen = zeroMonthThen + 1;
+
+    let eraThen: number;
+    let yearThen: number;
+    if (signedYearThen <= 0) {
+        eraThen = 0;
+        yearThen = 1 - signedYearThen;
+    } else {
+        eraThen = 1;
+        yearThen = signedYearThen;
+    }
+
+    const daysInMonthThen = daysInMonth(eraThen, yearThen, monthThen);
+    const dayThen = Math.min(cs.day, daysInMonthThen);
+
+    return timeIntervalFromLocalComponents(
+        tzOffsetSeconds, eraThen, yearThen, monthThen, dayThen,
+        cs.hour, cs.minute, cs.seconds,
+    );
+}
+
+/**
+ * Add (or subtract) calendar years from a time interval.
+ * Handles day clamping for Feb 29 in non-leap years.
+ *
+ * Ported from ESCalendar_addYearsToTimeInterval() in ESCalendar.cpp.
+ */
+export function addYearsToTimeInterval(
+    now: number, tzOffsetSeconds: number, years: number,
+): number {
+    const cs = localComponentsFromTimeInterval(now, tzOffsetSeconds);
+    const signedYearNow = cs.era === 0 ? 1 - cs.year : cs.year;
+    const signedYearThen = signedYearNow + years;
+
+    let eraThen: number;
+    let yearThen: number;
+    if (signedYearThen <= 0) {
+        eraThen = 0;
+        yearThen = 1 - signedYearThen;
+    } else {
+        eraThen = 1;
+        yearThen = signedYearThen;
+    }
+
+    // Clamp day for Feb 29 → Feb 28 if target year is not a leap year
+    const daysInTargetMonth = daysInMonth(eraThen, yearThen, cs.month);
+    const dayThen = Math.min(cs.day, daysInTargetMonth);
+
+    return timeIntervalFromLocalComponents(
+        tzOffsetSeconds, eraThen, yearThen, cs.month, dayThen,
+        cs.hour, cs.minute, cs.seconds,
+    );
+}

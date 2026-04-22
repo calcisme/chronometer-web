@@ -984,23 +984,32 @@
             width: 58px;
         }
 
-        /* YYYY */
-        #tp-apply {
-            width: 100%;
-            padding: 5px;
-            background: #335;
-            border: 1px solid #557;
-            border-radius: 6px;
-            color: #aac;
-            font-size: 12px;
+        /* BCE toggle */
+        #tp-bce {
+            background: #2a2a3e;
+            border: 1px solid #3a3a5e;
+            border-radius: 4px;
+            color: #667;
+            font-size: 10px;
+            padding: 4px 5px;
             cursor: pointer;
-            transition: background 0.15s;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+            line-height: 1;
+            flex-shrink: 0;
         }
 
-        #tp-apply:hover {
-            background: #446;
-            color: #ddf;
+        #tp-bce:hover {
+            color: #99b;
         }
+
+        #tp-bce.active {
+            background: #446;
+            border-color: #8af;
+            color: #8af;
+        }
+
+        /* YYYY */
         /* ============= Planet Selector (Venezia) ============= */
 
         #planet-selector {
@@ -1228,14 +1237,14 @@ The dot at 6 oclock is black for PM and white for AM.
             <div class="tp-section">
                 <div class="tp-label">Set Date &amp; Time</div>
                 <div class="tp-date-inputs">
-                    <input id="tp-year" type="number" min="-4000" max="2800" placeholder="YYYY">
+                    <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
                     <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
                     <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
                 </div>
                 <div class="tp-date-inputs">
                     <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
                     <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
-                    <button id="tp-apply">Apply</button>
+                    <button id="tp-bce" title="Toggle BCE (Before Common Era)">CE</button>
                 </div>
             </div>
         </div>

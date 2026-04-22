@@ -1382,6 +1382,9 @@
   function dateToDateInterval(date) {
     return date.getTime() / 1e3 - 978307200;
   }
+  function dateIntervalToDate(dateInterval) {
+    return new Date((dateInterval + 978307200) * 1e3);
+  }
 
   // src/astronomy/es-calendar.ts
   var kECJulianDayOf1990Epoch = 24478915e-1;
@@ -1494,6 +1497,72 @@
   function localComponentsFromTimeInterval(timeInterval, tzOffsetSeconds) {
     return utcComponentsFromTimeInterval(timeInterval + tzOffsetSeconds);
   }
+  function timeIntervalFromLocalComponents(tzOffsetSeconds, era, year, month, day, hour, minute, seconds) {
+    const localT = timeIntervalFromUTCComponents(era, year, month, day, hour, minute, seconds);
+    return localT - tzOffsetSeconds;
+  }
+  function weekdayFromTimeInterval(dateInterval, tzOffsetSeconds) {
+    const localNow = dateInterval + tzOffsetSeconds;
+    const localNowDays = localNow / (24 * 3600);
+    const weekday = ((localNowDays + 1) % 7 + 7) % 7;
+    return Math.floor(weekday);
+  }
+  function addMonthsToTimeInterval(now, tzOffsetSeconds, months) {
+    const cs = localComponentsFromTimeInterval(now, tzOffsetSeconds);
+    const signedYearNow = cs.era === 0 ? 1 - cs.year : cs.year;
+    const zeroMonthNow = cs.month - 1;
+    const yearMonthThen = signedYearNow + (zeroMonthNow + months) / 12;
+    const signedYearThen = Math.floor(yearMonthThen);
+    const zeroMonthThen = Math.round((yearMonthThen - signedYearThen) * 12);
+    const monthThen = zeroMonthThen + 1;
+    let eraThen;
+    let yearThen;
+    if (signedYearThen <= 0) {
+      eraThen = 0;
+      yearThen = 1 - signedYearThen;
+    } else {
+      eraThen = 1;
+      yearThen = signedYearThen;
+    }
+    const daysInMonthThen = daysInMonth(eraThen, yearThen, monthThen);
+    const dayThen = Math.min(cs.day, daysInMonthThen);
+    return timeIntervalFromLocalComponents(
+      tzOffsetSeconds,
+      eraThen,
+      yearThen,
+      monthThen,
+      dayThen,
+      cs.hour,
+      cs.minute,
+      cs.seconds
+    );
+  }
+  function addYearsToTimeInterval(now, tzOffsetSeconds, years) {
+    const cs = localComponentsFromTimeInterval(now, tzOffsetSeconds);
+    const signedYearNow = cs.era === 0 ? 1 - cs.year : cs.year;
+    const signedYearThen = signedYearNow + years;
+    let eraThen;
+    let yearThen;
+    if (signedYearThen <= 0) {
+      eraThen = 0;
+      yearThen = 1 - signedYearThen;
+    } else {
+      eraThen = 1;
+      yearThen = signedYearThen;
+    }
+    const daysInTargetMonth = daysInMonth(eraThen, yearThen, cs.month);
+    const dayThen = Math.min(cs.day, daysInTargetMonth);
+    return timeIntervalFromLocalComponents(
+      tzOffsetSeconds,
+      eraThen,
+      yearThen,
+      cs.month,
+      dayThen,
+      cs.hour,
+      cs.minute,
+      cs.seconds
+    );
+  }
 
   // src/watch/animation.ts
   var SCHEDULER_LOOKAHEAD_MS = 50;
@@ -1577,13 +1646,43 @@
     const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
     const monthNum = (env.functions.get("monthNumber")?.() ?? 0) + 1;
     const yearNum = env.functions.get("yearNumber")?.() ?? 2024;
-    const firstOfMonth = new Date(yearNum, monthNum - 1, 1);
-    const thisMonthStartCol = (7 + firstOfMonth.getDay() - calendarWeekdayStart) % 7;
-    const daysInMonth2 = new Date(yearNum, monthNum, 0).getDate();
-    const daysInPrevMonth = new Date(yearNum, monthNum - 1, 0).getDate();
-    const nextMonth = new Date(yearNum, monthNum, 1);
-    const nextMonthStartCol = (7 + nextMonth.getDay() - calendarWeekdayStart) % 7;
-    const nextMonthStartRow = Math.floor((daysInMonth2 + thisMonthStartCol) / 7);
+    const era = yearNum <= 0 ? 0 : 1;
+    const absYear = yearNum <= 0 ? 1 - yearNum : yearNum;
+    const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
+    const thisMonthStartCol = (7 + weekdayFromTimeInterval(firstOfMonthDI, 0) - calendarWeekdayStart) % 7;
+    const dim = daysInMonth(era, absYear, monthNum);
+    let prevEra = era;
+    let prevYear = absYear;
+    let prevMonth = monthNum - 1;
+    if (prevMonth < 1) {
+      prevMonth = 12;
+      if (era === 1 && absYear === 1) {
+        prevEra = 0;
+        prevYear = 1;
+      } else if (era === 0) {
+        prevYear = absYear + 1;
+      } else {
+        prevYear = absYear - 1;
+      }
+    }
+    const daysInPrevMonth = daysInMonth(prevEra, prevYear, prevMonth);
+    let nextEra = era;
+    let nextYear = absYear;
+    let nextMonth = monthNum + 1;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      if (era === 0 && absYear === 1) {
+        nextEra = 1;
+        nextYear = 1;
+      } else if (era === 0) {
+        nextYear = absYear - 1;
+      } else {
+        nextYear = absYear + 1;
+      }
+    }
+    const nextMonthFirstDI = timeIntervalFromUTCComponents(nextEra, nextYear, nextMonth, 1, 12, 0, 0);
+    const nextMonthStartCol = (7 + weekdayFromTimeInterval(nextMonthFirstDI, 0) - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((dim + thisMonthStartCol) / 7);
     const coverType = part.coverType || "";
     let columnMotion = 7;
     if (coverType === "row1Left") {
@@ -12232,7 +12331,10 @@
     });
     functions.set("monthNumber", () => getLocalComponents().month - 1);
     functions.set("monthNumberAngle", () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
-    functions.set("weekdayNumberAngle", () => liveDate().getDay() * 2 * Math.PI / 7);
+    functions.set("weekdayNumberAngle", () => {
+      const di = dateToDateInterval(getNow());
+      return weekdayFromTimeInterval(di, tzOffsetSeconds) * 2 * Math.PI / 7;
+    });
     functions.set("yearNumber", () => {
       const cs = getLocalComponents();
       return cs.era === 0 ? -cs.year : cs.year;
@@ -12692,7 +12794,8 @@
     env.variables.set("calendarWeekdayStart", calendarWeekdayStart);
     functions.set("calendarWeekdayStart", () => calendarWeekdayStart);
     const weekdayNumber = () => {
-      return liveDate().getDay();
+      const di = dateToDateInterval(getNow());
+      return weekdayFromTimeInterval(di, tzOffsetSeconds);
     };
     const weekdayNumberAsCalendarColumn = () => {
       return (7 + weekdayNumber() - calendarWeekdayStart) % 7;
@@ -12709,7 +12812,7 @@
       let dayNumber = cs.day - 1;
       let firstCol = columnOfFirstOfMonth();
       if (cs.year === 1582 && cs.month - 1 === 9 && cs.era === 1 && dayNumber > 4) {
-        dayNumber -= 10;
+        dayNumber -= 3;
         firstCol = (8 - calendarWeekdayStart) % 7;
       }
       const cellNumber = dayNumber + firstCol;
@@ -12717,12 +12820,16 @@
     });
     functions.set("rotationForCalendarWheel012B", (wheelWeekdayStart) => {
       if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+      const cs = getLocalComponents();
+      if (cs.year === 1582 && cs.month - 1 === 9 && cs.era === 1) return 3 * Math.PI / 2;
       const wd1 = columnOfFirstOfMonth();
       if (wd1 > 2) return 3 * Math.PI / 2;
       return wd1 * Math.PI / 2;
     });
     functions.set("rotationForCalendarWheel3456", (wheelWeekdayStart) => {
       if (calendarWeekdayStart !== wheelWeekdayStart) return 0;
+      const cs = getLocalComponents();
+      if (cs.year === 1582 && cs.month - 1 === 9 && cs.era === 1) return 0;
       const wd1 = columnOfFirstOfMonth();
       if (wd1 < 4) return 0;
       return (wd1 - 3) * Math.PI / 2;
@@ -15293,24 +15400,25 @@
       ctx.font = `${fontSize}px "${fontName}"`;
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
+      let slot = q.startColumn;
       let dayNumber = 1;
-      const maxDay = q.isOct1582 ? 31 : 31;
-      let startCol = q.startColumn;
-      for (let row = 0; dayNumber <= maxDay && row < 6; row++) {
-        for (let col = 0; col < 7 && dayNumber <= maxDay; col++) {
-          if (row === 0 && col < startCol) continue;
-          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-          const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
-          ctx.fillStyle = col === satCol || col === sunCol ? weekendColor : weekdayColor;
-          ctx.fillText(
-            String(dayNumber),
-            cx,
-            cy + textVisualCenterY(ctx, String(dayNumber))
-          );
-          dayNumber++;
-          if (q.isOct1582 && dayNumber === 5) {
-            dayNumber = 15;
-          }
+      const maxDay = 31;
+      while (dayNumber <= maxDay && slot < 6 * 7) {
+        const row = Math.floor(slot / 7);
+        const col = slot % 7;
+        const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
+        const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
+        ctx.fillStyle = col === satCol || col === sunCol ? weekendColor : weekdayColor;
+        ctx.fillText(
+          String(dayNumber),
+          cx,
+          cy + textVisualCenterY(ctx, String(dayNumber))
+        );
+        dayNumber++;
+        slot++;
+        if (q.isOct1582 && dayNumber === 5) {
+          dayNumber = 15;
+          slot += 7;
         }
       }
       ctx.restore();
@@ -15546,22 +15654,14 @@
         d.setDate(d.getDate() + direction);
         break;
       case "month": {
-        const origDay = d.getDate();
-        d.setDate(1);
-        d.setMonth(d.getMonth() + direction);
-        const maxDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-        d.setDate(Math.min(origDay, maxDay));
-        break;
+        const di = dateToDateInterval(date);
+        const newDI = addMonthsToTimeInterval(di, 0, direction);
+        return dateIntervalToDate(newDI);
       }
       case "year": {
-        const origDay = d.getDate();
-        const origMonth = d.getMonth();
-        d.setDate(1);
-        d.setFullYear(d.getFullYear() + direction);
-        const maxDay = new Date(d.getFullYear(), origMonth + 1, 0).getDate();
-        d.setMonth(origMonth);
-        d.setDate(Math.min(origDay, maxDay));
-        break;
+        const di = dateToDateInterval(date);
+        const newDI = addYearsToTimeInterval(di, 0, direction);
+        return dateIntervalToDate(newDI);
       }
     }
     return d;
@@ -15599,27 +15699,26 @@
           d.setDate(d.getDate() + 1);
         }
         break;
-      case "month":
-        d.setMilliseconds(0);
-        d.setSeconds(0);
-        d.setMinutes(0);
-        d.setHours(0);
-        d.setDate(1);
-        if (direction > 0 && date.getDate() > 1) {
-          d.setMonth(d.getMonth() + 1);
+      case "month": {
+        const di = dateToDateInterval(date);
+        const cs = localComponentsFromTimeInterval(di, 0);
+        const needAdvance = direction > 0 && (cs.day > 1 || cs.hour > 0 || cs.minute > 0 || cs.seconds > 0);
+        let snapDI = timeIntervalFromLocalComponents(0, cs.era, cs.year, cs.month, 1, 0, 0, 0);
+        if (needAdvance) {
+          snapDI = addMonthsToTimeInterval(snapDI, 0, 1);
         }
-        break;
-      case "year":
-        d.setMilliseconds(0);
-        d.setSeconds(0);
-        d.setMinutes(0);
-        d.setHours(0);
-        d.setDate(1);
-        d.setMonth(0);
-        if (direction > 0 && (date.getMonth() > 0 || date.getDate() > 1)) {
-          d.setFullYear(d.getFullYear() + 1);
+        return dateIntervalToDate(snapDI);
+      }
+      case "year": {
+        const di = dateToDateInterval(date);
+        const cs = localComponentsFromTimeInterval(di, 0);
+        const needAdvance = direction > 0 && (cs.month > 1 || cs.day > 1 || cs.hour > 0 || cs.minute > 0 || cs.seconds > 0);
+        let snapDI = timeIntervalFromLocalComponents(0, cs.era, cs.year, 1, 1, 0, 0, 0);
+        if (needAdvance) {
+          snapDI = addYearsToTimeInterval(snapDI, 0, 1);
         }
-        break;
+        return dateIntervalToDate(snapDI);
+      }
     }
     return d;
   }
@@ -17705,16 +17804,25 @@
     function fromTzDate(d) {
       return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
     }
+    function targetTzOffsetSec(d) {
+      return -d.getTimezoneOffset() * 60 + tzDeltaMs / 1e3;
+    }
     function formatSimTime(d) {
-      const td = toTzDate(d);
+      const di = dateToDateInterval(d);
+      const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mo = months[td.getMonth()];
-      const day = td.getDate();
-      const yr = td.getFullYear();
-      const h = td.getHours().toString().padStart(2, "0");
-      const m = td.getMinutes().toString().padStart(2, "0");
-      const s = td.getSeconds().toString().padStart(2, "0");
-      return `${mo} ${day}, ${yr}  ${h}:${m}:${s}`;
+      const mo = months[cs.month - 1] || "Jan";
+      const h = cs.hour.toString().padStart(2, "0");
+      const m = cs.minute.toString().padStart(2, "0");
+      const s = Math.floor(cs.seconds).toString().padStart(2, "0");
+      let suffix = "";
+      if (cs.era === 0) {
+        suffix = " BCE";
+      }
+      if (di < kECJulianGregorianSwitchoverTimeInterval) {
+        suffix += " (Julian)";
+      }
+      return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
     }
     function renderTransport() {
       tpTransport.innerHTML = "";
@@ -17783,12 +17891,19 @@
       }
       tpRateLabel.textContent = timeController.statusLabel;
       renderTransport();
-      const tzSim = toTzDate(sim);
-      document.getElementById("tp-year").value = tzSim.getFullYear().toString();
-      document.getElementById("tp-month").value = (tzSim.getMonth() + 1).toString();
-      document.getElementById("tp-day").value = tzSim.getDate().toString();
-      document.getElementById("tp-hour").value = tzSim.getHours().toString();
-      document.getElementById("tp-minute").value = tzSim.getMinutes().toString();
+      const simDI = dateToDateInterval(sim);
+      const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
+      document.getElementById("tp-year").value = simCs.year.toString();
+      document.getElementById("tp-month").value = simCs.month.toString();
+      document.getElementById("tp-day").value = simCs.day.toString();
+      document.getElementById("tp-hour").value = simCs.hour.toString();
+      document.getElementById("tp-minute").value = simCs.minute.toString();
+      const bceBtn = document.getElementById("tp-bce");
+      if (bceBtn) {
+        const isBCE = simCs.era === 0;
+        bceBtn.textContent = isBCE ? "BCE" : "CE";
+        bceBtn.classList.toggle("active", isBCE);
+      }
     }
     function formatOffset(sim, real) {
       const ms = sim.getTime() - real.getTime();
@@ -17798,22 +17913,69 @@
       const toMs = (ms < 0 ? real : sim).getTime();
       const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
       const to = new Date(Math.floor(toMs / 1e3) * 1e3);
-      let years = to.getFullYear() - from.getFullYear();
-      let months = to.getMonth() - from.getMonth();
-      let cursor = new Date(from);
-      cursor.setFullYear(cursor.getFullYear() + years);
-      cursor.setMonth(cursor.getMonth() + months);
-      if (cursor > to) {
-        months--;
-        if (months < 0) {
-          years--;
-          months += 12;
-        }
-        cursor = new Date(from);
-        cursor.setFullYear(cursor.getFullYear() + years);
-        cursor.setMonth(cursor.getMonth() + months);
+      const fromDI = dateToDateInterval(from);
+      const toDI = dateToDateInterval(to);
+      const fromCs = localComponentsFromTimeInterval(fromDI, 0);
+      const toCs = localComponentsFromTimeInterval(toDI, 0);
+      const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
+      const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
+      let years = toSigned - fromSigned;
+      let months = toCs.month - fromCs.month;
+      if (months < 0) {
+        years--;
+        months += 12;
       }
-      let remainSec = Math.round((to.getTime() - cursor.getTime()) / 1e3);
+      let cursorDI = fromDI;
+      if (years > 0 || months > 0) {
+        let cursorSigned = fromSigned + years;
+        let cursorMonth = fromCs.month + months;
+        if (cursorMonth > 12) {
+          cursorSigned++;
+          cursorMonth -= 12;
+        }
+        const cursorEra = cursorSigned <= 0 ? 0 : 1;
+        const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+        cursorDI = timeIntervalFromLocalComponents(
+          0,
+          cursorEra,
+          cursorYear,
+          cursorMonth,
+          fromCs.day,
+          fromCs.hour,
+          fromCs.minute,
+          fromCs.seconds
+        );
+        if (cursorDI > toDI) {
+          months--;
+          if (months < 0) {
+            years--;
+            months += 12;
+          }
+          cursorSigned = fromSigned + years;
+          cursorMonth = fromCs.month + months;
+          if (cursorMonth > 12) {
+            cursorSigned++;
+            cursorMonth -= 12;
+          }
+          if (cursorMonth < 1) {
+            cursorSigned--;
+            cursorMonth += 12;
+          }
+          const ce = cursorSigned <= 0 ? 0 : 1;
+          const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+          cursorDI = timeIntervalFromLocalComponents(
+            0,
+            ce,
+            cy,
+            cursorMonth,
+            fromCs.day,
+            fromCs.hour,
+            fromCs.minute,
+            fromCs.seconds
+          );
+        }
+      }
+      let remainSec = Math.round(toDI - cursorDI);
       let days, hrs, mins, sec;
       if (years > 0 || months > 0) {
         remainSec = Math.round(remainSec / 3600) * 3600;
@@ -18034,35 +18196,42 @@
         endHold();
       });
     });
-    document.getElementById("tp-apply").addEventListener("click", (e) => {
-      e.stopPropagation();
+    function applyDateInputs() {
       const yr = parseInt(document.getElementById("tp-year").value, 10);
-      const mo = parseInt(document.getElementById("tp-month").value, 10) - 1;
+      const mo = parseInt(document.getElementById("tp-month").value, 10);
       const dy = parseInt(document.getElementById("tp-day").value, 10);
       const hr = parseInt(document.getElementById("tp-hour").value, 10);
       const mn = parseInt(document.getElementById("tp-minute").value, 10);
       if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-      const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
+      const bceBtn = document.getElementById("tp-bce");
+      const isBCE = bceBtn?.classList.contains("active") ?? false;
+      const era = isBCE ? 0 : 1;
+      const refDate = timeController.getDisplayTime();
+      const tzOff = targetTzOffsetSec(refDate);
+      const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
+      const d = dateIntervalToDate(di);
       timeController.setTime(d);
+      finishAllAnimations();
+      resetAllSchedules();
       updateTimeUI();
-      ensureSchedulerRunning();
+      stopScheduler();
+      startScheduler();
       writeTimeState();
-    });
+    }
     ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
       document.getElementById(id).addEventListener("change", () => {
-        const yr = parseInt(document.getElementById("tp-year").value, 10);
-        const mo = parseInt(document.getElementById("tp-month").value, 10) - 1;
-        const dy = parseInt(document.getElementById("tp-day").value, 10);
-        const hr = parseInt(document.getElementById("tp-hour").value, 10);
-        const mn = parseInt(document.getElementById("tp-minute").value, 10);
-        if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-        const d = fromTzDate(new Date(yr, mo, dy, hr, mn, 0, 0));
-        timeController.setTime(d);
-        updateTimeUI();
-        ensureSchedulerRunning();
-        writeTimeState();
+        applyDateInputs();
       });
     });
+    const tpBce = document.getElementById("tp-bce");
+    if (tpBce) {
+      tpBce.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isActive = tpBce.classList.toggle("active");
+        tpBce.textContent = isActive ? "BCE" : "CE";
+        applyDateInputs();
+      });
+    }
     tpClose.addEventListener("click", (e) => {
       e.stopPropagation();
       hidePopover();
