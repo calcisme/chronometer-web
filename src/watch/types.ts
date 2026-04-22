@@ -176,6 +176,17 @@ export interface QHandPart extends PartBase {
     xMotion?: ASTNode;
     /** Y-axis linear motion expression (calendar day-indicator wires). */
     yMotion?: ASTNode;
+    // --- Pre-rendered shadow cache (not from XML) ---
+    /** Pre-rendered hand + shadow bitmap. Created at init/resize. */
+    _shadowBitmap?: OffscreenCanvas;
+    /** Anchor X within the bitmap in XML coords (rotation pivot point). */
+    _shadowAnchorX?: number;
+    /** Anchor Y within the bitmap in XML coords (rotation pivot point). */
+    _shadowAnchorY?: number;
+    /** Bitmap width in XML coordinate units. */
+    _shadowBitmapW?: number;
+    /** Bitmap height in XML coordinate units. */
+    _shadowBitmapH?: number;
 }
 
 // ============================================================================
@@ -370,6 +381,11 @@ export interface QDayNightRingPart extends PartBase {
     update?: ASTNode;
     timeBase?: string;         // 'LST' for Local Sidereal Time, omitted for local time
     envSlot?: ASTNode;         // env slot number — routes astronomy to slot's city lat/lon
+    // --- Render-level cache (not from XML) ---
+    /** Cached wedge angles from last computation; avoids per-frame astronomy calls. */
+    _cachedAngles?: number[];
+    /** performance.now() when the cached angles expire and must be recomputed. */
+    _cacheNextUpdate?: number;
 }
 
 // ============================================================================

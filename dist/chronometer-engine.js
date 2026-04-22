@@ -13708,7 +13708,14 @@
       } else if (part.type === "Static") {
         part.precedingWindows = pendingWindows.slice();
         pendingWindows.length = 0;
-        const cache = new OffscreenCanvas(canvasWidth, canvasHeight);
+        let cache = part.cachedCanvas;
+        if (!cache || cache.width !== canvasWidth || cache.height !== canvasHeight) {
+          cache = new OffscreenCanvas(canvasWidth, canvasHeight);
+        } else {
+          const cCtx = cache.getContext("2d");
+          cCtx.resetTransform();
+          cCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        }
         const ctx = cache.getContext("2d");
         ctx.translate(canvasWidth / 2, canvasHeight / 2);
         ctx.scale(scale, scale);
@@ -13727,6 +13734,290 @@
         pendingWindows.length = 0;
       }
     }
+  }
+  function invalidateDayNightCaches(watch) {
+    for (const part of watch.parts) {
+      if (part.type === "QDayNightRing") {
+        part._cacheNextUpdate = 0;
+      }
+    }
+  }
+  function buildHandShadowCaches(watch, env, scale, images) {
+    function processPartList(parts) {
+      for (const part of parts) {
+        if (part.type === "QHand") {
+          buildSingleHandShadow(part, env, scale, images);
+        } else if (part.type === "Static") {
+          processPartList(part.children);
+        }
+      }
+    }
+    processPartList(watch.parts);
+  }
+  function buildSingleHandShadow(part, env, scale, images) {
+    const z = evalAttr(part.z, env);
+    if (!z || z === 0) {
+      part._shadowBitmap = void 0;
+      return;
+    }
+    const handType = part.handType || "tri";
+    if (handType === "spoke") return;
+    if (part.src && images) {
+      buildImageHandShadow(part, env, scale, images);
+      return;
+    }
+    const length = evalAttr(part.length, env);
+    if (length <= 0) return;
+    const width = evalAttr(part.width, env);
+    const tail = evalAttr(part.tail, env);
+    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
+    const oLength = evalAttr(part.oLength, env);
+    const oWidth = evalAttr(part.oWidth, env) || width;
+    const oRadius = evalAttr(part.oRadius, env);
+    const oCenter = evalAttr(part.oCenter, env);
+    const oTail = evalAttr(part.oTail, env);
+    const length2 = evalAttr(part.length2, env);
+    const thick = evalAttr(part.thick, env) || 3;
+    let sigma = (z + 2) / 2;
+    let percentOpacity = 40;
+    if (thick < 3) {
+      sigma *= 1.25;
+      percentOpacity *= thick / 3;
+    }
+    const shadowPad = sigma * 3;
+    const shadowDx = z / 4.3;
+    const shadowDy = z / 2.15;
+    let halfW;
+    let tipExtent;
+    let tailExtent;
+    if (handType === "sun") {
+      const rayRad = (length - length2) / 2;
+      const raysRad = (length - length2) / 3;
+      const cen = length2 + rayRad;
+      const sunCenter = oCenter > 0 ? oCenter : raysRad / 2;
+      halfW = Math.max(rayRad, sunCenter) + lineWidth;
+      tipExtent = cen + rayRad + lineWidth;
+      tailExtent = lineWidth;
+    } else if (handType === "breguet") {
+      const widthScaler = width / (length * 0.16);
+      const lengthScaler = (length - 81) / 10;
+      const breOuterRadius = length * 0.075 * widthScaler;
+      const centerRadius = length * 0.08 * widthScaler;
+      const tipWidth = length * 0.045 * widthScaler;
+      halfW = Math.max(breOuterRadius, centerRadius, tipWidth / 2, width / 2) + lineWidth;
+      tipExtent = length + oLength + lineWidth;
+      tailExtent = Math.max(tail, 0) + lineWidth;
+    } else {
+      halfW = Math.max(width / 2, oWidth / 2) + lineWidth;
+      tipExtent = length + (oLength > 0 ? oLength + lineWidth * 3 : 0) + lineWidth;
+      tailExtent = Math.max(tail, 0) + lineWidth;
+    }
+    halfW = Math.max(halfW, oCenter || 0, oRadius || 0);
+    if (oRadius > 0) {
+      tailExtent = Math.max(tailExtent, Math.max(tail, 0) + 2 * oRadius + lineWidth);
+    }
+    const xMin = -halfW - shadowPad;
+    const xMax = halfW + shadowPad + shadowDx;
+    const yMin = -tipExtent - shadowPad;
+    const yMax = tailExtent + shadowPad + shadowDy;
+    const bboxW = xMax - xMin;
+    const bboxH = yMax - yMin;
+    const anchorX = -xMin;
+    const anchorY = -yMin;
+    const pxW = Math.ceil(bboxW * scale) + 2;
+    const pxH = Math.ceil(bboxH * scale) + 2;
+    if (pxW <= 0 || pxH <= 0) return;
+    const bitmap = new OffscreenCanvas(pxW, pxH);
+    const bctx = bitmap.getContext("2d");
+    bctx.translate(anchorX * scale + 1, anchorY * scale + 1);
+    bctx.scale(scale, scale);
+    bctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
+    bctx.shadowBlur = sigma * scale;
+    bctx.shadowOffsetX = shadowDx * scale;
+    bctx.shadowOffsetY = shadowDy * scale;
+    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
+    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
+    if (handType === "quad") {
+      drawQuadHandBody(bctx, part, env, length, strokeColor, fillColor, lineWidth);
+    } else if (handType === "sun") {
+      drawSunHandBody(bctx, part, env, length, length2, oCenter, strokeColor, fillColor, lineWidth);
+    } else if (handType === "breguet") {
+      drawBreguetHandBody(bctx, length, width, tail, oLength, strokeColor, fillColor, lineWidth);
+    } else {
+      drawHandShape(bctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
+    }
+    if (handType !== "quad" && handType !== "sun" && handType !== "breguet" && oLength > 0) {
+      const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
+      const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+      const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
+      drawHandOrnament(bctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor);
+    }
+    if (oRadius > 0) {
+      const tLW = evalAttr(part.tLineWidth, env) || evalAttr(part.oLineWidth, env) || lineWidth;
+      const tSC = part.tStrokeColor ? evalColor(part.tStrokeColor, env) : part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+      const tFC = part.tFillColor ? evalColor(part.tFillColor, env) : part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
+      drawTailCircle(bctx, tail, oRadius, tLW, tSC, tFC);
+    }
+    if (oCenter > 0 && handType !== "sun") {
+      const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+      drawCenterDot(bctx, oCenter, osc);
+    }
+    part._shadowBitmap = bitmap;
+    part._shadowAnchorX = anchorX;
+    part._shadowAnchorY = anchorY;
+    part._shadowBitmapW = bboxW;
+    part._shadowBitmapH = bboxH;
+  }
+  function drawQuadHandBody(ctx, part, env, length, strokeColor, fillColor, lineWidth) {
+    const oLength = evalAttr(part.oLength, env);
+    const oWidth = evalAttr(part.oWidth, env);
+    const oCenter2 = evalAttr(part.oCenter, env);
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.moveTo(-oWidth / 12, -oCenter2);
+    ctx.quadraticCurveTo(-oWidth * 0.45, -oLength / 2, -oWidth / 4, -oLength);
+    ctx.moveTo(oWidth / 4, -oLength);
+    ctx.quadraticCurveTo(oWidth * 0.45, -oLength / 2, oWidth / 12, -oCenter2);
+    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+    ctx.fillStyle = oStrokeColor;
+    ctx.lineWidth = 0;
+    ctx.beginPath();
+    ctx.moveTo(oWidth / 4 + lineWidth / 2, -oLength);
+    ctx.lineTo(0, -length);
+    ctx.lineTo(-oWidth / 4 - lineWidth / 2, -oLength);
+    ctx.lineTo(-oWidth / 4 + lineWidth / 2, -oLength);
+    ctx.lineTo(0, -oLength * 1.2);
+    ctx.lineTo(oWidth / 4 - lineWidth / 2, -oLength);
+    ctx.closePath();
+    ctx.fill();
+    if (oCenter2 > 0) {
+      const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
+      drawCenterDot(ctx, oCenter2, osc);
+    }
+  }
+  function drawSunHandBody(ctx, part, env, length, length2, oCenter, strokeColor, fillColor, lineWidth) {
+    const nRays = evalAttr(part.nRays, env) || 8;
+    let rayRad = (length - length2) / 2;
+    const raysRad = (length - length2) / 3;
+    const cen = length2 + rayRad;
+    const sunCenter = oCenter > 0 ? oCenter : raysRad / 2;
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    for (let i = 0; i < nRays; i++) {
+      const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
+      const farX = rayRad * Math.cos(theta);
+      const farYIOS = cen + rayRad * Math.sin(theta);
+      const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
+      const cwYIOS = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
+      const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
+      const ccwYIOS = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
+      ctx.moveTo(farX, -farYIOS);
+      ctx.lineTo(cwX, -cwYIOS);
+      ctx.lineTo(ccwX, -ccwYIOS);
+      ctx.lineTo(farX, -farYIOS);
+      rayRad = raysRad;
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = fillColor;
+    ctx.beginPath();
+    ctx.arc(0, -cen, sunCenter, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawBreguetHandBody(ctx, length, width, tail, oLength, strokeColor, fillColor, lineWidth) {
+    const widthScaler = width / (length * 0.16);
+    const lengthScaler = (length - 81) / 10;
+    const armWidth = length * 0.04 * widthScaler;
+    const centerRadius = length * 0.08 * widthScaler;
+    const breOuterCenter = length * 0.71 + lengthScaler;
+    const breInnerCenter = length * 0.725 + lengthScaler * 0.8;
+    const breOuterRadius = length * 0.075 * widthScaler;
+    const breInnerRadius = length * 0.05 * widthScaler;
+    const breBase = breOuterCenter - breOuterRadius;
+    const tipBase = breOuterCenter + breOuterRadius;
+    const tipWidth = length * 0.045 * widthScaler;
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.arc(0, 0, centerRadius, 0, 2 * Math.PI);
+    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-armWidth / 2, -centerRadius);
+    ctx.lineTo(-armWidth / 10, -breBase);
+    ctx.lineTo(armWidth / 10, -breBase);
+    ctx.lineTo(armWidth / 2, -centerRadius);
+    ctx.closePath();
+    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -breOuterCenter, breOuterRadius, 0, 2 * Math.PI);
+    ctx.moveTo(breInnerRadius, -breInnerCenter);
+    ctx.arc(0, -breInnerCenter, breInnerRadius, 0, 2 * Math.PI, true);
+    if (fillColor !== "rgba(0,0,0,0)") ctx.fill("evenodd");
+    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-tipWidth / 2, -tipBase);
+    ctx.lineTo(0, -length);
+    ctx.lineTo(tipWidth / 2, -tipBase);
+    ctx.closePath();
+    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
+    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
+  }
+  function buildImageHandShadow(part, env, scale, images) {
+    const z = evalAttr(part.z, env);
+    if (!z || z === 0) return;
+    const loaded2 = part.src ? images.get(part.src) : void 0;
+    if (!loaded2) return;
+    const { bitmap: srcBitmap, scale: imgScale } = loaded2;
+    const drawW = srcBitmap.width * imgScale;
+    const drawH = srcBitmap.height * imgScale;
+    const thick = evalAttr(part.thick, env) || 3;
+    let sigma = (z + 2) / 2;
+    let percentOpacity = 40;
+    const shadowPad = sigma * 3;
+    const shadowDx = z / 4.3;
+    const shadowDy = z / 2.15;
+    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
+    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
+    const imgLeft = -xAnchor;
+    const imgTop = -yAnchor - drawH;
+    const imgRight = imgLeft + drawW;
+    const imgBottom = imgTop + drawH;
+    const xMin = imgLeft - shadowPad;
+    const xMax = imgRight + shadowPad + shadowDx;
+    const yMin = imgTop - shadowPad;
+    const yMax = imgBottom + shadowPad + shadowDy;
+    const bboxW = xMax - xMin;
+    const bboxH = yMax - yMin;
+    const anchorX = -xMin;
+    const anchorY = -yMin;
+    const pxW = Math.ceil(bboxW * scale) + 2;
+    const pxH = Math.ceil(bboxH * scale) + 2;
+    if (pxW <= 0 || pxH <= 0) return;
+    const bmp = new OffscreenCanvas(pxW, pxH);
+    const bctx = bmp.getContext("2d");
+    bctx.translate(anchorX * scale + 1, anchorY * scale + 1);
+    bctx.scale(scale, scale);
+    bctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
+    bctx.shadowBlur = sigma * scale;
+    bctx.shadowOffsetX = shadowDx * scale;
+    bctx.shadowOffsetY = shadowDy * scale;
+    bctx.drawImage(srcBitmap, imgLeft, imgTop, drawW, drawH);
+    part._shadowBitmap = bmp;
+    part._shadowAnchorX = anchorX;
+    part._shadowAnchorY = anchorY;
+    part._shadowBitmapW = bboxW;
+    part._shadowBitmapH = bboxH;
   }
   function renderFrame(ctx, watch, env, scale, images, terminatorLeaves) {
     const w = ctx.canvas.width;
@@ -13995,9 +14286,15 @@
       drawWindowInnerShadow(ctx, win, env);
     }
   }
+  var _cutoutTempCanvas = null;
   function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale, images) {
-    const temp = new OffscreenCanvas(canvasWidth, canvasHeight);
+    if (!_cutoutTempCanvas || _cutoutTempCanvas.width !== canvasWidth || _cutoutTempCanvas.height !== canvasHeight) {
+      _cutoutTempCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
+    }
+    const temp = _cutoutTempCanvas;
     const tctx = temp.getContext("2d");
+    tctx.resetTransform();
+    tctx.clearRect(0, 0, canvasWidth, canvasHeight);
     tctx.translate(canvasWidth / 2, canvasHeight / 2);
     tctx.scale(scale, scale);
     drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale, images);
@@ -14368,6 +14665,27 @@
       return;
     }
     if (length <= 0) return;
+    if (part._shadowBitmap) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (part.dynamicState) {
+        const xm = part.dynamicState.currentXMotion ?? 0;
+        const ym = part.dynamicState.currentYMotion ?? 0;
+        if (xm !== 0 || ym !== 0) {
+          ctx.translate(xm, -ym);
+        }
+      }
+      ctx.rotate(angle);
+      ctx.drawImage(
+        part._shadowBitmap,
+        -part._shadowAnchorX,
+        -part._shadowAnchorY,
+        part._shadowBitmapW,
+        part._shadowBitmapH
+      );
+      ctx.restore();
+      return;
+    }
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
     const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
@@ -14870,6 +15188,20 @@
     const { bitmap, scale: imgScale } = loaded2;
     const drawW = bitmap.width * imgScale;
     const drawH = bitmap.height * imgScale;
+    if (part._shadowBitmap && offsetRadius <= 0) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (angle) ctx.rotate(angle);
+      ctx.drawImage(
+        part._shadowBitmap,
+        -part._shadowAnchorX,
+        -part._shadowAnchorY,
+        part._shadowBitmapW,
+        part._shadowBitmapH
+      );
+      ctx.restore();
+      return;
+    }
     ctx.save();
     setupHandShadow(
       ctx,
@@ -14995,11 +15327,23 @@
       leafAngleFn = env.functions.get(fnName);
     }
     if (!leafAngleFn) return;
+    const updateSec = part.update ? evalAttr(part.update, env) : 5;
+    const now = performance.now();
+    let angles;
+    if (part._cachedAngles && part._cachedAngles.length === numWedges && part._cacheNextUpdate != null && now < part._cacheNextUpdate) {
+      angles = part._cachedAngles;
+    } else {
+      angles = new Array(numWedges);
+      for (let i = 0; i < numWedges; i++) {
+        angles[i] = leafAngleFn(planetNumber, i, numWedges);
+      }
+      part._cachedAngles = angles;
+      part._cacheNextUpdate = now + updateSec * 1e3;
+    }
     ctx.save();
     ctx.translate(cx, cy);
     for (let i = 0; i < numWedges; i++) {
-      const leafAngle = leafAngleFn(planetNumber, i, numWedges);
-      const angle = masterOffset + leafAngle;
+      const angle = masterOffset + angles[i];
       ctx.save();
       ctx.rotate(angle);
       const startAngle = -Math.PI / 2 - wedgeSpan / 2;
@@ -16915,6 +17259,7 @@
         updateLeafAngles(face.terminatorLeaves, face.env);
       }
       buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+      buildHandShadowCaches(watch, env, scale, images);
       face.cachesBuilt = true;
       face.handStates = initHandStates(watch, env, performance.now(), getNow);
     }
@@ -16933,7 +17278,10 @@
     function rebuildEnvironments() {
       for (const face of faces) {
         if (!face.enabled) continue;
+        const oldKnockout = face.env._terraCityKnockout;
         face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
+        invalidateDayNightCaches(face.watch);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
@@ -16951,9 +17299,15 @@
         rafId = null;
       }
     }
+    let _frameTimingStart = performance.now();
+    let _frameTotalMs = 0;
+    let _frameRenderMs = 0;
+    let _frameCount = 0;
+    let _frameAnimatingFaces = 0;
     function frame() {
       rafId = null;
       const now = performance.now();
+      const frameStart = now;
       let stillAnimating = false;
       timeController.checkTick(now);
       timeController.beginFrame();
@@ -16961,6 +17315,8 @@
       const rate = timeController.currentRate;
       const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
       const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
+      let renderMs = 0;
+      let animatingFaceCount = 0;
       for (const face of faces) {
         if (!face.enabled || !face.cachesBuilt) continue;
         tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
@@ -16980,6 +17336,7 @@
             face.lastTerminatorRebuild = now;
           }
         }
+        const renderStart = performance.now();
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
         if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
           const ctx2d = face.ctx;
@@ -17061,7 +17418,12 @@
           }
           ctx2d.restore();
         }
-        if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
+        renderMs += performance.now() - renderStart;
+        const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves);
+        if (faceAnimating) {
+          stillAnimating = true;
+          animatingFaceCount++;
+        }
       }
       {
         const sim = timeController.getDisplayTime();
@@ -17071,6 +17433,24 @@
         }
       }
       timeController.endFrame();
+      _frameTotalMs += performance.now() - frameStart;
+      _frameRenderMs += renderMs;
+      _frameCount++;
+      _frameAnimatingFaces += animatingFaceCount;
+      if (performance.now() - _frameTimingStart >= 1e4) {
+        const avgTotal = (_frameTotalMs / _frameCount).toFixed(2);
+        const avgRender = (_frameRenderMs / _frameCount).toFixed(2);
+        const avgAnimFaces = (_frameAnimatingFaces / _frameCount).toFixed(1);
+        const fps = (1e3 / (_frameTotalMs / _frameCount)).toFixed(0);
+        console.log(
+          `[perf] ${_frameCount} frames in 10s | avg total: ${avgTotal}ms | avg render: ${avgRender}ms | avg animating faces: ${avgAnimFaces}/${faces.length} | effective fps: ${fps}`
+        );
+        _frameTimingStart = performance.now();
+        _frameTotalMs = 0;
+        _frameRenderMs = 0;
+        _frameCount = 0;
+        _frameAnimatingFaces = 0;
+      }
       if (timeController.needsContinuousRender || stillAnimating) {
         rafId = requestAnimationFrame(frame);
       } else {

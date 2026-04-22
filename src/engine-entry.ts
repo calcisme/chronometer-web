@@ -26,7 +26,7 @@ import { createWatchEnvironment, computeTzDeltaMs, GAIA_SUBDIAL_DEFAULTS } from 
 import type { TerraSlot } from './watch/watch-env.js';
 import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
 import { validSlotsForTz, formatSlotOffset, getStandardOffsetMinutes, olsonIdToCityName } from './watch/terra-slots.js';
-import { buildStaticBlockCaches, renderFrame, BEZEL_THICKNESS_XML } from './watch/renderer.js';
+import { buildStaticBlockCaches, renderFrame, invalidateDayNightCaches, buildHandShadowCaches, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
@@ -615,6 +615,7 @@ async function main() {
             updateLeafAngles(face.terminatorLeaves, face.env);
         }
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        buildHandShadowCaches(watch, env, scale, images);
         face.cachesBuilt = true;
         face.handStates = initHandStates(watch, env, performance.now(), getNow);
     }
@@ -646,8 +647,15 @@ async function main() {
     function rebuildEnvironments() {
         for (const face of faces) {
             if (!face.enabled) continue;
+            // Preserve the Terra city-name knockout cache across env rebuilds
+            // (it's stored on the env but doesn't depend on time — only on slot assignments).
+            const oldKnockout = (face.env as any)._terraCityKnockout;
             // Rebuild the environment but keep the same watch/parts
             face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            if (oldKnockout) (face.env as any)._terraCityKnockout = oldKnockout;
+            // Invalidate QDayNightRing render caches so astronomy values
+            // are recomputed immediately for the new time.
+            invalidateDayNightCaches(face.watch);
             // Preserve terminator leaves — their expressions are evaluated
             // against the env each frame by tickLeafAnimations, so they
             // don't need recreating. Recreating them would destroy animation state.
@@ -674,9 +682,17 @@ async function main() {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
     }
 
+    // --- Frame timing instrumentation ---
+    let _frameTimingStart = performance.now();
+    let _frameTotalMs = 0;
+    let _frameRenderMs = 0;
+    let _frameCount = 0;
+    let _frameAnimatingFaces = 0;
+
     function frame() {
         rafId = null;
         const now = performance.now();
+        const frameStart = now;
         let stillAnimating = false;
 
         // Check for quantized tick boundary
@@ -691,6 +707,9 @@ async function main() {
         const rate = timeController.currentRate;
         const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
         const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
+
+        let renderMs = 0;
+        let animatingFaceCount = 0;
 
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
@@ -714,6 +733,8 @@ async function main() {
                     face.lastTerminatorRebuild = now;
                 }
             }
+
+            const renderStart = performance.now();
             renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
 
             // Gaia: draw city name labels and 24-hour numbers on each subdial
@@ -823,7 +844,13 @@ async function main() {
 
                 ctx2d.restore();
             }
-            if (anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves)) stillAnimating = true;
+            renderMs += performance.now() - renderStart;
+
+            const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves);
+            if (faceAnimating) {
+                stillAnimating = true;
+                animatingFaceCount++;
+            }
         }
         // Update mini-bar time display (using frameRealTime captured at beginFrame)
         {
@@ -835,6 +862,26 @@ async function main() {
         }
 
         timeController.endFrame();
+
+        // --- Accumulate frame timing stats ---
+        _frameTotalMs += performance.now() - frameStart;
+        _frameRenderMs += renderMs;
+        _frameCount++;
+        _frameAnimatingFaces += animatingFaceCount;
+        if (performance.now() - _frameTimingStart >= 10000) {
+            const avgTotal = (_frameTotalMs / _frameCount).toFixed(2);
+            const avgRender = (_frameRenderMs / _frameCount).toFixed(2);
+            const avgAnimFaces = (_frameAnimatingFaces / _frameCount).toFixed(1);
+            const fps = (1000 / (_frameTotalMs / _frameCount)).toFixed(0);
+            console.log(
+                `[perf] ${_frameCount} frames in 10s | avg total: ${avgTotal}ms | avg render: ${avgRender}ms | avg animating faces: ${avgAnimFaces}/${faces.length} | effective fps: ${fps}`
+            );
+            _frameTimingStart = performance.now();
+            _frameTotalMs = 0;
+            _frameRenderMs = 0;
+            _frameCount = 0;
+            _frameAnimatingFaces = 0;
+        }
 
         // Decide whether to keep the RAF loop running
         if (timeController.needsContinuousRender || stillAnimating) {
