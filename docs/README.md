@@ -23,6 +23,7 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 
 ### Feature Systems
 - [**Astronomy**](astronomy.md) — Ported astronomical routines, opcode tracing guide
+- [**Calendar**](calendar.md) — Hybrid Julian/Gregorian calendar system, known correctness issues
 - [**World-Time Slots**](world-time-slots.md) — Slot architecture for Terra/Gaia world-time features
 - [**Location & Cities**](location-and-cities.md) — Location system, GeoNames city picker, `file://` limitations
 - [**Help System**](help-system.md) — Per-face help content, Android source extraction, lazy-loading architecture
