@@ -74,10 +74,11 @@ A shared scheduler tracks `min(handState.nextUpdateTime)` across all active face
 | Component | Per face | 25 faces total |
 |-----------|---------|----------------|
 | Static cache OffscreenCanvas | ~1.2 MB | ~31 MB |
+| Shadow bitmap caches | ~0.8 MB | ~20 MB |
 | Watch AST / model objects | ~0.1 MB | ~2.5 MB |
 | Watch Environment | ~0.05 MB | ~1.25 MB |
 | JS heap, GPU textures, fonts | — | ~20 MB |
-| **Estimated total** | | **~55 MB** |
+| **Estimated total** | | **~75 MB** |
 
 Well within the 100 MB budget target.
 

@@ -13,8 +13,8 @@ The shadow system synthesizes three types of shadows at runtime, replacing the i
 ## Three Shadow Mechanisms
 
 1. **Window inner shadows** — darkening along the inside edges of window openings, simulating the bezel casting a shadow onto a recessed wheel
-2. **Image-based shadows** — pre-rendered shadow PNGs in the iOS texture archive; replaced by runtime synthesis in the web app
-3. **Hand shadows** — blurred, offset, semi-transparent copies of hand bitmaps, rendered dynamically as hands rotate
+2. **Hand shadow bitmaps** — pre-rendered hand + shadow cached on OffscreenCanvas at init/resize, blitted per-frame with rotation (matching the iOS `makeOneShadow.pl` approach)
+3. **Calendar row cover shadows** — live Canvas `shadowBlur` on Babylon's 2 sliding row covers (negligible cost, not cached)
 
 ## Window Inner Shadows
 
@@ -51,9 +51,11 @@ The `shadowOffset` parameter adjusts per-edge opacity multipliers: positive offs
 
 A global intensity multiplier of `0.5` is applied to all shadow opacities, tuned by visual comparison against the iOS app on Terra.
 
-## Hand Shadows
+## Hand Shadow Bitmaps
 
-Hand shadows are **dynamic** — they rotate with their parent hand on every frame.
+Hand shadows are visually **dynamic** — they rotate with their parent hand on every frame — but the shadow rendering is **static**: each hand's shape + shadow is pre-rendered once onto a small OffscreenCanvas at initialization (and on resize), then blitted with rotation per-frame.
+
+This matches the iOS `makeOneShadow.pl` approach and eliminates per-frame Gaussian blur GPU cost, which was the dominant bottleneck in the all-faces grid view.
 
 ### iOS Formula (from `makeOneShadow.pl`)
 
@@ -71,9 +73,33 @@ Shadow offset (from `ECWatchController.m`):
 - **X offset**: `+z / 4.3` (rightward — light from the left)
 - **Y offset**: `-z / 2.15` (downward in screen coords — light from above)
 
-### Web Implementation (Canvas `shadowBlur`)
+### Pre-Rendered Shadow Cache
 
-The web app uses Canvas shadow properties (`shadowBlur`, `shadowOffsetX`, `shadowOffsetY`, `shadowColor`) set before each hand draw call. The `setupHandShadow()` helper configures these properties; shadow is cleared by `ctx.restore()`.
+`buildHandShadowCaches()` iterates all QHand parts (including those inside `<static>` blocks) and creates a cached bitmap for each hand with `z > 0`:
+
+1. **Compute bounding box** — hand shape extent (length, tail, width, ornaments, center dot, tail circle) + shadow padding (3σ + offset)
+2. **Create OffscreenCanvas** — sized to bounding box × scale, with 1px border
+3. **Draw hand + shadow** — set `shadowBlur`, `shadowOffset`, `shadowColor` on the small canvas, then draw the hand shape using the extracted helpers (`drawHandShape`, `drawQuadHandBody`, `drawSunHandBody`, `drawBreguetHandBody`, `drawHandOrnament`, `drawTailCircle`, `drawCenterDot`)
+4. **Store on part** — `_shadowBitmap`, `_shadowAnchorX/Y` (pivot offset within bitmap), `_shadowBitmapW/H` (dimensions in XML coords)
+
+Image-based hands with `z > 0` (e.g., Miami's planet labels) are handled by `buildImageHandShadow()` using the same approach.
+
+### Per-Frame Rendering (Fast Path)
+
+When `drawQHand()` finds a `_shadowBitmap` on a part, it takes a fast path:
+
+```
+ctx.save()
+ctx.translate(x, y)           // hand position
+ctx.translate(xMotion, -yMotion)  // calendar wire offset (if any)
+ctx.rotate(angle)              // animated angle
+ctx.drawImage(bitmap, -anchorX, -anchorY, bitmapW, bitmapH)
+ctx.restore()
+```
+
+No `setupHandShadow()`, no `shadowBlur`, no per-primitive Gaussian blur. The GPU just does a rotated texture blit — what it's designed for.
+
+`drawImageHand()` has the same fast path for image-based hands with cached shadow bitmaps.
 
 ### Thin-Hand Tuning Differences
 
@@ -85,11 +111,45 @@ The iOS formula was designed for pre-rendered bitmaps where shadow is generated 
 | Opacity | Increased (50→100%) — darker | Reduced (`× thick/3`) — lighter |
 | Base opacity | 50% | 40% |
 
-This produces a softer, more natural look that closely matches iOS at the visual level.
+This produces a softer, more natural look that closely matches iOS at the visual level. Since the web app now also pre-renders to bitmaps, the shadow is a single unified image rather than per-stroke shadows — matching the iOS behavior more closely.
 
-### Coordinate Scaling
+### Color Analysis
 
-Canvas `shadowBlur` and `shadowOffset` values are in **untransformed CSS pixel space**, not the current coordinate system. Since we draw in XML units with `ctx.scale(scale, scale)`, shadow parameters must be multiplied by `scale` (extracted from `ctx.getTransform().a`).
+No shadow-casting hand has truly dynamic colors. All color attributes resolve to:
+- Hex literals (`#RRGGBB`, `0xAARRGGBB`)
+- Init-time constants from `<init>` blocks (e.g., `hand24Color`, `nfgclr3`)
+
+This is why both iOS and the web app can safely pre-render shadows: hand appearance is fixed at initialization.
+
+### Inventory (180 shadow-casting parts)
+
+| Face | Drawn | Image | Total |
+|------|:---:|:---:|:---:|
+| Terra | 29 | 0 | 29 |
+| Selene | 25 | 0 | 25 |
+| Basel | 21 | 0 | 21 |
+| Geneva | 20 | 0 | 20 |
+| Hana | 17 | 0 | 17 |
+| Haleakala | 14 | 0 | 14 |
+| Venezia | 14 | 0 | 14 |
+| Gaia | 13 | 0 | 13 |
+| Babylon | 7 | 0 | 7 |
+| Chandra | 4 | 0 | 4 |
+| Mauna Kea | 4 | 1 | 5 |
+| Miami | 1 | 7 | 8 |
+| Firenze | 0 | 0 | 0 |
+
+### Memory Cost
+
+Each bitmap is typically 200–500 × 30–100 pixels (~50–200 KB). Total across all 13 faces: **~10 MB** (upper bound). This is comparable to the static block caches already in memory.
+
+### Cache Invalidation
+
+Shadow caches are rebuilt:
+- At initialization (`buildCache()`)
+- On resize (scale changes)
+
+They are **not** rebuilt on time/environment changes — hand geometry and colors are fixed.
 
 ## Calendar Wheel & Row Cover Shadows
 
@@ -102,6 +162,8 @@ The `CalendarRowCover` parts slide horizontally to reveal/hide calendar rows dur
 - **Bottom covers** (`row6Left`, `row56Right`): True "covers" on top of the wheels. **Shadow enabled.**
 
 **Unified shadow technique**: Each cover draws one solid background rectangle with shadow enabled, then clears shadow and draws text labels on top. This prevents individual `fillRect`/`fillText` calls from each creating their own shadow.
+
+These 2 covers use live `shadowBlur` per-frame (not cached), since the performance impact is negligible for a single face.
 
 ### Calendar SWheels (Babylon)
 
@@ -125,8 +187,8 @@ This ensures the shadow follows the actual wheel shape. Shadow is applied per-qu
 
 | File | Purpose |
 |------|---------|
-| `src/watch/renderer.ts` | `setupHandShadow()`, `drawWindowInnerShadow()`, `drawCalendarWheel()`, `drawCalendarRowCover()` |
-| `src/watch/types.ts` | `z` on `WheelPart`, shadow attributes on `WindowPart` |
+| `src/watch/renderer.ts` | `buildHandShadowCaches()`, `buildSingleHandShadow()`, `buildImageHandShadow()`, `setupHandShadow()`, `drawWindowInnerShadow()`, `drawCalendarWheel()`, `drawCalendarRowCover()` |
+| `src/watch/types.ts` | `z` on `WheelPart`, shadow attributes on `WindowPart`, `_shadowBitmap` / `_shadowAnchor*` on `QHandPart` |
 | `src/watch/xml-parser.ts` | Parsing `z`, `shadowOpacity`, `shadowSigma`, `shadowOffset`, `shadowOffsetX` |
 
 ## Related Docs
