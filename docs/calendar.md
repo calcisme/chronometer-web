@@ -14,7 +14,7 @@ From the iOS help file:
 | 1 BCE → Oct 4, 1582 CE | **Julian** |
 | Before 1 BCE | **Proleptic Julian** (leap years: 1 BCE, 5 BCE, 9 BCE, …) |
 
-The switchover date is **October 15, 1582**. Days October 5–14, 1582 **do not exist** in this hybrid calendar. This gap is handled explicitly in the Babylon calendar grid (`calendarWheelOct1582`).
+The switchover date is **October 15, 1582**. Days October 5–14, 1582 **do not exist** in this hybrid calendar. This gap is handled explicitly in the Babylon calendar grid (`calendarWheelOct1582`), with a **7-slot blank row** inserted between day 4 and day 15 to keep weekday columns aligned while providing a visible gap.
 
 ## Why This Matters
 
@@ -54,7 +54,8 @@ The expression environment registers calendar functions that the XML watch defin
 |---|---|
 | `dayNumber`, `dayNumberAngle` | ✅ Uses `getLocalComponents()` → `es-calendar.ts` |
 | `monthNumber`, `monthNumberAngle` | ✅ Uses `getLocalComponents()` → `es-calendar.ts` |
-| `yearNumber`, `eraNumber` | ✅ Uses `getLocalComponents()` → `es-calendar.ts` |
+| `yearNumber` | ✅ **Always positive** — returns `cs.year` for both CE and BCE |
+| `eraNumber` | ✅ Returns 0 for BCE, 1 for CE |
 | `weekdayNumber`, `weekdayNumberAngle` | ✅ Uses `weekdayFromTimeInterval()` (epoch arithmetic) |
 | `monthLen` | ✅ Uses `calendarDaysInMonth()` from `es-calendar.ts` |
 | `leapYearIndicatorAngle` | ✅ Uses `getLocalComponents()` with correct Julian/Gregorian logic |
@@ -91,6 +92,9 @@ The time bar at the bottom of each face page uses hybrid calendar decomposition:
 - **Date input "Apply"** constructs dates via `timeIntervalFromLocalComponents`
 - **BCE toggle** in the time controller popover switches between CE and BCE eras
 
+> [!IMPORTANT]
+> The timezone offset passed to `localComponentsFromTimeInterval` must be the **actual UTC offset** of the target timezone (east-positive, in seconds), not `tzDeltaMs`. The helper `targetTzOffsetSec(d)` computes this as `-d.getTimezoneOffset() * 60 + tzDeltaMs / 1000`.
+
 ## Notes on Remaining JS `Date` Usage
 
 > [!NOTE]
@@ -112,6 +116,33 @@ The time bar at the bottom of each face page uses hybrid calendar decomposition:
 4. **For month/year stepping**, use `addMonthsToTimeInterval()` / `addYearsToTimeInterval()` from `es-calendar.ts`.
 
 5. **Test with scrubbed dates** in the Julian era (e.g., year 1200 CE) and across the 1582 switchover to verify calendar correctness.
+
+6. **`yearNumber()` is always positive.** It matches iOS's `yearNumberUsingEnv:` which returns `cs.year` regardless of era. Use `eraNumber()` separately for BCE detection. The negative-year variant is `yearNumberCEMonotonic()` (era 1 → positive, era 0 → negative).
+
+7. **After setting a new time** via `timeController.setTime()`, call `finishAllAnimations()` + `resetAllSchedules()` + `stopScheduler()` + `startScheduler()` to force a re-render. Just calling `ensureSchedulerRunning()` is insufficient when the scheduler is already in idle mode.
+
+## October 1582 Implementation Details
+
+The Babylon calendar wheel and associated components require special handling for the Julian-Gregorian switchover month:
+
+### Calendar Wheel (`renderer.ts`)
+
+The `calendarWheelOct1582` quadrant uses a **slot-based** drawing approach. After drawing day 4, it:
+1. Advances the day counter from 5 to 15 (skipping the non-existent days)
+2. Advances the slot counter by 7 (inserting one full blank row)
+
+This creates a visible gap while keeping weekday columns aligned and making Oct 31 line up with the November next-month slider.
+
+### Calendar Row Bar (`watch-env.ts`)
+
+The `calendarRow` function subtracts **3** (not 10) from `dayNumber` for Oct 1582 days 15+. The math: 10 skipped days minus the 7 gap slots = 3. This ensures the red row indicator jumps correctly over the blank gap row.
+
+### Hidden Wheel Rotation (`watch-env.ts`)
+
+The `rotationForCalendarWheel012B` and `rotationForCalendarWheel3456` functions return **stable cutout angles** for all of October 1582, bypassing `columnOfFirstOfMonth()`. Without this, `columnOfFirstOfMonth()` returns different (bogus) values for Oct 4 vs Oct 15, causing a visible animation glitch as the hidden wheels rotate through non-blank quadrants during transitions.
+
+> [!NOTE]
+> `columnOfFirstOfMonth()` cannot correctly compute the first-of-month column for Oct 15+ 1582 because it unwinds from the current day position, but the unwind arithmetic doesn't account for the 10-day gap. This is only a problem for the hidden wheel angles; all other Oct 1582 handling uses explicit special cases.
 
 ## Key Source Files
 
