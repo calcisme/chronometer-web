@@ -335,13 +335,13 @@ export class TimeController {
 
     /**
      * Whether the render loop should run continuously.
-     * True for quantized rates and -1×; false for stopped and real-time 1×.
+     * True for quantized rates; false for stopped and 1×/-1× (which use
+     * idle-timeout scheduling with direction-aware boundary alignment).
      */
     get needsContinuousRender(): boolean {
         if (this.stopped) return false;
         if (this.rate !== null) return true;    // quantized ticking
-        if (this.direction === -1) return true; // -1× mode
-        return false;                           // 1× real time — use normal scheduler
+        return false;                           // 1× or -1× — use normal scheduler
     }
 
     // ========================================================================

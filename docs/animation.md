@@ -87,12 +87,13 @@ val.currentValue = newTarget - delta;  // unwrap so animation goes shortest path
 
 ## Modes of Operation
 
-### 1× Mode (Normal / Real Time)
+### 1× Mode (Normal / Real Time) and -1× Mode (Reverse)
 
 - `tickIntervalMs = null`
 - Expressions re-evaluate at epoch-aligned boundaries
 - Animations use natural speed (`kECGLAngleAnimationSpeed × animSpeed`)
 - No compression logic
+- Both directions use the same idle-timeout scheduler; `nextAlignedUpdate()` is direction-aware, using `Math.ceil` (forward) or `Math.floor` (backward) to find the next boundary in the direction time is flowing
 
 ### Quantized Mode (Scrubbing / Accelerated)
 

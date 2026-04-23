@@ -329,6 +329,7 @@ export function tickAnimations(
     now: number,   // performance.now()
     tickIntervalMs: number | null = null,
     displayDeltaPerTickSec: number = 0,
+    timeDirection: 1 | -1 = 1,
 ): void {
     for (const state of states) {
         // Check if it's time to re-evaluate
@@ -400,7 +401,7 @@ export function tickAnimations(
                 if (newOffsetTarget !== null && state.offsetAngle) {
                     startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
                 }
-                state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
+                state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow, timeDirection);
             }
 
             // Evaluate xMotion/yMotion (QHand day-indicator wires)
@@ -693,9 +694,9 @@ export function interpolateRaw(val: AnimatingValue, now: number): number {
  * Used only in 1× mode. Quantized mode computes schedules directly
  * in tickAnimations based on tick intervals and display-delta-per-tick.
  */
-function scheduleNextUpdate(updateIntervalMs: number, getNow: () => Date): number {
+function scheduleNextUpdate(updateIntervalMs: number, getNow: () => Date, timeDirection: 1 | -1 = 1): number {
     if (updateIntervalMs > 0) {
-        return nextAlignedUpdate(updateIntervalMs, getNow);
+        return nextAlignedUpdate(updateIntervalMs, getNow, timeDirection);
     }
 
     // Sentinel value — convert from ms back to the original constant
@@ -730,10 +731,20 @@ function scheduleNextUpdate(updateIntervalMs: number, getNow: () => Date): numbe
  * For example, with intervalMs=1000, if the display time is 14:00:00.350,
  * the next boundary is 14:00:01.000, which is 650ms from now.
  */
-function nextAlignedUpdate(intervalMs: number, getNow: () => Date): number {
+function nextAlignedUpdate(intervalMs: number, getNow: () => Date, timeDirection: 1 | -1 = 1): number {
     const displayNow = getNow().getTime();  // ms since epoch (display time)
-    const nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
-    const deltaMs = nextDisplay - displayNow;
+    let nextDisplay: number;
+    if (timeDirection === -1) {
+        // Time flows backward: find the previous boundary
+        nextDisplay = Math.floor(displayNow / intervalMs) * intervalMs;
+        // If exactly on a boundary, step one interval further back
+        if (nextDisplay === displayNow) {
+            nextDisplay -= intervalMs;
+        }
+    } else {
+        nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
+    }
+    const deltaMs = Math.abs(nextDisplay - displayNow);
     // Convert display-time delta to performance.now() time
     return performance.now() + deltaMs;
 }

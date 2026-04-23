@@ -1725,7 +1725,7 @@
       getNow
     };
   }
-  function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0) {
+  function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
     for (const state of states) {
       if (now >= state.nextUpdateTime) {
         const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
@@ -1766,7 +1766,7 @@
           if (newOffsetTarget !== null && state.offsetAngle) {
             startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
           }
-          state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow);
+          state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow, timeDirection);
         }
         if (state.part.type === "QHand") {
           const qhand = state.part;
@@ -1925,9 +1925,9 @@
     val.lastAnimationTime = now;
     return val.currentValue;
   }
-  function scheduleNextUpdate(updateIntervalMs, getNow) {
+  function scheduleNextUpdate(updateIntervalMs, getNow, timeDirection = 1) {
     if (updateIntervalMs > 0) {
-      return nextAlignedUpdate(updateIntervalMs, getNow);
+      return nextAlignedUpdate(updateIntervalMs, getNow, timeDirection);
     }
     const sentinel = updateIntervalMs / 1e3;
     switch (sentinel) {
@@ -1943,10 +1943,18 @@
         return nextLocalMidnight();
     }
   }
-  function nextAlignedUpdate(intervalMs, getNow) {
+  function nextAlignedUpdate(intervalMs, getNow, timeDirection = 1) {
     const displayNow = getNow().getTime();
-    const nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
-    const deltaMs = nextDisplay - displayNow;
+    let nextDisplay;
+    if (timeDirection === -1) {
+      nextDisplay = Math.floor(displayNow / intervalMs) * intervalMs;
+      if (nextDisplay === displayNow) {
+        nextDisplay -= intervalMs;
+      }
+    } else {
+      nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
+    }
+    const deltaMs = Math.abs(nextDisplay - displayNow);
     return performance.now() + deltaMs;
   }
   function nextLocalMidnight() {
@@ -16217,12 +16225,12 @@
     }
     /**
      * Whether the render loop should run continuously.
-     * True for quantized rates and -1×; false for stopped and real-time 1×.
+     * True for quantized rates; false for stopped and 1×/-1× (which use
+     * idle-timeout scheduling with direction-aware boundary alignment).
      */
     get needsContinuousRender() {
       if (this.stopped) return false;
       if (this.rate !== null) return true;
-      if (this.direction === -1) return true;
       return false;
     }
     // ========================================================================
@@ -17315,11 +17323,12 @@
       const rate = timeController.currentRate;
       const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
       const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
+      const timeDir = timeController.currentDirection;
       let renderMs = 0;
       let animatingFaceCount = 0;
       for (const face of faces) {
         if (!face.enabled || !face.cachesBuilt) continue;
-        tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
+        tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
         if (face.terminatorLeaves.length > 0) {
           tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
           const cacheIntervalMs = tickMs !== null ? tickMs : Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
@@ -18527,7 +18536,7 @@
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
-          tickAnimations(face.handStates, face.env, stepNow, null, 0);
+          tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
           tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
         }
         timeController.endFrame();
@@ -18556,7 +18565,7 @@
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
-          tickAnimations(face.handStates, face.env, stepNow, null, 0);
+          tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
           tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
         }
         timeController.endFrame();

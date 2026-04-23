@@ -707,13 +707,14 @@ async function main() {
         const rate = timeController.currentRate;
         const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
         const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
+        const timeDir = timeController.currentDirection;
 
         let renderMs = 0;
         let animatingFaceCount = 0;
 
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
-            tickAnimations(face.handStates, face.env, now, tickMs, deltaSec);
+            tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
             if (face.terminatorLeaves.length > 0) {
                 // Animate leaf angles and rotations using the same system
                 // as hands/wheels (adaptive duration, interpolation at 240fps)
@@ -2255,7 +2256,7 @@ async function main() {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
-                tickAnimations(face.handStates, face.env, stepNow, null, 0);
+                tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
                 tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
             }
             timeController.endFrame();
@@ -2293,7 +2294,7 @@ async function main() {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
-                tickAnimations(face.handStates, face.env, stepNow, null, 0);
+                tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
                 tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
             }
             timeController.endFrame();
