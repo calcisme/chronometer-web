@@ -12714,21 +12714,19 @@
       return moonAge(requestedDI, null).age;
     });
     const MS_PER_DAY = 864e5;
+    const tzOffsetMs = tzOffsetSeconds * 1e3;
+    const localDayNum = () => Math.floor((getNow().getTime() + tzOffsetMs) / MS_PER_DAY);
     functions.set("delOnDayTintColor", (n) => {
-      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayTintColorA") : env.variables.get("delOnDayTintColorB");
+      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayTintColorA") : env.variables.get("delOnDayTintColorB");
     });
     functions.set("delOnDayStrokeColor", (n) => {
-      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayStrokeColorA") : env.variables.get("delOnDayStrokeColorB");
+      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayStrokeColorA") : env.variables.get("delOnDayStrokeColorB");
     });
     functions.set("delOnDayTintNColor", (n) => {
-      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayTintNColorA") : env.variables.get("delOnDayTintNColorB");
+      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayTintNColorA") : env.variables.get("delOnDayTintNColorB");
     });
     functions.set("delOnDayStrokeNColor", (n) => {
-      const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-      return (dayNum + n) % 2 === 0 ? env.variables.get("delOnDayStrokeNColorA") : env.variables.get("delOnDayStrokeNColorB");
+      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayStrokeNColorA") : env.variables.get("delOnDayStrokeNColorB");
     });
     functions.set("moonriseForDayValid", () => {
       return isNaN(riseSetForDay(true, 1 /* Moon */)) ? 0 : 1;

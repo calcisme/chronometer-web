@@ -849,28 +849,33 @@ function registerTimeFunctions(
     // Use Unix day number (continuous integer count from epoch) for parity,
     // not day-of-month, to avoid color swaps at month boundaries with odd-length
     // months (e.g. Jan 31→Feb 1 both odd). Consecutive Unix days always alternate.
+    //
+    // We shift the UTC epoch ms by the full target-timezone offset so the day
+    // boundary falls at local midnight.  Using liveDate().getTime() was wrong
+    // because that adds only the browser-to-target delta (tzDeltaMs); when
+    // browser == target timezone, tzDeltaMs is 0 and the day flipped at UTC
+    // midnight instead of local midnight.
     const MS_PER_DAY = 86400000;
+    const tzOffsetMs = tzOffsetSeconds * 1000;
+    const localDayNum = (): number =>
+        Math.floor((getNow().getTime() + tzOffsetMs) / MS_PER_DAY);
     functions.set('delOnDayTintColor', (n: number) => {
-        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-        return ((dayNum + n) % 2 === 0)
+        return ((localDayNum() + n) % 2 === 0)
             ? env.variables.get('delOnDayTintColorA')!
             : env.variables.get('delOnDayTintColorB')!;
     });
     functions.set('delOnDayStrokeColor', (n: number) => {
-        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-        return ((dayNum + n) % 2 === 0)
+        return ((localDayNum() + n) % 2 === 0)
             ? env.variables.get('delOnDayStrokeColorA')!
             : env.variables.get('delOnDayStrokeColorB')!;
     });
     functions.set('delOnDayTintNColor', (n: number) => {
-        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-        return ((dayNum + n) % 2 === 0)
+        return ((localDayNum() + n) % 2 === 0)
             ? env.variables.get('delOnDayTintNColorA')!
             : env.variables.get('delOnDayTintNColorB')!;
     });
     functions.set('delOnDayStrokeNColor', (n: number) => {
-        const dayNum = Math.floor(liveDate().getTime() / MS_PER_DAY);
-        return ((dayNum + n) % 2 === 0)
+        return ((localDayNum() + n) % 2 === 0)
             ? env.variables.get('delOnDayStrokeNColorA')!
             : env.variables.get('delOnDayStrokeNColorB')!;
     });

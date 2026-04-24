@@ -102,7 +102,7 @@ The time bar at the bottom of each face page uses hybrid calendar decomposition:
 
 - **`DSTNumber`** (`watch-env.ts`): Uses `getFullYear()` to probe the system's DST offset at Jan/Jul. DST is a modern concept, so proleptic Gregorian is fine here.
 - **`moonDeltaEclipticLongitudeAtDeltaDay`** (`watch-env.ts`): Uses JS `Date` to find midnight ± n days. This is an astronomy offset calculation, not calendar display.
-- **`delOnDayTintColor` family** (`watch-env.ts`): Uses `liveDate().getTime() / MS_PER_DAY` for parity-based color alternation — this is continuous epoch arithmetic, not calendar decomposition.
+- **`delOnDayTintColor` family** (`watch-env.ts`): Uses `getNow().getTime() + tzOffsetMs` for parity-based color alternation — adding the full UTC-to-target offset shifts the epoch day boundary to local midnight.
 - **`second`/`minute`/`hour`/`day` stepping** (`time-controller.ts`): Uses JS `Date.setSeconds()` etc. — these are continuous timestamp operations that don't involve calendar decomposition.
 
 ## Rules for New Code
