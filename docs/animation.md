@@ -55,7 +55,9 @@ Controls **how often** a hand's angle expression is re-evaluated:
 | `update="1 * days()"` | Once per day (date/month/weekday wheels) |
 | No `update` | Defaults to `1/beatsPerSecond` |
 
-Updates fire on **exact clock boundaries** (epoch-aligned), not relative to page load. Named sentinel values (e.g., `updateAtNextSunriseOrMidnight`) are approximated as daily (`86400s`).
+Updates fire on **exact clock boundaries** (epoch-aligned), not relative to page load.
+
+**Sentinel-based scheduling**: Named sentinel values (e.g., `updateAtNextSunriseOrMidnight`) compute the true next astronomical event time (sunrise, sunset, moonrise, moonset) in display time and schedule the part to re-evaluate at that boundary. The `OrMidnight` variants clamp the event time to the next local midnight, so the part updates at whichever comes first. This works correctly in forward, backward (-1×), and quantized (scrubbing) modes. See `computeNextBoundary()` and `resolveSentinel()` in `animation.ts`.
 
 ## Animation Speed (`animSpeed` attribute)
 

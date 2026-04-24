@@ -140,7 +140,7 @@ Combinable: `'outer|tickOut'`, `'tickOut|no5s'` (skip every 5th mark).
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `update` | expr | Update interval in seconds |
+| `update` | expr | Update interval in seconds, or a sentinel function name |
 | `updateOffset` | expr | Offset from update boundary |
 | `kind` | string | Animation kind (see [Kinds](#animation-kinds)) |
 
@@ -254,7 +254,7 @@ For `tri` and `rect` hands, an ornament (arrowhead/diamond) can be overlaid at t
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `update` | expr | Update interval in seconds |
+| `update` | expr | Update interval in seconds, or a sentinel function name |
 | `updateOffset` | expr | Offset from update boundary |
 | `kind` | string | Animation kind — determines the time function mapping |
 | `animSpeed` | expr | Animation interpolation speed (higher = faster snap) |
@@ -621,7 +621,7 @@ When `kind` is set, the animation system uses it to determine the target angle. 
 
 ### Update Intervals
 
-The `update` attribute controls how often a part recomputes its angle:
+The `update` attribute controls how often a part recomputes its angle. It can be a numeric expression (in seconds) or a named sentinel function for astronomy-driven scheduling:
 
 | Pattern | Meaning |
 |---------|---------|
@@ -629,7 +629,19 @@ The `update` attribute controls how often a part recomputes its angle:
 | `60` | Every minute |
 | `3600` | Every hour |
 | `1 * days()` | Once per day |
-| `updateAtNextSunriseOrMidnight` | Astronomy-driven |
+| `updateAtNextSunrise` | At the next sunrise |
+| `updateAtNextSunset` | At the next sunset |
+| `updateAtNextMoonrise` | At the next moonrise |
+| `updateAtNextMoonset` | At the next moonset |
+| `updateAtNextSunriseOrMidnight` | At next sunrise or midnight, whichever first |
+| `updateAtNextSunsetOrMidnight` | At next sunset or midnight, whichever first |
+| `updateAtNextMoonriseOrMidnight` | At next moonrise or midnight, whichever first |
+| `updateAtNextMoonsetOrMidnight` | At next moonset or midnight, whichever first |
+| `updateAtNextSunriseOrSunset` | At whichever comes first: sunrise or sunset |
+| `updateAtNextMoonriseOrMoonset` | At whichever comes first: moonrise or moonset |
+| `updateAtEnvChangeOnly` | Only when location/timezone changes |
+
+Sentinel functions compute the true next astronomical event time in display time and schedule the part to re-evaluate at that boundary. The `OrMidnight` variants clamp to midnight. All sentinels work correctly in forward, backward (-1×), and quantized (scrubbing) modes.
 
 `updateOffset` shifts the update boundary (e.g., `updateOffset='0.5'` updates at :30 instead of :00).
 

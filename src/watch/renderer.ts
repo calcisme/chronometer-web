@@ -139,6 +139,7 @@ export function invalidateDayNightCaches(watch: Watch): void {
     for (const part of watch.parts) {
         if (part.type === 'QDayNightRing') {
             part._cacheNextUpdate = 0;
+            part._cacheStart = undefined;
         }
     }
 }
@@ -2639,12 +2640,19 @@ function drawQDayNightRing(
     if (!leafAngleFn) return;
 
     // --- Angle caching: reuse cached wedge angles until the update interval fires ---
+    // Use display time (ms-since-epoch) so the cache expires when enough
+    // *display* time has passed, not real time. This correctly handles
+    // quantized scrubbing where display time jumps by hours per tick.
+    // Track a bidirectional window [_cacheStart, _cacheNextUpdate] so the
+    // cache also expires when time runs backward (e.g. reverse animation).
     const updateSec = part.update ? evalAttr(part.update, env) : 5;
-    const now = performance.now();
+    const updateMs = updateSec * 1000;
+    const displayNowMs = env.getNow ? env.getNow().getTime() : performance.now();
     let angles: number[];
 
     if (part._cachedAngles && part._cachedAngles.length === numWedges
-        && part._cacheNextUpdate != null && now < part._cacheNextUpdate) {
+        && part._cacheStart != null && part._cacheNextUpdate != null
+        && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate) {
         angles = part._cachedAngles;
     } else {
         angles = new Array(numWedges);
@@ -2652,7 +2660,8 @@ function drawQDayNightRing(
             angles[i] = leafAngleFn(planetNumber, i, numWedges);
         }
         part._cachedAngles = angles;
-        part._cacheNextUpdate = now + updateSec * 1000;
+        part._cacheStart = displayNowMs;
+        part._cacheNextUpdate = displayNowMs + updateMs;
     }
 
     ctx.save();

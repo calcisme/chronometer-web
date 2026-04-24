@@ -1564,460 +1564,6 @@
     );
   }
 
-  // src/watch/animation.ts
-  var SCHEDULER_LOOKAHEAD_MS = 50;
-  var kECGLAngleAnimationSpeed = 2;
-  var kECGLFrameRate = 1 / 240;
-  var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
-  var EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT = -1006;
-  var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
-  var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
-  var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
-  function makeAnimatingValue(initial, now) {
-    return {
-      currentValue: initial,
-      targetValue: initial,
-      lastAnimationTime: now,
-      animationStopTime: now,
-      animating: false
-    };
-  }
-  function initHandStates(watch, env, now, getNow) {
-    const states = [];
-    collectDynamicParts(watch.parts, env, now, states, getNow || (() => /* @__PURE__ */ new Date()));
-    return states;
-  }
-  function collectDynamicParts(parts, env, now, out, getNow) {
-    for (const part of parts) {
-      if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
-        out.push(createHandState(part, env, now, getNow));
-      } else if (part.type === "CalendarRowCover") {
-        out.push(createCalendarCoverState(part, env, now, getNow));
-      } else if (part.type === "Static") {
-        collectDynamicParts(part.children, env, now, out, getNow);
-      }
-    }
-  }
-  function createHandState(part, env, now, getNow) {
-    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
-    const updateIntervalMs = updateIntervalSec * 1e3;
-    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
-    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
-    const hasOffsetAngle = (part.type === "QHand" || part.type === "QWedge") && part.offsetAngle;
-    const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle, env) : 0;
-    part.dynamicState = {
-      currentAngle: initialAngle,
-      ...hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}
-    };
-    const hasXMotion = part.type === "QHand" && part.xMotion;
-    const hasYMotion = part.type === "QHand" && part.yMotion;
-    const initialXMotion = hasXMotion ? evalAttr(part.xMotion, env) : 0;
-    const initialYMotion = hasYMotion ? evalAttr(part.yMotion, env) : 0;
-    if (hasXMotion || hasYMotion) {
-      part.dynamicState.currentXMotion = initialXMotion;
-      part.dynamicState.currentYMotion = initialYMotion;
-    }
-    return {
-      part,
-      angle: {
-        currentValue: initialAngle,
-        targetValue: initialAngle,
-        lastAnimationTime: now,
-        animationStopTime: now,
-        animating: false
-      },
-      offsetAngle: hasOffsetAngle ? {
-        currentValue: initialOffsetAngle,
-        targetValue: initialOffsetAngle,
-        lastAnimationTime: now,
-        animationStopTime: now,
-        animating: false
-      } : null,
-      xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
-      yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
-      updateIntervalMs,
-      nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
-      animSpeed,
-      getNow
-    };
-  }
-  function computeCalendarCoverOffset(part, env) {
-    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
-    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
-    const monthNum = (env.functions.get("monthNumber")?.() ?? 0) + 1;
-    const yearNum = env.functions.get("yearNumber")?.() ?? 2024;
-    const era = env.functions.get("eraNumber")?.() ?? 1;
-    const absYear = yearNum;
-    const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
-    const thisMonthStartCol = (7 + weekdayFromTimeInterval(firstOfMonthDI, 0) - calendarWeekdayStart) % 7;
-    const dim = daysInMonth(era, absYear, monthNum);
-    let prevEra = era;
-    let prevYear = absYear;
-    let prevMonth = monthNum - 1;
-    if (prevMonth < 1) {
-      prevMonth = 12;
-      if (era === 1 && absYear === 1) {
-        prevEra = 0;
-        prevYear = 1;
-      } else if (era === 0) {
-        prevYear = absYear + 1;
-      } else {
-        prevYear = absYear - 1;
-      }
-    }
-    const daysInPrevMonth = daysInMonth(prevEra, prevYear, prevMonth);
-    let nextEra = era;
-    let nextYear = absYear;
-    let nextMonth = monthNum + 1;
-    if (nextMonth > 12) {
-      nextMonth = 1;
-      if (era === 0 && absYear === 1) {
-        nextEra = 1;
-        nextYear = 1;
-      } else if (era === 0) {
-        nextYear = absYear - 1;
-      } else {
-        nextYear = absYear + 1;
-      }
-    }
-    const nextMonthFirstDI = timeIntervalFromUTCComponents(nextEra, nextYear, nextMonth, 1, 12, 0, 0);
-    const nextMonthStartCol = (7 + weekdayFromTimeInterval(nextMonthFirstDI, 0) - calendarWeekdayStart) % 7;
-    const nextMonthStartRow = Math.floor((dim + thisMonthStartCol) / 7);
-    const coverType = part.coverType || "";
-    let columnMotion = 7;
-    if (coverType === "row1Left") {
-      columnMotion = thisMonthStartCol + 22 - daysInPrevMonth;
-      if (columnMotion < -4) columnMotion = -4;
-    } else if (coverType === "row1Right") {
-      columnMotion = thisMonthStartCol + 26 - daysInPrevMonth;
-      if (columnMotion < -5) columnMotion = -5;
-    } else if (coverType === "row56Right") {
-      columnMotion = nextMonthStartRow === 4 ? nextMonthStartCol : 7;
-    } else if (coverType === "row6Left") {
-      if (nextMonthStartRow === 5) {
-        columnMotion = nextMonthStartCol;
-      } else if (nextMonthStartRow === 4) {
-        columnMotion = nextMonthStartCol - 7;
-      } else {
-        columnMotion = 7;
-      }
-    }
-    return Math.round(columnMotion * cellWidth);
-  }
-  function createCalendarCoverState(part, env, now, getNow) {
-    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
-    const updateIntervalMs = updateIntervalSec * 1e3;
-    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
-    const initialXOffset = computeCalendarCoverOffset(part, env);
-    part.dynamicState = {
-      currentAngle: 0,
-      currentXMotion: initialXOffset
-    };
-    return {
-      part,
-      angle: makeAnimatingValue(0, now),
-      offsetAngle: null,
-      xMotion: makeAnimatingValue(initialXOffset, now),
-      yMotion: null,
-      updateIntervalMs,
-      nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
-      animSpeed,
-      getNow
-    };
-  }
-  function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
-    for (const state of states) {
-      if (now >= state.nextUpdateTime) {
-        const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
-        const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
-        if (tickIntervalMs !== null && tickIntervalMs > 0) {
-          let ticksUntilUpdate = 1;
-          if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
-            const updateIntervalSec = state.updateIntervalMs / 1e3;
-            ticksUntilUpdate = Math.max(1, Math.ceil(updateIntervalSec / displayDeltaPerTickSec));
-          }
-          const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
-          const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
-          const normalizedTarget = fmod2(newTarget, 2 * Math.PI);
-          const normalizedCurrent = fmod2(state.angle.currentValue, 2 * Math.PI);
-          let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
-          if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
-          const angleDurationMs = animateSpeed > 0 ? angleDelta / animateSpeed * 1e3 : 0;
-          if (angleDurationMs > timeUntilNextUpdateMs) {
-            startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
-          } else {
-            startAnimation(state, newTarget, now);
-          }
-          if (newOffsetTarget !== null && state.offsetAngle) {
-            const normOffTarget = fmod2(newOffsetTarget, 2 * Math.PI);
-            const normOffCurrent = fmod2(state.offsetAngle.currentValue, 2 * Math.PI);
-            let offDelta = Math.abs(normOffTarget - normOffCurrent);
-            if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
-            const offsetDurationMs = animateSpeed > 0 ? offDelta / animateSpeed * 1e3 : 0;
-            if (offsetDurationMs > timeUntilNextUpdateMs) {
-              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
-            } else {
-              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
-            }
-          }
-          state.nextUpdateTime = now + timeUntilNextUpdateMs;
-        } else {
-          startAnimation(state, newTarget, now);
-          if (newOffsetTarget !== null && state.offsetAngle) {
-            startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
-          }
-          state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow, timeDirection);
-        }
-        if (state.part.type === "QHand") {
-          const qhand = state.part;
-          if (state.xMotion && qhand.xMotion) {
-            const newXM = evalAttr(qhand.xMotion, env);
-            startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
-          }
-          if (state.yMotion && qhand.yMotion) {
-            const newYM = evalAttr(qhand.yMotion, env);
-            startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
-          }
-        }
-        if (state.part.type === "CalendarRowCover" && state.xMotion) {
-          const newXM = computeCalendarCoverOffset(state.part, env);
-          startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
-        }
-      }
-      const angle = interpolate(state.angle, now);
-      if (!state.part.dynamicState) {
-        state.part.dynamicState = { currentAngle: angle };
-      } else {
-        state.part.dynamicState.currentAngle = angle;
-      }
-      if (state.offsetAngle) {
-        const oa = interpolateRaw(state.offsetAngle, now);
-        if (state.part.dynamicState) {
-          state.part.dynamicState.currentOffsetAngle = oa;
-        }
-      }
-      if (state.xMotion) {
-        const xm = interpolateLinear(state.xMotion, now);
-        if (state.part.dynamicState) {
-          state.part.dynamicState.currentXMotion = xm;
-        }
-      }
-      if (state.yMotion) {
-        const ym = interpolateLinear(state.yMotion, now);
-        if (state.part.dynamicState) {
-          state.part.dynamicState.currentYMotion = ym;
-        }
-      }
-    }
-  }
-  function nextWakeupTime(states) {
-    let earliest = Infinity;
-    for (const s of states) {
-      if (s.nextUpdateTime < earliest) earliest = s.nextUpdateTime;
-    }
-    return earliest;
-  }
-  function anyAnimating(states) {
-    for (const s of states) {
-      if (s.angle.animating) return true;
-      if (s.offsetAngle && s.offsetAngle.animating) return true;
-      if (s.xMotion && s.xMotion.animating) return true;
-      if (s.yMotion && s.yMotion.animating) return true;
-    }
-    return false;
-  }
-  function finishAnimations(states) {
-    for (const s of states) {
-      const val = s.angle;
-      if (val.animating) {
-        val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
-        val.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentAngle = val.currentValue;
-        }
-      }
-      if (s.offsetAngle && s.offsetAngle.animating) {
-        s.offsetAngle.currentValue = fmod2(s.offsetAngle.targetValue, 2 * Math.PI);
-        s.offsetAngle.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
-        }
-      }
-      if (s.xMotion && s.xMotion.animating) {
-        s.xMotion.currentValue = s.xMotion.targetValue;
-        s.xMotion.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentXMotion = s.xMotion.currentValue;
-        }
-      }
-      if (s.yMotion && s.yMotion.animating) {
-        s.yMotion.currentValue = s.yMotion.targetValue;
-        s.yMotion.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentYMotion = s.yMotion.currentValue;
-        }
-      }
-      s.nextUpdateTime = Infinity;
-    }
-  }
-  function resetHandSchedules(states) {
-    for (const s of states) {
-      s.nextUpdateTime = 0;
-    }
-  }
-  function startAnimation(state, newTarget, now, durationOverrideMs) {
-    startAnimationRaw(state.angle, newTarget, now, state.animSpeed, durationOverrideMs);
-  }
-  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
-    const animateSpeed = kECGLAngleAnimationSpeed * animSpeed;
-    newTarget = fmod2(newTarget, 2 * Math.PI);
-    if (animateSpeed === 0 || animSpeed === 0) {
-      val.currentValue = newTarget;
-      val.targetValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    if (val.animating && val.targetValue === newTarget) {
-      return;
-    }
-    if (val.animating) {
-      interpolateRaw(val, now);
-    }
-    if (val.currentValue === newTarget) {
-      val.animating = false;
-      return;
-    }
-    val.targetValue = newTarget;
-    const TWO_PI5 = 2 * Math.PI;
-    let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
-    val.currentValue = newTarget - delta;
-    let durationMs;
-    if (durationOverrideMs !== void 0) {
-      durationMs = durationOverrideMs;
-    } else {
-      const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
-      durationMs = deltaTime * 1e3;
-    }
-    if (durationMs < kECGLFrameRate * 1e3) {
-      val.currentValue = val.targetValue;
-      val.animating = false;
-      return;
-    }
-    val.lastAnimationTime = now;
-    val.animating = true;
-    val.animationStopTime = now + durationMs;
-  }
-  function interpolate(val, now) {
-    return interpolateRaw(val, now);
-  }
-  function interpolateRaw(val, now) {
-    if (!val.animating) {
-      return val.currentValue;
-    }
-    if (now >= val.animationStopTime) {
-      val.animating = false;
-      val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
-      return val.currentValue;
-    }
-    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
-    val.currentValue += (val.targetValue - val.currentValue) * fraction;
-    val.lastAnimationTime = now;
-    return val.currentValue;
-  }
-  function scheduleNextUpdate(updateIntervalMs, getNow, timeDirection = 1) {
-    if (updateIntervalMs > 0) {
-      return nextAlignedUpdate(updateIntervalMs, getNow, timeDirection);
-    }
-    const sentinel = updateIntervalMs / 1e3;
-    switch (sentinel) {
-      case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
-      case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
-      case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
-      case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
-        return nextLocalMidnight();
-      case EC_UPDATE_ENV_CHANGE_ONLY:
-        return performance.now() + 365 * 24 * 3600 * 1e3;
-      default:
-        console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
-        return nextLocalMidnight();
-    }
-  }
-  function nextAlignedUpdate(intervalMs, getNow, timeDirection = 1) {
-    const displayNow = getNow().getTime();
-    let nextDisplay;
-    if (timeDirection === -1) {
-      nextDisplay = Math.floor(displayNow / intervalMs) * intervalMs;
-      if (nextDisplay === displayNow) {
-        nextDisplay -= intervalMs;
-      }
-    } else {
-      nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
-    }
-    const deltaMs = Math.abs(nextDisplay - displayNow);
-    return performance.now() + deltaMs;
-  }
-  function nextLocalMidnight() {
-    const now = /* @__PURE__ */ new Date();
-    const midnight = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1,
-      // next day
-      0,
-      0,
-      0,
-      0
-      // 00:00:00.000
-    );
-    const msUntilMidnight = midnight.getTime() - now.getTime();
-    return performance.now() + msUntilMidnight;
-  }
-  function fmod2(value, modulus) {
-    const result = value % modulus;
-    return result < 0 ? result + modulus : result;
-  }
-  function startLinearAnimation(val, newTarget, now, animSpeed = 1) {
-    const speed = kECGLAngleAnimationSpeed * animSpeed;
-    if (speed === 0 || animSpeed === 0) {
-      val.currentValue = newTarget;
-      val.targetValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    if (val.animating && val.targetValue === newTarget) return;
-    if (val.animating) {
-      interpolateLinear(val, now);
-    }
-    if (val.currentValue === newTarget) {
-      val.animating = false;
-      return;
-    }
-    val.targetValue = newTarget;
-    const delta = Math.abs(newTarget - val.currentValue);
-    const durationMs = delta / (speed * 30) * 1e3;
-    if (durationMs < kECGLFrameRate * 1e3) {
-      val.currentValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    val.lastAnimationTime = now;
-    val.animating = true;
-    val.animationStopTime = now + durationMs;
-  }
-  function interpolateLinear(val, now) {
-    if (!val.animating) return val.currentValue;
-    if (now >= val.animationStopTime) {
-      val.animating = false;
-      val.currentValue = val.targetValue;
-      return val.currentValue;
-    }
-    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
-    val.currentValue += (val.targetValue - val.currentValue) * fraction;
-    val.lastAnimationTime = now;
-    return val.currentValue;
-  }
-
   // src/astronomy/es-sidereal.ts
   var TWO_PI = Math.PI * 2;
   function convertLSTtoGST(lst, observerLongitude) {
@@ -11164,8 +10710,834 @@
     }
   }
 
-  // src/astronomy/es-astro.ts
+  // src/astronomy/es-riseset.ts
   var TWO_PI3 = Math.PI * 2;
+  function riseSetTime(riseNotSet, rightAscension, declination, observerLatitude, observerLongitude, altAtRiseSet, calculationDateInterval, cachePool) {
+    const cosH = (Math.sin(altAtRiseSet) - Math.sin(observerLatitude) * Math.sin(declination)) / (Math.cos(observerLatitude) * Math.cos(declination));
+    if (cosH < -1) {
+      return ALWAYS_ABOVE_HORIZON;
+    } else if (cosH > 1) {
+      return ALWAYS_BELOW_HORIZON;
+    }
+    const H = Math.acos(cosH);
+    let LST_rs = rightAscension + (riseNotSet ? TWO_PI3 - H : H);
+    if (LST_rs > TWO_PI3) {
+      LST_rs -= TWO_PI3;
+    }
+    const { gst: GST_rs } = convertLSTtoGST(LST_rs, observerLongitude);
+    const riseSetDate = convertGSTtoUTclosest(GST_rs, calculationDateInterval, cachePool);
+    return riseSetDate;
+  }
+  function transitTime(dateInterval, wantHighTransit, observerLongitude, rightAscension, currentCache) {
+    const gst = convertUTToGSTP03(dateInterval, currentCache);
+    let ra = rightAscension;
+    if (!wantHighTransit) {
+      ra += Math.PI;
+    }
+    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI3);
+    if (hourAngle > Math.PI) {
+      hourAngle -= TWO_PI3;
+    } else if (hourAngle < -Math.PI) {
+      hourAngle += TWO_PI3;
+    }
+    return dateInterval - hourAngle * (12 * 3600) / Math.PI;
+  }
+  function linearFit(X1, Y1, X2, Y2) {
+    const offset = X1;
+    const x1 = 0;
+    const y1 = Y1 - offset;
+    const x2 = X2 - offset;
+    const y2 = Y2 - offset;
+    const denom = x2 - x1 - y2 + y1;
+    if (denom === 0) {
+      return y2 + offset;
+    }
+    const root = (y1 * (x2 - x1) - x1 * (y2 - y1)) / denom;
+    if (Math.abs(root - y2) > 12 * 3600) {
+      return y2 + offset;
+    }
+    return offset + root;
+  }
+  function extrapolateToYEqualX(x, y, numValues) {
+    if (numValues === 1) {
+      return y[0];
+    }
+    if (numValues > 2) {
+      const offset = x[numValues - 3];
+      const X1 = 0;
+      const Y1 = y[numValues - 3] - offset;
+      const X2 = x[numValues - 2] - offset;
+      const Y2 = y[numValues - 2] - offset;
+      const X3 = x[numValues - 1] - offset;
+      const Y3 = y[numValues - 1] - offset;
+      if (X1 !== X2 && X1 !== X3 && X2 !== X3) {
+        const k1 = Y1 / ((X1 - X2) * (X1 - X3));
+        const k2 = Y2 / ((X2 - X1) * (X2 - X3));
+        const k3 = Y3 / ((X3 - X1) * (X3 - X2));
+        const C2 = k1 + k2 + k3;
+        const C1 = k1 * (X2 + X3) + k2 * (X1 + X3) + k3 * (X1 + X2);
+        const C0 = k1 * X2 * X3 + k2 * X1 * X3 + k3 * X1 * X2;
+        if (C2 !== 0) {
+          const p = (-C1 - 1) / C2;
+          const q = C0 / C2;
+          const D = p * p / 4 - q;
+          if (D >= 0) {
+            const sqrtTerm = Math.sqrt(D);
+            const root1 = -p / 2 + sqrtTerm;
+            const root2 = -p / 2 - sqrtTerm;
+            if (Math.abs(root1 - Y3) < Math.abs(root2 - Y3)) {
+              if (Math.abs(root1 - Y3) < 24 * 3600) {
+                return root1 + offset;
+              }
+            } else {
+              if (Math.abs(root2 - Y3) < 24 * 3600) {
+                return root2 + offset;
+              }
+            }
+          }
+        }
+      }
+    }
+    return linearFit(x[numValues - 2], y[numValues - 2], x[numValues - 1], y[numValues - 1]);
+  }
+  function getPlanetRADeclDist(planetNumber, julianCenturiesSince2000Epoch, cache, precision) {
+    if (planetNumber === 0 /* Sun */) {
+      const result = WB_sunRAAndDecl(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+      return {
+        rightAscension: result.rightAscension,
+        declination: result.declination,
+        distance: 1
+        // approximate; will use WB_sunRadius for precise
+      };
+    } else if (planetNumber === 1 /* Moon */) {
+      const result = WB_MoonRAAndDecl(julianCenturiesSince2000Epoch, cache ?? void 0, precision);
+      const distKm = WB_MoonDistance(julianCenturiesSince2000Epoch, cache ?? void 0, precision);
+      return {
+        rightAscension: result.rightAscension,
+        declination: result.declination,
+        distance: distKm / 149597870691e-3
+      };
+    } else {
+      const pos = WB_planetApparentPosition(
+        planetNumber,
+        julianCenturiesSince2000Epoch / 100,
+        cache ?? void 0
+      );
+      return {
+        rightAscension: pos.apparentRightAscension,
+        declination: pos.apparentDeclination,
+        distance: pos.geocentricDistance
+      };
+    }
+  }
+  function planetaryRiseSetTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, riseNotSet, planetNumber, overrideAltitudeDesired, cachePool) {
+    let tryDate = calculationDateInterval;
+    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
+    const numIterations = 20;
+    const tryDates = new Array(numIterations + 11);
+    const results = new Array(numIterations + 11);
+    let fitTries = 0;
+    let lastValidResultDate = NaN;
+    let lastDelta = 0;
+    const firstTransit = tryDate;
+    for (let i = 0; i < numIterations; i++) {
+      if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
+        precision = 2 /* Full */;
+        i--;
+        fitTries = 0;
+      }
+      const priorCache = pushECAstroCacheWithSlopInPool(
+        cachePool,
+        cachePool.refinementCache,
+        tryDate,
+        0
+      );
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
+      const { rightAscension, declination } = getPlanetRADeclDist(
+        planetNumber,
+        julianCenturiesSince2000Epoch,
+        cachePool.currentCache,
+        precision
+      );
+      const altitude = isNaN(overrideAltitudeDesired) ? altitudeAtRiseSet(julianCenturiesSince2000Epoch, planetNumber, true, cachePool.currentCache, precision) : overrideAltitudeDesired;
+      const newDate = riseSetTime(
+        riseNotSet,
+        rightAscension,
+        declination,
+        observerLatitude,
+        observerLongitude,
+        altitude,
+        tryDate,
+        cachePool
+      );
+      popECAstroCacheToInPool(cachePool, priorCache);
+      if (isNoRiseSet(newDate)) {
+        return { riseSetTime: newDate, transitTime: tryDate };
+      }
+      lastValidResultDate = newDate;
+      lastDelta = newDate - tryDate;
+      if (Math.abs(lastDelta) < 0.1) {
+        if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
+          precision = 2 /* Full */;
+        } else {
+          return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
+        }
+      }
+      tryDates[fitTries] = tryDate;
+      results[fitTries] = newDate;
+      fitTries++;
+      tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
+    }
+    if (isNaN(lastValidResultDate)) {
+      return { riseSetTime: lastValidResultDate, transitTime: tryDate };
+    } else if (Math.abs(lastDelta) > 60) {
+      return { riseSetTime: NaN, transitTime: firstTransit };
+    } else {
+      return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
+    }
+  }
+  function planettransitTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, wantHighTransit, planetNumber, cachePool) {
+    let tryDate = calculationDateInterval;
+    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
+    const numIterations = 7;
+    const tryDates = new Array(numIterations);
+    const results_arr = new Array(numIterations);
+    let fitTries = 0;
+    for (let i = 0; i < numIterations; i++) {
+      if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
+        precision = 2 /* Full */;
+        i--;
+        fitTries = 0;
+      }
+      const priorCache = pushECAstroCacheWithSlopInPool(
+        cachePool,
+        cachePool.refinementCache,
+        tryDate,
+        0
+      );
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
+      const { rightAscension } = getPlanetRADeclDist(
+        planetNumber,
+        julianCenturiesSince2000Epoch,
+        cachePool.currentCache,
+        precision
+      );
+      const newDate = transitTime(
+        tryDate,
+        wantHighTransit,
+        observerLongitude,
+        rightAscension,
+        cachePool.currentCache
+      );
+      popECAstroCacheToInPool(cachePool, priorCache);
+      if (Math.abs(newDate - tryDate) < 0.1) {
+        if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
+          precision = 2 /* Full */;
+        } else {
+          return newDate;
+        }
+      }
+      tryDates[fitTries] = tryDate;
+      results_arr[fitTries] = newDate;
+      fitTries++;
+      tryDate = extrapolateToYEqualX(tryDates, results_arr, fitTries);
+    }
+    return tryDate;
+  }
+
+  // src/watch/animation.ts
+  var SCHEDULER_LOOKAHEAD_MS = 50;
+  var kECGLAngleAnimationSpeed = 2;
+  var kECGLFrameRate = 1 / 240;
+  var EC_UPDATE_NEXT_SUNRISE = -1001;
+  var EC_UPDATE_NEXT_SUNSET = -1002;
+  var EC_UPDATE_NEXT_MOONRISE = -1003;
+  var EC_UPDATE_NEXT_MOONSET = -1004;
+  var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
+  var EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT = -1006;
+  var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
+  var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
+  var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
+  var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
+  var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
+  function makeAnimatingValue(initial, now) {
+    return {
+      currentValue: initial,
+      targetValue: initial,
+      lastAnimationTime: now,
+      animationStopTime: now,
+      animating: false
+    };
+  }
+  function initHandStates(watch, env, now, getNow) {
+    const states = [];
+    collectDynamicParts(watch.parts, env, now, states, getNow || (() => /* @__PURE__ */ new Date()));
+    return states;
+  }
+  function collectDynamicParts(parts, env, now, out, getNow) {
+    for (const part of parts) {
+      if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
+        out.push(createHandState(part, env, now, getNow));
+      } else if (part.type === "CalendarRowCover") {
+        out.push(createCalendarCoverState(part, env, now, getNow));
+      } else if (part.type === "Static") {
+        collectDynamicParts(part.children, env, now, out, getNow);
+      }
+    }
+  }
+  function createHandState(part, env, now, getNow) {
+    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
+    const updateIntervalMs = updateIntervalSec * 1e3;
+    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
+    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
+    const hasOffsetAngle = (part.type === "QHand" || part.type === "QWedge") && part.offsetAngle;
+    const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle, env) : 0;
+    part.dynamicState = {
+      currentAngle: initialAngle,
+      ...hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}
+    };
+    const hasXMotion = part.type === "QHand" && part.xMotion;
+    const hasYMotion = part.type === "QHand" && part.yMotion;
+    const initialXMotion = hasXMotion ? evalAttr(part.xMotion, env) : 0;
+    const initialYMotion = hasYMotion ? evalAttr(part.yMotion, env) : 0;
+    if (hasXMotion || hasYMotion) {
+      part.dynamicState.currentXMotion = initialXMotion;
+      part.dynamicState.currentYMotion = initialYMotion;
+    }
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+    return {
+      part,
+      angle: {
+        currentValue: initialAngle,
+        targetValue: initialAngle,
+        lastAnimationTime: now,
+        animationStopTime: now,
+        animating: false
+      },
+      offsetAngle: hasOffsetAngle ? {
+        currentValue: initialOffsetAngle,
+        targetValue: initialOffsetAngle,
+        lastAnimationTime: now,
+        animationStopTime: now,
+        animating: false
+      } : null,
+      xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
+      yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
+      updateIntervalMs,
+      nextUpdateDisplayTime: nextDisplayMs,
+      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
+      animSpeed,
+      getNow
+    };
+  }
+  function computeCalendarCoverOffset(part, env) {
+    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
+    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
+    const monthNum = (env.functions.get("monthNumber")?.() ?? 0) + 1;
+    const yearNum = env.functions.get("yearNumber")?.() ?? 2024;
+    const era = env.functions.get("eraNumber")?.() ?? 1;
+    const absYear = yearNum;
+    const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
+    const thisMonthStartCol = (7 + weekdayFromTimeInterval(firstOfMonthDI, 0) - calendarWeekdayStart) % 7;
+    const dim = daysInMonth(era, absYear, monthNum);
+    let prevEra = era;
+    let prevYear = absYear;
+    let prevMonth = monthNum - 1;
+    if (prevMonth < 1) {
+      prevMonth = 12;
+      if (era === 1 && absYear === 1) {
+        prevEra = 0;
+        prevYear = 1;
+      } else if (era === 0) {
+        prevYear = absYear + 1;
+      } else {
+        prevYear = absYear - 1;
+      }
+    }
+    const daysInPrevMonth = daysInMonth(prevEra, prevYear, prevMonth);
+    let nextEra = era;
+    let nextYear = absYear;
+    let nextMonth = monthNum + 1;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      if (era === 0 && absYear === 1) {
+        nextEra = 1;
+        nextYear = 1;
+      } else if (era === 0) {
+        nextYear = absYear - 1;
+      } else {
+        nextYear = absYear + 1;
+      }
+    }
+    const nextMonthFirstDI = timeIntervalFromUTCComponents(nextEra, nextYear, nextMonth, 1, 12, 0, 0);
+    const nextMonthStartCol = (7 + weekdayFromTimeInterval(nextMonthFirstDI, 0) - calendarWeekdayStart) % 7;
+    const nextMonthStartRow = Math.floor((dim + thisMonthStartCol) / 7);
+    const coverType = part.coverType || "";
+    let columnMotion = 7;
+    if (coverType === "row1Left") {
+      columnMotion = thisMonthStartCol + 22 - daysInPrevMonth;
+      if (columnMotion < -4) columnMotion = -4;
+    } else if (coverType === "row1Right") {
+      columnMotion = thisMonthStartCol + 26 - daysInPrevMonth;
+      if (columnMotion < -5) columnMotion = -5;
+    } else if (coverType === "row56Right") {
+      columnMotion = nextMonthStartRow === 4 ? nextMonthStartCol : 7;
+    } else if (coverType === "row6Left") {
+      if (nextMonthStartRow === 5) {
+        columnMotion = nextMonthStartCol;
+      } else if (nextMonthStartRow === 4) {
+        columnMotion = nextMonthStartCol - 7;
+      } else {
+        columnMotion = 7;
+      }
+    }
+    return Math.round(columnMotion * cellWidth);
+  }
+  function createCalendarCoverState(part, env, now, getNow) {
+    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
+    const updateIntervalMs = updateIntervalSec * 1e3;
+    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
+    const initialXOffset = computeCalendarCoverOffset(part, env);
+    part.dynamicState = {
+      currentAngle: 0,
+      currentXMotion: initialXOffset
+    };
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+    return {
+      part,
+      angle: makeAnimatingValue(0, now),
+      offsetAngle: null,
+      xMotion: makeAnimatingValue(initialXOffset, now),
+      yMotion: null,
+      updateIntervalMs,
+      nextUpdateDisplayTime: nextDisplayMs,
+      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
+      animSpeed,
+      getNow
+    };
+  }
+  function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
+    for (const state of states) {
+      if (now >= state.nextUpdateTime) {
+        const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
+        const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
+        const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.getNow, timeDirection, env);
+        if (tickIntervalMs !== null && tickIntervalMs > 0) {
+          const displayNowMs = state.getNow().getTime();
+          const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
+          const displayDeltaPerTickMs = displayDeltaPerTickSec * 1e3;
+          const ticksUntilUpdate = displayDeltaPerTickMs > 0 ? Math.max(1, Math.ceil(displayDeltaMs / displayDeltaPerTickMs)) : 1;
+          const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+          const animateSpeed = kECGLAngleAnimationSpeed * state.animSpeed;
+          const normalizedTarget = fmod2(newTarget, 2 * Math.PI);
+          const normalizedCurrent = fmod2(state.angle.currentValue, 2 * Math.PI);
+          let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+          if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
+          const angleDurationMs = animateSpeed > 0 ? angleDelta / animateSpeed * 1e3 : 0;
+          if (angleDurationMs > timeUntilNextUpdateMs) {
+            startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
+          } else {
+            startAnimation(state, newTarget, now);
+          }
+          if (newOffsetTarget !== null && state.offsetAngle) {
+            const normOffTarget = fmod2(newOffsetTarget, 2 * Math.PI);
+            const normOffCurrent = fmod2(state.offsetAngle.currentValue, 2 * Math.PI);
+            let offDelta = Math.abs(normOffTarget - normOffCurrent);
+            if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
+            const offsetDurationMs = animateSpeed > 0 ? offDelta / animateSpeed * 1e3 : 0;
+            if (offsetDurationMs > timeUntilNextUpdateMs) {
+              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
+            } else {
+              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
+            }
+          }
+          state.nextUpdateDisplayTime = nextDisplayMs;
+          state.nextUpdateTime = now + timeUntilNextUpdateMs;
+        } else {
+          startAnimation(state, newTarget, now);
+          if (newOffsetTarget !== null && state.offsetAngle) {
+            startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
+          }
+          state.nextUpdateDisplayTime = nextDisplayMs;
+          state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.getNow);
+        }
+        if (state.part.type === "QHand") {
+          const qhand = state.part;
+          if (state.xMotion && qhand.xMotion) {
+            const newXM = evalAttr(qhand.xMotion, env);
+            startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
+          }
+          if (state.yMotion && qhand.yMotion) {
+            const newYM = evalAttr(qhand.yMotion, env);
+            startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
+          }
+        }
+        if (state.part.type === "CalendarRowCover" && state.xMotion) {
+          const newXM = computeCalendarCoverOffset(state.part, env);
+          startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
+        }
+      }
+      const angle = interpolate(state.angle, now);
+      if (!state.part.dynamicState) {
+        state.part.dynamicState = { currentAngle: angle };
+      } else {
+        state.part.dynamicState.currentAngle = angle;
+      }
+      if (state.offsetAngle) {
+        const oa = interpolateRaw(state.offsetAngle, now);
+        if (state.part.dynamicState) {
+          state.part.dynamicState.currentOffsetAngle = oa;
+        }
+      }
+      if (state.xMotion) {
+        const xm = interpolateLinear(state.xMotion, now);
+        if (state.part.dynamicState) {
+          state.part.dynamicState.currentXMotion = xm;
+        }
+      }
+      if (state.yMotion) {
+        const ym = interpolateLinear(state.yMotion, now);
+        if (state.part.dynamicState) {
+          state.part.dynamicState.currentYMotion = ym;
+        }
+      }
+    }
+  }
+  function nextWakeupTime(states) {
+    let earliest = Infinity;
+    for (const s of states) {
+      if (s.nextUpdateTime < earliest) earliest = s.nextUpdateTime;
+    }
+    return earliest;
+  }
+  function anyAnimating(states) {
+    for (const s of states) {
+      if (s.angle.animating) return true;
+      if (s.offsetAngle && s.offsetAngle.animating) return true;
+      if (s.xMotion && s.xMotion.animating) return true;
+      if (s.yMotion && s.yMotion.animating) return true;
+    }
+    return false;
+  }
+  function finishAnimations(states) {
+    for (const s of states) {
+      const val = s.angle;
+      if (val.animating) {
+        val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
+        val.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentAngle = val.currentValue;
+        }
+      }
+      if (s.offsetAngle && s.offsetAngle.animating) {
+        s.offsetAngle.currentValue = fmod2(s.offsetAngle.targetValue, 2 * Math.PI);
+        s.offsetAngle.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
+        }
+      }
+      if (s.xMotion && s.xMotion.animating) {
+        s.xMotion.currentValue = s.xMotion.targetValue;
+        s.xMotion.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentXMotion = s.xMotion.currentValue;
+        }
+      }
+      if (s.yMotion && s.yMotion.animating) {
+        s.yMotion.currentValue = s.yMotion.targetValue;
+        s.yMotion.animating = false;
+        if (s.part.dynamicState) {
+          s.part.dynamicState.currentYMotion = s.yMotion.currentValue;
+        }
+      }
+      s.nextUpdateDisplayTime = Infinity;
+      s.nextUpdateTime = Infinity;
+    }
+  }
+  function resetHandSchedules(states) {
+    for (const s of states) {
+      s.nextUpdateDisplayTime = 0;
+      s.nextUpdateTime = 0;
+    }
+  }
+  function startAnimation(state, newTarget, now, durationOverrideMs) {
+    startAnimationRaw(state.angle, newTarget, now, state.animSpeed, durationOverrideMs);
+  }
+  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
+    const animateSpeed = kECGLAngleAnimationSpeed * animSpeed;
+    newTarget = fmod2(newTarget, 2 * Math.PI);
+    if (animateSpeed === 0 || animSpeed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) {
+      return;
+    }
+    if (val.animating) {
+      interpolateRaw(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    const TWO_PI5 = 2 * Math.PI;
+    let delta = newTarget - val.currentValue;
+    delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
+    val.currentValue = newTarget - delta;
+    let durationMs;
+    if (durationOverrideMs !== void 0) {
+      durationMs = durationOverrideMs;
+    } else {
+      const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
+      durationMs = deltaTime * 1e3;
+    }
+    if (durationMs < kECGLFrameRate * 1e3) {
+      val.currentValue = val.targetValue;
+      val.animating = false;
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + durationMs;
+  }
+  function interpolate(val, now) {
+    return interpolateRaw(val, now);
+  }
+  function interpolateRaw(val, now) {
+    if (!val.animating) {
+      return val.currentValue;
+    }
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
+  }
+  function computeNextBoundary(updateIntervalMs, getNow, timeDirection, env) {
+    if (updateIntervalMs > 0) {
+      const tzOffsetMs = (env.tzOffsetSec ?? 0) * 1e3;
+      const displayNowMs = getNow().getTime();
+      const localNowMs = displayNowMs + tzOffsetMs;
+      if (timeDirection === -1) {
+        const localBoundary = Math.floor(localNowMs / updateIntervalMs) * updateIntervalMs;
+        const boundary = (localBoundary === localNowMs ? localBoundary - updateIntervalMs : localBoundary) - tzOffsetMs;
+        return boundary;
+      } else {
+        const localBoundary = Math.ceil(localNowMs / updateIntervalMs) * updateIntervalMs;
+        return localBoundary - tzOffsetMs;
+      }
+    }
+    const sentinel = updateIntervalMs / 1e3;
+    const eventDI = resolveSentinel(sentinel, getNow, env, timeDirection);
+    if (!isFinite(eventDI)) {
+      return Infinity;
+    }
+    return (eventDI + 978307200) * 1e3;
+  }
+  function displayTimeToPerfNow(displayTimeMs, getNow) {
+    if (!isFinite(displayTimeMs)) return Infinity;
+    const deltaMs = Math.abs(displayTimeMs - getNow().getTime());
+    return performance.now() + deltaMs;
+  }
+  var SENTINEL_FUDGE_SECONDS = 5;
+  var SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
+  function nextPlanetRiseSet(riseNotSet, planetNumber, getNow, lat, lon, timeDirection) {
+    const calculationDI = dateToDateInterval(getNow());
+    const searchForward = timeDirection === 1;
+    const fudge = searchForward ? SENTINEL_FUDGE_SECONDS : -SENTINEL_FUDGE_SECONDS;
+    const lookahead = searchForward ? SENTINEL_LOOKAHEAD_SECONDS : -SENTINEL_LOOKAHEAD_SECONDS;
+    const fudgeDate = calculationDI + fudge;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat, lon, !searchForward);
+    try {
+      const result = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        lat,
+        lon,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result.riseSetTime)) {
+        return NaN;
+      }
+      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
+      if (inRightDirection) {
+        return result.riseSetTime;
+      }
+      const tryDate = fudgeDate + lookahead;
+      releaseCachePool(pool);
+      initializeCachePool(pool, tryDate, lat, lon, !searchForward);
+      const result2 = planetaryRiseSetTimeRefined(
+        tryDate,
+        lat,
+        lon,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result2.riseSetTime)) {
+        return NaN;
+      }
+      return result2.riseSetTime;
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function nextOrMidnight(eventDI, getNow, tzOffsetSec, timeDirection) {
+    if (isNaN(eventDI)) {
+      return nextMidnightDI(getNow, tzOffsetSec, timeDirection);
+    }
+    const nowDI = dateToDateInterval(getNow());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+    if (timeDirection === -1) {
+      if (eventDI < todayMidnightDI) {
+        return todayMidnightDI;
+      }
+    } else {
+      const tomorrowMidnightDI = todayMidnightDI + 86400;
+      if (eventDI > tomorrowMidnightDI) {
+        return tomorrowMidnightDI;
+      }
+    }
+    return eventDI;
+  }
+  function nextMidnightDI(getNow, tzOffsetSec, timeDirection) {
+    const nowDI = dateToDateInterval(getNow());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+    if (timeDirection === -1) {
+      return todayMidnightDI;
+    } else {
+      return todayMidnightDI + 86400;
+    }
+  }
+  function resolveSentinel(sentinel, getNow, env, timeDirection) {
+    const lat = env.observerLatRad ?? 0;
+    const lon = env.observerLonRad ?? 0;
+    const tzOff = env.tzOffsetSec ?? 0;
+    switch (sentinel) {
+      // Bare rise/set (no midnight clamp)
+      case EC_UPDATE_NEXT_SUNRISE:
+        return nextPlanetRiseSet(true, 0 /* Sun */, getNow, lat, lon, timeDirection);
+      case EC_UPDATE_NEXT_SUNSET:
+        return nextPlanetRiseSet(false, 0 /* Sun */, getNow, lat, lon, timeDirection);
+      case EC_UPDATE_NEXT_MOONRISE:
+        return nextPlanetRiseSet(true, 1 /* Moon */, getNow, lat, lon, timeDirection);
+      case EC_UPDATE_NEXT_MOONSET:
+        return nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection);
+      // Rise/set clamped to midnight
+      case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(true, 0 /* Sun */, getNow, lat, lon, timeDirection),
+          getNow,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(false, 0 /* Sun */, getNow, lat, lon, timeDirection),
+          getNow,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(true, 1 /* Moon */, getNow, lat, lon, timeDirection),
+          getNow,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection),
+          getNow,
+          tzOff,
+          timeDirection
+        );
+      // Combined: whichever comes first in the direction of flow
+      case EC_UPDATE_NEXT_SUNRISE_OR_SUNSET: {
+        const rise = nextPlanetRiseSet(true, 0 /* Sun */, getNow, lat, lon, timeDirection);
+        const set = nextPlanetRiseSet(false, 0 /* Sun */, getNow, lat, lon, timeDirection);
+        return closerInTimeDirection(rise, set, timeDirection);
+      }
+      case EC_UPDATE_NEXT_MOONRISE_OR_MOONSET: {
+        const rise = nextPlanetRiseSet(true, 1 /* Moon */, getNow, lat, lon, timeDirection);
+        const set = nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection);
+        return closerInTimeDirection(rise, set, timeDirection);
+      }
+      // Environment change only — effectively never (only explicit reset)
+      case EC_UPDATE_ENV_CHANGE_ONLY:
+        return Infinity;
+      default:
+        console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
+        return nextMidnightDI(getNow, tzOff, timeDirection);
+    }
+  }
+  function closerInTimeDirection(a, b, timeDirection) {
+    if (isNaN(a)) return b;
+    if (isNaN(b)) return a;
+    return timeDirection === 1 ? Math.min(a, b) : Math.max(a, b);
+  }
+  function fmod2(value, modulus) {
+    const result = value % modulus;
+    return result < 0 ? result + modulus : result;
+  }
+  function startLinearAnimation(val, newTarget, now, animSpeed = 1) {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+    if (speed === 0 || animSpeed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateLinear(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    const delta = Math.abs(newTarget - val.currentValue);
+    const durationMs = delta / (speed * 30) * 1e3;
+    if (durationMs < kECGLFrameRate * 1e3) {
+      val.currentValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + durationMs;
+  }
+  function interpolateLinear(val, now) {
+    if (!val.animating) return val.currentValue;
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = val.targetValue;
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
+  }
+
+  // src/astronomy/es-astro.ts
+  var TWO_PI4 = Math.PI * 2;
   function planetAltAz(planetNumber, calculationDateInterval, observerLatitude, observerLongitude, correctForParallax, altNotAz, cache) {
     const altSlotBase = 381 /* planetAltitude */;
     const azSlotBase = 391 /* planetAzimuth */;
@@ -11275,7 +11647,7 @@
     const sunEclipticLong = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
     let age = moonEclipticLongitude - sunEclipticLong;
     if (age < 0) {
-      age += TWO_PI3;
+      age += TWO_PI4;
     }
     const phase = (1 - Math.cos(age)) / 2;
     if (cache) {
@@ -11355,9 +11727,9 @@
     const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
     let angle = -northAngle - posAngle - Math.PI / 2;
     if (angle < 0) {
-      angle += TWO_PI3;
-    } else if (angle > TWO_PI3) {
-      angle -= TWO_PI3;
+      angle += TWO_PI4;
+    } else if (angle > TWO_PI4) {
+      angle -= TWO_PI4;
     }
     return angle;
   }
@@ -11394,9 +11766,9 @@
     const posAngle = Math.asin(sinP);
     let angle = -northAngle - posAngle;
     if (angle < 0) {
-      angle += TWO_PI3;
-    } else if (angle > TWO_PI3) {
-      angle -= TWO_PI3;
+      angle += TWO_PI4;
+    } else if (angle > TWO_PI4) {
+      angle -= TWO_PI4;
     }
     return angle;
   }
@@ -11433,7 +11805,7 @@
     const moonSizeParallax = planetSizeAndParallax(1 /* Moon */, moonDistAU);
     const moonAngularSize = moonSizeParallax.angularSize;
     const moonParallax = moonSizeParallax.parallax;
-    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI3);
+    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI4);
     let physicalSeparation;
     let separationAtPartialEclipse;
     let separationAtTotalEclipse;
@@ -11468,7 +11840,7 @@
     } else {
       shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
       let shadowRA = sunRA + Math.PI;
-      if (shadowRA > TWO_PI3) shadowRA -= TWO_PI3;
+      if (shadowRA > TWO_PI4) shadowRA -= TWO_PI4;
       const shadowDecl = -sunDecl;
       physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
       separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
@@ -11525,11 +11897,11 @@
     const { age } = moonAge(dateInterval, cache);
     let deltaAge = targetAge - age;
     if (deltaAge > Math.PI) {
-      deltaAge -= TWO_PI3;
+      deltaAge -= TWO_PI4;
     } else if (deltaAge < -Math.PI) {
-      deltaAge += TWO_PI3;
+      deltaAge += TWO_PI4;
     }
-    return dateInterval + deltaAge / TWO_PI3 * LUNAR_CYCLE_SECONDS;
+    return dateInterval + deltaAge / TWO_PI4 * LUNAR_CYCLE_SECONDS;
   }
   function refineMoonAgeTargetForDate(dateInterval, targetAge) {
     let tryDate = dateInterval;
@@ -11544,9 +11916,9 @@
   }
   function closestQuarterPhaseTime(quarterAngle, dateInterval) {
     const { age } = moonAge(dateInterval, null);
-    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI3);
+    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI4);
     const closestIsBack = ageSinceQuarter < Math.PI - 0.01;
-    const guessDate = closestIsBack ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI3 : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI3 - ageSinceQuarter) / TWO_PI3;
+    const guessDate = closestIsBack ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI4 : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI4 - ageSinceQuarter) / TWO_PI4;
     return refineMoonAgeTargetForDate(guessDate, quarterAngle);
   }
   function closestPhaseDayNumber(targetPhase, dateInterval) {
@@ -11575,231 +11947,7 @@
   function lunarAscendingNodeLongitude(dateInterval, cache) {
     const { julianCenturiesSince2000Epoch: T } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
     const omegaDeg = 125.0445479 - 1934.1362891 * T + 20754e-7 * T * T + T * T * T / 467441 - T * T * T * T / 60616e3;
-    return fmod(omegaDeg * Math.PI / 180, TWO_PI3);
-  }
-
-  // src/astronomy/es-riseset.ts
-  var TWO_PI4 = Math.PI * 2;
-  function riseSetTime(riseNotSet, rightAscension, declination, observerLatitude, observerLongitude, altAtRiseSet, calculationDateInterval, cachePool) {
-    const cosH = (Math.sin(altAtRiseSet) - Math.sin(observerLatitude) * Math.sin(declination)) / (Math.cos(observerLatitude) * Math.cos(declination));
-    if (cosH < -1) {
-      return ALWAYS_ABOVE_HORIZON;
-    } else if (cosH > 1) {
-      return ALWAYS_BELOW_HORIZON;
-    }
-    const H = Math.acos(cosH);
-    let LST_rs = rightAscension + (riseNotSet ? TWO_PI4 - H : H);
-    if (LST_rs > TWO_PI4) {
-      LST_rs -= TWO_PI4;
-    }
-    const { gst: GST_rs } = convertLSTtoGST(LST_rs, observerLongitude);
-    const riseSetDate = convertGSTtoUTclosest(GST_rs, calculationDateInterval, cachePool);
-    return riseSetDate;
-  }
-  function transitTime(dateInterval, wantHighTransit, observerLongitude, rightAscension, currentCache) {
-    const gst = convertUTToGSTP03(dateInterval, currentCache);
-    let ra = rightAscension;
-    if (!wantHighTransit) {
-      ra += Math.PI;
-    }
-    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI4);
-    if (hourAngle > Math.PI) {
-      hourAngle -= TWO_PI4;
-    } else if (hourAngle < -Math.PI) {
-      hourAngle += TWO_PI4;
-    }
-    return dateInterval - hourAngle * (12 * 3600) / Math.PI;
-  }
-  function linearFit(X1, Y1, X2, Y2) {
-    const offset = X1;
-    const x1 = 0;
-    const y1 = Y1 - offset;
-    const x2 = X2 - offset;
-    const y2 = Y2 - offset;
-    const denom = x2 - x1 - y2 + y1;
-    if (denom === 0) {
-      return y2 + offset;
-    }
-    const root = (y1 * (x2 - x1) - x1 * (y2 - y1)) / denom;
-    if (Math.abs(root - y2) > 12 * 3600) {
-      return y2 + offset;
-    }
-    return offset + root;
-  }
-  function extrapolateToYEqualX(x, y, numValues) {
-    if (numValues === 1) {
-      return y[0];
-    }
-    if (numValues > 2) {
-      const offset = x[numValues - 3];
-      const X1 = 0;
-      const Y1 = y[numValues - 3] - offset;
-      const X2 = x[numValues - 2] - offset;
-      const Y2 = y[numValues - 2] - offset;
-      const X3 = x[numValues - 1] - offset;
-      const Y3 = y[numValues - 1] - offset;
-      if (X1 !== X2 && X1 !== X3 && X2 !== X3) {
-        const k1 = Y1 / ((X1 - X2) * (X1 - X3));
-        const k2 = Y2 / ((X2 - X1) * (X2 - X3));
-        const k3 = Y3 / ((X3 - X1) * (X3 - X2));
-        const C2 = k1 + k2 + k3;
-        const C1 = k1 * (X2 + X3) + k2 * (X1 + X3) + k3 * (X1 + X2);
-        const C0 = k1 * X2 * X3 + k2 * X1 * X3 + k3 * X1 * X2;
-        if (C2 !== 0) {
-          const p = (-C1 - 1) / C2;
-          const q = C0 / C2;
-          const D = p * p / 4 - q;
-          if (D >= 0) {
-            const sqrtTerm = Math.sqrt(D);
-            const root1 = -p / 2 + sqrtTerm;
-            const root2 = -p / 2 - sqrtTerm;
-            if (Math.abs(root1 - Y3) < Math.abs(root2 - Y3)) {
-              if (Math.abs(root1 - Y3) < 24 * 3600) {
-                return root1 + offset;
-              }
-            } else {
-              if (Math.abs(root2 - Y3) < 24 * 3600) {
-                return root2 + offset;
-              }
-            }
-          }
-        }
-      }
-    }
-    return linearFit(x[numValues - 2], y[numValues - 2], x[numValues - 1], y[numValues - 1]);
-  }
-  function getPlanetRADeclDist(planetNumber, julianCenturiesSince2000Epoch, cache, precision) {
-    if (planetNumber === 0 /* Sun */) {
-      const result = WB_sunRAAndDecl(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
-      return {
-        rightAscension: result.rightAscension,
-        declination: result.declination,
-        distance: 1
-        // approximate; will use WB_sunRadius for precise
-      };
-    } else if (planetNumber === 1 /* Moon */) {
-      const result = WB_MoonRAAndDecl(julianCenturiesSince2000Epoch, cache ?? void 0, precision);
-      const distKm = WB_MoonDistance(julianCenturiesSince2000Epoch, cache ?? void 0, precision);
-      return {
-        rightAscension: result.rightAscension,
-        declination: result.declination,
-        distance: distKm / 149597870691e-3
-      };
-    } else {
-      const pos = WB_planetApparentPosition(
-        planetNumber,
-        julianCenturiesSince2000Epoch / 100,
-        cache ?? void 0
-      );
-      return {
-        rightAscension: pos.apparentRightAscension,
-        declination: pos.apparentDeclination,
-        distance: pos.geocentricDistance
-      };
-    }
-  }
-  function planetaryRiseSetTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, riseNotSet, planetNumber, overrideAltitudeDesired, cachePool) {
-    let tryDate = calculationDateInterval;
-    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
-    const numIterations = 20;
-    const tryDates = new Array(numIterations + 11);
-    const results = new Array(numIterations + 11);
-    let fitTries = 0;
-    for (let i = 0; i < numIterations; i++) {
-      if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
-        precision = 2 /* Full */;
-        i--;
-        fitTries = 0;
-      }
-      const priorCache = pushECAstroCacheWithSlopInPool(
-        cachePool,
-        cachePool.refinementCache,
-        tryDate,
-        0
-      );
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
-      const { rightAscension, declination } = getPlanetRADeclDist(
-        planetNumber,
-        julianCenturiesSince2000Epoch,
-        cachePool.currentCache,
-        precision
-      );
-      const altitude = isNaN(overrideAltitudeDesired) ? altitudeAtRiseSet(julianCenturiesSince2000Epoch, planetNumber, true, cachePool.currentCache, precision) : overrideAltitudeDesired;
-      const newDate = riseSetTime(
-        riseNotSet,
-        rightAscension,
-        declination,
-        observerLatitude,
-        observerLongitude,
-        altitude,
-        tryDate,
-        cachePool
-      );
-      popECAstroCacheToInPool(cachePool, priorCache);
-      if (isNoRiseSet(newDate)) {
-        return newDate;
-      }
-      if (Math.abs(newDate - tryDate) < 0.1) {
-        if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
-          precision = 2 /* Full */;
-        } else {
-          return newDate;
-        }
-      }
-      tryDates[fitTries] = tryDate;
-      results[fitTries] = newDate;
-      fitTries++;
-      tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
-    }
-    return tryDate;
-  }
-  function planettransitTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, wantHighTransit, planetNumber, cachePool) {
-    let tryDate = calculationDateInterval;
-    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
-    const numIterations = 7;
-    const tryDates = new Array(numIterations);
-    const results_arr = new Array(numIterations);
-    let fitTries = 0;
-    for (let i = 0; i < numIterations; i++) {
-      if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
-        precision = 2 /* Full */;
-        i--;
-        fitTries = 0;
-      }
-      const priorCache = pushECAstroCacheWithSlopInPool(
-        cachePool,
-        cachePool.refinementCache,
-        tryDate,
-        0
-      );
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
-      const { rightAscension } = getPlanetRADeclDist(
-        planetNumber,
-        julianCenturiesSince2000Epoch,
-        cachePool.currentCache,
-        precision
-      );
-      const newDate = transitTime(
-        tryDate,
-        wantHighTransit,
-        observerLongitude,
-        rightAscension,
-        cachePool.currentCache
-      );
-      popECAstroCacheToInPool(cachePool, priorCache);
-      if (Math.abs(newDate - tryDate) < 0.1) {
-        if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
-          precision = 2 /* Full */;
-        } else {
-          return newDate;
-        }
-      }
-      tryDates[fitTries] = tryDate;
-      results_arr[fitTries] = newDate;
-      fitTries++;
-      tryDate = extrapolateToYEqualX(tryDates, results_arr, fitTries);
-    }
-    return tryDate;
+    return fmod(omegaDeg * Math.PI / 180, TWO_PI4);
   }
 
   // src/watch/terminator.ts
@@ -12225,14 +12373,20 @@
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
+    env.observerLatRad = OBSERVER_LAT;
+    env.observerLonRad = OBSERVER_LON;
+    env.getNow = getNow;
+    env.variables.set("updateAtNextSunrise", EC_UPDATE_NEXT_SUNRISE);
+    env.variables.set("updateAtNextSunset", EC_UPDATE_NEXT_SUNSET);
+    env.variables.set("updateAtNextMoonrise", EC_UPDATE_NEXT_MOONRISE);
+    env.variables.set("updateAtNextMoonset", EC_UPDATE_NEXT_MOONSET);
     env.variables.set("updateAtNextSunriseOrMidnight", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
     env.variables.set("updateAtNextSunsetOrMidnight", EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
     env.variables.set("updateAtNextMoonriseOrMidnight", EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
     env.variables.set("updateAtNextMoonsetOrMidnight", EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
     env.variables.set("updateAtEnvChangeOnly", EC_UPDATE_ENV_CHANGE_ONLY);
-    env.variables.set("updateAtNextSunrise", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
-    env.variables.set("updateAtNextSunset", EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
-    env.variables.set("updateAtNextSunriseOrSunset", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env.variables.set("updateAtNextSunriseOrSunset", EC_UPDATE_NEXT_SUNRISE_OR_SUNSET);
+    env.variables.set("updateAtNextMoonriseOrMoonset", EC_UPDATE_NEXT_MOONRISE_OR_MOONSET);
     env.variables.set("updateForTimeSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
     env.variables.set("updateForLocSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
     env.variables.set("planetSun", 0 /* Sun */);
@@ -12300,6 +12454,7 @@
     const tzDeltaMs = computeTzDeltaMs(olsonTimezone, now);
     const browserOffsetSec = -now.getTimezoneOffset() * 60;
     const tzOffsetSeconds = browserOffsetSec + tzDeltaMs / 1e3;
+    env.tzOffsetSec = tzOffsetSeconds;
     const liveDate = () => {
       const raw = getNow();
       return tzDeltaMs !== 0 ? new Date(raw.getTime() + tzDeltaMs) : raw;
@@ -12444,7 +12599,7 @@
         planetNumber,
         NaN,
         pool
-      );
+      ).riseSetTime;
       if (!isNoRiseSet(fwdResult) && isSameLocalDay(fwdResult, calcDate)) {
         return fwdResult;
       }
@@ -12456,7 +12611,7 @@
         planetNumber,
         NaN,
         pool
-      );
+      ).riseSetTime;
       if (!isNoRiseSet(bwdResult) && isSameLocalDay(bwdResult, calcDate)) {
         return bwdResult;
       }
@@ -13282,55 +13437,57 @@
   }
   function dayNightLeafAngle(riseNotSet, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
+    const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
-    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
-    const searchForward = riseNotSet ? !sunIsUp : sunIsUp;
-    const eventTime = planetaryRiseSetTimeRefined(
-      searchForward ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+    const sunIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
+    const isNext = riseNotSet ? !sunIsUp : sunIsUp;
+    const result = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       riseNotSet,
       0 /* Sun */,
-      NaN,
+      isNext,
+      -fudgeFactorSeconds,
+      lookahead,
       pool
     );
-    const transitSearchForward = riseNotSet ? !sunIsUp : sunIsUp;
-    const utcSec = calcDate + 978307200;
-    const localSec = utcSec + tzOffsetSeconds;
-    const dayStartSec = localSec - (localSec % 86400 + 86400) % 86400;
-    const noonDI = dayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
-    const noonAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
-    if (isNoRiseSet(eventTime)) {
-      if (eventTime === kECAlwaysAboveHorizon) {
-        return fmod(noonAngle + Math.PI, 2 * Math.PI);
+    if (isNoRiseSet(result.eventTime)) {
+      let transitAngle = angle24HourForDate(result.transitTime, tzOffsetSeconds);
+      if (result.eventTime === kECAlwaysAboveHorizon) {
+        transitAngle = fmod(transitAngle + Math.PI, 2 * Math.PI);
       }
-      return noonAngle;
+      return transitAngle;
     }
-    return angle24HourForDate(eventTime, tzOffsetSeconds);
+    return angle24HourForDate(result.eventTime, tzOffsetSeconds);
   }
   function isPolarSummer(getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
-    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
-    const riseTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
+    const sunIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
+    const riseResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       true,
       0 /* Sun */,
-      NaN,
+      !sunIsUp,
+      -5,
+      3600 * 13.2,
       pool
     );
-    const setTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
+    const setResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       false,
       0 /* Sun */,
-      NaN,
+      sunIsUp,
+      -5,
+      3600 * 13.2,
       pool
     );
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
     if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
       return riseTime === kECAlwaysAboveHorizon;
     }
@@ -13341,26 +13498,31 @@
   }
   function isPolarWinter(getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
-    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
-    const riseTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
+    const sunIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
+    const riseResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       true,
       0 /* Sun */,
-      NaN,
+      !sunIsUp,
+      -5,
+      3600 * 13.2,
       pool
     );
-    const setTime = planetaryRiseSetTimeRefined(
-      sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
+    const setResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       false,
       0 /* Sun */,
-      NaN,
+      sunIsUp,
+      -5,
+      3600 * 13.2,
       pool
     );
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
     if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
       return riseTime === kECAlwaysBelowHorizon;
     }
@@ -13376,40 +13538,101 @@
     const h = secondsInDay / 3600;
     return h * Math.PI / 12;
   }
+  function planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon) {
+    const correctForParallax = planetNumber === 1 /* Moon */;
+    const alt = planetAltAz(
+      planetNumber,
+      calcDate,
+      observerLat,
+      observerLon,
+      correctForParallax,
+      true,
+      null
+    );
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calcDate, null);
+    const altAtRS = altitudeAtRiseSet(
+      julianCenturiesSince2000Epoch,
+      planetNumber,
+      false,
+      null,
+      2 /* Full */
+    );
+    return alt > altAtRS;
+  }
+  function nextPrevRiseSetInternal(calcDate, observerLat, observerLon, riseNotSet, planetNumber, isNext, fudgeSeconds, lookahead, pool) {
+    let fudge = fudgeSeconds;
+    let look = lookahead;
+    if (!isNext) {
+      fudge = -fudge;
+      look = -look;
+    }
+    const fudgeDate = calcDate + fudge;
+    const result1 = planetaryRiseSetTimeRefined(
+      fudgeDate,
+      observerLat,
+      observerLon,
+      riseNotSet,
+      planetNumber,
+      NaN,
+      pool
+    );
+    const transitOk = isNext ? result1.transitTime >= fudgeDate : result1.transitTime < fudgeDate;
+    if (transitOk) {
+      return { eventTime: result1.riseSetTime, transitTime: result1.transitTime };
+    }
+    const tryDate = fudgeDate + look;
+    const result2 = planetaryRiseSetTimeRefined(
+      tryDate,
+      observerLat,
+      observerLon,
+      riseNotSet,
+      planetNumber,
+      NaN,
+      pool
+    );
+    return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
+  }
   function computeDayNightLeafAngle(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
+    const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
-    const correctForParallax = planetNumber === 1 /* Moon */;
-    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
-    const planetIsUp = alt > 0;
-    const riseTime = planetaryRiseSetTimeRefined(
-      planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+    const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
+    const riseResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       true,
       planetNumber,
-      NaN,
+      !planetIsUp,
+      -fudgeFactorSeconds,
+      lookahead,
       pool
     );
-    const setTime = planetaryRiseSetTimeRefined(
-      planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+    const setResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       false,
       planetNumber,
-      NaN,
+      planetIsUp,
+      -fudgeFactorSeconds,
+      lookahead,
       pool
     );
-    const utcNowSec = dateToDateInterval(getNow()) + 978307200;
-    const localNowSec = utcNowSec + tzOffsetSeconds;
-    const localDayStartSec = localNowSec - (localNowSec % 86400 + 86400) % 86400;
-    const noonUTCSec = localDayStartSec + 12 * 3600 - tzOffsetSeconds;
-    const midnightUTCSec = localDayStartSec - tzOffsetSeconds;
-    const noonDI = noonUTCSec - 978307200;
-    const midnightDI = midnightUTCSec - 978307200;
-    const rTransitAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
-    const sTransitAngle = angle24HourForDate(midnightDI, tzOffsetSeconds);
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
+    let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
+    let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
+    if (isNaN(riseTime)) {
+      if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+        rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
+      }
+    }
+    if (isNaN(setTime)) {
+      if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+        sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
+      }
+    }
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
     if (numLeaves === 0) {
@@ -13522,36 +13745,43 @@
   }
   function computeDayNightLeafAngleLST(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
+    const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
-    const correctForParallax = planetNumber === 1 /* Moon */;
-    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
-    const planetIsUp = alt > 0;
-    const riseTime = planetaryRiseSetTimeRefined(
-      planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
+    const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
+    const riseResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       true,
       planetNumber,
-      NaN,
+      !planetIsUp,
+      -fudgeFactorSeconds,
+      lookahead,
       pool
     );
-    const setTime = planetaryRiseSetTimeRefined(
-      planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
+    const setResult = nextPrevRiseSetInternal(
+      calcDate,
       observerLat,
       observerLon,
       false,
       planetNumber,
-      NaN,
+      planetIsUp,
+      -fudgeFactorSeconds,
+      lookahead,
       pool
     );
-    const now = getNow();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
+    let rTransitAngle = angle24HourLSTForDate(riseResult.transitTime, observerLon);
+    let sTransitAngle = angle24HourLSTForDate(setResult.transitTime, observerLon);
+    if (isNaN(riseTime) && isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+      rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
+    }
+    if (isNaN(setTime) && isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+      sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
+    }
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourLSTForDate(riseTime, observerLon);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourLSTForDate(setTime, observerLon);
-    const rTransitAngle = angle24HourLSTForDate(dateToDateInterval(noon), observerLon);
-    const sTransitAngle = angle24HourLSTForDate(dateToDateInterval(midnight), observerLon);
     if (numLeaves === 0) {
       if (leafNumber === 0) {
         if (isNaN(riseTimeAngle)) {
@@ -13745,6 +13975,7 @@
     for (const part of watch.parts) {
       if (part.type === "QDayNightRing") {
         part._cacheNextUpdate = 0;
+        part._cacheStart = void 0;
       }
     }
   }
@@ -15334,9 +15565,10 @@
     }
     if (!leafAngleFn) return;
     const updateSec = part.update ? evalAttr(part.update, env) : 5;
-    const now = performance.now();
+    const updateMs = updateSec * 1e3;
+    const displayNowMs = env.getNow ? env.getNow().getTime() : performance.now();
     let angles;
-    if (part._cachedAngles && part._cachedAngles.length === numWedges && part._cacheNextUpdate != null && now < part._cacheNextUpdate) {
+    if (part._cachedAngles && part._cachedAngles.length === numWedges && part._cacheStart != null && part._cacheNextUpdate != null && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate) {
       angles = part._cachedAngles;
     } else {
       angles = new Array(numWedges);
@@ -15344,7 +15576,8 @@
         angles[i] = leafAngleFn(planetNumber, i, numWedges);
       }
       part._cachedAngles = angles;
-      part._cacheNextUpdate = now + updateSec * 1e3;
+      part._cacheStart = displayNowMs;
+      part._cacheNextUpdate = displayNowMs + updateMs;
     }
     ctx.save();
     ctx.translate(cx, cy);

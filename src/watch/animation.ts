@@ -25,6 +25,10 @@ import {
     timeIntervalFromUTCComponents, daysInMonth as calendarDaysInMonth,
     weekdayFromTimeInterval,
 } from '../astronomy/es-calendar.js';
+import { dateToDateInterval } from '../astronomy/es-time.js';
+import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
+import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
+import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
 
 // Constants used by the scheduler
 export const SCHEDULER_LOOKAHEAD_MS = 50; // arm setTimeout this many ms early to avoid skipping boundaries
@@ -41,11 +45,17 @@ const kECGLFrameRate = 1.0 / 240;
 
 // --- Named update interval sentinels (matching iOS ECConstants.h) ---
 // Negative values that the animation system interprets specially.
+export const EC_UPDATE_NEXT_SUNRISE              = -1001;
+export const EC_UPDATE_NEXT_SUNSET               = -1002;
+export const EC_UPDATE_NEXT_MOONRISE             = -1003;
+export const EC_UPDATE_NEXT_MOONSET              = -1004;
 export const EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT  = -1005;
 export const EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT   = -1006;
 export const EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
 export const EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT  = -1008;
 export const EC_UPDATE_ENV_CHANGE_ONLY           = -1013;
+export const EC_UPDATE_NEXT_SUNRISE_OR_SUNSET    = -1016;
+export const EC_UPDATE_NEXT_MOONRISE_OR_MOONSET  = -1017;
 
 // ============================================================================
 // Types
@@ -81,7 +91,11 @@ export interface HandState {
     offsetAngle: AnimatingValue | null;
     /** Update interval in milliseconds. */
     updateIntervalMs: number;
-    /** Next time to re-evaluate the expression (performance.now()). */
+    /** Display-time ms-since-epoch of the next scheduled update.
+     *  For positive intervals: next epoch-aligned boundary.
+     *  For sentinels: next astronomical event time. */
+    nextUpdateDisplayTime: number;
+    /** performance.now() at which to wake the idle timer (derived from nextUpdateDisplayTime). */
     nextUpdateTime: number;
     /** Animation speed multiplier from XML (default 1.0). */
     animSpeed: number;
@@ -164,6 +178,8 @@ function createHandState(
         part.dynamicState!.currentYMotion = initialYMotion;
     }
 
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+
     return {
         part,
         angle: {
@@ -183,7 +199,8 @@ function createHandState(
         xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
         yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
         updateIntervalMs,
-        nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
+        nextUpdateDisplayTime: nextDisplayMs,
+        nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
         animSpeed,
         getNow,
     };
@@ -293,6 +310,8 @@ function createCalendarCoverState(
         currentXMotion: initialXOffset,
     };
 
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+
     return {
         part,
         angle: makeAnimatingValue(0, now),
@@ -300,7 +319,8 @@ function createCalendarCoverState(
         xMotion: makeAnimatingValue(initialXOffset, now),
         yMotion: null,
         updateIntervalMs,
-        nextUpdateTime: scheduleNextUpdate(updateIntervalMs, getNow),
+        nextUpdateDisplayTime: nextDisplayMs,
+        nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
         animSpeed,
         getNow,
     };
@@ -332,7 +352,9 @@ export function tickAnimations(
     timeDirection: 1 | -1 = 1,
 ): void {
     for (const state of states) {
-        // Check if it's time to re-evaluate
+        // Gate on performance.now() — this handles reset (nextUpdateTime=0 → immediate)
+        // and freeze (nextUpdateTime=Infinity → never) direction-agnostically.
+        // The display-time boundary is used to COMPUTE nextUpdateTime, not as the gate.
         if (now >= state.nextUpdateTime) {
             const newTarget = state.part.angle
                 ? evalAttr(state.part.angle, env)
@@ -343,14 +365,20 @@ export function tickAnimations(
                 ? evalAttr(state.part.offsetAngle!, env)
                 : null;
 
+            // Compute the next boundary BEFORE starting animations
+            // (so we know the time budget for compression)
+            const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.getNow, timeDirection, env);
+
             if (tickIntervalMs !== null && tickIntervalMs > 0) {
                 // --- Quantized mode ---
-                // Compute how many ticks until this part's next re-evaluation
-                let ticksUntilUpdate = 1;
-                if (displayDeltaPerTickSec > 0 && state.updateIntervalMs > 0) {
-                    const updateIntervalSec = state.updateIntervalMs / 1000;
-                    ticksUntilUpdate = Math.max(1, Math.ceil(updateIntervalSec / displayDeltaPerTickSec));
-                }
+                // Compute real-time budget until next boundary for animation compression.
+                // The display-time delta is converted to real-time via the tick rate.
+                const displayNowMs = state.getNow().getTime();
+                const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
+                const displayDeltaPerTickMs = displayDeltaPerTickSec * 1000;
+                const ticksUntilUpdate = displayDeltaPerTickMs > 0
+                    ? Math.max(1, Math.ceil(displayDeltaMs / displayDeltaPerTickMs))
+                    : 1;
                 const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
 
                 // Adaptive duration: use normal speed unless it wouldn't
@@ -393,7 +421,8 @@ export function tickAnimations(
                     }
                 }
 
-                // Schedule next re-evaluation
+                // Schedule next re-evaluation (also update perfNow for idle timer)
+                state.nextUpdateDisplayTime = nextDisplayMs;
                 state.nextUpdateTime = now + timeUntilNextUpdateMs;
             } else {
                 // --- 1× mode (normal) ---
@@ -401,7 +430,8 @@ export function tickAnimations(
                 if (newOffsetTarget !== null && state.offsetAngle) {
                     startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
                 }
-                state.nextUpdateTime = scheduleNextUpdate(state.updateIntervalMs, state.getNow, timeDirection);
+                state.nextUpdateDisplayTime = nextDisplayMs;
+                state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.getNow);
             }
 
             // Evaluate xMotion/yMotion (QHand day-indicator wires)
@@ -524,6 +554,7 @@ export function finishAnimations(states: HandState[]): void {
             }
         }
         // Prevent the scheduler from re-evaluating while stopped
+        s.nextUpdateDisplayTime = Infinity;
         s.nextUpdateTime = Infinity;
     }
 }
@@ -534,6 +565,7 @@ export function finishAnimations(states: HandState[]): void {
  */
 export function resetHandSchedules(states: HandState[]): void {
     for (const s of states) {
+        s.nextUpdateDisplayTime = 0;
         s.nextUpdateTime = 0;
     }
 }
@@ -687,81 +719,284 @@ export function interpolateRaw(val: AnimatingValue, now: number): number {
 // ============================================================================
 
 /**
- * Schedule the next update time based on the update interval.
- * Positive intervals use epoch-aligned boundaries.
- * Negative sentinel values are routed to event-specific scheduling.
+ * Compute the next display-time boundary for any part.
+ * Returns ms-since-epoch in display time.
  *
- * Used only in 1× mode. Quantized mode computes schedules directly
- * in tickAnimations based on tick intervals and display-delta-per-tick.
+ * For positive intervals, returns the next epoch-aligned boundary.
+ * For negative sentinel values, delegates to resolveSentinel().
  */
-function scheduleNextUpdate(updateIntervalMs: number, getNow: () => Date, timeDirection: 1 | -1 = 1): number {
+function computeNextBoundary(
+    updateIntervalMs: number,
+    getNow: () => Date,
+    timeDirection: 1 | -1,
+    env: Environment,
+): number {
     if (updateIntervalMs > 0) {
-        return nextAlignedUpdate(updateIntervalMs, getNow, timeDirection);
+        // Positive interval — epoch-aligned boundary in display time.
+        // Shift by the timezone offset so that daily (86400s) boundaries
+        // fall at LOCAL midnight instead of UTC midnight.
+        // iOS: ECDynamicUpdate.m line 192 subtracts tzOffset in the alignment.
+        const tzOffsetMs = (env.tzOffsetSec ?? 0) * 1000;
+        const displayNowMs = getNow().getTime();
+        const localNowMs = displayNowMs + tzOffsetMs;  // shift to local
+        if (timeDirection === -1) {
+            // Time flows backward: find the previous boundary
+            const localBoundary = Math.floor(localNowMs / updateIntervalMs) * updateIntervalMs;
+            const boundary = (localBoundary === localNowMs
+                ? localBoundary - updateIntervalMs
+                : localBoundary) - tzOffsetMs;
+            return boundary;
+        } else {
+            const localBoundary = Math.ceil(localNowMs / updateIntervalMs) * updateIntervalMs;
+            return localBoundary - tzOffsetMs;  // shift back to UTC
+        }
     }
 
     // Sentinel value — convert from ms back to the original constant
     const sentinel = updateIntervalMs / 1000;
-    switch (sentinel) {
-        case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
-        case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
-        case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
-        case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
-            // For now, schedule at next local midnight.
-            // TODO: also check for the actual next sunrise/sunset/moonrise/moonset
-            // and use whichever comes first.
-            return nextLocalMidnight();
+    const eventDI = resolveSentinel(sentinel, getNow, env, timeDirection);
 
-        case EC_UPDATE_ENV_CHANGE_ONLY:
-            // Only update when the environment changes (e.g. location changes).
-            // Schedule far in the future; an env change would reset this.
-            return performance.now() + 365 * 24 * 3600 * 1000;
-
-        default:
-            // Unknown sentinel — treat as daily at midnight
-            console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
-            return nextLocalMidnight();
+    if (!isFinite(eventDI)) {
+        // envChangeOnly or unknown — return Infinity (far future in display time)
+        return Infinity;
     }
+
+    // Convert dateInterval (Apple epoch sec) to ms-since-epoch (JS Date.getTime())
+    return (eventDI + 978307200) * 1000;
 }
 
 /**
- * Compute the next epoch-aligned update time in performance.now() ms.
- * Uses the display time (from getNow) so updates align to display-time
- * second/minute/hour boundaries, not wall-clock boundaries.
- *
- * For example, with intervalMs=1000, if the display time is 14:00:00.350,
- * the next boundary is 14:00:01.000, which is 650ms from now.
+ * Convert a display-time ms-since-epoch boundary to performance.now().
+ * Used to set the idle-timer wakeup.
  */
-function nextAlignedUpdate(intervalMs: number, getNow: () => Date, timeDirection: 1 | -1 = 1): number {
-    const displayNow = getNow().getTime();  // ms since epoch (display time)
-    let nextDisplay: number;
-    if (timeDirection === -1) {
-        // Time flows backward: find the previous boundary
-        nextDisplay = Math.floor(displayNow / intervalMs) * intervalMs;
-        // If exactly on a boundary, step one interval further back
-        if (nextDisplay === displayNow) {
-            nextDisplay -= intervalMs;
-        }
-    } else {
-        nextDisplay = Math.ceil(displayNow / intervalMs) * intervalMs;
-    }
-    const deltaMs = Math.abs(nextDisplay - displayNow);
-    // Convert display-time delta to performance.now() time
+function displayTimeToPerfNow(displayTimeMs: number, getNow: () => Date): number {
+    if (!isFinite(displayTimeMs)) return Infinity;
+    const deltaMs = Math.abs(displayTimeMs - getNow().getTime());
     return performance.now() + deltaMs;
 }
 
+// ============================================================================
+// Sentinel scheduling — astronomical event boundary computation
+// ============================================================================
+
+/** Fudge factor: 5 seconds to avoid retriggering on exact boundaries. */
+const SENTINEL_FUDGE_SECONDS = 5;
+
+/** Lookahead: 13.2 hours (matching iOS). */
+const SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
+
 /**
- * Compute performance.now() time of next local midnight (00:00:00.000).
+ * Find the next rise or set event for a planet, searching in the direction
+ * time is flowing. Returns a dateInterval, or NaN if no event found.
+ *
+ * Ports iOS ECAstronomy nextPrevRiseSetInternal + nextPrevPlanetRiseSetForPlanet.
+ * The iOS "runningBackward XOR nextNotPrev" pattern simplifies here because
+ * sentinel scheduling always requests "next in the direction of flow", so
+ * searchForward = (timeDirection === 1).
  */
-function nextLocalMidnight(): number {
-    const now = new Date();
-    const midnight = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1,  // next day
-        0, 0, 0, 0,         // 00:00:00.000
-    );
-    const msUntilMidnight = midnight.getTime() - now.getTime();
-    return performance.now() + msUntilMidnight;
+function nextPlanetRiseSet(
+    riseNotSet: boolean,
+    planetNumber: ECPlanetNumber,
+    getNow: () => Date,
+    lat: number,
+    lon: number,
+    timeDirection: 1 | -1,
+): number {
+    const calculationDI = dateToDateInterval(getNow());
+    const searchForward = timeDirection === 1;
+
+    // Fudge to avoid retriggering on the exact boundary
+    const fudge = searchForward ? SENTINEL_FUDGE_SECONDS : -SENTINEL_FUDGE_SECONDS;
+    const lookahead = searchForward ? SENTINEL_LOOKAHEAD_SECONDS : -SENTINEL_LOOKAHEAD_SECONDS;
+    const fudgeDate = calculationDI + fudge;
+
+    // Create a temporary cache pool for the rise/set calculation
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat, lon, !searchForward);
+
+    try {
+        // First attempt: search from fudged date
+        const result = planetaryRiseSetTimeRefined(
+            fudgeDate, lat, lon, riseNotSet, planetNumber, NaN, pool,
+        );
+
+        if (isNoRiseSet(result.riseSetTime)) {
+            // Object is always above or below horizon — no event
+            return NaN;
+        }
+
+        // Check if the transit time is in the right direction
+        // (iOS: nextPrevRiseSetInternalWithFudgeInterval lines 2335-2337)
+        const inRightDirection = searchForward
+            ? result.transitTime >= fudgeDate
+            : result.transitTime < fudgeDate;
+
+        if (inRightDirection) {
+            return result.riseSetTime;
+        }
+
+        // Not found on first try — search from 13.2 hours away
+        const tryDate = fudgeDate + lookahead;
+        releaseCachePool(pool);
+        initializeCachePool(pool, tryDate, lat, lon, !searchForward);
+
+        const result2 = planetaryRiseSetTimeRefined(
+            tryDate, lat, lon, riseNotSet, planetNumber, NaN, pool,
+        );
+
+        if (isNoRiseSet(result2.riseSetTime)) {
+            return NaN;
+        }
+
+        return result2.riseSetTime;
+    } finally {
+        releaseCachePool(pool);
+    }
+}
+
+/**
+ * Clamp an event time to midnight: return the earlier of the event
+ * or the next local midnight (in the direction time is flowing).
+ * All times are dateIntervals (Apple epoch seconds).
+ *
+ * Ports iOS ECAstronomy nextOrMidnightForDateInterval.
+ */
+function nextOrMidnight(
+    eventDI: number,
+    getNow: () => Date,
+    tzOffsetSec: number,
+    timeDirection: 1 | -1,
+): number {
+    if (isNaN(eventDI)) {
+        // No event found — return midnight as fallback
+        return nextMidnightDI(getNow, tzOffsetSec, timeDirection);
+    }
+
+    const nowDI = dateToDateInterval(getNow());
+
+    // Compute today's local midnight (start of day) in dateInterval space.
+    // Add timezone offset to get local time, floor to day, subtract tz offset.
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+
+    if (timeDirection === -1) {
+        // Backward: "next midnight" = today's midnight (start of current day).
+        // If event is before that, return the midnight instead.
+        if (eventDI < todayMidnightDI) {
+            return todayMidnightDI;
+        }
+    } else {
+        // Forward: next midnight = today's midnight + 1 day.
+        const tomorrowMidnightDI = todayMidnightDI + 86400;
+        if (eventDI > tomorrowMidnightDI) {
+            return tomorrowMidnightDI;
+        }
+    }
+
+    return eventDI;
+}
+
+/**
+ * Compute the dateInterval of the next local midnight in the direction
+ * time is flowing. Used as a fallback when no astronomical event is found.
+ */
+function nextMidnightDI(
+    getNow: () => Date,
+    tzOffsetSec: number,
+    timeDirection: 1 | -1,
+): number {
+    const nowDI = dateToDateInterval(getNow());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+
+    if (timeDirection === -1) {
+        return todayMidnightDI;
+    } else {
+        return todayMidnightDI + 86400;
+    }
+}
+
+/**
+ * Resolve a sentinel constant to its next display-time event.
+ * Returns a dateInterval (Apple epoch seconds), or Infinity for envChangeOnly.
+ *
+ * Ports iOS ECDynamicUpdate getUpdateCalculatorForInterval dispatch table.
+ */
+function resolveSentinel(
+    sentinel: number,
+    getNow: () => Date,
+    env: Environment,
+    timeDirection: 1 | -1,
+): number {
+    const lat = env.observerLatRad ?? 0;
+    const lon = env.observerLonRad ?? 0;
+    const tzOff = env.tzOffsetSec ?? 0;
+
+    switch (sentinel) {
+        // Bare rise/set (no midnight clamp)
+        case EC_UPDATE_NEXT_SUNRISE:
+            return nextPlanetRiseSet(true, ECPlanetNumber.Sun, getNow, lat, lon, timeDirection);
+        case EC_UPDATE_NEXT_SUNSET:
+            return nextPlanetRiseSet(false, ECPlanetNumber.Sun, getNow, lat, lon, timeDirection);
+        case EC_UPDATE_NEXT_MOONRISE:
+            return nextPlanetRiseSet(true, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection);
+        case EC_UPDATE_NEXT_MOONSET:
+            return nextPlanetRiseSet(false, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection);
+
+        // Rise/set clamped to midnight
+        case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
+            return nextOrMidnight(
+                nextPlanetRiseSet(true, ECPlanetNumber.Sun, getNow, lat, lon, timeDirection),
+                getNow, tzOff, timeDirection,
+            );
+        case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
+            return nextOrMidnight(
+                nextPlanetRiseSet(false, ECPlanetNumber.Sun, getNow, lat, lon, timeDirection),
+                getNow, tzOff, timeDirection,
+            );
+        case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
+            return nextOrMidnight(
+                nextPlanetRiseSet(true, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection),
+                getNow, tzOff, timeDirection,
+            );
+        case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
+            return nextOrMidnight(
+                nextPlanetRiseSet(false, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection),
+                getNow, tzOff, timeDirection,
+            );
+
+        // Combined: whichever comes first in the direction of flow
+        case EC_UPDATE_NEXT_SUNRISE_OR_SUNSET: {
+            const rise = nextPlanetRiseSet(true, ECPlanetNumber.Sun, getNow, lat, lon, timeDirection);
+            const set = nextPlanetRiseSet(false, ECPlanetNumber.Sun, getNow, lat, lon, timeDirection);
+            return closerInTimeDirection(rise, set, timeDirection);
+        }
+        case EC_UPDATE_NEXT_MOONRISE_OR_MOONSET: {
+            const rise = nextPlanetRiseSet(true, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection);
+            const set = nextPlanetRiseSet(false, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection);
+            return closerInTimeDirection(rise, set, timeDirection);
+        }
+
+        // Environment change only — effectively never (only explicit reset)
+        case EC_UPDATE_ENV_CHANGE_ONLY:
+            return Infinity;
+
+        default:
+            console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
+            return nextMidnightDI(getNow, tzOff, timeDirection);
+    }
+}
+
+/**
+ * Return whichever event is closer in the direction time is flowing.
+ * Forward: min. Backward: max. Handles NaN (no-event) gracefully.
+ */
+function closerInTimeDirection(a: number, b: number, timeDirection: 1 | -1): number {
+    if (isNaN(a)) return b;
+    if (isNaN(b)) return a;
+    return timeDirection === 1 ? Math.min(a, b) : Math.max(a, b);
 }
 
 /** Floating-point modulo that always returns a non-negative result. */

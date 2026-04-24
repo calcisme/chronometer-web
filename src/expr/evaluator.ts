@@ -19,6 +19,14 @@ export interface Environment {
     variables: Map<string, number>;
     /** Function bindings (math builtins + watch-specific functions). */
     functions: Map<string, ExprFunction>;
+    /** Observer latitude in radians (set by watch-env, used by sentinel scheduling). */
+    observerLatRad?: number;
+    /** Observer longitude in radians (set by watch-env, used by sentinel scheduling). */
+    observerLonRad?: number;
+    /** Timezone offset in seconds east-positive (set by watch-env, used by sentinel scheduling). */
+    tzOffsetSec?: number;
+    /** Display-time source (set by watch-env, used by renderer ring cache). */
+    getNow?: () => Date;
 }
 
 /**

@@ -19,11 +19,17 @@ import {
     timeIntervalFromUTCComponents, weekdayFromTimeInterval,
 } from '../astronomy/es-calendar.js';
 import {
+    EC_UPDATE_NEXT_SUNRISE,
+    EC_UPDATE_NEXT_SUNSET,
+    EC_UPDATE_NEXT_MOONRISE,
+    EC_UPDATE_NEXT_MOONSET,
     EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT,
     EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT,
     EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT,
     EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT,
     EC_UPDATE_ENV_CHANGE_ONLY,
+    EC_UPDATE_NEXT_SUNRISE_OR_SUNSET,
+    EC_UPDATE_NEXT_MOONRISE_OR_MOONSET,
 } from './animation.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
 import {
@@ -38,11 +44,11 @@ import {
     planetAltAz,
     positionAngle, northAngleForObject,
 } from '../astronomy/es-astro.js';
-import { planetaryRiseSetTimeRefined, planettransitTimeRefined } from '../astronomy/es-riseset.js';
-import { ECPlanetNumber, isNoRiseSet, kECAlwaysAboveHorizon, kECAlwaysBelowHorizon, fmod } from '../astronomy/astro-constants.js';
+import { planetaryRiseSetTimeRefined, planettransitTimeRefined, type RiseSetResult } from '../astronomy/es-riseset.js';
+import { ECPlanetNumber, ECWBPrecision, isNoRiseSet, kECAlwaysAboveHorizon, kECAlwaysBelowHorizon, fmod } from '../astronomy/astro-constants.js';
 import { terminatorAngle } from './terminator.js';
 import { GSTDifferenceForDate, convertUTToGSTP03, convertGSTtoLST } from '../astronomy/es-sidereal.js';
-import { generalPrecessionSinceJ2000, sunRAandDecl, moonRAAndDecl, sunEclipticLongitudeForDate, raAndDeclO, generalObliquity } from '../astronomy/es-coordinates.js';
+import { generalPrecessionSinceJ2000, sunRAandDecl, moonRAAndDecl, sunEclipticLongitudeForDate, raAndDeclO, generalObliquity, altitudeAtRiseSet } from '../astronomy/es-coordinates.js';
 import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
 import { WB_planetHeliocentricLongitude, WB_planetHeliocentricRadius, WB_planetApparentPosition } from '../astronomy/willmann-bell.js';
 import { WB_MoonAscendingNodeLongitude } from '../astronomy/wb-moon.js';
@@ -159,18 +165,27 @@ export function createWatchEnvironment(
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
     const env = createDefaultEnvironment();
 
+    // Store observer params on the env for sentinel scheduling (animation.ts)
+    // and display-time source for renderer caches.
+    env.observerLatRad = OBSERVER_LAT;
+    env.observerLonRad = OBSERVER_LON;
+    env.getNow = getNow;
+
     // Named update interval sentinels — negative values matching iOS ECConstants.h.
     // The animation system detects these and schedules at the appropriate event time.
+    env.variables.set('updateAtNextSunrise', EC_UPDATE_NEXT_SUNRISE);
+    env.variables.set('updateAtNextSunset', EC_UPDATE_NEXT_SUNSET);
+    env.variables.set('updateAtNextMoonrise', EC_UPDATE_NEXT_MOONRISE);
+    env.variables.set('updateAtNextMoonset', EC_UPDATE_NEXT_MOONSET);
     env.variables.set('updateAtNextSunriseOrMidnight', EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
     env.variables.set('updateAtNextSunsetOrMidnight', EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
     env.variables.set('updateAtNextMoonriseOrMidnight', EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
     env.variables.set('updateAtNextMoonsetOrMidnight', EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
     env.variables.set('updateAtEnvChangeOnly', EC_UPDATE_ENV_CHANGE_ONLY);
+    env.variables.set('updateAtNextSunriseOrSunset', EC_UPDATE_NEXT_SUNRISE_OR_SUNSET);
+    env.variables.set('updateAtNextMoonriseOrMoonset', EC_UPDATE_NEXT_MOONRISE_OR_MOONSET);
 
-    // Aliases used by Mauna Kea (shorter names without "OrMidnight")
-    env.variables.set('updateAtNextSunrise', EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
-    env.variables.set('updateAtNextSunset', EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
-    env.variables.set('updateAtNextSunriseOrSunset', EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    // Aliases used by some faces
     env.variables.set('updateForTimeSyncIndicator', EC_UPDATE_ENV_CHANGE_ONLY);
     env.variables.set('updateForLocSyncIndicator', EC_UPDATE_ENV_CHANGE_ONLY);
 
@@ -287,6 +302,7 @@ function registerTimeFunctions(
     // Timezone offset in seconds (east-positive) for calendar/astronomy.
     const browserOffsetSec = -now.getTimezoneOffset() * 60;
     const tzOffsetSeconds = browserOffsetSec + tzDeltaMs / 1000;
+    env.tzOffsetSec = tzOffsetSeconds;
 
     // --- Clock hands (LIVE — recompute from Date.now() on each call) ---
     // These are called every animation frame so the hands move in real time.
@@ -491,7 +507,7 @@ function registerTimeFunctions(
         const fwdResult = planetaryRiseSetTimeRefined(
             noonDI, OBSERVER_LAT, OBSERVER_LON,
             riseNotSet, planetNumber, NaN, pool,
-        );
+        ).riseSetTime;
         if (!isNoRiseSet(fwdResult) && isSameLocalDay(fwdResult, calcDate)) {
             return fwdResult;
         }
@@ -500,7 +516,7 @@ function registerTimeFunctions(
         const bwdResult = planetaryRiseSetTimeRefined(
             noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON,
             riseNotSet, planetNumber, NaN, pool,
-        );
+        ).riseSetTime;
         if (!isNoRiseSet(bwdResult) && isSameLocalDay(bwdResult, calcDate)) {
             return bwdResult;
         }
@@ -1608,43 +1624,31 @@ function dayNightLeafAngle(
     tzOffsetSeconds: number,
 ): number {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
+    const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
 
     // Determine if sun is currently up
-    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+    const sunIsUp = planetIsUpForRiseSet(ECPlanetNumber.Sun, calcDate, observerLat, observerLon);
 
-    // Search for rise: if sun is up, search backward; if down, search forward
-    // Search for set:  if sun is up, search forward; if down, search backward
-    const searchForward = riseNotSet ? !sunIsUp : sunIsUp;
+    // iOS: isNext = riseNotSet ? !sunIsUp : sunIsUp
+    const isNext = riseNotSet ? !sunIsUp : sunIsUp;
 
-    const eventTime = planetaryRiseSetTimeRefined(
-        searchForward ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
-        observerLat, observerLon,
-        riseNotSet, ECPlanetNumber.Sun, NaN, pool,
+    const result = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        riseNotSet, ECPlanetNumber.Sun, isNext, -fudgeFactorSeconds, lookahead, pool,
     );
 
-    // Also compute the transit angle for fallback
-    const transitSearchForward = riseNotSet ? !sunIsUp : sunIsUp;
-    // Transit is midpoint of the search — we don't have a direct transit search,
-    // so we'll use noon as transit fallback
-    // Compute local noon in the target timezone using UTC arithmetic
-    const utcSec = calcDate + 978307200;
-    const localSec = utcSec + tzOffsetSeconds;
-    const dayStartSec = localSec - ((localSec % 86400) + 86400) % 86400;
-    const noonDI = dayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
-    const noonAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
-
-    if (isNoRiseSet(eventTime)) {
-        // No rise/set — return transit angle (noon for sun)
-        if (eventTime === kECAlwaysAboveHorizon) {
-            // Polar summer: transit is at the high point, add PI for low transit
-            return fmod(noonAngle + Math.PI, 2 * Math.PI);
+    if (isNoRiseSet(result.eventTime)) {
+        // No rise/set — use transit angle as fallback
+        let transitAngle = angle24HourForDate(result.transitTime, tzOffsetSeconds);
+        if (result.eventTime === kECAlwaysAboveHorizon) {
+            // Polar summer: transit was for low transit → add PI for high transit
+            transitAngle = fmod(transitAngle + Math.PI, 2 * Math.PI);
         }
-        return noonAngle;
+        return transitAngle;
     }
 
-    return angle24HourForDate(eventTime, tzOffsetSeconds);
+    return angle24HourForDate(result.eventTime, tzOffsetSeconds);
 }
 
 /**
@@ -1658,19 +1662,19 @@ function isPolarSummer(
     tzOffsetSeconds: number,
 ): boolean {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
-    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+    const sunIsUp = planetIsUpForRiseSet(ECPlanetNumber.Sun, calcDate, observerLat, observerLon);
 
-    // Search for rise
-    const riseTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
-        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+    const riseResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        true, ECPlanetNumber.Sun, !sunIsUp, -5, 3600 * 13.2, pool,
     );
-    // Search for set
-    const setTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
-        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+    const setResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        false, ECPlanetNumber.Sun, sunIsUp, -5, 3600 * 13.2, pool,
     );
+
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
 
     if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
         return riseTime === kECAlwaysAboveHorizon;
@@ -1692,17 +1696,19 @@ function isPolarWinter(
     tzOffsetSeconds: number,
 ): boolean {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
-    const sunIsUp = sunAltitude(calcDate, observerLat, observerLon, null) > 0;
+    const sunIsUp = planetIsUpForRiseSet(ECPlanetNumber.Sun, calcDate, observerLat, observerLon);
 
-    const riseTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate - fudgeSeconds - 3600 * 13.2 : calcDate + fudgeSeconds,
-        observerLat, observerLon, true, ECPlanetNumber.Sun, NaN, pool,
+    const riseResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        true, ECPlanetNumber.Sun, !sunIsUp, -5, 3600 * 13.2, pool,
     );
-    const setTime = planetaryRiseSetTimeRefined(
-        sunIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - 3600 * 13.2,
-        observerLat, observerLon, false, ECPlanetNumber.Sun, NaN, pool,
+    const setResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        false, ECPlanetNumber.Sun, sunIsUp, -5, 3600 * 13.2, pool,
     );
+
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
 
     if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
         return riseTime === kECAlwaysBelowHorizon;
@@ -1729,8 +1735,95 @@ function angle24HourForDate(dateInterval: number, tzOffsetSeconds: number): numb
 }
 
 /**
+ * Determine if a planet is currently "up" (above the rise/set horizon).
+ *
+ * iOS: ECAstronomy.m planetIsUp (line 3408-3438).
+ * Compares the planet's current altitude against altitudeAtRiseSet
+ * (which accounts for refraction + semidiameter), NOT against zero.
+ * Using alt > 0 would create a several-minute gap near moonrise/moonset
+ * where the altitude check and the rise/set algorithm disagree.
+ */
+function planetIsUpForRiseSet(
+    planetNumber: number,
+    calcDate: number,
+    observerLat: number,
+    observerLon: number,
+): boolean {
+    const correctForParallax = planetNumber === ECPlanetNumber.Moon;
+    const alt = planetAltAz(
+        planetNumber, calcDate, observerLat, observerLon,
+        correctForParallax, true, null,
+    );
+    // iOS line 3427-3430: compare against altitudeAtRiseSet, NOT zero
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calcDate, null);
+    const altAtRS = altitudeAtRiseSet(
+        julianCenturiesSince2000Epoch, planetNumber,
+        false /* !wantGeocentricAltitude, matching iOS */,
+        null, ECWBPrecision.Full,
+    );
+    return alt > altAtRS;
+}
+
+/**
+ * Port of iOS nextPrevRiseSetInternalWithFudgeInterval.
+ *
+ * Two-step search for the next or previous rise/set event:
+ * 1. Search from (calcDate + fudge), check if the transit is in the right direction
+ * 2. If not, retry from (fudgeDate + lookahead)
+ *
+ * Returns { eventTime, transitTime } where transitTime is the
+ * riseSetOrTransit output from planetaryRiseSetTimeRefined.
+ */
+function nextPrevRiseSetInternal(
+    calcDate: number,
+    observerLat: number,
+    observerLon: number,
+    riseNotSet: boolean,
+    planetNumber: number,
+    isNext: boolean,
+    fudgeSeconds: number,
+    lookahead: number,
+    pool: AstroCachePool,
+): { eventTime: number; transitTime: number } {
+    // iOS lines 2326-2329: if searching backward, negate fudge and lookahead
+    let fudge = fudgeSeconds;
+    let look = lookahead;
+    if (!isNext) {
+        fudge = -fudge;
+        look = -look;
+    }
+
+    const fudgeDate = calcDate + fudge;
+    const result1 = planetaryRiseSetTimeRefined(
+        fudgeDate, observerLat, observerLon,
+        riseNotSet, planetNumber, NaN, pool,
+    );
+
+    // iOS lines 2335-2337: check if transit is in the right direction
+    const transitOk = isNext
+        ? result1.transitTime >= fudgeDate
+        : result1.transitTime < fudgeDate;
+
+    if (transitOk) {
+        return { eventTime: result1.riseSetTime, transitTime: result1.transitTime };
+    }
+
+    // Retry from lookahead position (iOS lines 2347-2350)
+    const tryDate = fudgeDate + look;
+    const result2 = planetaryRiseSetTimeRefined(
+        tryDate, observerLat, observerLon,
+        riseNotSet, planetNumber, NaN, pool,
+    );
+
+    return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
+}
+
+/**
  * Full day/night leaf angle computation.
  * iOS: dayNightLeafAngleForPlanetNumber:leafNumber:numLeaves:timeBaseKind:ECTimeBaseKindLT
+ *
+ * Uses nextPrevRiseSetInternal (matching iOS nextPrevRiseSetInternalWithFudgeInterval)
+ * with two-step search and transit-time validation.
  *
  * numLeaves == 0: special indicator angles (rise/set/polar)
  * numLeaves > 0: individual leaf positions for day/night ring
@@ -1746,37 +1839,44 @@ function computeDayNightLeafAngle(
     tzOffsetSeconds: number,
 ): number {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
+    const fudgeFactorSeconds = 5;  // iOS: fudgeFactorSeconds = 5
     const lookahead = 3600 * 13.2;
 
-    // Use the actual planet (Sun or Moon) for altitude and rise/set
-    const correctForParallax = planetNumber === ECPlanetNumber.Moon;
-    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
-    const planetIsUp = alt > 0;
+    // iOS: [self planetIsUp:planetNumber] — compares against altitudeAtRiseSet, not zero
+    const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
 
-    // Get rise time
-    const riseTime = planetaryRiseSetTimeRefined(
-        planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
-        observerLat, observerLon, true, planetNumber, NaN, pool,
+    // iOS lines 4598-4612: search for rise and set using nextPrevRiseSetInternal
+    // Rise: isNext = !planetIsUp (if planet is up, search backward for the most recent rise)
+    // Set:  isNext = planetIsUp  (if planet is up, search forward for the next set)
+    const riseResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        true, planetNumber, !planetIsUp, -fudgeFactorSeconds, lookahead, pool,
     );
-    // Get set time
-    const setTime = planetaryRiseSetTimeRefined(
-        planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
-        observerLat, observerLon, false, planetNumber, NaN, pool,
+    const setResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        false, planetNumber, planetIsUp, -fudgeFactorSeconds, lookahead, pool,
     );
 
-    // Compute transit angles for fallback
-    // Compute local noon and midnight in the target timezone using UTC arithmetic.
-    // Find the start of the current local day, then add 12h (noon) or 0h (midnight).
-    const utcNowSec = dateToDateInterval(getNow()) + 978307200;
-    const localNowSec = utcNowSec + tzOffsetSeconds;
-    const localDayStartSec = localNowSec - ((localNowSec % 86400) + 86400) % 86400;
-    const noonUTCSec = localDayStartSec + 12 * 3600 - tzOffsetSeconds;
-    const midnightUTCSec = localDayStartSec - tzOffsetSeconds;
-    const noonDI = noonUTCSec - 978307200;
-    const midnightDI = midnightUTCSec - 978307200;
-    const rTransitAngle = angle24HourForDate(noonDI, tzOffsetSeconds);
-    const sTransitAngle = angle24HourForDate(midnightDI, tzOffsetSeconds);
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
+
+    // iOS lines 4616-4631: get transit angles from the search results
+    // (iOS uses riseSetOrTransit from the search, NOT local noon/midnight)
+    let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
+    let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
+
+    // iOS lines 4619-4624: if rise is NaN and always-above, transit was for low transit → add PI
+    if (isNaN(riseTime)) {
+        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+            rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
+        }
+    }
+    // iOS lines 4626-4631: same for set
+    if (isNaN(setTime)) {
+        if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+            sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
+        }
+    }
 
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
@@ -1800,7 +1900,7 @@ function computeDayNightLeafAngle(
     let polarSummer = false;
     let polarWinter = false;
 
-    // Handle NaN cases — match iOS logic exactly
+    // Handle NaN cases — match iOS logic exactly (lines 4654-4756)
     if (isNaN(riseTimeAngle)) {
         if (isNaN(setTimeAngle)) {
             // Both invalid — use average transit
@@ -1981,34 +2081,39 @@ function computeDayNightLeafAngleLST(
     tzOffsetSeconds: number,
 ): number {
     const calcDate = dateToDateInterval(getNow());
-    const fudgeSeconds = -5;
+    const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
 
-    // Use the actual planet (Sun or Moon) for altitude and rise/set
-    const correctForParallax = planetNumber === ECPlanetNumber.Moon;
-    const alt = planetAltAz(planetNumber, calcDate, observerLat, observerLon, correctForParallax, true, null);
-    const planetIsUp = alt > 0;
+    // iOS: [self planetIsUp:planetNumber] — compares against altitudeAtRiseSet, not zero
+    const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
 
-    // Get rise time
-    const riseTime = planetaryRiseSetTimeRefined(
-        planetIsUp ? calcDate - fudgeSeconds - lookahead : calcDate + fudgeSeconds,
-        observerLat, observerLon, true, planetNumber, NaN, pool,
+    // iOS: search for rise and set using nextPrevRiseSetInternal
+    const riseResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        true, planetNumber, !planetIsUp, -fudgeFactorSeconds, lookahead, pool,
     );
-    // Get set time
-    const setTime = planetaryRiseSetTimeRefined(
-        planetIsUp ? calcDate + fudgeSeconds : calcDate - fudgeSeconds - lookahead,
-        observerLat, observerLon, false, planetNumber, NaN, pool,
+    const setResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        false, planetNumber, planetIsUp, -fudgeFactorSeconds, lookahead, pool,
     );
 
-    // Compute transit angles for fallback
-    const now = getNow();
-    const noon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-    
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
+
+    // Transit angles from search results (LST variant)
+    let rTransitAngle = angle24HourLSTForDate(riseResult.transitTime, observerLon);
+    let sTransitAngle = angle24HourLSTForDate(setResult.transitTime, observerLon);
+
+    // iOS: if always-above, transit was for low transit → add PI
+    if (isNaN(riseTime) && isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+        rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
+    }
+    if (isNaN(setTime) && isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+        sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
+    }
+
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourLSTForDate(riseTime, observerLon);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourLSTForDate(setTime, observerLon);
-    const rTransitAngle = angle24HourLSTForDate(dateToDateInterval(noon), observerLon);
-    const sTransitAngle = angle24HourLSTForDate(dateToDateInterval(midnight), observerLon);
 
     // Special case: numLeaves == 0
     if (numLeaves === 0) {

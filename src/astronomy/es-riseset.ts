@@ -228,6 +228,17 @@ function getPlanetRADeclDist(
 }
 
 /**
+ * Result of a rise/set time calculation.
+ * Matches iOS riseSetOrTransit output parameter pattern.
+ */
+export interface RiseSetResult {
+    /** The rise or set event time (dateInterval), or ALWAYS_ABOVE/BELOW_HORIZON sentinel. */
+    riseSetTime: number;
+    /** Associated transit/reference time — used by nextPrevRiseSetInternal for direction validation. */
+    transitTime: number;
+}
+
+/**
  * Iterative rise/set computation for Sun or Moon.
  * Follows the full algorithm from ESAstronomy.cpp:planetaryRiseSetTimeRefined.
  *
@@ -238,8 +249,9 @@ function getPlanetRADeclDist(
  * @param planetNumber - ECPlanetNumber
  * @param overrideAltitudeDesired - Override the default altitude at rise/set (NaN for default)
  * @param cachePool - AstroCachePool for computation
- * @returns Date interval of the rise/set event, or ALWAYS_ABOVE_HORIZON/ALWAYS_BELOW_HORIZON
+ * @returns RiseSetResult with the event time and associated transit time
  */
+
 export function planetaryRiseSetTimeRefined(
     calculationDateInterval: number,
     observerLatitude: number,
@@ -248,7 +260,7 @@ export function planetaryRiseSetTimeRefined(
     planetNumber: number,
     overrideAltitudeDesired: number,
     cachePool: AstroCachePool,
-): number {
+): RiseSetResult {
     let tryDate = calculationDateInterval;
     let precision: ECWBPrecision = planetNumber === ECPlanetNumber.Moon
         ? ECWBPrecision.Low : ECWBPrecision.Full;
@@ -257,6 +269,9 @@ export function planetaryRiseSetTimeRefined(
     const tryDates: number[] = new Array(numIterations + 11);
     const results: number[] = new Array(numIterations + 11);
     let fitTries = 0;
+    let lastValidResultDate = NaN;
+    let lastDelta = 0;
+    const firstTransit = tryDate;  // iOS: firstTransit = tryDate
 
     for (let i = 0; i < numIterations; i++) {
         // Upgrade Moon precision near the end
@@ -290,16 +305,20 @@ export function planetaryRiseSetTimeRefined(
         popECAstroCacheToInPool(cachePool, priorCache);
 
         if (isNoRiseSet(newDate)) {
-            // No rise/set at this time — the object is always above or below
-            // For simplicity, return the sentinel
-            return newDate;
+            // No rise/set at this time — the object is always above or below.
+            // iOS: *riseSetOrTransit = transitT (or tryDate if no transit computed)
+            return { riseSetTime: newDate, transitTime: tryDate };
         }
 
-        if (Math.abs(newDate - tryDate) < 0.1) {
+        lastValidResultDate = newDate;
+        lastDelta = newDate - tryDate;
+
+        if (Math.abs(lastDelta) < 0.1) {
             if (planetNumber === ECPlanetNumber.Moon && precision !== ECWBPrecision.Full) {
                 precision = ECWBPrecision.Full;
             } else {
-                return newDate;
+                // Converged: iOS sets *riseSetOrTransit = lastValidResultDate
+                return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
             }
         }
 
@@ -309,7 +328,15 @@ export function planetaryRiseSetTimeRefined(
         tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
     }
 
-    return tryDate;
+    // Did not converge — match iOS fallback logic (lines 1699-1711)
+    if (isNaN(lastValidResultDate)) {
+        return { riseSetTime: lastValidResultDate, transitTime: tryDate };
+    } else if (Math.abs(lastDelta) > 60) {
+        // Still futzing around — return firstNan with firstTransit
+        return { riseSetTime: NaN, transitTime: firstTransit };
+    } else {
+        return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
+    }
 }
 
 /**
@@ -396,16 +423,16 @@ export function sunriseForDay(
     const midnight = priorUTMidnightForDateInterval(dateInterval, cachePool.currentCache);
     const noon = midnight + 12 * 3600;
 
-    const result = planetaryRiseSetTimeRefined(
+    const { riseSetTime } = planetaryRiseSetTimeRefined(
         noon, observerLatitude, observerLongitude,
         true, ECPlanetNumber.Sun, NaN, cachePool,
     );
 
     if (cachePool.currentCache) {
-        cachePool.currentCache.set(CacheSlot.sunriseForDay, result);
+        cachePool.currentCache.set(CacheSlot.sunriseForDay, riseSetTime);
     }
 
-    return result;
+    return riseSetTime;
 }
 
 /**
@@ -424,16 +451,16 @@ export function sunsetForDay(
     const midnight = priorUTMidnightForDateInterval(dateInterval, cachePool.currentCache);
     const noon = midnight + 12 * 3600;
 
-    const result = planetaryRiseSetTimeRefined(
+    const { riseSetTime } = planetaryRiseSetTimeRefined(
         noon, observerLatitude, observerLongitude,
         false, ECPlanetNumber.Sun, NaN, cachePool,
     );
 
     if (cachePool.currentCache) {
-        cachePool.currentCache.set(CacheSlot.sunsetForDay, result);
+        cachePool.currentCache.set(CacheSlot.sunsetForDay, riseSetTime);
     }
 
-    return result;
+    return riseSetTime;
 }
 
 /**
@@ -486,7 +513,7 @@ export function sunAltitudeTimeForDay(
     return planetaryRiseSetTimeRefined(
         noon, observerLatitude, observerLongitude,
         riseNotSet, ECPlanetNumber.Sun, altitudeDesired, cachePool,
-    );
+    ).riseSetTime;
 }
 
 /** Civil twilight start (morning). */

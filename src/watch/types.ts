@@ -384,7 +384,9 @@ export interface QDayNightRingPart extends PartBase {
     // --- Render-level cache (not from XML) ---
     /** Cached wedge angles from last computation; avoids per-frame astronomy calls. */
     _cachedAngles?: number[];
-    /** performance.now() when the cached angles expire and must be recomputed. */
+    /** Display-time (ms since epoch) when the cached angles were computed. */
+    _cacheStart?: number;
+    /** Display-time (ms since epoch) when the cached angles expire. */
     _cacheNextUpdate?: number;
 }
 
