@@ -84,7 +84,7 @@ export function makeAnimatingValue(initial: number, now: number): AnimatingValue
 /** Per-part state tracked by the animation system. */
 export interface HandState {
     /** Reference to the XML part definition. */
-    part: QHandPart | WheelPart | QWedgePart;
+    part: QHandPart | WheelPart | QWedgePart | CalendarRowCoverPart;
     /** The angle being animated. */
     angle: AnimatingValue;
     /** The offsetAngle being animated (only for offset-orbit hands like Moon). */
@@ -356,7 +356,7 @@ export function tickAnimations(
         // and freeze (nextUpdateTime=Infinity → never) direction-agnostically.
         // The display-time boundary is used to COMPUTE nextUpdateTime, not as the gate.
         if (now >= state.nextUpdateTime) {
-            const newTarget = state.part.angle
+            const newTarget = ('angle' in state.part && state.part.angle)
                 ? evalAttr(state.part.angle, env)
                 : 0;
 

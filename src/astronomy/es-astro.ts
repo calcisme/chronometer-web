@@ -859,7 +859,6 @@ export function closestPhaseDayNumber(
 // Planetary ecliptic coordinates (for ELatitudeOfPlanet, ELongitudeOfPlanet, etc.)
 // ============================================================================
 
-import { WB_planetApparentPosition } from './willmann-bell';
 
 /**
  * Get geocentric apparent ecliptic longitude of a planet (radians).

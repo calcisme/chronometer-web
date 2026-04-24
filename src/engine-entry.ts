@@ -496,7 +496,7 @@ async function main() {
             }
             overrides[1] = {
                 cityName: observerName || 'Observer',
-                olsonId: locationTimezone,
+                olsonId: locationTimezone || '',
                 lat, lon,
             };
             // Slots 2–N: URL overrides or defaults
@@ -1317,7 +1317,7 @@ async function main() {
                 }
                 face.terraSlotOverrides[1] = {
                     cityName: obsName || 'Observer',
-                    olsonId: locationTimezone,
+                    olsonId: locationTimezone || '',
                     lat: newLat, lon: newLon,
                 };
             }
@@ -2565,8 +2565,8 @@ async function main() {
                 for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
                     slots[Number(k)] = { ...v };
                 }
-                if (terraFace.terraSlotOverrides) {
-                    for (const [k, v] of Object.entries(terraFace.terraSlotOverrides)) {
+                if (terraFace!.terraSlotOverrides) {
+                    for (const [k, v] of Object.entries(terraFace!.terraSlotOverrides)) {
                         slots[Number(k)] = { ...v };
                     }
                 }
@@ -2582,8 +2582,8 @@ async function main() {
                     params.delete(`r${slot}lat`);
                     params.delete(`r${slot}lon`);
                 }
-                if (terraFace.terraSlotOverrides) {
-                    for (const [slotStr, data] of Object.entries(terraFace.terraSlotOverrides)) {
+                if (terraFace!.terraSlotOverrides) {
+                    for (const [slotStr, data] of Object.entries(terraFace!.terraSlotOverrides)) {
                         params.set(`r${slotStr}`, data.cityName);
                         params.set(`r${slotStr}tz`, data.olsonId);
                         params.set(`r${slotStr}lat`, data.lat.toFixed(3));
@@ -2602,10 +2602,10 @@ async function main() {
             function rebuildTerraForSlotChange() {
                 // Re-run buildSlotOverrides to re-inject the global location
                 // override on top of whatever the user just changed.
-                const slotResult = buildSlotOverrides(terraFace.watch);
+                const slotResult = buildSlotOverrides(terraFace!.watch);
                 if (slotResult) {
-                    terraFace.terraSlotOverrides = slotResult.overrides;
-                    terraFace.globalLocationSlot = slotResult.globalLocationSlot;
+                    terraFace!.terraSlotOverrides = slotResult.overrides;
+                    terraFace!.globalLocationSlot = slotResult.globalLocationSlot;
                 }
                 for (const face of faces) {
                     if (!face.enabled) continue;
@@ -2631,11 +2631,11 @@ async function main() {
                 const currentSlots = getCurrentSlots();
                 const previousCity = currentSlots[slot]?.cityName || 'Unknown';
                 // Check if this is the global-location slot BEFORE rebuild changes it
-                const isGlobalSlot = slot === terraFace.globalLocationSlot;
-                if (!terraFace.terraSlotOverrides) {
-                    terraFace.terraSlotOverrides = {};
+                const isGlobalSlot = slot === terraFace!.globalLocationSlot;
+                if (!terraFace!.terraSlotOverrides) {
+                    terraFace!.terraSlotOverrides = {};
                 }
-                terraFace.terraSlotOverrides[slot] = {
+                terraFace!.terraSlotOverrides[slot] = {
                     cityName: city.shortLabel,
                     olsonId: city.timezone,
                     lat: city.lat,
@@ -2708,7 +2708,7 @@ async function main() {
                 });
                 confirmYes.addEventListener('click', () => {
                     confirmOverlay.style.display = 'none';
-                    terraFace.terraSlotOverrides = undefined;
+                    terraFace!.terraSlotOverrides = undefined;
                     writeTerraOverridesToUrl();
                     rebuildTerraForSlotChange();
                     showTcMessage('All cities reset to defaults', 'info');
@@ -2770,7 +2770,7 @@ async function main() {
                             return;
                         }
                     }
-                    const results = searchCities(query, lat, lon);
+                    const results = searchCities(query, 20);
                     renderTcSearchResults(results);
                 } catch (err) {
                     tcCityResults!.innerHTML = `<div class="tc-city-loading">Error: ${(err as Error).message}</div>`;
@@ -2823,7 +2823,7 @@ async function main() {
 
                 if (validSlots.length === 1) {
                     // If the only valid slot is the global-location slot, warn
-                    if (validSlots[0] === terraFace.globalLocationSlot) {
+                    if (validSlots[0] === terraFace!.globalLocationSlot) {
                         showTcMessage(`Note: this slot currently shows your location`, 'warn');
                     }
                     assignCityToSlot(validSlots[0], city);
@@ -2834,7 +2834,7 @@ async function main() {
                     const currentSlots = getCurrentSlots();
                     for (const slot of validSlots) {
                         const currentCity = currentSlots[slot]?.cityName || 'Unknown';
-                        const isGlobalSlot = slot === terraFace.globalLocationSlot;
+                        const isGlobalSlot = slot === terraFace!.globalLocationSlot;
                         const btn = document.createElement('button');
                         btn.className = 'tc-slot-btn';
                         const label = isGlobalSlot ? `${currentCity} ★` : currentCity;
@@ -2893,15 +2893,15 @@ async function main() {
             /** Write Gaia subdial overrides to URL */
             function writeGaiaOverridesToUrl() {
                 const params = new URLSearchParams(window.location.search);
-                const nSubdials = gaiaFace.watch.maxSeparateLoc || 4;
+                const nSubdials = gaiaFace!.watch.maxSeparateLoc || 4;
                 for (let slot = 2; slot <= nSubdials; slot++) {
                     params.delete(`d${slot}`);
                     params.delete(`d${slot}tz`);
                     params.delete(`d${slot}lat`);
                     params.delete(`d${slot}lon`);
                 }
-                if (gaiaFace.terraSlotOverrides) {
-                    for (const [slotStr, data] of Object.entries(gaiaFace.terraSlotOverrides)) {
+                if (gaiaFace!.terraSlotOverrides) {
+                    for (const [slotStr, data] of Object.entries(gaiaFace!.terraSlotOverrides)) {
                         const s = Number(slotStr);
                         if (s < 2) continue; // don't write observer slot
                         params.set(`d${slotStr}`, data.cityName);
@@ -2939,11 +2939,11 @@ async function main() {
             }
 
             function assignCityToGaiaSlot(slot: number, city: CityResult) {
-                const previousCity = gaiaFace.terraSlotOverrides?.[slot]?.cityName || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || 'Unknown';
-                if (!gaiaFace.terraSlotOverrides) {
-                    gaiaFace.terraSlotOverrides = {};
+                const previousCity = gaiaFace!.terraSlotOverrides?.[slot]?.cityName || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || 'Unknown';
+                if (!gaiaFace!.terraSlotOverrides) {
+                    gaiaFace!.terraSlotOverrides = {};
                 }
-                gaiaFace.terraSlotOverrides[slot] = {
+                gaiaFace!.terraSlotOverrides[slot] = {
                     cityName: city.shortLabel,
                     olsonId: city.timezone,
                     lat: city.lat,
@@ -3081,7 +3081,7 @@ async function main() {
                             return;
                         }
                     }
-                    const results = searchCities(query, lat, lon);
+                    const results = searchCities(query, 20);
                     renderGaiaSearchResults(results);
                 } catch (err) {
                     tcCityResults!.innerHTML = `<div class="tc-city-loading">Error: ${(err as Error).message}</div>`;
@@ -3130,9 +3130,9 @@ async function main() {
                 const slotLabel = tcSlotPicker!.querySelector('.tc-slot-label');
                 if (slotLabel) slotLabel.textContent = 'Which subdial should this city replace?';
 
-                const nSubdials = gaiaFace.watch.maxSeparateLoc || 4;
+                const nSubdials = gaiaFace!.watch.maxSeparateLoc || 4;
                 for (let slot = 2; slot <= nSubdials; slot++) {
-                    const currentCity = gaiaFace.terraSlotOverrides?.[slot]?.cityName
+                    const currentCity = gaiaFace!.terraSlotOverrides?.[slot]?.cityName
                         || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || 'Unknown';
                     const btn = document.createElement('button');
                     btn.className = 'tc-slot-btn';
