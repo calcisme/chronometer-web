@@ -471,6 +471,8 @@ Colored wedges showing daylight hours on a 24-hour dial. Computes sunrise/sunset
 | `timeBase` | string | `'LST'` for Local Sidereal Time; omitted for local time |
 | `envSlot` | expr | Environment slot number (routes astronomy to that slot's location) |
 
+Wedge angles are cached in a **bidirectional display-time window** (`[_cacheStart, _cacheNextUpdate]`) keyed on `env.getNow()`. The cache expires when display time moves past either bound — forward (normal play) or backward (reverse animation/scrubbing). The cache is also force-invalidated via `invalidateDayNightCaches()` on environment changes.
+
 ---
 
 ## `<terminator>` — Moon Phase Display

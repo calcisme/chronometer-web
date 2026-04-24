@@ -55,7 +55,7 @@ Controls **how often** a hand's angle expression is re-evaluated:
 | `update="1 * days()"` | Once per day (date/month/weekday wheels) |
 | No `update` | Defaults to `1/beatsPerSecond` |
 
-Updates fire on **exact clock boundaries** (epoch-aligned), not relative to page load.
+Updates fire on **local-time-aligned clock boundaries**, not relative to page load. The alignment formula shifts by the watch's timezone offset (iOS: `ECDynamicUpdate.m` line 192), so a daily update (`1 * days()`) fires at **local midnight**, not UTC midnight.
 
 **Sentinel-based scheduling**: Named sentinel values (e.g., `updateAtNextSunriseOrMidnight`) compute the true next astronomical event time (sunrise, sunset, moonrise, moonset) in display time and schedule the part to re-evaluate at that boundary. The `OrMidnight` variants clamp the event time to the next local midnight, so the part updates at whichever comes first. This works correctly in forward, backward (-1×), and quantized (scrubbing) modes. See `computeNextBoundary()` and `resolveSentinel()` in `animation.ts`.
 
@@ -92,7 +92,7 @@ val.currentValue = newTarget - delta;  // unwrap so animation goes shortest path
 ### 1× Mode (Normal / Real Time) and -1× Mode (Reverse)
 
 - `tickIntervalMs = null`
-- Expressions re-evaluate at epoch-aligned boundaries
+- Expressions re-evaluate at local-time-aligned boundaries
 - Animations use natural speed (`kECGLAngleAnimationSpeed × animSpeed`)
 - No compression logic
 - Both directions use the same idle-timeout scheduler; `nextAlignedUpdate()` is direction-aware, using `Math.ceil` (forward) or `Math.floor` (backward) to find the next boundary in the direction time is flowing

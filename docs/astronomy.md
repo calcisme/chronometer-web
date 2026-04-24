@@ -89,6 +89,21 @@ if (isNaN(U)) return null;
 
 See [Development Rules §2](development-rules.md#2-never-simplify-ios-algorithms). The astronomical calculations contain steps that look algebraically reducible but handle numerical stability at extreme date ranges.
 
+### Rise/Set Two-Step Search (`nextPrevRiseSetInternal`)
+
+Finding the next/previous rise or set event uses the iOS `nextPrevRiseSetInternalWithFudgeInterval` algorithm (a faithful port in `watch-env.ts`):
+
+1. **Fudge**: Offset `calcDate` by a small fudge factor (5 seconds) in the search direction
+2. **First try**: Call `planetaryRiseSetTimeRefined(fudgeDate, ...)` which returns both `riseSetTime` and `transitTime`
+3. **Transit validation**: Check if `transitTime` is in the correct temporal direction (iOS lines 2335-2337). This catches cases where the solver converges on an event in the wrong direction
+4. **Retry**: If transit validation fails, retry from `fudgeDate ± 13.2 hours` (the lookahead)
+
+The `planetaryRiseSetTimeRefined` function returns a `RiseSetResult` with both `riseSetTime` and `transitTime` fields, matching the iOS `riseSetOrTransit` output parameter pattern.
+
+### `planetIsUp` Check
+
+Determining whether a planet is currently above the horizon must use the same altitude threshold as the rise/set algorithm. iOS (`ECAstronomy.m` line 3427-3430) compares the planet's altitude against `altitudeAtRiseSet()` — a negative value accounting for atmospheric refraction and body semidiameter (~-0.8° to -1.0° for the Moon) — **not** against zero. Using `alt > 0` creates a several-minute gap near rise/set where the altitude check and the algorithm disagree, causing the day/night ring to briefly show tomorrow's event instead of today's.
+
 ## Key Source Files
 
 | File | Purpose |
