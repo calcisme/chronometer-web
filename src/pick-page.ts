@@ -1,0 +1,406 @@
+/**
+ * Pick Page — face selection and reordering logic.
+ *
+ * Handles:
+ *  - Rendering face thumbnails in a selectable grid
+ *  - Toggle selection with numbered badges
+ *  - Summary strip with mini-thumbnails and "Done" button
+ *  - Bottom sheet for drag-to-reorder
+ *  - URL state: reads/writes `picks` param, preserves other params
+ */
+
+// ============================================================================
+// Face registry
+// ============================================================================
+
+interface FaceInfo {
+    slug: string;
+    name: string;
+    thumb: string;
+    abbrev: string;
+}
+
+const FACES: FaceInfo[] = [
+    { slug: 'babylon',    name: 'Babylon',    thumb: 'thumb-babylon.png',    abbrev: 'bb' },
+    { slug: 'mauna-kea',  name: 'Mauna Kea',  thumb: 'thumb-mauna-kea.png',  abbrev: 'mk' },
+    { slug: 'haleakala',  name: 'Haleakalā',  thumb: 'thumb-haleakala.png',  abbrev: 'hk' },
+    { slug: 'hana',       name: 'Hana',        thumb: 'thumb-hana.png',       abbrev: 'hn' },
+    { slug: 'chandra',    name: 'Chandra',     thumb: 'thumb-chandra.png',    abbrev: 'ch' },
+    { slug: 'selene',     name: 'Selene',      thumb: 'thumb-selene.png',     abbrev: 'sl' },
+    { slug: 'geneva',     name: 'Geneva',      thumb: 'thumb-geneva.png',     abbrev: 'gn' },
+    { slug: 'basel',      name: 'Basel',       thumb: 'thumb-basel.png',      abbrev: 'bs' },
+    { slug: 'firenze',    name: 'Firenze',     thumb: 'thumb-firenze.png',    abbrev: 'fi' },
+    { slug: 'venezia',    name: 'Venezia',     thumb: 'thumb-venezia.png',    abbrev: 'vz' },
+    { slug: 'terra',      name: 'Terra',       thumb: 'thumb-terra.png',      abbrev: 'tr' },
+    { slug: 'miami',      name: 'Miami',       thumb: 'thumb-miami.png',      abbrev: 'mi' },
+    { slug: 'gaia',       name: 'Gaia',        thumb: 'thumb-gaia.png',       abbrev: 'ga' },
+];
+
+const faceByAbbrev = new Map(FACES.map(f => [f.abbrev, f]));
+
+// ============================================================================
+// State
+// ============================================================================
+
+/** Ordered list of selected face abbreviations. */
+let selectedOrder: string[] = [];
+
+// ============================================================================
+// DOM elements
+// ============================================================================
+
+const pickGrid = document.getElementById('pick-grid')!;
+const summaryThumbs = document.getElementById('summary-thumbs')!;
+const summaryCount = document.getElementById('summary-count')!;
+const doneBtn = document.getElementById('done-btn') as HTMLButtonElement;
+const summaryExpand = document.getElementById('summary-expand')!;
+const sheetBackdrop = document.getElementById('sheet-backdrop')!;
+const sheetPanel = document.getElementById('sheet-panel')!;
+const sheetList = document.getElementById('sheet-list')!;
+const sheetClose = document.getElementById('sheet-close')!;
+const sheetDone = document.getElementById('sheet-done')!;
+const homeLink = document.getElementById('pick-home-link') as HTMLAnchorElement;
+
+// ============================================================================
+// URL helpers
+// ============================================================================
+
+/** Parse picks from the URL `picks` param (concatenated 2-letter codes). */
+function readPicksFromUrl(): string[] {
+    const param = new URLSearchParams(window.location.search).get('picks');
+    if (!param || param.length < 2) return [];
+    const result: string[] = [];
+    for (let i = 0; i + 1 < param.length; i += 2) {
+        const abbrev = param.substring(i, i + 2);
+        if (faceByAbbrev.has(abbrev)) {
+            result.push(abbrev);
+        }
+    }
+    return result;
+}
+
+/** Build a URL preserving all current params but setting `picks`. */
+function buildDoneUrl(): string {
+    const params = new URLSearchParams(window.location.search);
+    if (selectedOrder.length > 0) {
+        params.set('picks', selectedOrder.join(''));
+    } else {
+        params.delete('picks');
+    }
+    const qs = params.toString();
+    return 'selected.html' + (qs ? '?' + qs : '');
+}
+
+/** Update the home link to preserve query params. */
+function updateHomeLink(): void {
+    const url = new URL('index.html', window.location.href);
+    url.search = window.location.search;
+    homeLink.href = url.toString();
+}
+
+// ============================================================================
+// Grid rendering
+// ============================================================================
+
+/** Map of abbrev → card element for quick updates. */
+const cardElements = new Map<string, HTMLElement>();
+
+function buildGrid(): void {
+    pickGrid.innerHTML = '';
+    for (const face of FACES) {
+        const card = document.createElement('div');
+        card.className = 'pick-card';
+        card.dataset.abbrev = face.abbrev;
+
+        const img = document.createElement('img');
+        img.className = 'pick-thumb';
+        img.src = face.thumb;
+        img.alt = face.name;
+        img.loading = 'lazy';
+
+        const badge = document.createElement('span');
+        badge.className = 'pick-badge';
+
+        const name = document.createElement('p');
+        name.className = 'pick-name';
+        name.textContent = face.name;
+
+        card.appendChild(img);
+        card.appendChild(badge);
+        card.appendChild(name);
+
+        card.addEventListener('click', () => toggleFace(face.abbrev));
+
+        pickGrid.appendChild(card);
+        cardElements.set(face.abbrev, card);
+    }
+}
+
+// ============================================================================
+// Selection logic
+// ============================================================================
+
+function toggleFace(abbrev: string): void {
+    const idx = selectedOrder.indexOf(abbrev);
+    if (idx >= 0) {
+        selectedOrder.splice(idx, 1);
+    } else {
+        selectedOrder.push(abbrev);
+    }
+    updateUI();
+}
+
+function removeFace(abbrev: string): void {
+    const idx = selectedOrder.indexOf(abbrev);
+    if (idx >= 0) {
+        selectedOrder.splice(idx, 1);
+        updateUI();
+        renderSheet();
+    }
+}
+
+// ============================================================================
+// UI updates
+// ============================================================================
+
+function updateUI(): void {
+    // Update grid cards
+    for (const [abbrev, card] of cardElements) {
+        const idx = selectedOrder.indexOf(abbrev);
+        if (idx >= 0) {
+            card.classList.add('selected');
+            const badge = card.querySelector('.pick-badge') as HTMLElement;
+            badge.textContent = String(idx + 1);
+        } else {
+            card.classList.remove('selected');
+        }
+    }
+
+    // Update summary strip
+    summaryThumbs.innerHTML = '';
+    for (const abbrev of selectedOrder) {
+        const face = faceByAbbrev.get(abbrev);
+        if (face) {
+            const img = document.createElement('img');
+            img.src = face.thumb;
+            img.alt = face.name;
+            summaryThumbs.appendChild(img);
+        }
+    }
+
+    const count = selectedOrder.length;
+    summaryCount.textContent = count === 0 ? 'Tap faces to select' : `${count} selected`;
+    doneBtn.disabled = count === 0;
+}
+
+// ============================================================================
+// Bottom sheet
+// ============================================================================
+
+function openSheet(): void {
+    if (selectedOrder.length === 0) return;
+    renderSheet();
+    sheetBackdrop.classList.add('visible');
+    requestAnimationFrame(() => {
+        sheetPanel.classList.add('visible');
+    });
+}
+
+function closeSheet(): void {
+    sheetPanel.classList.remove('visible');
+    setTimeout(() => {
+        sheetBackdrop.classList.remove('visible');
+    }, 300);
+}
+
+function renderSheet(): void {
+    sheetList.innerHTML = '';
+    for (const abbrev of selectedOrder) {
+        const face = faceByAbbrev.get(abbrev);
+        if (!face) continue;
+
+        const item = document.createElement('div');
+        item.className = 'sheet-item';
+        item.dataset.abbrev = abbrev;
+
+        const img = document.createElement('img');
+        img.src = face.thumb;
+        img.alt = face.name;
+
+        const name = document.createElement('span');
+        name.className = 'sheet-name';
+        name.textContent = face.name;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'sheet-remove';
+        removeBtn.textContent = '✕';
+        removeBtn.title = 'Remove';
+        removeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeFace(abbrev);
+        });
+
+        const handle = document.createElement('span');
+        handle.className = 'sheet-handle';
+        handle.textContent = '≡';
+        handle.title = 'Drag to reorder';
+
+        item.appendChild(img);
+        item.appendChild(name);
+        item.appendChild(removeBtn);
+        item.appendChild(handle);
+
+        sheetList.appendChild(item);
+    }
+
+    setupDragReorder();
+}
+
+// ============================================================================
+// Drag-to-reorder
+// ============================================================================
+
+function setupDragReorder(): void {
+    const handles = sheetList.querySelectorAll('.sheet-handle');
+    handles.forEach(handle => {
+        handle.addEventListener('touchstart', onDragStart as EventListener, { passive: false });
+        handle.addEventListener('mousedown', onDragStart as EventListener);
+    });
+}
+
+let dragItem: HTMLElement | null = null;
+let dragStartY = 0;
+let dragOffsetY = 0;
+let dragInitialIndex = -1;
+
+function getItemIndex(item: HTMLElement): number {
+    const items = Array.from(sheetList.querySelectorAll('.sheet-item'));
+    return items.indexOf(item);
+}
+
+function onDragStart(e: MouseEvent | TouchEvent): void {
+    e.preventDefault();
+    const handle = (e.target as HTMLElement).closest('.sheet-handle');
+    if (!handle) return;
+
+    dragItem = handle.closest('.sheet-item') as HTMLElement;
+    if (!dragItem) return;
+
+    dragItem.classList.add('dragging');
+    dragInitialIndex = getItemIndex(dragItem);
+
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const rect = dragItem.getBoundingClientRect();
+    dragStartY = clientY;
+    dragOffsetY = clientY - rect.top;
+
+    document.addEventListener('touchmove', onDragMove as EventListener, { passive: false });
+    document.addEventListener('mousemove', onDragMove as EventListener);
+    document.addEventListener('touchend', onDragEnd as EventListener);
+    document.addEventListener('mouseup', onDragEnd as EventListener);
+}
+
+function onDragMove(e: MouseEvent | TouchEvent): void {
+    if (!dragItem) return;
+    e.preventDefault();
+
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const items = Array.from(sheetList.querySelectorAll('.sheet-item')) as HTMLElement[];
+    const currentIndex = items.indexOf(dragItem);
+
+    // Check if we need to swap with neighboring items
+    for (let i = 0; i < items.length; i++) {
+        if (i === currentIndex) continue;
+        const rect = items[i].getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+
+        if (i < currentIndex && clientY < midY) {
+            // Move up
+            sheetList.insertBefore(dragItem, items[i]);
+            syncOrderFromSheet();
+            break;
+        } else if (i > currentIndex && clientY > midY) {
+            // Move down
+            if (items[i].nextSibling) {
+                sheetList.insertBefore(dragItem, items[i].nextSibling);
+            } else {
+                sheetList.appendChild(dragItem);
+            }
+            syncOrderFromSheet();
+            break;
+        }
+    }
+}
+
+function onDragEnd(): void {
+    if (dragItem) {
+        dragItem.classList.remove('dragging');
+        dragItem = null;
+    }
+
+    document.removeEventListener('touchmove', onDragMove as EventListener);
+    document.removeEventListener('mousemove', onDragMove as EventListener);
+    document.removeEventListener('touchend', onDragEnd as EventListener);
+    document.removeEventListener('mouseup', onDragEnd as EventListener);
+
+    syncOrderFromSheet();
+    updateUI();
+}
+
+/** Sync selectedOrder from the current DOM order of sheet items. */
+function syncOrderFromSheet(): void {
+    const items = sheetList.querySelectorAll('.sheet-item');
+    selectedOrder = Array.from(items)
+        .map(item => (item as HTMLElement).dataset.abbrev!)
+        .filter(abbrev => abbrev != null);
+}
+
+// ============================================================================
+// Event handlers
+// ============================================================================
+
+summaryExpand.addEventListener('click', openSheet);
+
+// Also open sheet by clicking anywhere on the summary strip except Done button
+document.getElementById('summary-strip')!.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.id === 'done-btn' || target.closest('#done-btn')) return;
+    if (target.id === 'summary-expand' || target.closest('#summary-expand')) return;
+    if (selectedOrder.length > 0) openSheet();
+});
+
+sheetClose.addEventListener('click', closeSheet);
+sheetBackdrop.addEventListener('click', closeSheet);
+
+sheetDone.addEventListener('click', () => {
+    closeSheet();
+    navigateDone();
+});
+
+doneBtn.addEventListener('click', navigateDone);
+
+function navigateDone(): void {
+    if (selectedOrder.length === 0) return;
+    window.location.href = buildDoneUrl();
+}
+
+// Close sheet with Escape key
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && sheetPanel.classList.contains('visible')) {
+        closeSheet();
+    }
+});
+
+// ============================================================================
+// Init
+// ============================================================================
+
+(function init() {
+    // Restore from URL
+    selectedOrder = readPicksFromUrl();
+
+    // Build grid and update UI
+    buildGrid();
+    updateUI();
+    updateHomeLink();
+})();

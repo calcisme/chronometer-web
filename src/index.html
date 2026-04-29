@@ -195,6 +195,18 @@
             color: #ccf;
         }
 
+        .pick-icon-thumb {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(145deg, #2a2a48 0%, #1e1e36 100%);
+        }
+
+        .pick-icon-svg {
+            width: 80px;
+            height: 80px;
+        }
+
         /* {{LOCATION_CSS}} */
     </style>
 </head>
@@ -219,6 +231,19 @@
             <img class="thumb thumb-square" src="thumb-all-faces.png" alt="All Faces">
             <h2>All Faces</h2>
             <p class="desc">View all watch faces together</p>
+        </a>
+
+        <a class="face-card" id="pick-card" href="pick.html">
+            <div class="thumb thumb-square pick-icon-thumb">
+                <svg viewBox="0 0 24 24" class="pick-icon-svg">
+                    <circle cx="7" cy="7" r="2.8" fill="#5ca0d3"/>
+                    <circle cx="17" cy="7" r="2.8" fill="#5ca0d3"/>
+                    <circle cx="7" cy="17" r="2.8" fill="#5ca0d3"/>
+                    <circle cx="17" cy="17" r="2.8" fill="#5ca0d3"/>
+                </svg>
+            </div>
+            <h2 id="pick-card-title">Pick Faces</h2>
+            <p class="desc" id="pick-card-desc">Choose and order your favorite faces</p>
         </a>
 
         <a class="face-card" href="babylon.html">

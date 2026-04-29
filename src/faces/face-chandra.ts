@@ -10,6 +10,7 @@ import blueStarUrl from '../watch/assets/chandra/blueStar.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Chandra',
+    urlAbbrev: 'ch',
     xml,
     images: {
         '../partsBin/moonES.png':     { dataUrl: moonESUrl, scale: 0.25 },

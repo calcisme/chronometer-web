@@ -12,6 +12,7 @@ import moonUrl from '../watch/assets/mauna-kea/moon25-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Mauna Kea',
+    urlAbbrev: 'mk',
     xml,
     images: {
         'astro-face.png':    { dataUrl: faceUrl, scale: 0.25 },

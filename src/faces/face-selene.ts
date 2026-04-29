@@ -12,6 +12,7 @@ import phaseFUrl from '../watch/assets/selene/phaseF.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Selene',
+    urlAbbrev: 'sl',
     xml,
     images: {
         'face-white-trim.png':       { dataUrl: seleneFaceUrl, scale: 0.25 },

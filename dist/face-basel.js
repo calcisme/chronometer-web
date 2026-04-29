@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Basel I' beatsPerSecond='10' faceWidth='275' statusBarLoc='bottom' bezelColor='rgb(200,195,180)'>
+<watch name='Basel I' urlAbbrev='bs' beatsPerSecond='10' faceWidth='275' statusBarLoc='bottom' bezelColor='rgb(200,195,180)'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='64' backHeight='64' nightWidth='1024' nightHeight='512'/>
   <init expr='faceWidth=275, backerWidth=faceWidth' />
 
@@ -211,6 +211,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Basel",
+    urlAbbrev: "bs",
     xml: Basel_I_default,
     images: {
       "faceBack.png": { dataUrl: faceBack_4x_default, scale: 0.25 },

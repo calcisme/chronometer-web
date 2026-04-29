@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Mauna Kea I' beatsPerSecond='10' faceWidth='266' statusBarLoc='bottom' bezelColor='rgb(185,170,138)' bezelNoonMark='true'>
+<watch name='Mauna Kea I' urlAbbrev='mk' beatsPerSecond='10' faceWidth='266' statusBarLoc='bottom' bezelColor='rgb(185,170,138)' bezelNoonMark='true'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='128' nightWidth='1024' nightHeight='512'/>
   <init expr='faceWidth=268, backerWidth=faceWidth' />
 
@@ -116,6 +116,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Mauna Kea",
+    urlAbbrev: "mk",
     xml: MaunaKea_I_default,
     images: {
       "astro-face.png": { dataUrl: astro_face_4x_default, scale: 0.25 },

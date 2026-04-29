@@ -14,7 +14,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Firenze I' beatsPerSecond='0' faceWidth='285' statusBarLoc='bottom' bezelColor='rgb(160,160,160)'>
+<watch name='Firenze I' urlAbbrev='fi' beatsPerSecond='0' faceWidth='285' statusBarLoc='bottom' bezelColor='rgb(160,160,160)'>
   <atlas frontWidth='512' frontHeight='512' backWidth='32' backHeight='128' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=285, backerWidth=faceWidth' />
 
@@ -116,6 +116,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Firenze",
+    urlAbbrev: "fi",
     xml: Firenze_I_default,
     images: {
       "face.png": { dataUrl: face_4x_default, scale: 0.25 },

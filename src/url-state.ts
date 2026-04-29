@@ -5,15 +5,16 @@
  * where localStorage may be unavailable.
  *
  * Parameters:
- *   lat  - Observer latitude (degrees, negative = south)
- *   lon  - Observer longitude (degrees, negative = west)
- *   city - City/location label (URL-encoded, e.g. "San Francisco")
- *   bloc - Browser location: 1 = ask browser for location on startup
- *   tc   - Time controller popover visible (1 = shown, absent = hidden)
- *   t    - Display time as Unix ms (absent = real time)
- *   off  - Millisecond offset from real time (used for 1× forward with offset)
- *   dir  - Time direction: 1=forward, -1=reverse, 0=stopped (absent = 1)
- *   tz   - IANA timezone for the location (e.g. "America/Los_Angeles")
+ *   lat   - Observer latitude (degrees, negative = south)
+ *   lon   - Observer longitude (degrees, negative = west)
+ *   city  - City/location label (URL-encoded, e.g. "San Francisco")
+ *   bloc  - Browser location: 1 = ask browser for location on startup
+ *   tc    - Time controller popover visible (1 = shown, absent = hidden)
+ *   t     - Display time as Unix ms (absent = real time)
+ *   off   - Millisecond offset from real time (used for 1× forward with offset)
+ *   dir   - Time direction: 1=forward, -1=reverse, 0=stopped (absent = 1)
+ *   tz    - IANA timezone for the location (e.g. "America/Los_Angeles")
+ *   picks - Compact face selection: concatenated 2-letter abbreviations (e.g. "bbmktr")
  */
 
 export interface UrlState {
@@ -26,6 +27,8 @@ export interface UrlState {
     off: number | null;
     dir: 1 | -1 | 0;
     tz: string | null;
+    /** Compact face selection string — concatenated 2-letter abbreviations. */
+    picks: string | null;
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -58,6 +61,7 @@ export function readUrlState(): UrlState {
         off: offStr !== null ? parseInt(offStr, 10) : null,
         dir,
         tz: params.get('tz') || null,
+        picks: params.get('picks') || null,
     };
 }
 
@@ -174,6 +178,24 @@ export function updateNavigationLinks(): void {
         url.search = search;
         allFacesLink.href = url.toString();
     }
+    // Update selected-faces-link (2×2 icon → selected.html or pick.html)
+    const selectedLink = document.getElementById('selected-faces-link') as HTMLAnchorElement | null;
+    if (selectedLink) {
+        const params = new URLSearchParams(search);
+        const hasPicks = !!params.get('picks');
+        const baseHref = hasPicks ? 'selected.html' : 'pick.html';
+        const url = new URL(baseHref, window.location.href);
+        url.search = search;
+        selectedLink.href = url.toString();
+        selectedLink.title = hasPicks ? 'Selected Faces' : 'Pick Faces';
+    }
+    // Update edit-picks-link (shown on selected.html → pick.html)
+    const editPicksLink = document.getElementById('edit-picks-link') as HTMLAnchorElement | null;
+    if (editPicksLink) {
+        const url = new URL('pick.html', window.location.href);
+        url.search = search;
+        editPicksLink.href = url.toString();
+    }
     // Update face-card links (index page)
     document.querySelectorAll('a.face-card').forEach((a) => {
         const anchor = a as HTMLAnchorElement;
@@ -197,6 +219,8 @@ export function initNavigationLinks(): void {
     if (allFacesLink && !allFacesLink.hasAttribute('data-base-href')) {
         allFacesLink.setAttribute('data-base-href', allFacesLink.getAttribute('href') || 'all.html');
     }
+    // selected-faces-link destination is computed dynamically based on picks param,
+    // so no data-base-href is needed — it's set in updateNavigationLinks().
     document.querySelectorAll('a.face-card').forEach((a) => {
         const anchor = a as HTMLAnchorElement;
         if (!anchor.hasAttribute('data-base-href')) {

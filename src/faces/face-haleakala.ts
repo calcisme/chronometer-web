@@ -10,6 +10,7 @@ import caseUrl from '../watch/assets/haleakala/case-front-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Haleakalā',
+    urlAbbrev: 'hk',
     xml,
     images: {
         'Haleakala-face.png':                                { dataUrl: faceUrl, scale: 1 },

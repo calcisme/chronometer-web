@@ -13,7 +13,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Miami I' beatsPerSecond='0' faceWidth='279' statusBarLoc='top' bezelColor='rgb(200,200,210)'>
+<watch name='Miami I' urlAbbrev='mi' beatsPerSecond='0' faceWidth='279' statusBarLoc='top' bezelColor='rgb(200,200,210)'>
   <atlas backWidth='64' backHeight='256' frontWidth='512' frontHeight='1024' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=279, backerWidth=faceWidth' />
 
@@ -177,6 +177,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Miami",
+    urlAbbrev: "mi",
     xml: Miami_I_default,
     images: {
       "face.png": { dataUrl: face_4x_default, scale: 0.25 },

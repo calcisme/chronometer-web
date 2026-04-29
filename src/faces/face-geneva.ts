@@ -11,6 +11,7 @@ import seasonsUrl from '../watch/assets/geneva/seasons-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Geneva',
+    urlAbbrev: 'gn',
     xml,
     images: {
         'faceFront.png':          { dataUrl: faceFrontUrl, scale: 0.25 },

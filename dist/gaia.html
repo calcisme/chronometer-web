@@ -902,6 +902,7 @@
 
         #back-link,
         #all-faces-link,
+        #selected-faces-link,
         #info-btn {
             position: absolute;
             top: 16px;
@@ -924,6 +925,21 @@
 
         #all-faces-link {
             left: 60px;
+        }
+
+        #selected-faces-link {
+            left: 104px;
+        }
+
+        #selected-faces-link svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        /* Accent dots in the selected-faces icon */
+        #selected-faces-link .accent-dot {
+            fill: #5ca0d3;
         }
 
         #info-btn {
@@ -954,6 +970,7 @@
 
         #back-link:hover,
         #all-faces-link:hover,
+        #selected-faces-link:hover,
         #info-btn:hover {
             background: rgba(255,255,255,0.15);
             color: #bbd;
@@ -970,6 +987,37 @@
         body.is-all-faces #all-faces-link,
         body.is-all-faces #face-name {
             display: none;
+        }
+
+        /* Hide nav elements on the selected-faces page */
+        body.is-selected-faces #selected-faces-link,
+        body.is-selected-faces #face-name {
+            display: none;
+        }
+
+        /* Edit Picks link — only visible on selected.html */
+        #edit-picks-link {
+            display: none;
+            position: absolute;
+            top: 16px;
+            left: 104px;
+            height: 36px;
+            align-items: center;
+            z-index: 10;
+            color: #5ca0d3;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            transition: color 0.2s;
+        }
+
+        #edit-picks-link:hover {
+            color: #7dc0ef;
+        }
+
+        body.is-selected-faces #edit-picks-link {
+            display: flex;
         }
 
         /* Info popup overlay */
@@ -1478,6 +1526,8 @@
     <div id="app">
         <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
         <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></a>
+        <a id="selected-faces-link" href="selected.html" title="Selected Faces"><svg viewBox="0 0 24 24"><circle class="accent-dot" cx="7" cy="7" r="2.5"/><circle class="accent-dot" cx="17" cy="7" r="2.5"/><circle class="accent-dot" cx="7" cy="17" r="2.5"/><circle class="accent-dot" cx="17" cy="17" r="2.5"/></svg></a>
+        <a id="edit-picks-link" href="pick.html" title="Edit face selection">Edit Picks</a>
         <span id="face-name">Gaia</span>
         <button id="info-btn" title="About this face">ℹ&#xFE0E;</button>
         <div id="info-overlay">

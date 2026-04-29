@@ -6,6 +6,8 @@
  */
 interface FaceData {
     name: string;
+    /** Two-letter URL abbreviation for compact picks parameter encoding. */
+    urlAbbrev: string;
     xml: string;
     images: Record<string, { dataUrl: string; scale: number }>;
 }
@@ -169,10 +171,39 @@ interface FaceInstance {
 // ============================================================================
 
 async function main() {
-    const faceDataArray = window.ChronometerFaces || [];
+    let faceDataArray = window.ChronometerFaces || [];
     if (faceDataArray.length === 0) {
         console.error('No face data registered. Include at least one face-*.js script.');
         return;
+    }
+
+    // On selected.html, filter and reorder faces by the picks parameter
+    const isSelectedPage = window.location.pathname.endsWith('selected.html');
+    if (isSelectedPage) {
+        const picksParam = new URLSearchParams(window.location.search).get('picks');
+        if (picksParam && picksParam.length >= 2) {
+            // Parse picks string into array of 2-letter abbreviations
+            const abbrevs: string[] = [];
+            for (let i = 0; i + 1 < picksParam.length; i += 2) {
+                abbrevs.push(picksParam.substring(i, i + 2));
+            }
+            // Filter and reorder faceDataArray to match picks order
+            const byAbbrev = new Map(faceDataArray.map(f => [f.urlAbbrev, f]));
+            const filtered: FaceData[] = [];
+            for (const abbrev of abbrevs) {
+                const face = byAbbrev.get(abbrev);
+                if (face) filtered.push(face);
+            }
+            if (filtered.length > 0) {
+                faceDataArray = filtered;
+            }
+        } else {
+            // No picks on selected.html — redirect to pick.html
+            const url = new URL('pick.html', window.location.href);
+            url.search = window.location.search;
+            window.location.replace(url.toString());
+            return;
+        }
     }
 
     // --- UI elements ---
@@ -581,11 +612,15 @@ async function main() {
         faces.push(face);
     }
 
-    // On multi-face pages (all.html), make each face clickable → navigate to its page
+    // On multi-face pages (all.html, selected.html), make each face clickable → navigate to its page
     const isMultiFace = faceDataArray.length > 1;
     if (isMultiFace) {
-        // Hide the all-faces grid icon on the all-faces page itself
-        document.body.classList.add('is-all-faces');
+        // Hide the appropriate nav icon depending on which multi-face page we're on
+        if (isSelectedPage) {
+            document.body.classList.add('is-selected-faces');
+        } else {
+            document.body.classList.add('is-all-faces');
+        }
         /** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */
         function faceNameToSlug(name: string): string {
             return name

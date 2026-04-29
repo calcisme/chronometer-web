@@ -64,6 +64,7 @@ export function parseWatchXML(
         numEnvironments: parseInt(attr(watchEl, 'numEnvironments') ?? '1', 10),
         maxSeparateLoc: parseInt(attr(watchEl, 'maxSeparateLoc') ?? '1', 10),
         calendarWeekStart: (attr(watchEl, 'calendarWeekStart') ?? '') === '1',
+        urlAbbrev: attr(watchEl, 'urlAbbrev') ?? '',
         initExprs: [],
         parts: [],
     };

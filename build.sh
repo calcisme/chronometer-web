@@ -17,6 +17,15 @@ COMMON_FLAGS="--format=iife --target=es2020"
 
 mkdir -p "$DIST"
 
+echo "=== Checking URL abbreviation uniqueness ==="
+ABBREVS=$(grep -roh "urlAbbrev='[^']*'" "$SRC"/watch/assets/*//*.xml | sed "s/urlAbbrev='//;s/'//" | sort)
+DUPES=$(echo "$ABBREVS" | uniq -d)
+if [ -n "$DUPES" ]; then
+  echo "ERROR: Duplicate urlAbbrev values found: $DUPES" >&2
+  exit 1
+fi
+echo "  ✓ All urlAbbrev values are unique ($(echo "$ABBREVS" | wc -l | tr -d ' ') faces)"
+
 echo "=== Building engine ==="
 $ESBUILD "$SRC/engine-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/chronometer-engine.js"
@@ -33,6 +42,11 @@ echo "=== Building index page script ==="
 $ESBUILD "$SRC/index-page.ts" --bundle $COMMON_FLAGS \
   --outfile="$DIST/index-page.js"
 echo "  → index-page.js"
+
+echo "=== Building pick page script ==="
+$ESBUILD "$SRC/pick-page.ts" --bundle $COMMON_FLAGS \
+  --outfile="$DIST/pick-page.js"
+echo "  → pick-page.js"
 
 echo "=== Generating HTML files ==="
 
@@ -137,9 +151,20 @@ sed -e "s|{{TITLE}}|All Faces|g" \
     "$SRC/face-template.html" | inject_partials > "$DIST/all.html"
 echo "  → all.html"
 
+# selected.html — loads all faces; engine filters by picks param
+sed -e "s|{{TITLE}}|Selected Faces|g" \
+    -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
+    -e "s|{{ICON}}|thumb-all-faces.png|g" \
+    "$SRC/face-template.html" | inject_partials > "$DIST/selected.html"
+echo "  → selected.html"
+
 # index.html — process with partial injection
 inject_partials < "$SRC/index.html" > "$DIST/index.html"
 echo "  → index.html"
+
+# pick.html — face picker page (simple copy, no partials needed)
+cp "$SRC/pick.html" "$DIST/pick.html"
+echo "  → pick.html"
 
 # cities-data.js — city database for location picker (if generated)
 if [ -f "$SRC/cities-data.js" ]; then

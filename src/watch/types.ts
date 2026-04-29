@@ -33,6 +33,8 @@ export interface Watch {
     maxSeparateLoc: number;
     /** True if this face uses a calendar grid (Babylon-style). */
     calendarWeekStart: boolean;
+    /** Two-letter URL abbreviation for compact picks parameter encoding. */
+    urlAbbrev: string;
     /** All `<init expr="...">` blocks in document order. */
     initExprs: ASTNode[];
     /** All parts included for the selected mode, in document order. */

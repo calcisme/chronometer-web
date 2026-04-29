@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Gaia I' worldTimeSubdials='1' bezelColor='rgb(200,180,160)' numEnvironments='5' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='278' statusBarLoc='bottom'>
+<watch name='Gaia I' urlAbbrev='ga' worldTimeSubdials='1' bezelColor='rgb(200,180,160)' numEnvironments='5' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='278' statusBarLoc='bottom'>
   <atlas frontWidth='512' frontHeight='512' backWidth='64' backHeight='128' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=278, backerWidth=faceWidth' />
 
@@ -222,6 +222,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Gaia",
+    urlAbbrev: "ga",
     xml: Gaia_I_default,
     images: {
       "face.png": { dataUrl: face_4x_default, scale: 0.25 },

@@ -12,6 +12,7 @@ import roseDial158Url from '../watch/assets/parts-bin/rose-dial158-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Gaia',
+    urlAbbrev: 'ga',
     xml,
     images: {
         'face.png':              { dataUrl: faceUrl, scale: 0.25 },

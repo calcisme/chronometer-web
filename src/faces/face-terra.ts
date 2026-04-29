@@ -10,6 +10,7 @@ import blackLogoUrl from '../watch/assets/parts-bin/logos/black-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Terra',
+    urlAbbrev: 'tr',
     xml,
     images: {
         '../partsBin/HD/rose/face.png':     { dataUrl: faceUrl, scale: 0.25 },

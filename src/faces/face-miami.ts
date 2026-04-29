@@ -14,6 +14,7 @@ import moonLabelUrl from '../watch/assets/miami/MoonLabel-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Miami',
+    urlAbbrev: 'mi',
     xml,
     images: {
         'face.png':          { dataUrl: faceUrl, scale: 0.25 },

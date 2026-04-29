@@ -23,6 +23,7 @@ import sequoiaLogoUrl from '../watch/assets/parts-bin/logos/SequoiaOnlyFrom192.p
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Venezia',
+    urlAbbrev: 'vz',
     xml,
     images: {
         '../partsBin/planets/sun36.png':     { dataUrl: sun36Url, scale: 0.25 },

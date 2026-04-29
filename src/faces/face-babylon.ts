@@ -9,6 +9,7 @@ import logoUrl from '../watch/assets/parts-bin/logos/black-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Babylon',
+    urlAbbrev: 'bb',
     xml,
     images: {
         '../partsBin/HD/rose/face.png': { dataUrl: roseFaceUrl, scale: 0.25 },

@@ -75,6 +75,21 @@ function updateLinks() {
         url.search = search;
         (a as HTMLAnchorElement).href = url.toString();
     });
+
+    // Smart pick card: show "Selected Faces" if picks exist, else "Pick Faces"
+    const pickCard = document.getElementById('pick-card') as HTMLAnchorElement | null;
+    if (pickCard) {
+        const params = new URLSearchParams(search);
+        const hasPicks = !!params.get('picks');
+        const baseHref = hasPicks ? 'selected.html' : 'pick.html';
+        const url = new URL(baseHref, window.location.href);
+        url.search = search;
+        pickCard.href = url.toString();
+        const titleEl = document.getElementById('pick-card-title');
+        const descEl = document.getElementById('pick-card-desc');
+        if (titleEl) titleEl.textContent = hasPicks ? 'Selected Faces' : 'Pick Faces';
+        if (descEl) descEl.textContent = hasPicks ? 'View your chosen faces' : 'Choose and order your favorite faces';
+    }
 }
 
 // ============================================================================

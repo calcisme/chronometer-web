@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2011. All rights reserved.
 -->
 
-<watch name='Babylon I' beatsPerSecond='1' faceWidth='276' statusBarLoc='bottom' bezelColor='rgb(180,160,140)' calendarWeekStart='1'>
+<watch name='Babylon I' urlAbbrev='bb' beatsPerSecond='1' faceWidth='276' statusBarLoc='bottom' bezelColor='rgb(180,160,140)' calendarWeekStart='1'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='256' nightWidth='1024' nightHeight='1024'/>
   <init expr='faceWidth=276, backerWidth=faceWidth' />
 
@@ -153,6 +153,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Babylon",
+    urlAbbrev: "bb",
     xml: Babylon_I_default,
     images: {
       "../partsBin/HD/rose/face.png": { dataUrl: rose_face_4x_default, scale: 0.25 },

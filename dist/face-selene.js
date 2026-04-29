@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Selene I' beatsPerSecond='0' faceWidth='274' bezelColor='#c0c0c0' statusBarLoc='bottom'>
+<watch name='Selene I' urlAbbrev='sl' beatsPerSecond='0' faceWidth='274' bezelColor='#c0c0c0' statusBarLoc='bottom'>
   <atlas frontWidth='512' frontHeight='512' backWidth='64' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=274, backerWidth=faceWidth' />
 
@@ -455,6 +455,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Selene",
+    urlAbbrev: "sl",
     xml: Selene_I_default,
     images: {
       "face-white-trim.png": { dataUrl: face_white_trim_4x_default, scale: 0.25 },

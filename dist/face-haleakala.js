@@ -13,7 +13,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Haleakala I' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(218,201,162)'>
+<watch name='Haleakala I' urlAbbrev='hk' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(218,201,162)'>
   <atlas frontWidth='512' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=266, backerWidth=faceWidth' />
 
@@ -185,6 +185,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Haleakal\u0101",
+    urlAbbrev: "hk",
     xml: Haleakala_android_default,
     images: {
       "Haleakala-face.png": { dataUrl: Haleakala_face_android_default, scale: 1 },

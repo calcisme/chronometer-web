@@ -441,6 +441,7 @@
       numEnvironments: parseInt(attr(watchEl, "numEnvironments") ?? "1", 10),
       maxSeparateLoc: parseInt(attr(watchEl, "maxSeparateLoc") ?? "1", 10),
       calendarWeekStart: (attr(watchEl, "calendarWeekStart") ?? "") === "1",
+      urlAbbrev: attr(watchEl, "urlAbbrev") ?? "",
       initExprs: [],
       parts: []
     };
@@ -16600,7 +16601,8 @@
       t: tStr !== null ? parseInt(tStr, 10) : null,
       off: offStr !== null ? parseInt(offStr, 10) : null,
       dir,
-      tz: params.get("tz") || null
+      tz: params.get("tz") || null,
+      picks: params.get("picks") || null
     };
   }
   function writeUrlState(changes) {
@@ -16688,6 +16690,22 @@
       const url = new URL(allFacesLink.getAttribute("data-base-href") || "all.html", window.location.href);
       url.search = search;
       allFacesLink.href = url.toString();
+    }
+    const selectedLink = document.getElementById("selected-faces-link");
+    if (selectedLink) {
+      const params = new URLSearchParams(search);
+      const hasPicks = !!params.get("picks");
+      const baseHref = hasPicks ? "selected.html" : "pick.html";
+      const url = new URL(baseHref, window.location.href);
+      url.search = search;
+      selectedLink.href = url.toString();
+      selectedLink.title = hasPicks ? "Selected Faces" : "Pick Faces";
+    }
+    const editPicksLink = document.getElementById("edit-picks-link");
+    if (editPicksLink) {
+      const url = new URL("pick.html", window.location.href);
+      url.search = search;
+      editPicksLink.href = url.toString();
     }
     document.querySelectorAll("a.face-card").forEach((a) => {
       const anchor = a;
@@ -17128,10 +17146,34 @@
     return result;
   }
   async function main() {
-    const faceDataArray = window.ChronometerFaces || [];
+    let faceDataArray = window.ChronometerFaces || [];
     if (faceDataArray.length === 0) {
       console.error("No face data registered. Include at least one face-*.js script.");
       return;
+    }
+    const isSelectedPage = window.location.pathname.endsWith("selected.html");
+    if (isSelectedPage) {
+      const picksParam = new URLSearchParams(window.location.search).get("picks");
+      if (picksParam && picksParam.length >= 2) {
+        const abbrevs = [];
+        for (let i = 0; i + 1 < picksParam.length; i += 2) {
+          abbrevs.push(picksParam.substring(i, i + 2));
+        }
+        const byAbbrev = new Map(faceDataArray.map((f) => [f.urlAbbrev, f]));
+        const filtered = [];
+        for (const abbrev of abbrevs) {
+          const face = byAbbrev.get(abbrev);
+          if (face) filtered.push(face);
+        }
+        if (filtered.length > 0) {
+          faceDataArray = filtered;
+        }
+      } else {
+        const url = new URL("pick.html", window.location.href);
+        url.search = window.location.search;
+        window.location.replace(url.toString());
+        return;
+      }
     }
     const grid = document.getElementById("watch-grid");
     const locationDisplay = document.getElementById("location-display");
@@ -17471,7 +17513,11 @@
         return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
       };
       var faceNameToSlug = faceNameToSlug2;
-      document.body.classList.add("is-all-faces");
+      if (isSelectedPage) {
+        document.body.classList.add("is-selected-faces");
+      } else {
+        document.body.classList.add("is-all-faces");
+      }
       for (let i = 0; i < faces.length; i++) {
         const face = faces[i];
         const slug = faceNameToSlug2(faceDataArray[i].name);

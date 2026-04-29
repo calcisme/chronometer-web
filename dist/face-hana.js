@@ -11,7 +11,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Hana I' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(160,160,160)'>
+<watch name='Hana I' urlAbbrev='hn' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(160,160,160)'>
   <atlas frontWidth='512' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=266, backerWidth=faceWidth' />
 
@@ -183,6 +183,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Hana",
+    urlAbbrev: "hn",
     xml: Hana_I_android_default,
     images: {
       "Haleakala-back.png": { dataUrl: Haleakala_back_default, scale: 1 }

@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Terra I' worldTimeRing='1' numEnvironments='29' bezelColor='rgb(180,150,130)' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='276' statusBarLoc='bottom'>
+<watch name='Terra I' urlAbbrev='tr' worldTimeRing='1' numEnvironments='29' bezelColor='rgb(180,150,130)' maxSeparateLoc='4' beatsPerSecond='8' faceWidth='276' statusBarLoc='bottom'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=276, backerWidth=faceWidth' />
 
@@ -275,6 +275,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Terra",
+    urlAbbrev: "tr",
     xml: Terra_I_default,
     images: {
       "../partsBin/HD/rose/face.png": { dataUrl: face_4x_default, scale: 0.25 },

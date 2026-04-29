@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Chandra I' beatsPerSecond='0' faceWidth='268' bezelColor='#808080' statusBarLoc='bottom'>
+<watch name='Chandra I' urlAbbrev='ch' beatsPerSecond='0' faceWidth='268' bezelColor='#808080' statusBarLoc='bottom'>
   <atlas frontWidth='1024' frontHeight='512' backWidth='128' backHeight='256' nightWidth='1024' nightHeight='512'/>
   <init expr='faceWidth=268, backerWidth=faceWidth' />
 
@@ -97,6 +97,7 @@
   window.ChronometerFaces = window.ChronometerFaces || [];
   window.ChronometerFaces.push({
     name: "Chandra",
+    urlAbbrev: "ch",
     xml: Chandra_I_android_default,
     images: {
       "../partsBin/moonES.png": { dataUrl: moonES_4x_default, scale: 0.25 },

@@ -12,6 +12,7 @@ import berryUrl from '../watch/assets/basel/berry-4x.png';
 window.ChronometerFaces = window.ChronometerFaces || [];
 window.ChronometerFaces.push({
     name: 'Basel',
+    urlAbbrev: 'bs',
     xml,
     images: {
         'faceBack.png':           { dataUrl: faceBackUrl, scale: 0.25 },
