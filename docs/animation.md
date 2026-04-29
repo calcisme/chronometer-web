@@ -10,13 +10,32 @@ The animation system manages how watch hands move between their computed positio
 |------|-----------|
 | `.chronometer-ref/` | `Classes/ECGLPart.m` (animation interpolation, `kECGLAngleAnimationSpeed`), `Classes/ECWatchController.m` (update scheduling) |
 
+## `beatsPerSecond` — Time Quantization
+
+Each watch declares `beatsPerSecond` on its `<watch>` element. This controls the granularity of the time that expressions see, mirroring the behavior of a physical watch mechanism:
+
+| `beatsPerSecond` | Effect | Faces |
+|---|---|---|
+| `0` | No quantization — fully continuous sweep | Firenze, Chandra, Miami, Venezia, Selene |
+| `1` | Snap to whole seconds — tick-tick second hand | Babylon, Haleakala, Hana |
+| `8` | Snap to 1/8 s — smooth sweep at 8 Hz | Terra, Gaia |
+| `10` | Snap to 1/10 s — smooth sweep at 10 Hz | Geneva, Basel, Mauna Kea |
+
+The default is `0` (continuous), matching iOS (`ECWatchDefinitionManager.m`, `df:0`).
+
+**Implementation**: `makeGetNow(bps)` in `engine-entry.ts` wraps the raw `timeController.getDisplayTime()` with quantization, mirroring iOS `latchTimeForBeatsPerSecond`:
+```typescript
+const quantizedMs = Math.round(ms / 1000 * bps) / bps * 1000;
+```
+Each face gets its own quantized `getNow` closure, passed to both `createWatchEnvironment` (for expression evaluation) and `initHandStates` (for animation scheduling). This ensures all downstream time-dependent functions automatically see the quantized time.
+
 ## Two-Time-Base Architecture
 
 The system uses two independent time bases:
 
 | Time Base | Source | Used For |
 |-----------|--------|----------|
-| **Display time** | `getNow()` → `timeController.getDisplayTime()` | Evaluating angle expressions — determines **what** the target position should be |
+| **Display time** | `getNow()` → `makeGetNow(bps)` → `timeController.getDisplayTime()` | Evaluating angle expressions — determines **what** the target position should be |
 | **Real time** | `performance.now()` | Animation interpolation — determines **where** the hand is drawn right now |
 
 These must never be conflated. Display time can jump by hours/days per tick; real time always advances smoothly at 1:1.
@@ -36,10 +55,12 @@ interface HandState {
     part: QHandPart | WheelPart | QWedgePart;
     angle: AnimatingValue;
     offsetAngle: AnimatingValue | null;   // For orbit hands (e.g. Moon)
-    updateIntervalMs: number;            // From XML update attr
-    nextUpdateTime: number;              // performance.now() for next re-eval
-    animSpeed: number;                   // From XML animSpeed attr (default 1.0)
-    getNow: () => Date;                  // Display time source
+    xMotion: AnimatingValue | null;       // Linear X translation (calendar wires)
+    yMotion: AnimatingValue | null;       // Linear Y translation (calendar wires)
+    updateIntervalMs: number;             // From XML update attr
+    nextUpdateTime: number;               // performance.now() for next re-eval
+    animSpeed: number;                    // From XML animSpeed attr (default 1.0)
+    getNow: () => Date;                   // Display time source (quantized)
 }
 ```
 
@@ -103,21 +124,23 @@ Used for hold-to-scrub at rates like 10 hr/s, 10 day/s:
 
 - Display time jumps in fixed steps on each tick (10 Hz tick rate, 100ms intervals)
 - **Adaptive compression**: If natural animation duration exceeds the tick interval, compress to fit. Otherwise, use natural speed.
-- **Independent compression**: `angle` and `offsetAngle` are compressed independently
+- **Independent compression**: `angle`, `offsetAngle`, `xMotion`, and `yMotion` are all compressed independently
 - **Schedule skipping**: Slow-updating parts skip ticks where their expression wouldn't change
 
 **Decision rule** for each hand update:
 1. `ticksUntilUpdate = ceil(part.updateIntervalSec / displayDeltaPerTick)`
 2. `timeUntilNextUpdate = ticksUntilUpdate × TICK_INTERVAL_MS`
-3. `normalDuration = angular_delta / (kECGLAngleAnimationSpeed × animSpeed)`
+3. `normalDuration = delta / (speed × animSpeed)` — where speed is angular or linear
 4. If `normalDuration ≤ timeUntilNextUpdate` → use normal speed
 5. If `normalDuration > timeUntilNextUpdate` → compress to `timeUntilNextUpdate`
 
 ### Single-Step Mode
 
 - Triggered by a single tap on a step button
-- Calls `resetHandSchedules` then `tickAnimations` once
+- **Stops time first** (`timeController.stop()`) and snaps in-flight animations (`finishAllAnimations()`), matching scrub behavior
+- Then calls `timeController.step()`, `resetHandSchedules`, and `tickAnimations` once
 - Animations use natural speed (no compression)
+- `ensureSchedulerRunning()` keeps the rAF loop running while `anyAnimating` is true
 
 ## Hold-Scrub Time Preservation
 
@@ -131,7 +154,7 @@ When holding a step button, `timeController.setRate()` starts quantized scrubbin
 
 | Transition | What happens |
 |-----------|--------------|
-| **Single tap** | Step by one unit, animate at natural speed over 100ms |
+| **Single tap** | Stop time, snap in-flight animations, step by one unit, animate at natural speed |
 | **Hold → scrub** | After 300ms hold delay, enter quantized mode. `resetHandSchedules()` forces immediate re-eval |
 | **Pause** | Freeze display time. `finishAnimations()` snaps all hands to targets |
 | **Resume (Play)** | Unfreeze at 1×. `resetHandSchedules()` forces immediate re-eval with normal scheduling |
@@ -140,28 +163,50 @@ When holding a step button, `timeController.setRate()` starts quantized scrubbin
 
 | Function | Purpose |
 |----------|---------|
-| `initHandStates(watch, env, now)` | Build animation state for all dynamic parts |
-| `tickAnimations(states, env, now, tickMs, deltaSec)` | Per-frame: re-evaluate + start animations |
-| `startAnimationRaw(val, target, now, speed, durationOverride?)` | Begin/restart an animation |
-| `interpolateRaw(val, now)` | Advance currentValue toward target |
+| `initHandStates(watch, env, now, getNow)` | Build animation state for all dynamic parts |
+| `tickAnimations(states, env, now, tickMs, deltaSec, timeDir)` | Per-frame: re-evaluate + start animations |
+| `startValueAnimation(val, target, now, speed, durationOverride?)` | Core: begin/restart an animation on an abstract value |
+| `startAnimationRaw(val, target, now, speed, durationOverride?)` | Angle wrapper: unwraps for shortest-path, then calls core |
+| `startLinearAnimation(val, target, now, speed, durationOverride?)` | Linear wrapper: calls core without angle wrapping |
+| `interpolateValue(val, now)` | Advance currentValue toward target (abstract, semantics-free) |
+| `interpolateRaw(val, now)` | Angle wrapper: calls core, applies `fmod(2π)` when done |
 | `finishAnimations(states)` | Snap all in-flight animations to targets |
+| `finishAllAnimations()` | Snap all hands on all faces |
 | `resetHandSchedules(states)` | Set nextUpdateTime=0 so all hands re-evaluate next frame |
 | `nextWakeupTime(states)` | Find earliest scheduled update (for idle timer) |
+| `makeGetNow(bps)` | Create a per-face quantized getNow closure |
 
 ## Constants (from `ECConstants.h`)
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
 | `kECGLAngleAnimationSpeed` | `2.0` rad/s | Base angular animation speed |
+| `kECGLLinearAnimationSpeed` | `60.0` px/s | Base linear animation speed (xMotion/yMotion) |
 | `kECGLFrameRate` | `1/240` s | Minimum animation duration; below this, snap |
+
+## Unified Animation Core
+
+All animation types (angular, linear, terminator leaf) share a common semantics-free core:
+
+1. **`startValueAnimation(val, target, now, speed, durationOverride?)`** — Sets `targetValue`, computes `animationStopTime`, marks `animating = true`
+2. **`interpolateValue(val, now)`** — Linear interpolation from current to target based on elapsed real time
+
+Specialized wrappers add type-specific behavior:
+- **`startAnimationRaw`** — Normalizes angles to `[0, 2π)` and unwraps for shortest-path before calling core
+- **`startLinearAnimation`** — Calls core directly (no wrapping needed for pixel translations)
+- **`interpolateRaw`** — Calls core, then applies `fmod(2π)` when animation completes
+
+The terminator leaf system (`terminator.ts`) also uses the unified core via `startAnimationRaw` for leaf angles and rotations.
 
 ## Key Source Files
 
 | File | Purpose |
 |------|---------|
-| `src/watch/animation.ts` | All animation logic: hand states, ticking, interpolation |
+| `src/watch/animation.ts` | All animation logic: hand states, ticking, interpolation, unified core |
+| `src/watch/terminator.ts` | Moon-phase leaf animation (uses unified core) |
 | `src/time-controller.ts` | Display time management, rate control, tick scheduling |
-| `src/engine-entry.ts` | Main loop, scheduler, transition handling |
+| `src/engine-entry.ts` | Main loop, scheduler, transition handling, `makeGetNow` |
+| `src/watch/watch-env.ts` | Expression environment (receives quantized `getNow`) |
 
 ## Related Docs
 
