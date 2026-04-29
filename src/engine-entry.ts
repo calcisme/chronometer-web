@@ -391,7 +391,25 @@ async function main() {
         // dir === 0 stays stopped (setTime already stops)
     }
 
-    const getNow = () => timeController.getDisplayTime();
+    const rawGetNow = () => timeController.getDisplayTime();
+
+    /**
+     * Create a per-face getNow closure that applies beatsPerSecond
+     * quantization.  Mirrors iOS latchTimeForBeatsPerSecond:
+     *   latchNTPTime = rint(currentTime * bps) / bps
+     * With bps=0, no quantization (continuous sweep).
+     * With bps=1, snap to whole seconds (tick-tick).
+     * With bps=10, snap to 0.1s (smooth 10 Hz sweep).
+     */
+    function makeGetNow(bps: number): () => Date {
+        if (bps <= 0) return rawGetNow;
+        return () => {
+            const d = rawGetNow();
+            const ms = d.getTime();
+            const quantizedMs = Math.round(ms / 1000 * bps) / bps * 1000;
+            return new Date(quantizedMs);
+        };
+    }
 
     // --- Per-face slot overrides helper ---
     // Builds slot overrides based on watch feature flags:
@@ -540,7 +558,8 @@ async function main() {
         const watch = parsedWatches[i];
         const slotResult = buildSlotOverrides(watch);
         const faceOverrides = slotResult?.overrides;
-        const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
+        const faceGetNow = makeGetNow(watch.beatsPerSecond);
+        const env = createWatchEnvironment(watch, lat, lon, faceGetNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
 
         const face: FaceInstance = {
             watch,
@@ -617,7 +636,7 @@ async function main() {
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         buildHandShadowCaches(watch, env, scale, images);
         face.cachesBuilt = true;
-        face.handStates = initHandStates(watch, env, performance.now(), getNow);
+        face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond));
     }
 
     function buildAllCachesSequentially(facesToBuild: FaceInstance[], onDone: () => void) {
@@ -651,7 +670,7 @@ async function main() {
             // (it's stored on the env but doesn't depend on time — only on slot assignments).
             const oldKnockout = (face.env as any)._terraCityKnockout;
             // Rebuild the environment but keep the same watch/parts
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (oldKnockout) (face.env as any)._terraCityKnockout = oldKnockout;
             // Invalidate QDayNightRing render caches so astronomy values
             // are recomputed immediately for the new time.
@@ -1322,7 +1341,7 @@ async function main() {
                 };
             }
             // Fresh environment with new lat/lon/tz — same watch/parts
-            face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            face.env = createWatchEnvironment(face.watch, newLat, newLon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             // Update terminator leaves (preserve for animation interpolation)
             if (face.terminatorLeaves.length > 0) {
                 updateLeafAngles(face.terminatorLeaves, face.env);
@@ -2246,7 +2265,10 @@ async function main() {
         el.addEventListener('mousedown', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            // Immediate single step with smooth animation
+            // Stop time and snap in-flight animations before stepping,
+            // so the scheduler doesn't fight the animation system.
+            timeController.stop();
+            finishAllAnimations();
             timeController.step(unit, dir);
             // One-shot: re-evaluate all hands with natural speed animation
             // (null tickIntervalMs = no compression, unlike continuous scrub)
@@ -2284,7 +2306,10 @@ async function main() {
         el.addEventListener('touchstart', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            // Immediate single step with smooth animation
+            // Stop time and snap in-flight animations before stepping,
+            // so the scheduler doesn't fight the animation system.
+            timeController.stop();
+            finishAllAnimations();
             timeController.step(unit, dir);
             // One-shot: re-evaluate all hands with natural speed animation
             // (null tickIntervalMs = no compression, unlike continuous scrub)
@@ -2497,7 +2522,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     // Rebuild environment (picks up new body URL param)
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     // Update terminator leaf angles for the new planet's phase
                     // (keep existing leaves so the animation system can interpolate)
                     if (face.terminatorLeaves.length > 0) {
@@ -2609,7 +2634,7 @@ async function main() {
                 }
                 for (const face of faces) {
                     if (!face.enabled) continue;
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);
@@ -2922,7 +2947,7 @@ async function main() {
             function rebuildGaiaForSlotChange() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
-                    face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);

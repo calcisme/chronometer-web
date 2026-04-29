@@ -431,7 +431,7 @@
     }
     const watch = {
       name: attr(watchEl, "name") ?? "unknown",
-      beatsPerSecond: attr(watchEl, "beatsPerSecond") ?? "1",
+      beatsPerSecond: parseInt(attr(watchEl, "beatsPerSecond") ?? "0", 10),
       faceWidth: parseFloat(attr(watchEl, "faceWidth") ?? "290"),
       bezelColor: attr(watchEl, "bezelColor") ?? "",
       bezelNoonMark: (attr(watchEl, "bezelNoonMark") ?? "") === "true",
@@ -17317,7 +17317,16 @@
         timeController.setRate(null);
       }
     }
-    const getNow = () => timeController.getDisplayTime();
+    const rawGetNow = () => timeController.getDisplayTime();
+    function makeGetNow(bps) {
+      if (bps <= 0) return rawGetNow;
+      return () => {
+        const d = rawGetNow();
+        const ms = d.getTime();
+        const quantizedMs = Math.round(ms / 1e3 * bps) / bps * 1e3;
+        return new Date(quantizedMs);
+      };
+    }
     function buildSlotOverrides(watch) {
       const params = new URLSearchParams(window.location.search);
       if (watch.worldTimeRing) {
@@ -17435,7 +17444,8 @@
       const watch = parsedWatches[i];
       const slotResult = buildSlotOverrides(watch);
       const faceOverrides = slotResult?.overrides;
-      const env = createWatchEnvironment(watch, lat, lon, getNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
+      const faceGetNow = makeGetNow(watch.beatsPerSecond);
+      const env = createWatchEnvironment(watch, lat, lon, faceGetNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
       const face = {
         watch,
         env,
@@ -17499,7 +17509,7 @@
       buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       buildHandShadowCaches(watch, env, scale, images);
       face.cachesBuilt = true;
-      face.handStates = initHandStates(watch, env, performance.now(), getNow);
+      face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond));
     }
     function buildAllCachesSequentially(facesToBuild, onDone) {
       let idx = 0;
@@ -17517,7 +17527,7 @@
       for (const face of faces) {
         if (!face.enabled) continue;
         const oldKnockout = face.env._terraCityKnockout;
-        face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
         if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
         invalidateDayNightCaches(face.watch);
         const { canvas, watch, env, images, scale } = face;
@@ -18012,7 +18022,7 @@
             lon: newLon
           };
         }
-        face.env = createWatchEnvironment(face.watch, newLat, newLon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        face.env = createWatchEnvironment(face.watch, newLat, newLon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
         if (face.terminatorLeaves.length > 0) {
           updateLeafAngles(face.terminatorLeaves, face.env);
           resetLeafSchedules(face.terminatorLeaves);
@@ -18759,6 +18769,8 @@
       el.addEventListener("mousedown", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        timeController.stop();
+        finishAllAnimations();
         timeController.step(unit, dir);
         timeController.beginFrame();
         const stepNow = performance.now();
@@ -18788,6 +18800,8 @@
       el.addEventListener("touchstart", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        timeController.stop();
+        finishAllAnimations();
         timeController.step(unit, dir);
         timeController.beginFrame();
         const stepNow = performance.now();
@@ -18910,7 +18924,7 @@
           window.history.replaceState({}, "", url.toString());
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -19028,7 +19042,7 @@
           }
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -19285,7 +19299,7 @@
         }, rebuildGaiaForSlotChange2 = function() {
           for (const face of faces) {
             if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, getNow, locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);

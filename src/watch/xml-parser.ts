@@ -54,7 +54,7 @@ export function parseWatchXML(
 
     const watch: Watch = {
         name: attr(watchEl, 'name') ?? 'unknown',
-        beatsPerSecond: attr(watchEl, 'beatsPerSecond') ?? '1',
+        beatsPerSecond: parseInt(attr(watchEl, 'beatsPerSecond') ?? '0', 10),
         faceWidth: parseFloat(attr(watchEl, 'faceWidth') ?? '290'),
         bezelColor: attr(watchEl, 'bezelColor') ?? '',
         bezelNoonMark: (attr(watchEl, 'bezelNoonMark') ?? '') === 'true',

@@ -124,7 +124,7 @@ describe('parseWatchXML: Haleakala front side', () => {
 
     test('parses watch name and beatsPerSecond', () => {
         expect(watch.name).toBe('Haleakala');
-        expect(watch.beatsPerSecond).toBe('1');
+        expect(watch.beatsPerSecond).toBe(1);
     });
 
     test('collects all init expressions', () => {
