@@ -10949,6 +10949,7 @@
   var SCHEDULER_LOOKAHEAD_MS = 50;
   var kECGLAngleAnimationSpeed = 2;
   var kECGLFrameRate = 1 / 240;
+  var kECGLLinearAnimationSpeed = 60;
   var EC_UPDATE_NEXT_SUNRISE = -1001;
   var EC_UPDATE_NEXT_SUNSET = -1002;
   var EC_UPDATE_NEXT_MOONRISE = -1003;
@@ -11119,7 +11120,7 @@
   function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
     for (const state of states) {
       if (now >= state.nextUpdateTime) {
-        const newTarget = state.part.angle ? evalAttr(state.part.angle, env) : 0;
+        const newTarget = "angle" in state.part && state.part.angle ? evalAttr(state.part.angle, env) : 0;
         const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
         const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.getNow, timeDirection, env);
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
@@ -11151,6 +11152,7 @@
               startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
             }
           }
+          compressLinearMotions(state, env, now, timeUntilNextUpdateMs);
           state.nextUpdateDisplayTime = nextDisplayMs;
           state.nextUpdateTime = now + timeUntilNextUpdateMs;
         } else {
@@ -11158,45 +11160,33 @@
           if (newOffsetTarget !== null && state.offsetAngle) {
             startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
           }
+          evaluateLinearMotions(state, env, now);
           state.nextUpdateDisplayTime = nextDisplayMs;
           state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.getNow);
         }
-        if (state.part.type === "QHand") {
-          const qhand = state.part;
-          if (state.xMotion && qhand.xMotion) {
-            const newXM = evalAttr(qhand.xMotion, env);
-            startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
-          }
-          if (state.yMotion && qhand.yMotion) {
-            const newYM = evalAttr(qhand.yMotion, env);
-            startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
-          }
-        }
-        if (state.part.type === "CalendarRowCover" && state.xMotion) {
-          const newXM = computeCalendarCoverOffset(state.part, env);
-          startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
-        }
       }
-      const angle = interpolate(state.angle, now);
+      const rawAngle = interpolateValue(state.angle, now);
+      const angle = state.angle.animating ? rawAngle : fmod2(rawAngle, 2 * Math.PI);
       if (!state.part.dynamicState) {
         state.part.dynamicState = { currentAngle: angle };
       } else {
         state.part.dynamicState.currentAngle = angle;
       }
       if (state.offsetAngle) {
-        const oa = interpolateRaw(state.offsetAngle, now);
+        const rawOA = interpolateValue(state.offsetAngle, now);
+        const oa = state.offsetAngle.animating ? rawOA : fmod2(rawOA, 2 * Math.PI);
         if (state.part.dynamicState) {
           state.part.dynamicState.currentOffsetAngle = oa;
         }
       }
       if (state.xMotion) {
-        const xm = interpolateLinear(state.xMotion, now);
+        const xm = interpolateValue(state.xMotion, now);
         if (state.part.dynamicState) {
           state.part.dynamicState.currentXMotion = xm;
         }
       }
       if (state.yMotion) {
-        const ym = interpolateLinear(state.yMotion, now);
+        const ym = interpolateValue(state.yMotion, now);
         if (state.part.dynamicState) {
           state.part.dynamicState.currentYMotion = ym;
         }
@@ -11263,39 +11253,26 @@
   function startAnimation(state, newTarget, now, durationOverrideMs) {
     startAnimationRaw(state.angle, newTarget, now, state.animSpeed, durationOverrideMs);
   }
-  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
-    const animateSpeed = kECGLAngleAnimationSpeed * animSpeed;
-    newTarget = fmod2(newTarget, 2 * Math.PI);
-    if (animateSpeed === 0 || animSpeed === 0) {
+  function startValueAnimation(val, newTarget, now, speed, durationOverrideMs) {
+    if (speed === 0) {
       val.currentValue = newTarget;
       val.targetValue = newTarget;
       val.animating = false;
       return;
     }
-    if (val.animating && val.targetValue === newTarget) {
-      return;
-    }
+    if (val.animating && val.targetValue === newTarget) return;
     if (val.animating) {
-      interpolateRaw(val, now);
+      interpolateValue(val, now);
     }
     if (val.currentValue === newTarget) {
       val.animating = false;
       return;
     }
     val.targetValue = newTarget;
-    const TWO_PI5 = 2 * Math.PI;
-    let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
-    val.currentValue = newTarget - delta;
-    let durationMs;
-    if (durationOverrideMs !== void 0) {
-      durationMs = durationOverrideMs;
-    } else {
-      const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
-      durationMs = deltaTime * 1e3;
-    }
+    const delta = Math.abs(newTarget - val.currentValue);
+    const durationMs = durationOverrideMs ?? delta / speed * 1e3;
     if (durationMs < kECGLFrameRate * 1e3) {
-      val.currentValue = val.targetValue;
+      val.currentValue = newTarget;
       val.animating = false;
       return;
     }
@@ -11303,22 +11280,46 @@
     val.animating = true;
     val.animationStopTime = now + durationMs;
   }
-  function interpolate(val, now) {
-    return interpolateRaw(val, now);
-  }
-  function interpolateRaw(val, now) {
+  function interpolateValue(val, now) {
     if (!val.animating) {
       return val.currentValue;
     }
     if (now >= val.animationStopTime) {
       val.animating = false;
-      val.currentValue = fmod2(val.targetValue, 2 * Math.PI);
+      val.currentValue = val.targetValue;
       return val.currentValue;
     }
     const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
     val.currentValue += (val.targetValue - val.currentValue) * fraction;
     val.lastAnimationTime = now;
     return val.currentValue;
+  }
+  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+    newTarget = fmod2(newTarget, 2 * Math.PI);
+    if (speed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateValue(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    const TWO_PI5 = 2 * Math.PI;
+    let delta = newTarget - val.currentValue;
+    delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
+    val.currentValue = newTarget - delta;
+    startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
+  }
+  function interpolateRaw(val, now) {
+    const result = interpolateValue(val, now);
+    return val.animating ? result : fmod2(result, 2 * Math.PI);
   }
   function computeNextBoundary(updateIntervalMs, getNow, timeDirection, env) {
     if (updateIntervalMs > 0) {
@@ -11495,45 +11496,43 @@
     const result = value % modulus;
     return result < 0 ? result + modulus : result;
   }
-  function startLinearAnimation(val, newTarget, now, animSpeed = 1) {
-    const speed = kECGLAngleAnimationSpeed * animSpeed;
-    if (speed === 0 || animSpeed === 0) {
-      val.currentValue = newTarget;
-      val.targetValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    if (val.animating && val.targetValue === newTarget) return;
-    if (val.animating) {
-      interpolateLinear(val, now);
-    }
-    if (val.currentValue === newTarget) {
-      val.animating = false;
-      return;
-    }
-    val.targetValue = newTarget;
-    const delta = Math.abs(newTarget - val.currentValue);
-    const durationMs = delta / (speed * 30) * 1e3;
-    if (durationMs < kECGLFrameRate * 1e3) {
-      val.currentValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    val.lastAnimationTime = now;
-    val.animating = true;
-    val.animationStopTime = now + durationMs;
+  function startLinearAnimation(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
+    startValueAnimation(val, newTarget, now, kECGLLinearAnimationSpeed * animSpeed, durationOverrideMs);
   }
-  function interpolateLinear(val, now) {
-    if (!val.animating) return val.currentValue;
-    if (now >= val.animationStopTime) {
-      val.animating = false;
-      val.currentValue = val.targetValue;
-      return val.currentValue;
+  function evaluateLinearMotions(state, env, now) {
+    if (state.part.type === "QHand") {
+      const qhand = state.part;
+      if (state.xMotion && qhand.xMotion) {
+        startLinearAnimation(state.xMotion, evalAttr(qhand.xMotion, env), now, state.animSpeed);
+      }
+      if (state.yMotion && qhand.yMotion) {
+        startLinearAnimation(state.yMotion, evalAttr(qhand.yMotion, env), now, state.animSpeed);
+      }
     }
-    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
-    val.currentValue += (val.targetValue - val.currentValue) * fraction;
-    val.lastAnimationTime = now;
-    return val.currentValue;
+    if (state.part.type === "CalendarRowCover" && state.xMotion) {
+      const newXM = computeCalendarCoverOffset(state.part, env);
+      startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
+    }
+  }
+  function compressLinearMotions(state, env, now, timeUntilNextUpdateMs) {
+    const linearSpeed = kECGLLinearAnimationSpeed * state.animSpeed;
+    const compressLinear = (val, newTarget) => {
+      const naturalMs = linearSpeed > 0 ? Math.abs(newTarget - val.currentValue) / linearSpeed * 1e3 : 0;
+      const overrideMs = naturalMs > timeUntilNextUpdateMs ? timeUntilNextUpdateMs : void 0;
+      startLinearAnimation(val, newTarget, now, state.animSpeed, overrideMs);
+    };
+    if (state.part.type === "QHand") {
+      const qhand = state.part;
+      if (state.xMotion && qhand.xMotion) {
+        compressLinear(state.xMotion, evalAttr(qhand.xMotion, env));
+      }
+      if (state.yMotion && qhand.yMotion) {
+        compressLinear(state.yMotion, evalAttr(qhand.yMotion, env));
+      }
+    }
+    if (state.part.type === "CalendarRowCover" && state.xMotion) {
+      compressLinear(state.xMotion, computeCalendarCoverOffset(state.part, env));
+    }
   }
 
   // src/astronomy/es-astro.ts
@@ -17399,7 +17398,7 @@
         }
         overrides[1] = {
           cityName: observerName || "Observer",
-          olsonId: locationTimezone,
+          olsonId: locationTimezone || "",
           lat,
           lon
         };
@@ -18008,7 +18007,7 @@
           }
           face.terraSlotOverrides[1] = {
             cityName: obsName || "Observer",
-            olsonId: locationTimezone,
+            olsonId: locationTimezone || "",
             lat: newLat,
             lon: newLon
           };
@@ -19209,7 +19208,7 @@
                 return;
               }
             }
-            const results = searchCities(query, lat, lon);
+            const results = searchCities(query, 20);
             renderTcSearchResults2(results);
           } catch (err) {
             tcCityResults.innerHTML = `<div class="tc-city-loading">Error: ${err.message}</div>`;
@@ -19454,7 +19453,7 @@
                 return;
               }
             }
-            const results = searchCities(query, lat, lon);
+            const results = searchCities(query, 20);
             renderGaiaSearchResults2(results);
           } catch (err) {
             tcCityResults.innerHTML = `<div class="tc-city-loading">Error: ${err.message}</div>`;

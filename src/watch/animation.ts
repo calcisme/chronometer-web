@@ -43,6 +43,9 @@ const kECGLAngleAnimationSpeed = 2.0;
 /** Minimum animation duration; below this, snap directly. */
 const kECGLFrameRate = 1.0 / 240;
 
+/** Base linear animation speed (pixels per second). */
+const kECGLLinearAnimationSpeed = 60.0;
+
 // --- Named update interval sentinels (matching iOS ECConstants.h) ---
 // Negative values that the animation system interprets specially.
 export const EC_UPDATE_NEXT_SUNRISE              = -1001;
@@ -421,6 +424,9 @@ export function tickAnimations(
                     }
                 }
 
+                // Compress xMotion/yMotion in quantized mode
+                compressLinearMotions(state, env, now, timeUntilNextUpdateMs);
+
                 // Schedule next re-evaluation (also update perfNow for idle timer)
                 state.nextUpdateDisplayTime = nextDisplayMs;
                 state.nextUpdateTime = now + timeUntilNextUpdateMs;
@@ -430,31 +436,18 @@ export function tickAnimations(
                 if (newOffsetTarget !== null && state.offsetAngle) {
                     startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
                 }
+
+                // Evaluate xMotion/yMotion at natural speed
+                evaluateLinearMotions(state, env, now);
+
                 state.nextUpdateDisplayTime = nextDisplayMs;
                 state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.getNow);
-            }
-
-            // Evaluate xMotion/yMotion (QHand day-indicator wires)
-            if (state.part.type === 'QHand') {
-                const qhand = state.part as QHandPart;
-                if (state.xMotion && qhand.xMotion) {
-                    const newXM = evalAttr(qhand.xMotion, env);
-                    startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
-                }
-                if (state.yMotion && qhand.yMotion) {
-                    const newYM = evalAttr(qhand.yMotion, env);
-                    startLinearAnimation(state.yMotion, newYM, now, state.animSpeed);
-                }
-            }
-            // CalendarRowCover xMotion — recompute offset from current month
-            if (state.part.type === 'CalendarRowCover' && state.xMotion) {
-                const newXM = computeCalendarCoverOffset(state.part as CalendarRowCoverPart, env);
-                startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
             }
         }
 
         // Interpolate if animating (uses real time for smooth rendering)
-        const angle = interpolate(state.angle, now);
+        const rawAngle = interpolateValue(state.angle, now);
+        const angle = state.angle.animating ? rawAngle : fmod(rawAngle, 2 * Math.PI);
 
         // Write to part's dynamicState
         if (!state.part.dynamicState) {
@@ -465,7 +458,8 @@ export function tickAnimations(
 
         // Interpolate offsetAngle if present
         if (state.offsetAngle) {
-            const oa = interpolateRaw(state.offsetAngle, now);
+            const rawOA = interpolateValue(state.offsetAngle, now);
+            const oa = state.offsetAngle.animating ? rawOA : fmod(rawOA, 2 * Math.PI);
             if (state.part.dynamicState) {
                 state.part.dynamicState.currentOffsetAngle = oa;
             }
@@ -473,13 +467,13 @@ export function tickAnimations(
 
         // Interpolate xMotion/yMotion if present (linear, no angle wrapping)
         if (state.xMotion) {
-            const xm = interpolateLinear(state.xMotion, now);
+            const xm = interpolateValue(state.xMotion, now);
             if (state.part.dynamicState) {
                 state.part.dynamicState.currentXMotion = xm;
             }
         }
         if (state.yMotion) {
-            const ym = interpolateLinear(state.yMotion, now);
+            const ym = interpolateValue(state.yMotion, now);
             if (state.part.dynamicState) {
                 state.part.dynamicState.currentYMotion = ym;
             }
@@ -614,24 +608,27 @@ function snapToTargetRaw(val: AnimatingValue, newTarget: number): void {
     val.animating = false;
 }
 
+// ============================================================================
+// Core animation (semantics-free)
+// ============================================================================
+
 /**
- * Core animation start logic, usable by any AnimatingValue.
- * Exported for use by the terminator leaf animation system.
+ * Core animation start — operates on abstract values without angle/linear
+ * semantics.  Callers handle any normalization (e.g. angle wrapping) before
+ * invoking this function.
+ *
+ * @param speed  Units per second (radians/s for angles, pixels/s for linear).
+ * @param durationOverrideMs  When provided, use this fixed duration instead of
+ *   computing from distance / speed.  Used for tick-interval compression.
  */
-export function startAnimationRaw(
+function startValueAnimation(
     val: AnimatingValue,
     newTarget: number,
     now: number,
-    animSpeed: number = 1.0,
+    speed: number,
     durationOverrideMs?: number,
 ): void {
-    const animateSpeed = kECGLAngleAnimationSpeed * animSpeed;
-
-    // Normalize target to [0, 2π)
-    newTarget = fmod(newTarget, 2 * Math.PI);
-
-    if (animateSpeed === 0 || animSpeed === 0) {
-        // No animation — snap directly
+    if (speed === 0) {
         val.currentValue = newTarget;
         val.targetValue = newTarget;
         val.animating = false;
@@ -639,13 +636,11 @@ export function startAnimationRaw(
     }
 
     // If already animating toward this same target, let it continue
-    if (val.animating && val.targetValue === newTarget) {
-        return;
-    }
+    if (val.animating && val.targetValue === newTarget) return;
 
     // If mid-animation toward a DIFFERENT target, snapshot current position
     if (val.animating) {
-        interpolateRaw(val, now);
+        interpolateValue(val, now);
     }
 
     if (val.currentValue === newTarget) {
@@ -655,63 +650,91 @@ export function startAnimationRaw(
 
     val.targetValue = newTarget;
 
-    // Unwrap currentValue so |currentValue - targetValue| ≤ π.
-    // This avoids the animation flipping direction when crossing 0°/360°.
-    // In both normal and compressed modes, we want the shortest angular path.
-    const TWO_PI = 2 * Math.PI;
-    let delta = newTarget - val.currentValue;
-    // Normalize delta to [-π, π]
-    delta = delta - TWO_PI * Math.round(delta / TWO_PI);
-    // Set currentValue so that (currentValue + delta) == newTarget
-    val.currentValue = newTarget - delta;
-
     // Compute animation duration
-    let durationMs: number;
-    if (durationOverrideMs !== undefined) {
-        durationMs = durationOverrideMs;
-    } else {
-        const deltaTime = Math.abs(val.targetValue - val.currentValue) / animateSpeed;
-        durationMs = deltaTime * 1000;
-    }
+    const delta = Math.abs(newTarget - val.currentValue);
+    const durationMs = durationOverrideMs ?? (delta / speed) * 1000;
 
     if (durationMs < kECGLFrameRate * 1000) {
-        // Too small to animate — snap
-        val.currentValue = val.targetValue;
+        val.currentValue = newTarget;
         val.animating = false;
         return;
     }
 
-    // Start (or restart) animation from current position
     val.lastAnimationTime = now;
     val.animating = true;
     val.animationStopTime = now + durationMs;
 }
 
-function interpolate(val: AnimatingValue, now: number): number {
-    return interpolateRaw(val, now);
-}
-
 /**
- * Core interpolation logic, usable by any AnimatingValue.
+ * Core interpolation — operates on abstract values.
  * Exported for use by the terminator leaf animation system.
  */
-export function interpolateRaw(val: AnimatingValue, now: number): number {
+export function interpolateValue(val: AnimatingValue, now: number): number {
     if (!val.animating) {
         return val.currentValue;
     }
 
     if (now >= val.animationStopTime) {
-        // Animation complete — snap to target
         val.animating = false;
-        val.currentValue = fmod(val.targetValue, 2 * Math.PI);
+        val.currentValue = val.targetValue;
         return val.currentValue;
     }
 
-    // Linear interpolation
     const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
     val.currentValue += (val.targetValue - val.currentValue) * fraction;
     val.lastAnimationTime = now;
     return val.currentValue;
+}
+
+// ============================================================================
+// Angle animation (wraps to [0, 2π))
+// ============================================================================
+
+/**
+ * Start an angle animation.  Normalizes the target to [0, 2π) and unwraps
+ * currentValue for the shortest angular path, then delegates to the core.
+ * Exported for use by the terminator leaf animation system.
+ */
+export function startAnimationRaw(
+    val: AnimatingValue,
+    newTarget: number,
+    now: number,
+    animSpeed: number = 1.0,
+    durationOverrideMs?: number,
+): void {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+
+    // Normalize target to [0, 2π)
+    newTarget = fmod(newTarget, 2 * Math.PI);
+
+    if (speed === 0) {
+        val.currentValue = newTarget;
+        val.targetValue = newTarget;
+        val.animating = false;
+        return;
+    }
+
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) { interpolateValue(val, now); }
+    if (val.currentValue === newTarget) { val.animating = false; return; }
+
+    // Unwrap currentValue so |currentValue - targetValue| ≤ π.
+    // This avoids the animation flipping direction when crossing 0°/360°.
+    const TWO_PI = 2 * Math.PI;
+    let delta = newTarget - val.currentValue;
+    delta = delta - TWO_PI * Math.round(delta / TWO_PI);
+    val.currentValue = newTarget - delta;
+
+    startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
+}
+
+/**
+ * Interpolate an angle AnimatingValue.  Wraps result to [0, 2π) on completion.
+ * Legacy export — new code should use interpolateValue + fmod.
+ */
+export function interpolateRaw(val: AnimatingValue, now: number): number {
+    const result = interpolateValue(val, now);
+    return val.animating ? result : fmod(result, 2 * Math.PI);
 }
 
 // ============================================================================
@@ -1005,68 +1028,78 @@ function fmod(value: number, modulus: number): number {
     return result < 0 ? result + modulus : result;
 }
 
+// ============================================================================
+// Linear animation helpers
+// ============================================================================
+
 /**
  * Start a linear animation (no angle wrapping) for xMotion/yMotion.
- * Uses the same speed model as angular animation but treats values as pixels.
+ * Delegates to the core startValueAnimation with linear speed.
  */
 function startLinearAnimation(
     val: AnimatingValue,
     newTarget: number,
     now: number,
     animSpeed: number = 1.0,
+    durationOverrideMs?: number,
 ): void {
-    const speed = kECGLAngleAnimationSpeed * animSpeed;
-
-    if (speed === 0 || animSpeed === 0) {
-        val.currentValue = newTarget;
-        val.targetValue = newTarget;
-        val.animating = false;
-        return;
-    }
-
-    if (val.animating && val.targetValue === newTarget) return;
-
-    if (val.animating) {
-        interpolateLinear(val, now);
-    }
-
-    if (val.currentValue === newTarget) {
-        val.animating = false;
-        return;
-    }
-
-    val.targetValue = newTarget;
-
-    // Linear distance, no wrapping
-    const delta = Math.abs(newTarget - val.currentValue);
-    // Scale: treat ~100 pixels like ~π radians for speed purposes
-    const durationMs = (delta / (speed * 30)) * 1000;
-
-    if (durationMs < kECGLFrameRate * 1000) {
-        val.currentValue = newTarget;
-        val.animating = false;
-        return;
-    }
-
-    val.lastAnimationTime = now;
-    val.animating = true;
-    val.animationStopTime = now + durationMs;
+    startValueAnimation(val, newTarget, now, kECGLLinearAnimationSpeed * animSpeed, durationOverrideMs);
 }
 
 /**
- * Linear interpolation (no angle wrapping) for xMotion/yMotion values.
+ * Evaluate and start linear motions (xMotion/yMotion) for QHand and
+ * CalendarRowCover parts at natural speed (1× mode).
  */
-function interpolateLinear(val: AnimatingValue, now: number): number {
-    if (!val.animating) return val.currentValue;
-
-    if (now >= val.animationStopTime) {
-        val.animating = false;
-        val.currentValue = val.targetValue;
-        return val.currentValue;
+function evaluateLinearMotions(
+    state: HandState,
+    env: Environment,
+    now: number,
+): void {
+    if (state.part.type === 'QHand') {
+        const qhand = state.part as QHandPart;
+        if (state.xMotion && qhand.xMotion) {
+            startLinearAnimation(state.xMotion, evalAttr(qhand.xMotion, env), now, state.animSpeed);
+        }
+        if (state.yMotion && qhand.yMotion) {
+            startLinearAnimation(state.yMotion, evalAttr(qhand.yMotion, env), now, state.animSpeed);
+        }
     }
+    if (state.part.type === 'CalendarRowCover' && state.xMotion) {
+        const newXM = computeCalendarCoverOffset(state.part as CalendarRowCoverPart, env);
+        startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
+    }
+}
 
-    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
-    val.currentValue += (val.targetValue - val.currentValue) * fraction;
-    val.lastAnimationTime = now;
-    return val.currentValue;
+/**
+ * Evaluate and start linear motions with quantized-mode compression.
+ * If the natural duration exceeds the time budget, compress to fit.
+ */
+function compressLinearMotions(
+    state: HandState,
+    env: Environment,
+    now: number,
+    timeUntilNextUpdateMs: number,
+): void {
+    const linearSpeed = kECGLLinearAnimationSpeed * state.animSpeed;
+
+    const compressLinear = (val: AnimatingValue, newTarget: number) => {
+        const naturalMs = linearSpeed > 0
+            ? (Math.abs(newTarget - val.currentValue) / linearSpeed) * 1000
+            : 0;
+        const overrideMs = naturalMs > timeUntilNextUpdateMs ? timeUntilNextUpdateMs : undefined;
+        startLinearAnimation(val, newTarget, now, state.animSpeed, overrideMs);
+    };
+
+    if (state.part.type === 'QHand') {
+        const qhand = state.part as QHandPart;
+        if (state.xMotion && qhand.xMotion) {
+            compressLinear(state.xMotion, evalAttr(qhand.xMotion, env));
+        }
+        if (state.yMotion && qhand.yMotion) {
+            compressLinear(state.yMotion, evalAttr(qhand.yMotion, env));
+        }
+    }
+    if (state.part.type === 'CalendarRowCover' && state.xMotion) {
+        compressLinear(state.xMotion, computeCalendarCoverOffset(state.part as CalendarRowCoverPart, env));
+    }
 }
