@@ -10971,23 +10971,25 @@
       animating: false
     };
   }
-  function initHandStates(watch, env, now, getNow) {
+  function initHandStates(watch, env, now, getNow, rawGetNow) {
     const states = [];
-    collectDynamicParts(watch.parts, env, now, states, getNow || (() => /* @__PURE__ */ new Date()));
+    const effectiveGetNow = getNow || (() => /* @__PURE__ */ new Date());
+    const effectiveRawGetNow = rawGetNow || effectiveGetNow;
+    collectDynamicParts(watch.parts, env, now, states, effectiveGetNow, effectiveRawGetNow);
     return states;
   }
-  function collectDynamicParts(parts, env, now, out, getNow) {
+  function collectDynamicParts(parts, env, now, out, getNow, rawGetNow) {
     for (const part of parts) {
       if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
-        out.push(createHandState(part, env, now, getNow));
+        out.push(createHandState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "CalendarRowCover") {
-        out.push(createCalendarCoverState(part, env, now, getNow));
+        out.push(createCalendarCoverState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "Static") {
-        collectDynamicParts(part.children, env, now, out, getNow);
+        collectDynamicParts(part.children, env, now, out, getNow, rawGetNow);
       }
     }
   }
-  function createHandState(part, env, now, getNow) {
+  function createHandState(part, env, now, getNow, rawGetNow) {
     const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
     const updateIntervalMs = updateIntervalSec * 1e3;
     const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
@@ -11006,7 +11008,7 @@
       part.dynamicState.currentXMotion = initialXMotion;
       part.dynamicState.currentYMotion = initialYMotion;
     }
-    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
     return {
       part,
       angle: {
@@ -11027,9 +11029,10 @@
       yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
       updateIntervalMs,
       nextUpdateDisplayTime: nextDisplayMs,
-      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
+      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, rawGetNow),
       animSpeed,
-      getNow
+      getNow,
+      rawGetNow
     };
   }
   function computeCalendarCoverOffset(part, env) {
@@ -11095,7 +11098,7 @@
     }
     return Math.round(columnMotion * cellWidth);
   }
-  function createCalendarCoverState(part, env, now, getNow) {
+  function createCalendarCoverState(part, env, now, getNow, rawGetNow) {
     const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
     const updateIntervalMs = updateIntervalSec * 1e3;
     const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
@@ -11104,7 +11107,7 @@
       currentAngle: 0,
       currentXMotion: initialXOffset
     };
-    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
     return {
       part,
       angle: makeAnimatingValue(0, now),
@@ -11113,9 +11116,10 @@
       yMotion: null,
       updateIntervalMs,
       nextUpdateDisplayTime: nextDisplayMs,
-      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
+      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, rawGetNow),
       animSpeed,
-      getNow
+      getNow,
+      rawGetNow
     };
   }
   function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
@@ -11123,7 +11127,7 @@
       if (now >= state.nextUpdateTime) {
         const newTarget = "angle" in state.part && state.part.angle ? evalAttr(state.part.angle, env) : 0;
         const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
-        const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.getNow, timeDirection, env);
+        const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.rawGetNow, timeDirection, env);
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
           const displayNowMs = state.getNow().getTime();
           const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
@@ -11163,7 +11167,7 @@
           }
           evaluateLinearMotions(state, env, now);
           state.nextUpdateDisplayTime = nextDisplayMs;
-          state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.getNow);
+          state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.rawGetNow);
         }
       }
       const rawAngle = interpolateValue(state.angle, now);
@@ -17555,7 +17559,7 @@
       buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       buildHandShadowCaches(watch, env, scale, images);
       face.cachesBuilt = true;
-      face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond));
+      face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond), rawGetNow);
     }
     function buildAllCachesSequentially(facesToBuild, onDone) {
       let idx = 0;

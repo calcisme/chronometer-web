@@ -102,8 +102,12 @@ export interface HandState {
     nextUpdateTime: number;
     /** Animation speed multiplier from XML (default 1.0). */
     animSpeed: number;
-    /** Time source for scheduling aligned updates. */
+    /** Time source for expression evaluation (may be quantized by beatsPerSecond). */
     getNow: () => Date;
+    /** Unquantized time source for boundary scheduling.
+     *  Matches iOS architecture where update boundaries are computed in
+     *  iPhone time (real time), not latched/quantized watch time. */
+    rawGetNow: () => Date;
     /** X-axis linear motion (calendar day-indicator wires). */
     xMotion: AnimatingValue | null;
     /** Y-axis linear motion (calendar day-indicator wires). */
@@ -124,9 +128,12 @@ export function initHandStates(
     env: Environment,
     now: number,  // performance.now()
     getNow?: () => Date,
+    rawGetNow?: () => Date,
 ): HandState[] {
     const states: HandState[] = [];
-    collectDynamicParts(watch.parts, env, now, states, getNow || (() => new Date()));
+    const effectiveGetNow = getNow || (() => new Date());
+    const effectiveRawGetNow = rawGetNow || effectiveGetNow;
+    collectDynamicParts(watch.parts, env, now, states, effectiveGetNow, effectiveRawGetNow);
     return states;
 }
 
@@ -136,14 +143,15 @@ function collectDynamicParts(
     now: number,
     out: HandState[],
     getNow: () => Date,
+    rawGetNow: () => Date,
 ): void {
     for (const part of parts) {
         if (part.type === 'QHand' || part.type === 'Wheel' || part.type === 'QWedge') {
-            out.push(createHandState(part, env, now, getNow));
+            out.push(createHandState(part, env, now, getNow, rawGetNow));
         } else if (part.type === 'CalendarRowCover') {
-            out.push(createCalendarCoverState(part as CalendarRowCoverPart, env, now, getNow));
+            out.push(createCalendarCoverState(part as CalendarRowCoverPart, env, now, getNow, rawGetNow));
         } else if (part.type === 'Static') {
-            collectDynamicParts(part.children, env, now, out, getNow);
+            collectDynamicParts(part.children, env, now, out, getNow, rawGetNow);
         }
     }
 }
@@ -153,6 +161,7 @@ function createHandState(
     env: Environment,
     now: number,
     getNow: () => Date,
+    rawGetNow: () => Date,
 ): HandState {
     // Evaluate the update interval. Named sentinel constants evaluate to
     // negative values; numeric values are expression strings like "1" or "60".
@@ -181,7 +190,9 @@ function createHandState(
         part.dynamicState!.currentYMotion = initialYMotion;
     }
 
-    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+    // Use raw (unquantized) time for boundary computation, matching iOS
+    // where boundaries are computed in iPhone time, not latched watch time.
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
 
     return {
         part,
@@ -203,9 +214,10 @@ function createHandState(
         yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
         updateIntervalMs,
         nextUpdateDisplayTime: nextDisplayMs,
-        nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
+        nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, rawGetNow),
         animSpeed,
         getNow,
+        rawGetNow,
     };
 }
 
@@ -301,6 +313,7 @@ function createCalendarCoverState(
     env: Environment,
     now: number,
     getNow: () => Date,
+    rawGetNow: () => Date,
 ): HandState {
     const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
     const updateIntervalMs = updateIntervalSec * 1000;
@@ -313,7 +326,8 @@ function createCalendarCoverState(
         currentXMotion: initialXOffset,
     };
 
-    const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
+    // Use raw (unquantized) time for boundary computation
+    const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
 
     return {
         part,
@@ -323,9 +337,10 @@ function createCalendarCoverState(
         yMotion: null,
         updateIntervalMs,
         nextUpdateDisplayTime: nextDisplayMs,
-        nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, getNow),
+        nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, rawGetNow),
         animSpeed,
         getNow,
+        rawGetNow,
     };
 }
 
@@ -370,7 +385,9 @@ export function tickAnimations(
 
             // Compute the next boundary BEFORE starting animations
             // (so we know the time budget for compression)
-            const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.getNow, timeDirection, env);
+            // Use rawGetNow for boundary computation — matches iOS where
+            // boundaries are computed in iPhone time, not latched watch time.
+            const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.rawGetNow, timeDirection, env);
 
             if (tickIntervalMs !== null && tickIntervalMs > 0) {
                 // --- Quantized mode ---
@@ -441,7 +458,7 @@ export function tickAnimations(
                 evaluateLinearMotions(state, env, now);
 
                 state.nextUpdateDisplayTime = nextDisplayMs;
-                state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.getNow);
+                state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.rawGetNow);
             }
         }
 

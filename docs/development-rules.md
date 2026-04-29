@@ -57,6 +57,10 @@ if (isNaN(U)) return null;
 
 `NaN` defeats range checks because `NaN < x` and `NaN > x` are both `false`, causing index calculations to produce `NaN` and crash on array access.
 
+### Boundary scheduling must use `rawGetNow`, never `getNow`
+
+`HandState` has two time sources: `getNow` (quantized by `beatsPerSecond`) and `rawGetNow` (unquantized). `computeNextBoundary` and `displayTimeToPerfNow` must always use `rawGetNow`. Using the quantized `getNow` causes `Math.ceil` to return the current time (not the next boundary) when the quantized time is already aligned, leading to every-frame evaluation and a visible ~0.5s timing skew between faces with different `beatsPerSecond` values. See the `[!IMPORTANT]` block in [animation.md](animation.md) for details.
+
 ## 6. Animation Schedule Reset Rules
 
 Reset hand schedules (`nextUpdateTime = 0`) only at **discrete transition points**:

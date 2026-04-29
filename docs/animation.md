@@ -27,7 +27,12 @@ The default is `0` (continuous), matching iOS (`ECWatchDefinitionManager.m`, `df
 ```typescript
 const quantizedMs = Math.round(ms / 1000 * bps) / bps * 1000;
 ```
-Each face gets its own quantized `getNow` closure, passed to both `createWatchEnvironment` (for expression evaluation) and `initHandStates` (for animation scheduling). This ensures all downstream time-dependent functions automatically see the quantized time.
+Each face gets its own quantized `getNow` closure, passed to `createWatchEnvironment` (for expression evaluation) and as the `getNow` parameter of `initHandStates`. A separate **unquantized** `rawGetNow` is also passed to `initHandStates` for boundary scheduling (see below).
+
+> [!IMPORTANT]
+> **Boundary scheduling must use raw (unquantized) time.** The quantized `getNow` is only for expression evaluation — determining *what* angle a hand should show. The `rawGetNow` is used by `computeNextBoundary` and `displayTimeToPerfNow` to determine *when* the next update fires. This matches the iOS architecture where `ECDynamicUpdate.getNextUpdateTimeForInterval` computes boundaries in "iPhone time" (real device time), not in latched/quantized watch time.
+>
+> **Why this matters**: With `bps=1`, `Math.round` snaps the displayed time to the nearest whole second, which can be up to 0.5s ahead of real time. If `computeNextBoundary` uses this quantized time, `Math.ceil` of an already-aligned value returns the current time (not the next boundary), producing a zero delta and causing every-frame re-evaluation. The hand then ticks 0.5s before faces with `bps=0`, creating visible inter-face skew.
 
 ## Two-Time-Base Architecture
 
@@ -60,7 +65,8 @@ interface HandState {
     updateIntervalMs: number;             // From XML update attr
     nextUpdateTime: number;               // performance.now() for next re-eval
     animSpeed: number;                    // From XML animSpeed attr (default 1.0)
-    getNow: () => Date;                   // Display time source (quantized)
+    getNow: () => Date;                   // Display time source (quantized) — for expressions
+    rawGetNow: () => Date;                // Unquantized time — for boundary scheduling
 }
 ```
 

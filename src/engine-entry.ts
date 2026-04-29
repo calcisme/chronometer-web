@@ -671,7 +671,7 @@ async function main() {
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         buildHandShadowCaches(watch, env, scale, images);
         face.cachesBuilt = true;
-        face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond));
+        face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond), rawGetNow);
     }
 
     function buildAllCachesSequentially(facesToBuild: FaceInstance[], onDone: () => void) {
