@@ -884,59 +884,85 @@
         }
 
         /* Popover */
+        /* ---- L-shaped time popover ---- */
         #time-popover {
             position: absolute;
             bottom: 0;
             right: 0;
             z-index: 30;
-            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            background: none;   /* sections carry their own bg */
+            overflow: visible;  /* close btn floats above */
+            padding: 0;
+        }
+
+        /* Close button: floats above popover top edge */
+        #tp-close {
+            position: absolute;
+            top: -26px;
+            right: 4px;
+            background: rgba(26, 26, 46, 0.85);
+            border: 1px solid #3a3a5e;
+            border-radius: 50%;
+            color: #667;
+            font-size: 14px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s, background 0.15s;
+            z-index: 31;
+        }
+
+        #tp-close:hover {
+            color: #ccf;
+            background: rgba(50, 50, 80, 0.95);
+        }
+
+        /* Upper section: narrow, right-aligned */
+        #tp-upper {
+            width: 120px;
+            padding: 10px 10px 6px;
             background: rgba(26, 26, 46, 0.96);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid #3a3a5e;
             border-radius: 14px 0 0 0;
-            padding: 12px 14px;
+            border-bottom: none;
             box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
         }
 
-        #tp-close {
-            position: absolute;
-            top: 4px;
-            right: 4px;
-            background: none;
-            border: none;
-            color: #667;
-            font-size: 16px;
-            cursor: pointer;
-            padding: 2px 6px;
-            line-height: 1;
-            transition: color 0.15s;
-        }
-
-        #tp-close:hover {
-            color: #ccf;
-        }
-
-        .tp-section {
-            margin-bottom: 10px;
-        }
-
-        .tp-section:last-child {
-            margin-bottom: 0;
+        /* Lower section: full width */
+        #tp-lower {
+            width: 100%;
+            min-width: 200px;
+            padding: 8px 14px 12px;
+            background: rgba(26, 26, 46, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid #3a3a5e;
+            border-radius: 14px 0 0 0;
+            border-top: 1px solid #3a3a5e;
+            box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
         }
 
         .tp-label {
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
             color: #667;
             letter-spacing: 0.5px;
             margin-bottom: 5px;
+            text-align: center;
         }
 
-        .tp-btn-row {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 4px;
+        #tp-upper .tp-label {
+            margin-top: 8px;
         }
 
         .tp-btn {
@@ -966,17 +992,17 @@
             color: #8af;
         }
 
-        /* Step buttons expand to fill row equally */
+        /* Step buttons: 2 per row, fill equally */
         .tp-step-row {
             display: flex;
-            gap: 4px;
-            margin-bottom: 4px;
+            gap: 3px;
+            margin-bottom: 3px;
         }
 
         .tp-step-row .tp-btn {
             flex: 1;
             font-size: 11px;
-            padding: 5px 4px;
+            padding: 4px 2px;
         }
 
         .tp-btn.holding {
@@ -985,23 +1011,31 @@
             color: #ccf;
         }
 
-        /* Transport bar (play/pause) */
+        /* Transport: flex column with sub-rows */
         .tp-transport {
             display: flex;
-            gap: 4px;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .tp-transport-row {
+            display: flex;
+            gap: 3px;
             justify-content: center;
         }
 
         .tp-transport .tp-btn {
-            font-size: 14px;
-            padding: 5px 14px;
+            font-size: 13px;
+            padding: 4px 10px;
+            flex: 1;
         }
 
         #tp-rate-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #8af;
             text-align: center;
             margin-top: 4px;
+            margin-bottom: 2px;
         }
 
         .tp-date-inputs {
@@ -1287,35 +1321,35 @@ And the distance away from the standard meridian of the time zone can result in 
         </div>
 
 
-        <!-- Time controller popover -->
+        <!-- Time controller popover (L-shaped) -->
         <div id="time-popover" style="display:none">
             <button id="tp-close">&times;</button>
-            <div class="tp-section">
+            <div id="tp-upper">
                 <div class="tp-transport" id="tp-transport"></div>
                 <div id="tp-rate-label">1× (real time)</div>
-            </div>
-            <div class="tp-section">
-                <div class="tp-label">Step (hold to scrub)</div>
+                <div class="tp-label">Hold to scrub</div>
                 <div class="tp-step-row">
                     <button class="tp-btn" data-step="-year" data-unit="year">◀1y</button>
+                    <button class="tp-btn" data-step="+year" data-unit="year">1y ▶</button>
+                </div>
+                <div class="tp-step-row">
                     <button class="tp-btn" data-step="-month" data-unit="month">◀1mo</button>
+                    <button class="tp-btn" data-step="+month" data-unit="month">1mo ▶</button>
+                </div>
+                <div class="tp-step-row">
                     <button class="tp-btn" data-step="-day" data-unit="day">◀1d</button>
+                    <button class="tp-btn" data-step="+day" data-unit="day">1d ▶</button>
                 </div>
                 <div class="tp-step-row">
                     <button class="tp-btn" data-step="-hour" data-unit="hour">◀1h</button>
-                    <button class="tp-btn" data-step="-minute" data-unit="minute">◀1m</button>
-                </div>
-                <div class="tp-step-row">
-                    <button class="tp-btn" data-step="+minute" data-unit="minute">1m ▶</button>
                     <button class="tp-btn" data-step="+hour" data-unit="hour">1h ▶</button>
                 </div>
                 <div class="tp-step-row">
-                    <button class="tp-btn" data-step="+day" data-unit="day">1d ▶</button>
-                    <button class="tp-btn" data-step="+month" data-unit="month">1mo ▶</button>
-                    <button class="tp-btn" data-step="+year" data-unit="year">1y ▶</button>
+                    <button class="tp-btn" data-step="-minute" data-unit="minute">◀1mi</button>
+                    <button class="tp-btn" data-step="+minute" data-unit="minute">1mi ▶</button>
                 </div>
             </div>
-            <div class="tp-section">
+            <div id="tp-lower">
                 <div class="tp-label">Set Date &amp; Time</div>
                 <div class="tp-date-inputs">
                     <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">

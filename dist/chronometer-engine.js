@@ -18502,7 +18502,38 @@
     function renderTransport() {
       tpTransport.innerHTML = "";
       const isStopped = timeController.isStopped;
+      const topRow = document.createElement("div");
+      topRow.className = "tp-transport-row";
+      if (!timeController.isRealTime) {
+        const nowBtn = document.createElement("button");
+        nowBtn.className = "tp-btn";
+        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
+        nowBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          nowClicked();
+        });
+        topRow.appendChild(nowBtn);
+      }
+      if (!isStopped) {
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "tp-btn active";
+        pauseBtn.textContent = "\u2016";
+        pauseBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.stop();
+          finishAllAnimations();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        topRow.appendChild(pauseBtn);
+      }
+      if (topRow.childNodes.length > 0) {
+        tpTransport.appendChild(topRow);
+      }
       if (isStopped) {
+        const bottomRow = document.createElement("div");
+        bottomRow.className = "tp-transport-row";
         const revBtn = document.createElement("button");
         revBtn.className = "tp-btn";
         revBtn.textContent = "\u25C0";
@@ -18527,32 +18558,9 @@
           ensureSchedulerRunning();
           writeTimeState();
         });
-        tpTransport.appendChild(revBtn);
-        tpTransport.appendChild(fwdBtn);
-      } else {
-        const pauseBtn = document.createElement("button");
-        pauseBtn.className = "tp-btn active";
-        pauseBtn.textContent = "\u2016";
-        pauseBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.stop();
-          finishAllAnimations();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        tpTransport.appendChild(pauseBtn);
-      }
-      if (!timeController.isRealTime) {
-        const nowBtn = document.createElement("button");
-        nowBtn.className = "tp-btn";
-        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
-        nowBtn.style.padding = "5px 4px";
-        nowBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          nowClicked();
-        });
-        tpTransport.appendChild(nowBtn);
+        bottomRow.appendChild(revBtn);
+        bottomRow.appendChild(fwdBtn);
+        tpTransport.appendChild(bottomRow);
       }
     }
     function updateTimeUI() {
