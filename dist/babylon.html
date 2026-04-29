@@ -622,18 +622,26 @@
             position: absolute;
             top: 60px;
             left: 16px;
+            width: 36px;
             height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
             align-items: center;
+            justify-content: center;
             z-index: 10;
             color: #5ca0d3;
             text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-            letter-spacing: 0.3px;
-            transition: color 0.2s;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        #edit-picks-link svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
         }
 
         #edit-picks-link:hover {
+            background: rgba(255,255,255,0.15);
             color: #7dc0ef;
         }
 
@@ -1182,7 +1190,7 @@
         <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
         <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></a>
         <a id="selected-faces-link" href="selected.html" title="Selected Faces"><svg viewBox="0 0 24 24"><circle class="accent-dot" cx="7" cy="7" r="2.5"/><circle class="accent-dot" cx="17" cy="7" r="2.5"/><circle class="accent-dot" cx="7" cy="17" r="2.5"/><circle class="accent-dot" cx="17" cy="17" r="2.5"/></svg></a>
-        <a id="edit-picks-link" href="pick.html" title="Edit face selection">Edit Picks</a>
+        <a id="edit-picks-link" href="pick.html" title="Edit face selection"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a>
         <span id="face-name">Babylon</span>
         <button id="info-btn" title="About this face">ℹ&#xFE0E;</button>
         <div id="info-overlay">
