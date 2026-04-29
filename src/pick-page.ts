@@ -4,7 +4,7 @@
  * Handles:
  *  - Rendering face thumbnails in a selectable grid
  *  - Toggle selection with numbered badges
- *  - Summary strip with mini-thumbnails and "Done" button
+ *  - All / None / Reorder / Done header buttons
  *  - Bottom sheet for drag-to-reorder
  *  - URL state: reads/writes `picks` param, preserves other params
  */
@@ -50,14 +50,13 @@ let selectedOrder: string[] = [];
 // ============================================================================
 
 const pickGrid = document.getElementById('pick-grid')!;
-const summaryThumbs = document.getElementById('summary-thumbs')!;
-const summaryCount = document.getElementById('summary-count')!;
-const doneBtn = document.getElementById('done-btn') as HTMLButtonElement;
-const summaryExpand = document.getElementById('summary-expand')!;
+const btnAll = document.getElementById('btn-all') as HTMLButtonElement;
+const btnNone = document.getElementById('btn-none') as HTMLButtonElement;
+const btnReorder = document.getElementById('btn-reorder') as HTMLButtonElement;
+const btnDone = document.getElementById('btn-done') as HTMLButtonElement;
 const sheetBackdrop = document.getElementById('sheet-backdrop')!;
 const sheetPanel = document.getElementById('sheet-panel')!;
 const sheetList = document.getElementById('sheet-list')!;
-const sheetClose = document.getElementById('sheet-close')!;
 const sheetDone = document.getElementById('sheet-done')!;
 const homeLink = document.getElementById('pick-home-link') as HTMLAnchorElement;
 
@@ -150,13 +149,16 @@ function toggleFace(abbrev: string): void {
     updateUI();
 }
 
-function removeFace(abbrev: string): void {
-    const idx = selectedOrder.indexOf(abbrev);
-    if (idx >= 0) {
-        selectedOrder.splice(idx, 1);
-        updateUI();
-        renderSheet();
-    }
+
+
+function selectAll(): void {
+    selectedOrder = FACES.map(f => f.abbrev);
+    updateUI();
+}
+
+function selectNone(): void {
+    selectedOrder = [];
+    updateUI();
 }
 
 // ============================================================================
@@ -176,33 +178,45 @@ function updateUI(): void {
         }
     }
 
-    // Update summary strip
-    summaryThumbs.innerHTML = '';
+    // Update header buttons
+    const count = selectedOrder.length;
+    btnReorder.disabled = count < 2;
+    btnDone.disabled = count === 0;
+}
+
+/** Reorder grid DOM: selected faces first (in selectedOrder), then unselected (in original order). */
+function reorderGrid(): void {
+    // Selected faces in their current order
     for (const abbrev of selectedOrder) {
-        const face = faceByAbbrev.get(abbrev);
-        if (face) {
-            const img = document.createElement('img');
-            img.src = face.thumb;
-            img.alt = face.name;
-            summaryThumbs.appendChild(img);
+        const card = cardElements.get(abbrev);
+        if (card) pickGrid.appendChild(card);
+    }
+    // Unselected faces in original FACES order
+    for (const face of FACES) {
+        if (!selectedOrder.includes(face.abbrev)) {
+            const card = cardElements.get(face.abbrev);
+            if (card) pickGrid.appendChild(card);
         }
     }
-
-    const count = selectedOrder.length;
-    summaryCount.textContent = count === 0 ? 'Tap faces to select' : `${count} selected`;
-    doneBtn.disabled = count === 0;
 }
 
 // ============================================================================
 // Bottom sheet
 // ============================================================================
 
+let sheetOpenTime = 0;  // Timestamp when sheet was opened, to debounce backdrop clicks
+
 function openSheet(): void {
-    if (selectedOrder.length === 0) return;
+    if (selectedOrder.length < 2) return;
     renderSheet();
     sheetBackdrop.classList.add('visible');
+    sheetOpenTime = Date.now();
+    // Double-rAF ensures the browser has committed the backdrop layout
+    // before starting the slide-up transition on the panel.
     requestAnimationFrame(() => {
-        sheetPanel.classList.add('visible');
+        requestAnimationFrame(() => {
+            sheetPanel.classList.add('visible');
+        });
     });
 }
 
@@ -231,15 +245,6 @@ function renderSheet(): void {
         name.className = 'sheet-name';
         name.textContent = face.name;
 
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'sheet-remove';
-        removeBtn.textContent = '✕';
-        removeBtn.title = 'Remove';
-        removeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            removeFace(abbrev);
-        });
-
         const handle = document.createElement('span');
         handle.className = 'sheet-handle';
         handle.textContent = '≡';
@@ -247,7 +252,6 @@ function renderSheet(): void {
 
         item.appendChild(img);
         item.appendChild(name);
-        item.appendChild(removeBtn);
         item.appendChild(handle);
 
         sheetList.appendChild(item);
@@ -359,25 +363,23 @@ function syncOrderFromSheet(): void {
 // Event handlers
 // ============================================================================
 
-summaryExpand.addEventListener('click', openSheet);
+btnAll.addEventListener('click', selectAll);
+btnNone.addEventListener('click', selectNone);
+btnReorder.addEventListener('click', openSheet);
+btnDone.addEventListener('click', navigateDone);
 
-// Also open sheet by clicking anywhere on the summary strip except Done button
-document.getElementById('summary-strip')!.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.id === 'done-btn' || target.closest('#done-btn')) return;
-    if (target.id === 'summary-expand' || target.closest('#summary-expand')) return;
-    if (selectedOrder.length > 0) openSheet();
+
+sheetBackdrop.addEventListener('click', () => {
+    // Ignore clicks within 300ms of opening — prevents the same click from closing
+    if (Date.now() - sheetOpenTime < 300) return;
+    closeSheet();
 });
-
-sheetClose.addEventListener('click', closeSheet);
-sheetBackdrop.addEventListener('click', closeSheet);
 
 sheetDone.addEventListener('click', () => {
     closeSheet();
-    navigateDone();
+    reorderGrid();
+    updateUI();
 });
-
-doneBtn.addEventListener('click', navigateDone);
 
 function navigateDone(): void {
     if (selectedOrder.length === 0) return;
@@ -401,6 +403,9 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
 
     // Build grid and update UI
     buildGrid();
+    if (selectedOrder.length > 0) {
+        reorderGrid();
+    }
     updateUI();
     updateHomeLink();
 })();

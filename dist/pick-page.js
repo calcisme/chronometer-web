@@ -19,14 +19,13 @@
   var faceByAbbrev = new Map(FACES.map((f) => [f.abbrev, f]));
   var selectedOrder = [];
   var pickGrid = document.getElementById("pick-grid");
-  var summaryThumbs = document.getElementById("summary-thumbs");
-  var summaryCount = document.getElementById("summary-count");
-  var doneBtn = document.getElementById("done-btn");
-  var summaryExpand = document.getElementById("summary-expand");
+  var btnAll = document.getElementById("btn-all");
+  var btnNone = document.getElementById("btn-none");
+  var btnReorder = document.getElementById("btn-reorder");
+  var btnDone = document.getElementById("btn-done");
   var sheetBackdrop = document.getElementById("sheet-backdrop");
   var sheetPanel = document.getElementById("sheet-panel");
   var sheetList = document.getElementById("sheet-list");
-  var sheetClose = document.getElementById("sheet-close");
   var sheetDone = document.getElementById("sheet-done");
   var homeLink = document.getElementById("pick-home-link");
   function readPicksFromUrl() {
@@ -90,13 +89,13 @@
     }
     updateUI();
   }
-  function removeFace(abbrev) {
-    const idx = selectedOrder.indexOf(abbrev);
-    if (idx >= 0) {
-      selectedOrder.splice(idx, 1);
-      updateUI();
-      renderSheet();
-    }
+  function selectAll() {
+    selectedOrder = FACES.map((f) => f.abbrev);
+    updateUI();
+  }
+  function selectNone() {
+    selectedOrder = [];
+    updateUI();
   }
   function updateUI() {
     for (const [abbrev, card] of cardElements) {
@@ -109,26 +108,32 @@
         card.classList.remove("selected");
       }
     }
-    summaryThumbs.innerHTML = "";
+    const count = selectedOrder.length;
+    btnReorder.disabled = count < 2;
+    btnDone.disabled = count === 0;
+  }
+  function reorderGrid() {
     for (const abbrev of selectedOrder) {
-      const face = faceByAbbrev.get(abbrev);
-      if (face) {
-        const img = document.createElement("img");
-        img.src = face.thumb;
-        img.alt = face.name;
-        summaryThumbs.appendChild(img);
+      const card = cardElements.get(abbrev);
+      if (card) pickGrid.appendChild(card);
+    }
+    for (const face of FACES) {
+      if (!selectedOrder.includes(face.abbrev)) {
+        const card = cardElements.get(face.abbrev);
+        if (card) pickGrid.appendChild(card);
       }
     }
-    const count = selectedOrder.length;
-    summaryCount.textContent = count === 0 ? "Tap faces to select" : `${count} selected`;
-    doneBtn.disabled = count === 0;
   }
+  var sheetOpenTime = 0;
   function openSheet() {
-    if (selectedOrder.length === 0) return;
+    if (selectedOrder.length < 2) return;
     renderSheet();
     sheetBackdrop.classList.add("visible");
+    sheetOpenTime = Date.now();
     requestAnimationFrame(() => {
-      sheetPanel.classList.add("visible");
+      requestAnimationFrame(() => {
+        sheetPanel.classList.add("visible");
+      });
     });
   }
   function closeSheet() {
@@ -151,21 +156,12 @@
       const name = document.createElement("span");
       name.className = "sheet-name";
       name.textContent = face.name;
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "sheet-remove";
-      removeBtn.textContent = "\u2715";
-      removeBtn.title = "Remove";
-      removeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeFace(abbrev);
-      });
       const handle = document.createElement("span");
       handle.className = "sheet-handle";
       handle.textContent = "\u2261";
       handle.title = "Drag to reorder";
       item.appendChild(img);
       item.appendChild(name);
-      item.appendChild(removeBtn);
       item.appendChild(handle);
       sheetList.appendChild(item);
     }
@@ -244,20 +240,19 @@
     const items = sheetList.querySelectorAll(".sheet-item");
     selectedOrder = Array.from(items).map((item) => item.dataset.abbrev).filter((abbrev) => abbrev != null);
   }
-  summaryExpand.addEventListener("click", openSheet);
-  document.getElementById("summary-strip").addEventListener("click", (e) => {
-    const target = e.target;
-    if (target.id === "done-btn" || target.closest("#done-btn")) return;
-    if (target.id === "summary-expand" || target.closest("#summary-expand")) return;
-    if (selectedOrder.length > 0) openSheet();
+  btnAll.addEventListener("click", selectAll);
+  btnNone.addEventListener("click", selectNone);
+  btnReorder.addEventListener("click", openSheet);
+  btnDone.addEventListener("click", navigateDone);
+  sheetBackdrop.addEventListener("click", () => {
+    if (Date.now() - sheetOpenTime < 300) return;
+    closeSheet();
   });
-  sheetClose.addEventListener("click", closeSheet);
-  sheetBackdrop.addEventListener("click", closeSheet);
   sheetDone.addEventListener("click", () => {
     closeSheet();
-    navigateDone();
+    reorderGrid();
+    updateUI();
   });
-  doneBtn.addEventListener("click", navigateDone);
   function navigateDone() {
     if (selectedOrder.length === 0) return;
     window.location.href = buildDoneUrl();
@@ -270,6 +265,9 @@
   (function init() {
     selectedOrder = readPicksFromUrl();
     buildGrid();
+    if (selectedOrder.length > 0) {
+      reorderGrid();
+    }
     updateUI();
     updateHomeLink();
   })();
