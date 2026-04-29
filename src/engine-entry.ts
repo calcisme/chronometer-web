@@ -1082,9 +1082,14 @@ async function main() {
         if (popoverOpen) {
             const gridRect = grid.getBoundingClientRect();
             const popRect = timePopover.getBoundingClientRect();
-            const pLeft = popRect.left - gridRect.left;
+            // Use tp-upper's narrow width for horizontal bounds (tp-lower
+            // sits over the time bar/location panel below the grid, so its
+            // extra width doesn't block faces in the grid area).
+            const upperEl = document.getElementById('tp-upper')!;
+            const upperRect = upperEl.getBoundingClientRect();
+            const pLeft = upperRect.left - gridRect.left;
             const pTop = popRect.top - gridRect.top;
-            const pRight = popRect.right - gridRect.left;
+            const pRight = upperRect.right - gridRect.left;
             const pBottom = popRect.bottom - gridRect.top;
 
             // Check whether a grid with `cols` columns at face `size`
