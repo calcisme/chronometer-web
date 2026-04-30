@@ -178,6 +178,8 @@ export interface QHandPart extends PartBase {
     xMotion?: ASTNode;
     /** Y-axis linear motion expression (calendar day-indicator wires). */
     yMotion?: ASTNode;
+    /** Alpha/opacity expression (0 = invisible, 1 = fully opaque). */
+    alpha?: ASTNode;
     // --- Pre-rendered shadow cache (not from XML) ---
     /** Pre-rendered hand + shadow bitmap. Created at init/resize. */
     _shadowBitmap?: OffscreenCanvas;

@@ -1389,6 +1389,7 @@ async function main() {
                 face.lastTerminatorRebuild = 0;
             }
             // Rebuild static caches (day/night rings, sunrise marks, etc.)
+            invalidateDayNightCaches(face.watch);
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
             // Reset hand schedules so they re-evaluate immediately and animate to new targets

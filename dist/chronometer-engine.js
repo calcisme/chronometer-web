@@ -640,7 +640,8 @@
       fontSize: attrExpr(el, "fontSize"),
       fontName: attr(el, "fontName"),
       xMotion: attrExpr(el, "xMotion"),
-      yMotion: attrExpr(el, "yMotion")
+      yMotion: attrExpr(el, "yMotion"),
+      alpha: attrExpr(el, "alpha")
     };
   }
   function parseWheel(el, variant) {
@@ -1077,8 +1078,6 @@
   var kECAstroTwilightAltitude = -18 * Math.PI / 180;
   var kECGoldenHourAltitude = 6 * Math.PI / 180;
   var kECLimitingAzimuthLatitude = 89 * Math.PI / 180;
-  var kECAlwaysAboveHorizon = NaN;
-  var kECAlwaysBelowHorizon = NaN;
   var ALWAYS_ABOVE_HORIZON = 1e18;
   var ALWAYS_BELOW_HORIZON = -1e18;
   function isAlwaysAbove(value) {
@@ -13024,16 +13023,52 @@
       return -generalPrecessionSinceJ2000(julianCenturiesSince2000Epoch);
     });
     functions.set("sunrise24HourIndicatorAngle", () => {
-      return dayNightLeafAngle(true, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds);
+      return computeDayNightLeafAngle(
+        0 /* Sun */,
+        0,
+        0,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
     });
     functions.set("sunset24HourIndicatorAngle", () => {
-      return dayNightLeafAngle(false, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds);
+      return computeDayNightLeafAngle(
+        0 /* Sun */,
+        1,
+        0,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
     });
     functions.set("polarSummer", () => {
-      return isPolarSummer(getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds) ? 1 : 0;
+      return computeDayNightLeafAngle(
+        0 /* Sun */,
+        2,
+        0,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
     });
     functions.set("polarWinter", () => {
-      return isPolarWinter(getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds) ? 1 : 0;
+      return computeDayNightLeafAngle(
+        0 /* Sun */,
+        3,
+        0,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
     });
     functions.set("sunriseIndicatorValid", () => {
       return isNaN(riseSetForDay(true, 0 /* Sun */)) ? 0 : 1;
@@ -13439,102 +13474,6 @@
     );
     releaseCachePool(pool);
   }
-  function dayNightLeafAngle(riseNotSet, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
-    const calcDate = dateToDateInterval(getNow());
-    const fudgeFactorSeconds = 5;
-    const lookahead = 3600 * 13.2;
-    const sunIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
-    const isNext = riseNotSet ? !sunIsUp : sunIsUp;
-    const result = nextPrevRiseSetInternal(
-      calcDate,
-      observerLat,
-      observerLon,
-      riseNotSet,
-      0 /* Sun */,
-      isNext,
-      -fudgeFactorSeconds,
-      lookahead,
-      pool
-    );
-    if (isNoRiseSet(result.eventTime)) {
-      let transitAngle = angle24HourForDate(result.transitTime, tzOffsetSeconds);
-      if (result.eventTime === kECAlwaysAboveHorizon) {
-        transitAngle = fmod(transitAngle + Math.PI, 2 * Math.PI);
-      }
-      return transitAngle;
-    }
-    return angle24HourForDate(result.eventTime, tzOffsetSeconds);
-  }
-  function isPolarSummer(getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
-    const calcDate = dateToDateInterval(getNow());
-    const sunIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
-    const riseResult = nextPrevRiseSetInternal(
-      calcDate,
-      observerLat,
-      observerLon,
-      true,
-      0 /* Sun */,
-      !sunIsUp,
-      -5,
-      3600 * 13.2,
-      pool
-    );
-    const setResult = nextPrevRiseSetInternal(
-      calcDate,
-      observerLat,
-      observerLon,
-      false,
-      0 /* Sun */,
-      sunIsUp,
-      -5,
-      3600 * 13.2,
-      pool
-    );
-    const riseTime = riseResult.eventTime;
-    const setTime = setResult.eventTime;
-    if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
-      return riseTime === kECAlwaysAboveHorizon;
-    }
-    if (isNoRiseSet(riseTime) && !isNoRiseSet(setTime)) {
-      return riseTime === kECAlwaysAboveHorizon;
-    }
-    return false;
-  }
-  function isPolarWinter(getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
-    const calcDate = dateToDateInterval(getNow());
-    const sunIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
-    const riseResult = nextPrevRiseSetInternal(
-      calcDate,
-      observerLat,
-      observerLon,
-      true,
-      0 /* Sun */,
-      !sunIsUp,
-      -5,
-      3600 * 13.2,
-      pool
-    );
-    const setResult = nextPrevRiseSetInternal(
-      calcDate,
-      observerLat,
-      observerLon,
-      false,
-      0 /* Sun */,
-      sunIsUp,
-      -5,
-      3600 * 13.2,
-      pool
-    );
-    const riseTime = riseResult.eventTime;
-    const setTime = setResult.eventTime;
-    if (isNoRiseSet(riseTime) && isNoRiseSet(setTime)) {
-      return riseTime === kECAlwaysBelowHorizon;
-    }
-    if (isNoRiseSet(riseTime) && !isNoRiseSet(setTime)) {
-      return riseTime === kECAlwaysBelowHorizon;
-    }
-    return false;
-  }
   function angle24HourForDate(dateInterval, tzOffsetSeconds) {
     const utcSeconds = dateInterval + 978307200;
     const localSeconds = utcSeconds + tzOffsetSeconds;
@@ -13628,29 +13567,30 @@
     let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
     let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
     if (isNaN(riseTime)) {
-      if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+      if (isAlwaysAbove(riseTime)) {
         rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
       }
     }
     if (isNaN(setTime)) {
-      if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+      if (isAlwaysAbove(setTime)) {
         sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
       }
     }
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
+    let isSpecial = false;
     if (numLeaves === 0) {
       if (leafNumber === 0) {
         return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
       } else if (leafNumber === 1) {
         return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
-      } else if (leafNumber === 2) {
-        return isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon ? 1 : 0;
-      } else if (leafNumber === 3) {
-        return isNoRiseSet(riseTime) && riseTime === kECAlwaysBelowHorizon ? 1 : 0;
+      } else {
+        isSpecial = true;
       }
+    } else if (numLeaves < 0) {
+      numLeaves = -numLeaves;
     }
-    const leafWidth = 2 * Math.PI / numLeaves;
+    const leafWidth = numLeaves > 0 ? 2 * Math.PI / numLeaves : 0;
     let polarSummer = false;
     let polarWinter = false;
     if (isNaN(riseTimeAngle)) {
@@ -13659,7 +13599,7 @@
         if (sTA > rTransitAngle + Math.PI) sTA -= 2 * Math.PI;
         else if (sTA < rTransitAngle - Math.PI) sTA += 2 * Math.PI;
         const avgTransit = (rTransitAngle + sTA) / 2;
-        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+        if (isAlwaysAbove(riseTime)) {
           riseTimeAngle = avgTransit - Math.PI;
           setTimeAngle = avgTransit + Math.PI;
           polarSummer = true;
@@ -13669,7 +13609,7 @@
           polarWinter = true;
         }
       } else {
-        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+        if (isAlwaysAbove(riseTime)) {
           riseTimeAngle = setTimeAngle - 2 * Math.PI;
           polarSummer = true;
         } else {
@@ -13678,7 +13618,7 @@
         }
       }
     } else if (isNaN(setTimeAngle)) {
-      if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+      if (isAlwaysAbove(setTime)) {
         setTimeAngle = riseTimeAngle + 2 * Math.PI;
         polarSummer = true;
       } else {
@@ -13686,17 +13626,32 @@
         polarWinter = true;
       }
     }
+    if (isSpecial) {
+      if (leafNumber === 2) return polarSummer ? 1 : 0;
+      if (leafNumber === 3) return polarWinter ? 1 : 0;
+    }
     riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
     setTimeAngle = fmod(setTimeAngle, 2 * Math.PI);
     if (setTimeAngle <= riseTimeAngle + 1e-4) {
       setTimeAngle += 2 * Math.PI;
     }
-    setTimeAngle -= leafWidth / 2;
-    riseTimeAngle += leafWidth / 2;
+    const nightTime = planetNumber === 11 /* MidnightSun */;
+    if (nightTime) {
+      setTimeAngle += leafWidth / 2;
+      riseTimeAngle -= leafWidth / 2;
+    } else {
+      setTimeAngle -= leafWidth / 2;
+      riseTimeAngle += leafWidth / 2;
+    }
     if (setTimeAngle < riseTimeAngle) {
       riseTimeAngle = setTimeAngle = (riseTimeAngle + setTimeAngle) / 2;
     }
-    let leafCenterAngle = riseTimeAngle + (setTimeAngle - riseTimeAngle) / (numLeaves - 1) * leafNumber;
+    let leafCenterAngle;
+    if (nightTime) {
+      leafCenterAngle = setTimeAngle + (2 * Math.PI - setTimeAngle + riseTimeAngle) / (numLeaves - 1) * leafNumber;
+    } else {
+      leafCenterAngle = riseTimeAngle + (setTimeAngle - riseTimeAngle) / (numLeaves - 1) * leafNumber;
+    }
     if (leafCenterAngle > 2 * Math.PI) {
       leafCenterAngle -= 2 * Math.PI;
     }
@@ -13778,10 +13733,10 @@
     const setTime = setResult.eventTime;
     let rTransitAngle = angle24HourLSTForDate(riseResult.transitTime, observerLon);
     let sTransitAngle = angle24HourLSTForDate(setResult.transitTime, observerLon);
-    if (isNaN(riseTime) && isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+    if (isAlwaysAbove(riseTime)) {
       rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
     }
-    if (isNaN(setTime) && isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+    if (isAlwaysAbove(setTime)) {
       sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
     }
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourLSTForDate(riseTime, observerLon);
@@ -13809,7 +13764,7 @@
         if (sTA > rTransitAngle + Math.PI) sTA -= 2 * Math.PI;
         else if (sTA < rTransitAngle - Math.PI) sTA += 2 * Math.PI;
         const avgTransit = (rTransitAngle + sTA) / 2;
-        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+        if (isAlwaysAbove(riseTime)) {
           riseTimeAngle = avgTransit - Math.PI;
           setTimeAngle = avgTransit + Math.PI;
         } else {
@@ -13817,14 +13772,14 @@
           setTimeAngle = avgTransit + leafWidth / 2 + 1e-5;
         }
       } else {
-        if (isNoRiseSet(riseTime) && riseTime === kECAlwaysAboveHorizon) {
+        if (isAlwaysAbove(riseTime)) {
           riseTimeAngle = setTimeAngle - 2 * Math.PI;
         } else {
           riseTimeAngle = setTimeAngle - leafWidth;
         }
       }
     } else if (isNaN(setTimeAngle)) {
-      if (isNoRiseSet(setTime) && setTime === kECAlwaysAboveHorizon) {
+      if (isAlwaysAbove(setTime)) {
         setTimeAngle = riseTimeAngle + 2 * Math.PI;
       } else {
         setTimeAngle = riseTimeAngle + leafWidth;
@@ -15421,6 +15376,8 @@
     if (!part.src || !images) return;
     const loaded2 = images.get(part.src);
     if (!loaded2) return;
+    const alpha = part.alpha !== void 0 ? evalAttr(part.alpha, env) : 1;
+    if (alpha <= 0) return;
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);
     const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
@@ -15444,6 +15401,7 @@
       return;
     }
     ctx.save();
+    if (alpha < 1) ctx.globalAlpha = alpha;
     setupHandShadow(
       ctx,
       part,
@@ -18080,6 +18038,7 @@
           resetLeafSchedules(face.terminatorLeaves);
           face.lastTerminatorRebuild = 0;
         }
+        invalidateDayNightCaches(face.watch);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         for (const hs of face.handStates) {

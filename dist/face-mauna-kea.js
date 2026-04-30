@@ -64,13 +64,13 @@
 
   <QdayNightRing name='daytime' x='0' y='0' modes='front' outerRadius='r-10' innerRadius='108' update='3600' strokeColor='leafBorder'  fillColor='leafFill' input='0' numWedges='24'
 						    planetNumber='planetSun' masterOffset='pi + longitude()-tzOffsetAngle()+EOTAngle()' />
-  <hand		name='dawn'         x=' 0'  y='0'   modes='front'  xAnchor= '39' yAnchor='-105' src='morningHD.png'   update='updateAtNextSunset'   input='0' dragAnimationType='dragAnimationAlways' animSpeed='2'
+  <hand		name='dawn'         x=' 0'  y='0'   modes='front'  xAnchor= '39' yAnchor='-105' src='morningHD.png'   update='updateAtNextSunset'   input='0' dragAnimationType='dragAnimationAlways' animSpeed='2' alpha='sunriseIndicatorValid()'
 						    angle='sunrise24HourIndicatorAngle() + pi+longitude()-tzOffsetAngle()+EOTAngle()' />
-  <hand		name='dusk'         x=' 0'  y='0'   modes='front'  xAnchor= '42' yAnchor='-104' src='eveningHD.png'   update='updateAtNextSunrise'  input='0' dragAnimationType='dragAnimationAlways' animSpeed='2'
+  <hand		name='dusk'         x=' 0'  y='0'   modes='front'  xAnchor= '42' yAnchor='-104' src='eveningHD.png'   update='updateAtNextSunrise'  input='0' dragAnimationType='dragAnimationAlways' animSpeed='2' alpha='sunsetIndicatorValid()'
 						    angle='sunset24HourIndicatorAngle () + pi+longitude()-tzOffsetAngle()+EOTAngle()' />  
-  <hand		name='dawn n'       x=' 0'  y='0'   modes='night'  xAnchor= '39' yAnchor='-105' src='morningHD-sunonly.png'   update='updateAtNextSunset'   input='0' dragAnimationType='dragAnimationAlways' animSpeed='2'
+  <hand		name='dawn n'       x=' 0'  y='0'   modes='night'  xAnchor= '39' yAnchor='-105' src='morningHD-sunonly.png'   update='updateAtNextSunset'   input='0' dragAnimationType='dragAnimationAlways' animSpeed='2' alpha='sunriseIndicatorValid()'
 						    angle='sunrise24HourIndicatorAngle() + pi+longitude()-tzOffsetAngle()+EOTAngle()' />
-  <hand		name='dusk n'       x=' 0'  y='0'   modes='night'  xAnchor= '42' yAnchor='-104' src='eveningHD-sunonly.png'   update='updateAtNextSunrise'  input='0' dragAnimationType='dragAnimationAlways' animSpeed='2'
+  <hand		name='dusk n'       x=' 0'  y='0'   modes='night'  xAnchor= '42' yAnchor='-104' src='eveningHD-sunonly.png'   update='updateAtNextSunrise'  input='0' dragAnimationType='dragAnimationAlways' animSpeed='2' alpha='sunsetIndicatorValid()'
 						    angle='sunset24HourIndicatorAngle () + pi+longitude()-tzOffsetAngle()+EOTAngle()' />  
   <QWedge	name='ringMaskW'    x='0'   y=' 13.5' modes='front'  outerRadius='122' innerRadius='95' angleSpan='pi/5' animSpeed='2' dragAnimationType='dragAnimationAlways' update='updateAtNextSunriseOrSunset' angle='polarWinter() ? 0 : pi' strokeColor='0xffc0c0c0' fillColor='black'/>
   <QWedge	name='ringMaskS'    x='0'   y=' 13.5' modes='front'  outerRadius='122' innerRadius='95' angleSpan='pi/5' animSpeed='2' dragAnimationType='dragAnimationAlways' update='updateAtNextSunriseOrSunset' angle='polarSummer() ? 0 : pi' strokeColor='0xff404040' fillColor='white'/>

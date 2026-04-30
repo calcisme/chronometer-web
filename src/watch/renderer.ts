@@ -2408,6 +2408,10 @@ function drawImageHand(
     const loaded = images.get(part.src);
     if (!loaded) return;
 
+    // Support alpha expression for visibility control (e.g. dawn/dusk polar hiding)
+    const alpha = part.alpha !== undefined ? evalAttr(part.alpha, env) : 1;
+    if (alpha <= 0) return;  // Fully transparent — skip rendering
+
     const x = evalAttr(part.x, env);
     const y = -evalAttr(part.y, env);  // Negate Y
     // Use pre-computed animated angle if available, otherwise evaluate expression
@@ -2439,6 +2443,7 @@ function drawImageHand(
     }
 
     ctx.save();
+    if (alpha < 1) ctx.globalAlpha = alpha;
     setupHandShadow(ctx, part, env, /* isImageHand */ true);
     ctx.translate(x, y);
 

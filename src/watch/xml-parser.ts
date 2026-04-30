@@ -321,6 +321,7 @@ function parseQHand(el: Element): QHandPart {
         fontName: attr(el, 'fontName'),
         xMotion: attrExpr(el, 'xMotion'),
         yMotion: attrExpr(el, 'yMotion'),
+        alpha: attrExpr(el, 'alpha'),
     };
 }
 
