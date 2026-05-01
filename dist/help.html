@@ -526,12 +526,11 @@ const faceUrls = {
     'Venezia': 'venezia.html', 'Terra': 'terra.html', 'Miami': 'miami.html',
     'Gaia': 'gaia.html', 'Babylon': 'babylon.html'
 };
-// Build regex that matches any face name (longest first to avoid partial matches)
-const faceRe = new RegExp('\\b(' + Object.keys(faceUrls).sort((a,b) => b.length - a.length).join('|') + ')\\b', 'g');
 document.querySelectorAll('.comp-table td:last-child').forEach(td => {
-    td.innerHTML = td.textContent.replace(faceRe, (name) =>
-        `<a href="${faceUrls[name]}" target="_top">${name}</a>`
-    );
+    td.innerHTML = td.textContent.split(', ').map(name => {
+        const url = faceUrls[name.trim()];
+        return url ? `<a href="${url}" target="_top">${name.trim()}</a>` : name;
+    }).join(', ');
 });
 // Embed mode: hide nav/title, report height to parent
 const isEmbed = new URLSearchParams(location.search).has('embed');
