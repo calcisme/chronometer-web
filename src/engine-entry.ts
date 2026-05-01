@@ -2485,15 +2485,23 @@ async function main() {
                 // On selected.html, hide help sections for faces not in the current selection
                 if (isSelectedPage) {
                     // FaceData.name is a display name (e.g., "Mauna Kea"); data-face is a slug (e.g., "mauna-kea")
-                    // Convert display names to slugs for comparison
-                    const activeSlugs = new Set(faceDataArray.map(f =>
-                        f.name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-')
-                    ));
+                    const toSlug = (name: string) => name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-');
+                    const activeSlugs = faceDataArray.map(f => toSlug(f.name));
+                    const slugSet = new Set(activeSlugs);
+                    const bySlug = new Map<string, Element>();
                     helpContent.querySelectorAll('.face-help-section[data-face]').forEach(el => {
-                        if (!activeSlugs.has((el as HTMLElement).dataset.face!)) {
+                        const slug = (el as HTMLElement).dataset.face!;
+                        if (!slugSet.has(slug)) {
                             (el as HTMLElement).style.display = 'none';
+                        } else {
+                            bySlug.set(slug, el);
                         }
                     });
+                    // Re-append in picks order (moves existing nodes)
+                    for (const slug of activeSlugs) {
+                        const el = bySlug.get(slug);
+                        if (el) helpContent.appendChild(el);
+                    }
                 }
             }
         });

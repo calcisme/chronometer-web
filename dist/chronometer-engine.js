@@ -18916,14 +18916,22 @@
             }
           });
           if (isSelectedPage) {
-            const activeSlugs = new Set(faceDataArray.map(
-              (f) => f.name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-")
-            ));
+            const toSlug = (name) => name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-");
+            const activeSlugs = faceDataArray.map((f) => toSlug(f.name));
+            const slugSet = new Set(activeSlugs);
+            const bySlug = /* @__PURE__ */ new Map();
             helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
-              if (!activeSlugs.has(el.dataset.face)) {
+              const slug = el.dataset.face;
+              if (!slugSet.has(slug)) {
                 el.style.display = "none";
+              } else {
+                bySlug.set(slug, el);
               }
             });
+            for (const slug of activeSlugs) {
+              const el = bySlug.get(slug);
+              if (el) helpContent.appendChild(el);
+            }
           }
         }
       });
