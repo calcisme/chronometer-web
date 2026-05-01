@@ -2465,6 +2465,11 @@ async function main() {
             if (!helpLoaded && helpContent && helpTemplate?.content) {
                 helpLoaded = true;
                 helpContent.appendChild(helpTemplate.content.cloneNode(true));
+                // Open external links in a new tab so they don't navigate away from the face
+                helpContent.querySelectorAll('a[href^="http"]').forEach(a => {
+                    a.setAttribute('target', '_blank');
+                    a.setAttribute('rel', 'noopener');
+                });
             }
         });
         infoClose.addEventListener('click', () => {
