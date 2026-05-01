@@ -2470,6 +2470,31 @@ async function main() {
                     a.setAttribute('target', '_blank');
                     a.setAttribute('rel', 'noopener');
                 });
+                // Add thumbnail images to per-face help section summaries
+                helpContent.querySelectorAll('.face-help-section[data-face]').forEach(el => {
+                    const face = (el as HTMLElement).dataset.face!;
+                    const summary = el.querySelector('summary');
+                    if (summary) {
+                        const img = document.createElement('img');
+                        img.src = `thumb-${face}.png`;
+                        img.alt = '';
+                        img.style.cssText = 'width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;';
+                        summary.prepend(img);
+                    }
+                });
+                // On selected.html, hide help sections for faces not in the current selection
+                if (isSelectedPage) {
+                    // FaceData.name is a display name (e.g., "Mauna Kea"); data-face is a slug (e.g., "mauna-kea")
+                    // Convert display names to slugs for comparison
+                    const activeSlugs = new Set(faceDataArray.map(f =>
+                        f.name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-')
+                    ));
+                    helpContent.querySelectorAll('.face-help-section[data-face]').forEach(el => {
+                        if (!activeSlugs.has((el as HTMLElement).dataset.face!)) {
+                            (el as HTMLElement).style.display = 'none';
+                        }
+                    });
+                }
             }
         });
         infoClose.addEventListener('click', () => {

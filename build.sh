@@ -130,7 +130,7 @@ for face in $FACES; do
   echo "  → $face.html"
 done
 
-# all.html — loads all faces
+# all.html / selected.html — loads all faces
 ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-mauna-kea.js"><\/script>\
     <script src="face-haleakala.js"><\/script>\
@@ -145,18 +145,33 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-miami.js"><\/script>\
     <script src="face-gaia.js"><\/script>\
     <script src="face-babylon.js"><\/script>'
+
+# Generate combined help file for multi-face pages
+COMBINED_HELP="$DIST/.combined-help.html"
+: > "$COMBINED_HELP"
+for face in $FACES; do
+  HELP_FILE=$(get_help_file "$face")
+  if [ -n "$HELP_FILE" ]; then
+    TITLE=$(get_title "$face")
+    echo "<details class=\"face-help-section\" data-face=\"$face\"><summary>$TITLE</summary>" >> "$COMBINED_HELP"
+    cat "$HELP_FILE" >> "$COMBINED_HELP"
+    echo "</details>" >> "$COMBINED_HELP"
+  fi
+done
+
 sed -e "s|{{TITLE}}|All Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \
-    "$SRC/face-template.html" | inject_partials > "$DIST/all.html"
+    "$SRC/face-template.html" | inject_partials "$COMBINED_HELP" > "$DIST/all.html"
 echo "  → all.html"
 
 # selected.html — loads all faces; engine filters by picks param
 sed -e "s|{{TITLE}}|Selected Faces|g" \
     -e "s|{{SCRIPTS}}|$ALL_SCRIPTS|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \
-    "$SRC/face-template.html" | inject_partials > "$DIST/selected.html"
+    "$SRC/face-template.html" | inject_partials "$COMBINED_HELP" > "$DIST/selected.html"
 echo "  → selected.html"
+rm -f "$COMBINED_HELP"
 
 # index.html — process with partial injection
 inject_partials < "$SRC/index.html" > "$DIST/index.html"

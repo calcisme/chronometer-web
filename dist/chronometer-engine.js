@@ -18904,6 +18904,27 @@
             a.setAttribute("target", "_blank");
             a.setAttribute("rel", "noopener");
           });
+          helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
+            const face = el.dataset.face;
+            const summary = el.querySelector("summary");
+            if (summary) {
+              const img = document.createElement("img");
+              img.src = `thumb-${face}.png`;
+              img.alt = "";
+              img.style.cssText = "width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;";
+              summary.prepend(img);
+            }
+          });
+          if (isSelectedPage) {
+            const activeSlugs = new Set(faceDataArray.map(
+              (f) => f.name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-")
+            ));
+            helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
+              if (!activeSlugs.has(el.dataset.face)) {
+                el.style.display = "none";
+              }
+            });
+          }
         }
       });
       infoClose.addEventListener("click", () => {
