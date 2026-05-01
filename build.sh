@@ -166,6 +166,10 @@ echo "  → index.html"
 cp "$SRC/pick.html" "$DIST/pick.html"
 echo "  → pick.html"
 
+# help.html — general help topics page (simple copy)
+cp "$SRC/help.html" "$DIST/help.html"
+echo "  → help.html"
+
 # cities-data.js — city database for location picker (if generated)
 if [ -f "$SRC/cities-data.js" ]; then
   cp "$SRC/cities-data.js" "$DIST/cities-data.js"

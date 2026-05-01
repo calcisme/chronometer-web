@@ -2477,6 +2477,17 @@ async function main() {
         });
     }
 
+    // --- General Help iframe lazy-loading ---
+    const generalHelpSection = document.getElementById('general-help-section') as HTMLDetailsElement | null;
+    const generalHelpIframe = document.getElementById('general-help-iframe') as HTMLIFrameElement | null;
+    if (generalHelpSection && generalHelpIframe) {
+        generalHelpSection.addEventListener('toggle', () => {
+            if (generalHelpSection.open && !generalHelpIframe.src) {
+                generalHelpIframe.src = 'help.html';
+            }
+        });
+    }
+
 
     // =========================================================================
     // Time bar clock — update at the top of each second

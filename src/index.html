@@ -208,6 +208,32 @@
         }
 
         /* {{LOCATION_CSS}} */
+
+        /* General help iframe section */
+        #general-help-section {
+            margin: 12px 0 4px;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+
+        #general-help-section summary {
+            cursor: pointer;
+            color: #8af;
+            font-size: 14px;
+        }
+
+        #general-help-section summary:hover {
+            text-decoration: underline;
+        }
+
+        #general-help-iframe {
+            width: 100%;
+            height: 60vh;
+            border: none;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 
@@ -219,6 +245,11 @@
             <h2>Chronometer for the Web</h2>
             <p>A web port of <a href="https://emeraldsequoia.com/h/index.html" target="_blank" rel="noopener">Emerald Chronometer</a> (<a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">GitHub</a>), an astronomical watch-face app originally built for iPhone and iPad.</p>
             <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a></p>
+            <hr style="border:none; border-top:1px solid #3a3a5e; margin:12px 0;">
+            <details id="general-help-section">
+                <summary>General Help Topics</summary>
+                <iframe id="general-help-iframe"></iframe>
+            </details>
         </div>
     </div>
     <header>
@@ -342,6 +373,16 @@
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && infoOverlay.classList.contains('visible')) {
                     infoOverlay.classList.remove('visible');
+                }
+            });
+        }
+        // General Help iframe lazy-loading
+        const generalHelpSection = document.getElementById('general-help-section');
+        const generalHelpIframe = document.getElementById('general-help-iframe');
+        if (generalHelpSection && generalHelpIframe) {
+            generalHelpSection.addEventListener('toggle', () => {
+                if (generalHelpSection.open && !generalHelpIframe.src) {
+                    generalHelpIframe.src = 'help.html';
                 }
             });
         }

@@ -788,6 +788,32 @@
             margin: 16px 0 8px;
         }
 
+        /* General help iframe section */
+        #general-help-section {
+            margin: 0 0 4px;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+
+        #general-help-section summary {
+            cursor: pointer;
+            color: #8af;
+            font-size: 14px;
+        }
+
+        #general-help-section summary:hover {
+            text-decoration: underline;
+        }
+
+        #general-help-iframe {
+            width: 100%;
+            height: 60vh;
+            border: none;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+
         /* ============= Time Controller ============= */
 
         /* Time bar (always visible, between watch-grid and location-panel) */
@@ -1199,6 +1225,11 @@
                 <h2>Chronometer for the Web</h2>
                 <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
                 <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a></p>
+                <hr class="help-separator">
+                <details id="general-help-section">
+                    <summary>General Help Topics</summary>
+                    <iframe id="general-help-iframe"></iframe>
+                </details>
                 <hr class="help-separator">
                 <div id="help-content">
                     <!-- Populated from help-template on first info click -->

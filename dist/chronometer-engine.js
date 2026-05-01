@@ -18911,6 +18911,15 @@
         }
       });
     }
+    const generalHelpSection = document.getElementById("general-help-section");
+    const generalHelpIframe = document.getElementById("general-help-iframe");
+    if (generalHelpSection && generalHelpIframe) {
+      generalHelpSection.addEventListener("toggle", () => {
+        if (generalHelpSection.open && !generalHelpIframe.src) {
+          generalHelpIframe.src = "help.html";
+        }
+      });
+    }
     function tickTimeBarClock() {
       if (timeController.isRealTime) {
         timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
