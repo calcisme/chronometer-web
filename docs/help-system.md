@@ -1,12 +1,22 @@
 # Help System
 
-Per-face help content is displayed in the ℹ info popup on every single-face page. When the user clicks the ℹ button, the popup shows generic project info at the top, a separator, and then face-specific help text below.
+The help system has two layers:
+
+1. **General Help Topics** — Four topic pages (Complications, Accuracy, Eclipses, Physics) available from every page via an embedded iframe.
+2. **Per-Face Help** — Face-specific help content injected into each page at build time.
+
+Both are accessed through the ℹ info popup. When the user clicks the ℹ button, the popup shows:
+- Generic project info (title, GitHub links)
+- An expandable "General Help Topics" section (iframe)
+- Per-face help content (details sections)
 
 ## Source Material
 
-The help content was ported from the **Android (Wear OS) help files** stored in `/Users/spucci/aw/`. These are HTML files that were originally part of the Emerald Chronometer for Wear OS product pages.
+### Per-Face Help
 
-### Android Help Directory Structure
+The per-face help content was ported from the **Android (Wear OS) help files** stored in `/Users/spucci/aw/`. These are HTML files that were originally part of the Emerald Chronometer for Wear OS product pages.
+
+#### Android Help Directory Structure
 
 The Android help files use iOS-derived directory names, but the face names in the filenames are the same Android face names used in our app:
 
@@ -36,7 +46,7 @@ The Android help files use iOS-derived directory names, but the face names in th
 └── product.css              → Legacy Android help stylesheet (not used)
 ```
 
-### Extraction Process
+#### Extraction Process
 
 Each Android help file has a standard structure with boilerplate and content markers:
 
@@ -63,7 +73,7 @@ The help content was extracted manually (no automated script) with the following
 9. **Kept**: All inline explanatory images (screenshots of watch details)
 10. **Inlined**: Terra's `SlotRules.html` as a collapsible `<details>/<summary>` section (default collapsed)
 
-### Faces with Unported Counterparts
+#### Faces with Unported Counterparts
 
 The Android help includes faces not yet in our web app. These are **not** included:
 
@@ -71,9 +81,42 @@ The Android help includes faces not yet in our web app. These are **not** includ
 
 Cross-face links pointing to unported faces are rendered as plain text.
 
+### General Help Topics
+
+The general help content in `src/help.html` was ported from four sources:
+
+| Section | Source | Adaptations |
+|---------|--------|-------------|
+| Complications | iOS XML `<!-- COMPLICATIONS -->` blocks via `.chronometer-ref/scripts/genHelp.pl` logic | Built table for 13 web faces; mapped iOS front/back sides to web face names |
+| Astronomical Accuracy | `.chronometer-ref/Help/AstroAccuracy.html` | Removed iPhone-specific language; updated "Geneva" → "Basel" where appropriate |
+| Predicting Eclipses | `.chronometer-ref/Help/Geneva/PredictingEclipses.html` | Changed all "Geneva" → "Basel"; replaced crown/pusher language with time controller |
+| The Physics | `https://emeraldsequoia.com/h/mmm.html` | Inlined directly; no external dependency |
+
+Eclipse prediction images (8 files) were copied from `.chronometer-ref/Help/Geneva/` to `src/help/images/basel/`.
+
 ## Architecture
 
-### Build-Time Injection
+### General Help — Standalone Page with Embed Mode
+
+`src/help.html` is a standalone page with four collapsible `<details>` sections. It can be viewed directly or embedded in an iframe.
+
+**Standalone mode** (`help.html`): Shows full page with navigation bar, title, and section links.
+
+**Embed mode** (`help.html?embed=1`): When loaded with the `embed` query parameter:
+- Navigation bar and title are hidden (redundant inside the info popup)
+- Padding is reduced
+- `postMessage({type: 'help-resize', height: scrollHeight})` is sent to the parent on load and whenever a section is toggled
+- The parent listens for these messages and resizes the iframe to match the content height
+
+This auto-resize approach avoids a fixed iframe height, so the General Help Topics section is compact when collapsed and grows naturally as sections expand.
+
+**External link handling**: `<base target="_blank">` ensures all external links (Wikipedia, NASA, Amazon) open in new tabs. Internal anchor links use `target="_self"` to stay in the iframe. Face name links in the complications table use `target="_top"` to break out of the iframe.
+
+**Face name linkification**: A runtime script in help.html scans the complications table and wraps face names (Mauna Kea, Basel, etc.) in links to their corresponding pages using `target="_top"`.
+
+**Eclipse prediction link**: The "Eclipse prediction" row in the complications table links to `#eclipses`, which opens and scrolls to the Predicting Eclipses section.
+
+### Per-Face Help — Build-Time Injection
 
 Help HTML fragments live in `src/help/<face-slug>.html` (one per face). During build, `build.sh` injects each fragment into the page inside a `<template>` element:
 
@@ -84,6 +127,32 @@ Help HTML fragments live in `src/help/<face-slug>.html` (one per face). During b
 ```
 
 The `<template>` element is **inert** — browsers do not render its content or load any images within it.
+
+#### Single-Face Pages
+
+Each single-face page (e.g., `basel.html`) receives its own help file via `inject_partials "$HELP_FILE"`. The `{{HELP_CONTENT}}` placeholder is replaced with the contents of `src/help/basel.html`.
+
+#### Multi-Face Pages (all.html, selected.html)
+
+The build generates a **combined help file** by looping through all faces and wrapping each help fragment in a `<details>` element:
+
+```html
+<details class="face-help-section" data-face="mauna-kea">
+    <summary>Mauna Kea</summary>
+    <!-- contents of src/help/mauna-kea.html -->
+</details>
+```
+
+The `data-face` attribute stores the URL slug for runtime matching.
+
+At runtime, `engine-entry.ts` post-processes the cloned help content:
+
+1. **External links**: All `<a href="http...">` links get `target="_blank"` added
+2. **Thumbnails**: Each per-face `<summary>` gets a 28px circular thumbnail prepended (using the existing `thumb-{face}.png` assets)
+3. **Reordering**: Help sections are re-appended in `faceDataArray` order to match the display order
+4. **Filtering** (selected.html only): Sections for faces not in the current selection are hidden with `display: none`
+
+Note: `FaceData.name` uses display names (e.g., "Mauna Kea", "Haleakalā") while `data-face` uses URL slugs (e.g., "mauna-kea", "haleakala"). The runtime code converts display names to slugs for comparison using `name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-')`.
 
 ### Runtime Lazy Cloning
 
@@ -107,6 +176,7 @@ src/help/images/
 ├── chandra/                   # Chandra + Selene images
 ├── mauna_kea/                 # Mauna Kea images
 ├── geneva/                    # Geneva + Basel images
+├── basel/                     # Eclipse prediction images (8 files)
 ├── babylon/                   # Babylon images
 ├── terra/                     # Terra + Gaia images + SlotRules images
 ├── miami/                     # Miami images
@@ -115,23 +185,26 @@ src/help/images/
 
 During build, these are copied to `dist/help/images/`.
 
-### For `all.html`
-
-The all-faces page receives an empty `<template>`, so the help popup shows only the generic project info with no face-specific content.
-
 ## File Inventory
 
 | File | Purpose |
 |------|---------|
-| `src/help/<face>.html` | Help HTML fragment (13 files, one per face) |
-| `src/help/images/` | Inline help images (47 files across 8 subdirectories) |
-| `src/face-template.html` | Contains `#help-content` div, `<template>`, and help CSS |
-| `build.sh` | `get_help_file()` function + `{{HELP_CONTENT}}` injection |
-| `src/engine-entry.ts` | Template cloning on first ℹ click |
+| `src/help.html` | General help page (Complications, Accuracy, Eclipses, Physics) |
+| `src/help/<face>.html` | Per-face help HTML fragments (13 files, one per face) |
+| `src/help/images/` | Inline help images (55+ files across 9 subdirectories) |
+| `src/face-template.html` | Contains General Help iframe, `#help-content` div, `<template>`, and help CSS |
+| `src/index.html` | Contains General Help iframe (no per-face help) |
+| `build.sh` | `get_help_file()`, `{{HELP_CONTENT}}` injection, combined help generation |
+| `src/engine-entry.ts` | Template cloning, external link targeting, thumbnail injection, reordering, filtering, iframe resize listener |
 
 ## Adding Help for a New Face
 
 See [Face Porting Guide — Step 11](face-porting-guide.md#11-help-content).
+
+When adding a new face, also:
+- Update the complications table in `src/help.html` if the face has complications
+- Add the face name and URL slug to the `faceUrls` map in `src/help.html`'s linkification script
+- The combined help for all.html/selected.html will automatically include it (no manual step needed)
 
 ## Related Docs
 
