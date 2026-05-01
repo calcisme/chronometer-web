@@ -533,6 +533,22 @@ document.querySelectorAll('.comp-table td:last-child').forEach(td => {
         `<a href="${faceUrls[name]}" target="_top">${name}</a>`
     );
 });
+// Embed mode: hide nav/title, report height to parent
+const isEmbed = new URLSearchParams(location.search).has('embed');
+if (isEmbed) {
+    document.querySelector('.help-nav')?.remove();
+    document.querySelector('h1')?.remove();
+    document.querySelector('.help-page').style.padding = '8px 12px 12px';
+
+    function reportHeight() {
+        requestAnimationFrame(() => {
+            parent.postMessage({ type: 'help-resize', height: document.body.scrollHeight }, '*');
+        });
+    }
+    reportHeight();
+    // Re-report when any details section opens/closes
+    document.querySelectorAll('details').forEach(d => d.addEventListener('toggle', reportHeight));
+}
 </script>
 </body>
 </html>

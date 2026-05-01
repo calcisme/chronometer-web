@@ -2522,7 +2522,13 @@ async function main() {
     if (generalHelpSection && generalHelpIframe) {
         generalHelpSection.addEventListener('toggle', () => {
             if (generalHelpSection.open && !generalHelpIframe.src) {
-                generalHelpIframe.src = 'help.html';
+                generalHelpIframe.src = 'help.html?embed=1';
+            }
+        });
+        // Auto-resize iframe to match content height
+        window.addEventListener('message', (e) => {
+            if (e.data?.type === 'help-resize' && typeof e.data.height === 'number') {
+                generalHelpIframe.style.height = e.data.height + 'px';
             }
         });
     }
