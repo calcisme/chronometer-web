@@ -2482,22 +2482,23 @@ async function main() {
                         summary.prepend(img);
                     }
                 });
-                // On selected.html, hide help sections for faces not in the current selection
-                if (isSelectedPage) {
+                // Reorder and filter per-face help sections to match display order
+                const faceHelpSections = helpContent.querySelectorAll('.face-help-section[data-face]');
+                if (faceHelpSections.length > 0) {
                     // FaceData.name is a display name (e.g., "Mauna Kea"); data-face is a slug (e.g., "mauna-kea")
                     const toSlug = (name: string) => name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-');
                     const activeSlugs = faceDataArray.map(f => toSlug(f.name));
                     const slugSet = new Set(activeSlugs);
                     const bySlug = new Map<string, Element>();
-                    helpContent.querySelectorAll('.face-help-section[data-face]').forEach(el => {
+                    faceHelpSections.forEach(el => {
                         const slug = (el as HTMLElement).dataset.face!;
-                        if (!slugSet.has(slug)) {
+                        if (isSelectedPage && !slugSet.has(slug)) {
                             (el as HTMLElement).style.display = 'none';
                         } else {
                             bySlug.set(slug, el);
                         }
                     });
-                    // Re-append in picks order (moves existing nodes)
+                    // Re-append in display order (moves existing nodes)
                     for (const slug of activeSlugs) {
                         const el = bySlug.get(slug);
                         if (el) helpContent.appendChild(el);

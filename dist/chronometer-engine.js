@@ -18915,14 +18915,15 @@
               summary.prepend(img);
             }
           });
-          if (isSelectedPage) {
+          const faceHelpSections = helpContent.querySelectorAll(".face-help-section[data-face]");
+          if (faceHelpSections.length > 0) {
             const toSlug = (name) => name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-");
             const activeSlugs = faceDataArray.map((f) => toSlug(f.name));
             const slugSet = new Set(activeSlugs);
             const bySlug = /* @__PURE__ */ new Map();
-            helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
+            faceHelpSections.forEach((el) => {
               const slug = el.dataset.face;
-              if (!slugSet.has(slug)) {
+              if (isSelectedPage && !slugSet.has(slug)) {
                 el.style.display = "none";
               } else {
                 bySlug.set(slug, el);
