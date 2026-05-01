@@ -63,15 +63,9 @@
   <QWheel       name='am/pm valid'  x='riseX-5'  y='riseSetY+riseSetRadius+3'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='front'  radius='10' orientation='three' update='60'  angle='moonriseForDayValid() ? pi : 0' fontSize='13' fontName='Arial' marks='0' text='\u25CF,' strokeColor='0xffff4040'   bgColor='clear' />
   <QWheel    refName='am/pm valid'  x=' setX-5'  y='riseSetY+riseSetRadius+3'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='front'  radius='10' orientation='three' update='60'  angle='moonsetForDayValid() ? pi : 0' fontSize='13' fontName='Arial' marks='0' text='\u25CF,' strokeColor='0xffff4040'   bgColor='clear' />
 
-  <QWheel       name='N am/pm'	      x='riseX-5'  y='riseSetY+riseSetRadius+3'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='night'  radius='10' orientation='three' update='60'  angle='moonriseForDayHour24Number() >= 12 ? 0 : pi' fontSize='13' fontName='Arial' marks='0' text='\u25CF,' strokeColor='moonclrn' bgColor='black' />
-  <QWheel    refName='N am/pm'	      x=' setX-5'  y='riseSetY+riseSetRadius+3'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='night'  radius='10' orientation='three' update='60'  angle='moonsetForDayHour24Number() >= 12 ? 0 : pi' fontSize='13' fontName='Arial' marks='0' text='\u25CF,' strokeColor='moonclrn' bgColor='black' />
-  <QWheel       name='N am/pm valid'  x='riseX-5'  y='riseSetY+riseSetRadius+3'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='night'  radius='10' orientation='three' update='60'  angle='moonriseForDayValid() ? pi : 0' fontSize='13' fontName='Arial' marks='0' text='\u25CF,' strokeColor='0xffff0000'   bgColor='clear' />
-  <QWheel    refName='N am/pm valid'  x=' setX-5'  y='riseSetY+riseSetRadius+3'  animSpeed='5.0' dragAnimationType='dragAnimationAlways' modes='night'  radius='10' orientation='three' update='60'  angle='moonsetForDayValid() ? pi : 0' fontSize='13' fontName='Arial' marks='0' text='\u25CF,' strokeColor='0xffff0000'   bgColor='clear' />
 
   <hand         name='moon'	    x='termX'  y='termY'  modes='front|night'  src='../partsBin/moonES72.png'  update='1 * minutes()'	angle='moonRelativeAngle()' />
-  <hand         name='nightcast'    x='termX'  y='termY'  modes='night'  src='../partsBin/moonNightCastAW72.png'  update='0' angle='0' />
   <terminator   name='term'         x='termX'  y='termY'  modes='front'   radius='termRad' leavesPerQuadrant='10' incremental='0' leafBorderColor='0xff282828' leafFillColor='0xff171717' leafAnchorRadius='0' update='60' updateOffset='0' phaseAngle='moonAgeAngle()' rotation='moonRelativePositionAngle()'/>
-  <terminator   name='termn'	    x='termX'  y='termY'  modes='night'   radius='termRad' leavesPerQuadrant='10' incremental='0' leafBorderColor='black'    leafFillColor='black'      leafAnchorRadius='0' update='60' updateOffset='0' phaseAngle='moonAgeAngle()' rotation='moonRelativePositionAngle()'/>
 
   <Image	name='phasen'       x='  0'  y=' 88'  modes='front'	    src='phaseN.png'/>
   <Image	name='phase1'       x=' 88'  y='  0'  modes='front'	    src='phase1.png'/>
@@ -101,10 +95,6 @@
     <QRect      name='maskRect'     x='-backerWidth/2' y='-backerWidth/2'  modes='front'  w='backerWidth' h='backerWidth' bgColor='black'/>
     <QDial	name='border ring'	    x='0'   y='0'  modes='front'	radius='dialOuterRad'  marks='outer' markWidth='1'			     bgColor='clear' strokeColor='0xff000000' />
     <QDial	name='phase bg'	    x='0'   y='0'  modes='front'	radius='dialOuterRad-dialWidth/2'  marks='outer' markWidth='dialWidth'			     bgColor='clear' strokeColor='0xff707070' />
-  </static>
-  <window	name='fullface hole n'    x='0'	y='0' w='dialOuterRad*2' h='dialOuterRad*2' type='porthole' border='0' strokeColor='holeBorderColor' modes='night' />
-  <static name='prenight' modes='night'>
-      <QRect    name='maskRectn'     x='-backerWidth/2' y='-backerWidth/2'  modes='night'  w='backerWidth' h='backerWidth' bgColor='black'/>
   </static>
 
 <!-- DELOnDay hands -->
@@ -249,127 +239,22 @@
 
 </static>
   
-<!-- night -->
-<Image	name='phasenn'       x='  0'  y=' 88'  modes='night'	    src='phaseNn.png'/>
-<Image	name='phase1n'       x=' 88'  y='  0'  modes='night'	    src='phase1n.png'/>
-<Image	name='phase3n'       x='-88'  y='  0'  modes='night'	    src='phase3n.png'/>
-<Image	name='phasefn'       x=' .5'  y='-88'  modes='night'	    src='phaseFn.png'/>
 
-  <SWheel	name='ndigits'	    x=' -28'	y=' 88'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='three' update='1 * days()' angle='fmod(1+closestNewMoonDayNumber(),10)*2*pi/10'		fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='nfgclr' bgColor='clear' />
-  <SWheel    refName='ndigits'	    x=' -41'	y=' 88'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='three' update='1 * days()' angle='floor((1+closestNewMoonDayNumber())/10)*2*pi/10'		fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='nfgclr' bgColor='clear' />
 
-  <SWheel       name='nbdigits'	    x=' 130'	y='  0'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='nine' update='1 * days()' angle='fmod(1+closestFirstQuarterDayNumber(),10)*2*pi/10'	fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='clear' />
-  <SWheel    refName='ndigits'	    x=' 117'	y='  0'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='nine' update='1 * days()' angle='floor((1+closestFirstQuarterDayNumber())/10)*2*pi/10'	fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='nfgclr' bgColor='clear' />
 
-  <SWheel    refName='ndigits'	    x=' -46'	y='  0'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='nine'  update='1 * days()' angle='fmod(1+closestThirdQuarterDayNumber(),10)*2*pi/10'	fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='nfgclr' bgColor='clear' />
-  <SWheel    refName='nbdigits'	    x=' -59'	y='  0'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='nine'  update='1 * days()' angle='floor((1+closestThirdQuarterDayNumber())/10)*2*pi/10'	fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='clear' />
 
-  <SWheel    refName='nbdigits'	    x=' -28'	y='-88'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='three' update='1 * days()' angle='fmod(1+closestFullMoonDayNumber(),10)*2*pi/10'		fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='clear' />
-  <SWheel    refName='nbdigits'	    x=' -40'	y='-88'  dragAnimationType='dragAnimationAlways' modes='night'  radius='40' orientation='three' update='1 * days()' angle='floor((1+closestFullMoonDayNumber())/10)*2*pi/10'	fontSize='18' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='clear' />
 
-  <QRect	name='nday bak b'   x='dayX'	y='dayY-1' w='20' h='dateFS' modes='night' bgColor='black' />
-  <SWheel       name='nsdigits'	    x='dayX-22'	y='dayY+dateFS/2-1' dragAnimationType='dragAnimationAlways' modes='night'  radius='31' orientation='three'  update='1 * days()' angle='fmod(floor((dayNumber()+1)/10), 10)*2*pi/10'	fontSize='dateFS' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='0xffa0a0a0' bgColor='clear' />
-  <SWheel    refName='nsdigits'	    x='dayX-8'	y='dayY+dateFS/2-1' dragAnimationType='dragAnimationAlways' modes='night'  radius='27' orientation='three'  update='1 * days()' angle='fmod(dayNumber()+1,             10)*2*pi/10'	fontSize='dateFS' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='0xffa0a0a0' bgColor='clear' />
 
-<!-- DELOnDay night hands -->
-  <QWedge    name='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(0)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(0)' fillColor='delOnDayTintNColor(0)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(1)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(0)' fillColor='delOnDayTintNColor(0)' opaque='1' animSpeed='0' />
-  <QWedge    name='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(1)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(1)' fillColor='delOnDayTintNColor(1)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(2)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(1)' fillColor='delOnDayTintNColor(1)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(2)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(2)' fillColor='delOnDayTintNColor(2)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(3)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(2)' fillColor='delOnDayTintNColor(2)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(3)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(3)' fillColor='delOnDayTintNColor(3)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(4)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(3)' fillColor='delOnDayTintNColor(3)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(4)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(4)' fillColor='delOnDayTintNColor(4)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(5)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(4)' fillColor='delOnDayTintNColor(4)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(5)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(5)' fillColor='delOnDayTintNColor(5)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(6)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(5)' fillColor='delOnDayTintNColor(5)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(6)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(6)' fillColor='delOnDayTintNColor(6)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(7)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(6)' fillColor='delOnDayTintNColor(6)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(7)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(7)' fillColor='delOnDayTintNColor(7)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(8)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(7)' fillColor='delOnDayTintNColor(7)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(8)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(8)' fillColor='delOnDayTintNColor(8)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(9)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(8)' fillColor='delOnDayTintNColor(8)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(9)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(9)' fillColor='delOnDayTintNColor(9)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(10)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(9)' fillColor='delOnDayTintNColor(9)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(10)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(10)' fillColor='delOnDayTintNColor(10)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(11)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(10)' fillColor='delOnDayTintNColor(10)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(11)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(11)' fillColor='delOnDayTintNColor(11)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(12)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(11)' fillColor='delOnDayTintNColor(11)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(12)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(12)' fillColor='delOnDayTintNColor(12)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(13)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(12)' fillColor='delOnDayTintNColor(12)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(13)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(13)' fillColor='delOnDayTintNColor(13)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(14)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(13)' fillColor='delOnDayTintNColor(13)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(14)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(14)' fillColor='delOnDayTintNColor(14)' opaque='1' animSpeed='0' />
 
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(0)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-1)' fillColor='delOnDayTintNColor(-1)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-1)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-1)' fillColor='delOnDayTintNColor(-1)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-1)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-2)' fillColor='delOnDayTintNColor(-2)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-2)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-2)' fillColor='delOnDayTintNColor(-2)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-2)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-3)' fillColor='delOnDayTintNColor(-3)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-3)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-3)' fillColor='delOnDayTintNColor(-3)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-3)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-4)' fillColor='delOnDayTintNColor(-4)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-4)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-4)' fillColor='delOnDayTintNColor(-4)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-4)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-5)' fillColor='delOnDayTintNColor(-5)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-5)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-5)' fillColor='delOnDayTintNColor(-5)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-5)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-6)' fillColor='delOnDayTintNColor(-6)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-6)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-6)' fillColor='delOnDayTintNColor(-6)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-6)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-7)' fillColor='delOnDayTintNColor(-7)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-7)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-7)' fillColor='delOnDayTintNColor(-7)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-7)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-8)' fillColor='delOnDayTintNColor(-8)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-8)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-8)' fillColor='delOnDayTintNColor(-8)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-8)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-9)' fillColor='delOnDayTintNColor(-9)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-9)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-9)' fillColor='delOnDayTintNColor(-9)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-9)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-10)' fillColor='delOnDayTintNColor(-10)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-10)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-10)' fillColor='delOnDayTintNColor(-10)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-10)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-11)' fillColor='delOnDayTintNColor(-11)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-11)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-11)' fillColor='delOnDayTintNColor(-11)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-11)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-12)' fillColor='delOnDayTintNColor(-12)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-12)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-12)' fillColor='delOnDayTintNColor(-12)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-12)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-13)' fillColor='delOnDayTintNColor(-13)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-13)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-13)' fillColor='delOnDayTintNColor(-13)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-13)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-14)' fillColor='delOnDayTintNColor(-14)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay A'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-14)+delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-14)' fillColor='delOnDayTintNColor(-14)' opaque='1' animSpeed='0' />
-  <QWedge refName='n DELDay B'   x='0' y='0' modes='night' outerRadius='delOnDayOuterRadius' innerRadius='delOnDayInnerRadius' angleSpan='delOnDayWedgeSpan' update='3600' angle='moonDeltaEclipticLongitudeAtDeltaDay(-14)-delOnDayWedgeSpan/2' strokeColor='delOnDayStrokeNColor(-15)' fillColor='delOnDayTintNColor(-15)' opaque='1' animSpeed='0' />
 
 
 <window	name='new  hole'    x='   0 '	y='  88' w='holeD' h='holeD' type='porthole' border='2' strokeColor='holeBorderColor' modes='front' />
 <window	name='1stq hole'    x='   88'	y='   0' w='holeD' h='holeD' type='porthole' border='2' strokeColor='holeBorderColor' modes='front' />
 <window	name='full hole'    x='   0 '	y=' -88' w='holeD' h='holeD' type='porthole' border='2' strokeColor='holeBorderColor' modes='front' />
 <window	name='3rdq hole'    x='  -88'	y='   0' w='holeD' h='holeD' type='porthole' border='2' strokeColor='holeBorderColor' modes='front' />
-<window	name='term hole b'  x='termX'   y='termY' w='2*termRad' h='2*termRad' border='1' strokeColor='moonclrn' modes='night' type='porthole' />
 <window	name='day win b'    x='dayX'	y='dayY-1'  w='20' h='dateFS' border='0' />
   <window	name='mr am/pm hn'	    x='riseX-1'	y='riseSetY+riseSetRadius+2' w='2' h='2' strokeColor='clear' border='0' />
   <window	name='ms am/pm hn'	    x=' setX-1'	y='riseSetY+riseSetRadius+2' w='2' h='2' strokeColor='clear' border='0' />
-  <static name='night2' modes='night'>
-
-    <Image	name='face n'	    x='0'   y='0'  modes='night' src='face-black.png' />
-
-      <QDial	name='lat labelsn'   x='latX' y='latY'  modes='night' radius='latLen-1'  text=",,,,,,,,,,-5,,,,,0,,,,,+5,,," orientation='upright' fontSize='12' fontName='Arial' bgColor='clear' strokeColor='latcolorn' />
-      <QDial	name='lat dialn'     x='latX' y='latY'  modes='night' radius='latLen'   angle1='lbgAngle1' angle2='lbgAngle2' markWidth='1'  marks='outer'  bgColor='clear' strokeColor='latcolorn' />
-      <QDial	name='lat dial ticn' x='latX' y='latY'  modes='night' radius='latLen-1' angle1='latAngle1' angle2='latAngle2' markWidth='2' mSize='4' nMarks='24'  marks='tickOut'  bgColor='clear' strokeColor='latcolorn' />
-      
-      <QDial	name='dist labelsn'  x='disX' y='disY'  modes='night' radius='disLen-1'  text=",,,,405,,,,,380,,,,,355,,,,,,,,," orientation='upright' fontSize='10' fontName='Arial' bgColor='clear' strokeColor='latcolorn' />
-      <QDial	name='dist dialn'    x='disX' y='disY'  modes='night' radius='disLen'   angle1='dbgAngle1' angle2='dbgAngle2' markWidth='1'  marks='outer'  bgColor='clear' strokeColor='latcolorn' />
-      <QDial	name='dis dial ticn' x='disX' y='disY'  modes='night' radius='disLen-1' angle1='disAngle1' angle2='disAngle2' markWidth='2' mSize='4' nMarks='24'  marks='tickOut'  bgColor='clear' strokeColor='latcolorn' />
-
-      <QDial	name='outer ringn'   x='0'   y='0'  modes='night'	radius='dialOuterRad'  markWidth='1'   marks='outer'					     bgColor='clear' strokeColor='nfgclr2a' />
-      <QDial	name='phase dial0n'  x='0'   y='0'  modes='night'	radius='dialOuterRad'  markWidth='2.5' marks='tickOut' nMarks='360/90' mSize='dialWidth*2.5' bgColor='clear' strokeColor='nfgclr2a' />
-      <QDial	name='phase dial5n'  x='0'   y='0'  modes='night'	radius='dialOuterRad'  markWidth='2.5' marks='tickOut' nMarks='360/30' mSize='dialWidth '    bgColor='clear' strokeColor='nfgclr2a' />
-      <QDial	name='phase dial1n'  x='0'   y='0'  modes='night'	radius='dialOuterRad'  markWidth='1.5' marks='tickOut' nMarks='360/10' mSize='dialWidth'     bgColor='clear' strokeColor='nfgclr2a' />
-    <Qtext	name='phase labeln'  x='0'   y='0'  modes='night' radius='dialInnerRad-10' orientation='demi' fontName='Arial' fontSize='12' startAngle='pi' text='Delta Ecliptic Longitude' strokeColor='DELcolorn'/>
-    <Qtext	name='elong labeln'  x='0'   y='0'  modes='night' radius='dialInnerRad-9' orientation='demi' fontName='Arial' fontSize='12' startAngle='0' strokeColor='elongcolorn' text='Elongation' />
-    <Image	name='lumiberry'     x='0'   y='berryY'	modes='night'	src='../partsBin/berry-lum.png' />
-      <QDial	name='phase dial4n'  x='0'   y='0'  modes='night'	radius='dialInnerRad'  markWidth='1'   marks='outer'					     bgColor='clear' strokeColor='nfgclr' />
-      <QDial	name='axle2n'        x='0'   y='0'  modes='night' radius='4'	markWidth='.75' marks='outer' bgColor='nfgclr' />
-      <QDial    name='clock seconds n tic ' x='timeBackX' y='timeBackY'   modes='night' radius='timeBackRad' bgColor='clear' strokeColor='white' marks='outer|tickOut' nMarks='12' markWidth='0.8 ' mSize='4' />
-
-    <QDial	name='N mdial-ua'	    x='riseX' y='riseSetY'	modes='night'	radius='riseSetRadius' orientation='upright'  fontSize=' 8' fontName='Arial' bgColor='moondialbgn' strokeColor='moonclrnmask' marks='outer' markWidth='0.5'/>
-    <QDial	name='N mua ticks'    x='riseX' y='riseSetY'	modes='night'	radius='riseSetRadius' bgColor='clear' strokeColor='moonclrnmask' marks='tickOut' nMarks=' 4' markWidth=' 1' mSize='4'/>
-
-    <QDial	name='N mdial-u2'	    x=' setX' y='riseSetY'	modes='night'	radius='riseSetRadius' orientation='upright'  fontSize=' 8' fontName='Arial' bgColor='moondialbgn' strokeColor='moonclrnmask' marks='outer' markWidth='0.5'/>
-    <QDial	name='N mub ticks'    x=' setX' y='riseSetY'	modes='night'	radius='riseSetRadius' bgColor='clear' strokeColor='moonclrnmask' marks='tickOut' nMarks=' 4' markWidth=' 1' mSize='4'/>
-  </static>
   
 <!-- hands -->
 
@@ -377,37 +262,26 @@
 <Qhand	name='minute' z='2' kind='minuteKind' x='timeBackX'  y='timeBackY'  modes='front'    length='timeBackRad*.87' width='2.8' tail='4'    update='1' angle='minuteValueAngle()' strokeColor='backfgColor' fillColor='backfgColor'/>
 <Qhand	name='second' z='2' kind='secondKind' x='timeBackX'  y='timeBackY'  modes='front'    length='timeBackRad - 5' width='1'   tail='6'    update='1' angle='secondValueAngle()' strokeColor='backfgColor' fillColor='backfgColor'/>
 
-<Qhand	name='12hourb'	    kind='hour12Kind' x='timeBackX'  y='timeBackY'  modes='night|back'    length='timeBackRad*.60' width='3.0' tail='4'    update='10' angle='hour12ValueAngle()' strokeColor='white' fillColor='white'/>
-<Qhand	name='minuteb'	    kind='minuteKind' x='timeBackX'  y='timeBackY'  modes='night|back'    length='timeBackRad*.83' width='2.5' tail='4'    update='10' angle='minuteValueAngle()' strokeColor='white' fillColor='white'/>
-
   <Qhand	name='nxt mrs hr'   x='riseX'    y='riseSetY'	z='1' modes='front'	length='riseSetHourLength' width='riseSetHourWidth'	strokeColor='riseSetHourColor'   update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayHour12ValueAngle() : 0'/>
   <Qhand	name='nxt mrs mn'   x='riseX'    y='riseSetY'	z='1' modes='front'	length='riseSetMinuteLength' width='riseSetMinuteWidth'	strokeColor='riseSetMinuteColor' update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayMinuteValueAngle() : 0'/>
   <Qhand	name='mset hr'	    x=' setX'    y='riseSetY'	z='1' modes='front'	length='riseSetHourLength' width='riseSetHourWidth'	strokeColor='riseSetHourColor'   update='updateAtNextMoonsetOrMidnight'	angle='moonsetForDayValid() ? moonsetForDayHour12ValueAngle() : 0'/>
   <Qhand	name='mset min'	    x=' setX'    y='riseSetY'	z='1' modes='front'	length='riseSetMinuteLength' width='riseSetMinuteWidth'	strokeColor='riseSetMinuteColor' update='updateAtNextMoonsetOrMidnight'	angle='moonsetForDayValid() ? moonsetForDayMinuteValueAngle() : 0'/>
 
-  <Qhand	name='N nxt mrs hr'   x='riseX'    y='riseSetY'	z='1' modes='night'	length='riseSetHourLength' width='riseSetHourWidth'	strokeColor='moonclrn' fillColor='moonclrn'   update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayHour12ValueAngle() : 0'/>
-  <Qhand	name='N nxt mrs mn'   x='riseX'    y='riseSetY'	z='1' modes='night'	length='riseSetMinuteLength' width='riseSetMinuteWidth'	strokeColor='moonclrn' fillColor='moonclrn' update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayMinuteValueAngle() : 0'/>
-  <Qhand	name='N mset hr'	    x=' setX'    y='riseSetY'	z='1' modes='night'	length='riseSetHourLength' width='riseSetHourWidth'	strokeColor='moonclrn' fillColor='moonclrn'   update='updateAtNextMoonsetOrMidnight'	angle='moonsetForDayValid() ? moonsetForDayHour12ValueAngle() : 0'/>
-  <Qhand	name='N mset min'	    x=' setX'    y='riseSetY'	z='1' modes='night'	length='riseSetMinuteLength' width='riseSetMinuteWidth'	strokeColor='moonclrn' fillColor='moonclrn' update='updateAtNextMoonsetOrMidnight'	angle='moonsetForDayValid() ? moonsetForDayMinuteValueAngle() : 0'/>
 
 <Qhand	name='eLatDiff'     x='latX' y='latY' z='2' modes='front' length='latLen-4-latArrow'   width='latWidth'   type='rect'					oCenter='4' tail='0'	      oLineWidth='.2' oFillColor='backfgColor'
 	oLength='latArrow'		oStrokeColor='backfgColor'		   update='60' angle='latAngle1+angleSpan/2+ELatitudeOfPlanet(planetMoon)*180/pi/5.1*angleSpan/2'		          strokeColor='backfgColor' fillColor='backfgColor' />
 <Qhand	name='lunarDistanc' x='disX' y='disY' z='4' modes='front' length='disLen-4-disArrow'   width='disWidth'   type='rect'					oCenter='4' tail='0'	      oLineWidth='.2' oFillColor='backfgColor'
 	oLength='latArrow'		oStrokeColor='backfgColor'     		   update='60' angle='disAngle2-(distanceFromEarthOfPlanet(planetMoon)-moonPerigee)/(moonApogee-moonPerigee)*angleSpan' strokeColor='backfgColor' fillColor='backfgColor' />
 
-<Qhand	name='eLatDiffn'     x='latX' y='latY' z='2' modes='night' length='latLen-4-latArrow'   width='latWidth'   type='rect'					oCenter='4' tail='0'	      oLineWidth='.2' oFillColor='latcolorn'
 	oLength='latArrow'		oStrokeColor='latcolorn'		   update='60' angle='latAngle1+angleSpan/2+ELatitudeOfPlanet(planetMoon)*180/pi/5.1*angleSpan/2'		          strokeColor='latcolorn' fillColor='latcolorn' />
-<Qhand	name='lunarDistancn' x='disX' y='disY' z='4' modes='night' length='disLen-4-disArrow'   width='disWidth'   type='rect'					oCenter='4' tail='0'	      oLineWidth='.2' oFillColor='latcolorn'
 	oLength='latArrow'		oStrokeColor='latcolorn'     		   update='60' angle='disAngle2-(distanceFromEarthOfPlanet(planetMoon)-moonPerigee)/(moonApogee-moonPerigee)*angleSpan' strokeColor='latcolorn' fillColor='latcolorn' />
 
 <!-- alt/az hands -->
 <!-- Actual angle function is -pi/2 + moonAltitude(), update=10 -->
   <Qhand name='alt'   x='termX'  y='termY' z='2' thick='0.5' type='rect' modes='front' width='1' lineWidth='.25' length='altazChannelRad' length2='altazChannelRad-altazLength' tail='0' strokeColor='altHandColor' fillColor='altHandColor' angle='-pi/2 + moonAltitude()' update='10' />
-  <Qhand name='alt N'   x='termX'  y='termY' z='2' thick='0.5' type='rect' modes='night' width='1' lineWidth='.25' length='altazChannelRad' length2='altazChannelRad-altazLength' tail='0' strokeColor='red' fillColor='red' angle='-pi/2 + moonAltitude()' update='10' />
 
 <!-- Actual angle function is moonAzimuth() -->
   <Qhand name='az'    x='termX'  y='termY' z='2' thick='0.5' type='rect' modes='front'       width='1' lineWidth='.25' length='altazChannelRad+altazLength' length2='altazChannelRad' tail='0' strokeColor='azHandColor'  fillColor='azHandColor'  angle='moonAzimuth()' update='10' />
-  <Qhand name='az N'  x='termX'  y='termY' z='2' thick='0.5' type='rect' modes='night'       width='1' lineWidth='.25' length='altazChannelRad+altazLength' length2='altazChannelRad' tail='0' strokeColor='0xffa0a0ff' fillColor='0xffa0a0ff' angle='moonAzimuth()' update='10' />
 
 <!-- Nodal hands -->
   <Qhand        name='rahu1'	    x='0'   y='0' z='3' thick='1.5' modes='front|night' kind='hour24Kind' length='dialOuterRad' length2='dialOuterRad-14' width='3.5' tail='0' update='3600' angle='lunarAscendingNodeLongitude()-ELongitudeOfPlanet(planetSun)' strokeColor='nodeColor' fillColor='nodeColor' />
@@ -422,12 +296,9 @@
 <Qhand	name='phaseAngle'   x=' 0'   y='0'    z='2' modes='front' length='phaseLen-phaseArrow' width='phaseWidth' type='rect' grabPrio='-1' kind='moonDayKind' tail='phaseLen/6' tLineWidth='2' tFillColor='clear' oLineWidth='.1' 
         oFillColor='phaseColor' oRadius='phaseWidth*4' oLength='phaseArrow'  oWidth='phaseArrowWidth' oTail='phaseArrowWidth*-0.66' update='60' angle='moonAgeAngle()' oStrokeColor='phaseColor'        strokeColor='phaseColor' fillColor='phaseColor' />
 
-<Qhand	name='nelongAngle'   x=' 0'   y='0'    z='2' modes='night' length='phaseLen-phaseArrow' width='phaseWidth' type='rect' grabPrio='-1' kind='moonDayKind' tail='phaseLen/6+phaseWidth*4' tLineWidth='2' tFillColor='clear' oLineWidth='.1' 
         oFillColor='elongcolorn' oRadius='phaseWidth*4' oLength='phaseArrow'  oWidth='phaseArrowWidth' oTail='phaseArrowWidth*-0.66'
         update='60' angle='moonElongation()' oStrokeColor='elongcolorn'        strokeColor='elongcolorn' fillColor='elongcolorn' />
 <!-- Axle has to go on top of the elong hand... -->
-<QDial	name='naxle2'	    x='0'   y='0'  modes='night' radius='4'	markWidth='.75' marks='outer'	bgColor='DELcolorn' update='0' angle='0' />
-<Qhand	name='nphaseAngle'   x=' 0'   y='0'    z='2' modes='night' length='phaseLen-phaseArrow' width='phaseWidth' type='rect' grabPrio='-1' kind='moonDayKind' tail='phaseLen/6' tLineWidth='2' tFillColor='clear' oLineWidth='.1' 
         oFillColor='DELcolorn' oRadius='phaseWidth*4' oLength='phaseArrow'  oWidth='phaseArrowWidth' oTail='phaseArrowWidth*-0.66' update='60' angle='moonAgeAngle()' oStrokeColor='DELcolorn'        strokeColor='DELcolorn' fillColor='DELcolorn' />
 
 </watch>

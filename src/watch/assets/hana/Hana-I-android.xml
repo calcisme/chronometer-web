@@ -43,47 +43,7 @@
   <hand  refName='blackLight'	x='locx-1'  y='locy+indicR'   modes='front' src='blackLight.png'   offsetRadius='indicR'  offsetAngle='locationIndicatorColor()==black   ? normAngle : offAngle ' xAnchor= '5' yAnchor='5' update='updateForLocSyncIndicator'  angle='0' animSpeed='0' />
 -->
 
-  <QRect	name='n day back'   x='firstDateX+25'	y='dateY-7'	     modes='night' w='24' h='16' bgColor='black' />
-  <SWheel	name='n day1s'	    x='firstDateX+12' y='dateY+1'  dragAnimationType='dragAnimationAlways' modes='night'  radius='36' orientation='three' update='1 * 3600 * 24' angle='fmod((dayNumber()+1),          10)*2*pi/10' strokeColor='white' bgColor='black' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' />
-  <SWheel    refName='n day1s'	    x='firstDateX'    y='dateY+1'  dragAnimationType='dragAnimationAlways' modes='night'  radius='36' orientation='three' update='1 * days()'    angle='fmod(floor((dayNumber()+1)/10),10)*2*pi/10' strokeColor='white' bgColor='black' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' />
-  <QRect	name='n month back'   x='monthX+24'	y='dateY-7'	     modes='night' w='42' h='16' bgColor='black' />
-  <Swheel	name='n Qmonths'	    x='monthX-2'      y='dateY+1'  dragAnimationType='dragAnimationAlways' modes='night'  radius='65' orientation='three' update='1 * days()'	angle='monthNumber()                     *2*pi/12' fontSize='15' fontName='Arial' bgColor='black' strokeColor='nfgclr3a' text='JAN,FEB,MAR,APR,MAY,JUN,JUL,AUG,SEP,OCT,NOV,DEC'/>
-  <QRect	name='n wkday back'   x='-37'		y='-weekdayRadius+8' modes='night' w='74' h='15' bgColor='black' />
-  <Swheel	name='n Qweekdays'    x=' 0'	      y='2.5'      dragAnimationType='dragAnimationAlways' modes='night'  radius='weekdayRadius-8' orientation='six' update='1 * days()'	angle='weekdayNumberAngle()' strokeColor='nfgclr3a' bgColor='black' fontSize='11' fontName='Arial' text='SUNDAY,MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY,SATURDAY' />
 
-  <QRect	name='N mr am/pm back'   x='-rsampmX-21'		y='riseSetY-5' modes='night' w='17' h='12' bgColor='black' />
-  <SWheel	name='N mr am/pm'	       x='-rsampmX'   y='riseSetY+1'  dragAnimationType='dragAnimationAlways' modes='night'  radius='20' orientation='nine' update='updateAtNextMoonriseOrMidnight' angle='moonriseForDayValid() ? moonriseForDayHour24Number()>=12?pi/2:0 : -pi/2' fontSize='10' fontName='Arial' text='AM,PM,,--' strokeColor='moonclrn' bgColor='black' />
-  <QRect	name='N ms am/pm back'   x='rsampmX+4'	y='riseSetY-5'	    modes='night' w='17' h='12' bgColor='black' />
-  <SWheel    refName='N mr am/pm'	    x='rsampmX+25' y='riseSetY+1'  dragAnimationType='dragAnimationAlways' modes='night'  radius='20' orientation='nine' update='updateAtNextMoonsetOrMidnight'  angle='moonsetForDayValid() ?  moonsetForDayHour24Number() >=12?pi/2:0 : -pi/2' fontSize='10' fontName='Arial' text='AM,PM,,--' strokeColor='moonclrn' bgColor='black' />
-
-<QRect	name='term backn'    x='-termR' y='termY-termR'  modes='night' w='termR*2' h='termR*2'  bgColor='moonclrnmask'/>
-<terminator   name='termn'         x=' 0'  y='termY'  modes='night'   radius='termR+1' leavesPerQuadrant='termLeaves' incremental='0' leafBorderColor='0xff181818' leafFillColor='0xff080808' leafAnchorRadius='0' update='60' updateOffset='0' phaseAngle='moonAgeAngle()' rotation='moonRelativePositionAngle()'/>
-<window	name='term holen'    x= '0'  y='termY'  w='termR*2' h='termR*2' type='porthole'  border='0.5' strokeColor='moonclrn' />
-  <window	name='N mr am/pm'	    x='-rsampmX-21'	y='riseSetY-5'	    modes='night' w='17' h='12' border='0.5' strokeColor='black' />
-  <window	name='N ms am/pm'	    x='rsampmX+4'	y='riseSetY-5'	    modes='night' w='17' h='12' border='0.5' strokeColor='black' />
-
-  <window	name='n month win'    x='monthX+24'	y='dateY-7'	     modes='night' w='42' h='16' border='0' />  <!-- month -->
-  <window	name='n day win'	    x='firstDateX+25'	y='dateY-7'	     modes='night' w='24' h='16' border='0' />  <!-- days -->
-  <window	name='n wkday win'    x='-37'		y='-weekdayRadius+10' modes='night' w='74' h='13' border='0' />  <!-- weekday -->
-  <static name='night' modes='night'>
-    <QRect      name='maskRectn' x='-backerWidth/2' y='-backerWidth/2'  modes='front|night'  w='backerWidth' h='backerWidth' bgColor='black'/>
-    <!-- Upright text is drawn (by ECQView.m) well inside of the part border (because the part dimension uses the raw radius but the text is drawn inside of that using ECDialRadiusFactor).
-         So we can make the atlas half the size simply by drawing text as labels instead. -->
-    <!-- <QDial	name='NESW onlyn'    x='0'   y='0'   modes='night'  radius='  azR+16' orientation='upright' fontSize='12' fontName='Times New Roman' bgColor='clear' strokeColor='azNight' text='N,E,S,W' marks='center' markWidth='4' /> -->
-    <Qtext      name='n az dial 3 N' x='0'   y='azR-3.5'  modes='night'  fontSize='12' fontName='Times New Roman' text='N' strokeColor='azNight'/>
-    <Qtext      name='n az dial 3 S' x='0'   y='-azR+4'  modes='night'  fontSize='12' fontName='Times New Roman' text='S' strokeColor='azNight'/>
-    <Qtext      name='n az dial 3 E' x='azR-4'   y='0'  modes='night'  fontSize='12' fontName='Times New Roman' text='E' strokeColor='azNight'/>
-    <Qtext      name='n az dial 3 W' x='-azR+4'   y='0'  modes='night'  fontSize='12' fontName='Times New Roman' text='W' strokeColor='azNight'/>
-
-    <QDial	name='main dial3n'  x='0'   y='0'   modes='night'  radius='mainR-3' bgColor='clear' strokeColor='moonclrn' marks='tickOut' nMarks=' 12' markWidth='.75' mSize=' 9' />
-    <QDial	name='N alt dial'     x='0'   y='0'   modes='night'  radius=' altR' bgColor='clear' strokeColor='altNumberNight' marks='dot' nMarks='36' mSize='1.5' angle1='42*pi/36' angle2='71*pi/36' />
-    <QDial	name='N alt dial2'    x='0'   y='0'   modes='night'  radius=' altR' bgColor='clear' strokeColor='altNumberNight' marks='dot' nMarks='12' mSize='2.0' angle1='42*pi/36' angle2='71*pi/36' />
-    <QDial	name='dial-uan'	x='riseX' y='riseSetY'	modes='night'	radius='riseSetRadius' bgColor='moondialbgn' strokeColor='black' />
-    <QDial	name='dial-u2n'	x=' setX' y='riseSetY'	modes='night'	radius='riseSetRadius' bgColor='moondialbgn' strokeColor='black' />
-    <Qtext      name='alt90n'        x='0'   y='altR'  modes='night'  fontSize='8' fontName='Arial' text='90' strokeColor='altNumberNight'/>
-    <QDial	name='hub'          x='0'   y='0' modes='night' radius='3' marks='outer' bgColor='moonclrn' strokeColor='moonclrn' />
-    <Image	name='lumiberry'    x='0' y='-24.5'	modes='night'	src='../partsBin/berry-lum.png' />
-  </static>
 
   <QRect	name='mr am/pm back'   x='-rsampmX-21'		y='riseSetY-5' modes='front' w='17' h='12' bgColor='0xffe8e8e8' />
   <SWheel	name='mr am/pm'	       x='-rsampmX'   y='riseSetY+1'  dragAnimationType='dragAnimationAlways' modes='front'  radius='20' orientation='nine' update='updateAtNextMoonriseOrMidnight' angle='moonriseForDayValid() ? moonriseForDayHour24Number()>=12?pi/2:0 : -pi/2' fontSize='10' fontName='Arial' text='AM,PM,,--' strokeColor='black' bgColor='0xffe8e8e8' />
@@ -151,10 +111,7 @@
     <Qhand	name='saz hand'	    x='0'   y='0'  z='1.5' thick='2.5'	modes='front'	length='azR-5' width='0.75' tail='0'	update='1'	angle='moonAzimuth()'		strokeColor='azColor' fillColor='azColor' />
     <Qhand	name='salt hand'    x='0'   y='0'  z='2.5' thick='1.5'	modes='front'	length='altR' width='0.75'  tail='0'	update='1'	angle='-pi/2 + moonAltitude()'	strokeColor='altColor' fillColor='altColor' />
 
-    <Qhand	name='nxt rs hr N' x='riseX' y='riseSetY' z='5' thick='4.0' modes='night' length=' 18' width='1.2' update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayHour12ValueAngle() : 0' strokeColor='moonclrn'  fillColor='moonclrn'  />
-    <Qhand	name='nxt rs mn N' x='riseX' y='riseSetY' z='5' thick='4.0' modes='night' length=' 23' width='1'   update='updateAtNextMoonriseOrMidnight'	angle='moonriseForDayValid() ? moonriseForDayMinuteValueAngle() : 0' strokeColor='moonclrn'  fillColor='moonclrn'  />
-    <Qhand	name='set hr N'    x=' setX' y='riseSetY' z='5' thick='4.0' modes='night' length=' 18' width='1.2' update='updateAtNextMoonsetOrMidnight'	angle='moonsetForDayValid() ? moonsetForDayHour12ValueAngle() : 0' strokeColor='moonclrn'  fillColor='moonclrn'  />
-    <Qhand	name='set min N'   x=' setX' y='riseSetY' z='5' thick='4.0' modes='night' length=' 23' width='1'   update='updateAtNextMoonsetOrMidnight'	angle='moonsetForDayValid() ? moonsetForDayMinuteValueAngle() : 0' strokeColor='moonclrn'  fillColor='moonclrn'  />
+
 
   <Qhand	name='maz hand'	    x='0'   y='0' z='1.5' thick='2.5'	modes='front'	length='azR-5' width='1.5' tail='0'	update='1'	angle='moonAzimuth()'		strokeColor='azColorB' fillColor='azColorB' />
   <Qhand	name='malt hand'    x='0'   y='0' z='2.5' thick='1.5'	modes='front'	length=' altR' width='1.2'  tail='0'	update='1'	angle='-pi/2 + moonAltitude()'	strokeColor='altColorB' fillColor='altColorB' />
@@ -165,9 +122,6 @@
   <Qhand	name='sec'	    x='0' y='0'	z='3.5' thick='1.7'	modes='front|back'	kind='secondKind'   update='1'	angle='secondValueAngle()' type='tri'
 						 length='secLen-secArrow'	width='sw'	  tail='20'	   lineWidth='0.4'    strokeColor='mainSecColor'	 fillColor='mainSecColor'
 						oLength='secArrow'	        oWidth='sw*2'    oTail='4'        oLineWidth='0.4'   oStrokeColor='mainSecColor'	oFillColor='secArrowColor'/>
-    <Qhand	name='naz hand'	    x='0'   y='0'  modes='night'	length='azR-5' width='1.5' tail='0'	update='1'	angle='moonAzimuth()'		strokeColor='azNight' fillColor='azNight' />
-    <Qhand	name='nalt hand'    x='0'   y='0'  modes='night'	length='altR' width='2'  tail='0'	update='1'	angle='-pi/2 + moonAltitude()'	strokeColor='altNight' fillColor='altNight' />
-  <Qhand	name='hrn'	    x='0' y='  0'  z='5'	modes='night'	kind='hour12Kind'  type='rect' length='hrLen-hrArrow'   width='arrowWidth' tail=' 3' update='10' angle='hour12ValueAngle()' strokeColor='white'  fillColor='white'  oLength='hrArrow'  oWidth='8' oTail='hrTail'  oLineWidth='arrowWidth' oStrokeColor='white'  oFillColor='arrowClr' />
-  <Qhand	name='minn'	    x='0' y='  0'  z='5'	modes='night'	kind='minuteKind'  type='rect' length='minLen-minArrow' width='arrowWidth' tail=' 3' update='10' angle='minuteValueAngle()' strokeColor='white' fillColor='white' oLength='minArrow' oWidth=' 6' oTail='minTail' oLineWidth='arrowWidth' oStrokeColor='white'  oFillColor='arrowClr' />
+
 
 </watch>
