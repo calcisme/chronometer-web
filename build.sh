@@ -171,11 +171,11 @@ sed -e "s|{{TITLE}}|Selected Faces|g" \
     -e "s|{{ICON}}|thumb-all-faces.png|g" \
     "$SRC/face-template.html" | inject_partials "$COMBINED_HELP" > "$DIST/selected.html"
 echo "  → selected.html"
-rm -f "$COMBINED_HELP"
 
-# index.html — process with partial injection
-inject_partials < "$SRC/index.html" > "$DIST/index.html"
+# index.html — process with partial injection (includes combined help)
+inject_partials "$COMBINED_HELP" < "$SRC/index.html" > "$DIST/index.html"
 echo "  → index.html"
+rm -f "$COMBINED_HELP"
 
 # pick.html — face picker page (simple copy, no partials needed)
 cp "$SRC/pick.html" "$DIST/pick.html"

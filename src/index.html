@@ -233,6 +233,24 @@
             border-radius: 8px;
             margin-top: 8px;
         }
+
+        /* Per-face help sections */
+        #help-content details {
+            margin: 12px 0;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+
+        #help-content details summary {
+            cursor: pointer;
+            color: #8af;
+            font-size: 14px;
+        }
+
+        #help-content details summary:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -251,6 +269,9 @@
             </details>
         </div>
     </div>
+    <template id="help-template">
+        {{HELP_CONTENT}}
+    </template>
     <header>
         <h1>Emerald Chronometer</h1>
         <p>Select a watch face</p>
@@ -360,11 +381,51 @@
 
     <script src="index-page.js"></script>
     <script>
+        // Info popup
         const infoBtn = document.getElementById('info-btn');
         const infoOverlay = document.getElementById('info-overlay');
         const infoClose = document.getElementById('info-close');
+        const helpContent = document.getElementById('info-popup');
+        const helpTemplate = document.getElementById('help-template');
+        let helpLoaded = false;
         if (infoBtn && infoOverlay && infoClose) {
-            infoBtn.addEventListener('click', () => infoOverlay.classList.add('visible'));
+            infoBtn.addEventListener('click', () => {
+                infoOverlay.classList.add('visible');
+                // Clone help template into DOM on first open
+                if (!helpLoaded && helpContent && helpTemplate?.content) {
+                    helpLoaded = true;
+                    // Create a container for per-face help
+                    const helpDiv = document.createElement('div');
+                    helpDiv.id = 'help-content';
+                    helpDiv.appendChild(helpTemplate.content.cloneNode(true));
+                    // Add thumbnails to face help summaries
+                    helpDiv.querySelectorAll('.face-help-section[data-face]').forEach(el => {
+                        const face = el.dataset.face;
+                        const summary = el.querySelector('summary');
+                        if (summary) {
+                            const img = document.createElement('img');
+                            img.src = `thumb-${face}.png`;
+                            img.alt = '';
+                            img.style.cssText = 'width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;';
+                            summary.prepend(img);
+                        }
+                    });
+                    // Open external links in new tabs
+                    helpDiv.querySelectorAll('a[href^="http"]').forEach(a => {
+                        a.setAttribute('target', '_blank');
+                        a.setAttribute('rel', 'noopener');
+                    });
+                    // Reorder to match index page face card order
+                    const indexOrder = ['babylon','mauna-kea','haleakala','hana','chandra','selene','geneva','basel','firenze','venezia','terra','miami','gaia'];
+                    const byFace = new Map();
+                    helpDiv.querySelectorAll('.face-help-section[data-face]').forEach(el => byFace.set(el.dataset.face, el));
+                    for (const slug of indexOrder) {
+                        const el = byFace.get(slug);
+                        if (el) helpDiv.appendChild(el);
+                    }
+                    helpContent.appendChild(helpDiv);
+                }
+            });
             infoClose.addEventListener('click', () => infoOverlay.classList.remove('visible'));
             infoOverlay.addEventListener('click', (e) => {
                 if (e.target === infoOverlay) infoOverlay.classList.remove('visible');
