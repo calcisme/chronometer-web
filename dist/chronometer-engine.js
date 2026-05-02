@@ -16184,20 +16184,15 @@
     }
   }
   function advanceByUnit(date, unit, direction) {
-    const d = new Date(date.getTime());
     switch (unit) {
       case "second":
-        d.setSeconds(d.getSeconds() + direction);
-        break;
+        return new Date(date.getTime() + direction * 1e3);
       case "minute":
-        d.setMinutes(d.getMinutes() + direction);
-        break;
+        return new Date(date.getTime() + direction * 6e4);
       case "hour":
-        d.setHours(d.getHours() + direction);
-        break;
+        return new Date(date.getTime() + direction * 36e5);
       case "day":
-        d.setDate(d.getDate() + direction);
-        break;
+        return new Date(date.getTime() + direction * 864e5);
       case "month": {
         const di = dateToDateInterval(date);
         const newDI = addMonthsToTimeInterval(di, 0, direction);
@@ -16209,7 +16204,6 @@
         return dateIntervalToDate(newDI);
       }
     }
-    return d;
   }
   function snapToUnit(date, unit, direction) {
     const d = new Date(date.getTime());
@@ -17791,7 +17785,7 @@
     let _dstTimerId = null;
     function handleDstTransition() {
       console.log("[dst-detect] Timezone/DST change \u2014 rebuilding environments");
-      tzDeltaMs = computeTzDeltaMs(locationTimezone);
+      tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
       for (const face of faces) {
         if (!face.enabled) continue;
         const oldKnockout = face.env._terraCityKnockout;
@@ -17837,7 +17831,7 @@
         _dstTimerId = setTimeout(scheduleDstRebuild, MAX_TIMEOUT);
         return;
       }
-      delay = Math.max(0, delay) + 2e3;
+      delay = Math.max(0, delay) + 100;
       console.log(`[dst-detect] Next transition at ${next.toISOString()} \u2014 timer set for ${Math.round(delay / 1e3)}s`);
       _dstTimerId = setTimeout(() => {
         _dstTimerId = null;

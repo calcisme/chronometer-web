@@ -76,20 +76,15 @@ import { dateToDateInterval, dateIntervalToDate } from './astronomy/es-time.js';
  * internally; timezone adjustments are applied at the display layer).
  */
 function advanceByUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
-    const d = new Date(date.getTime());
     switch (unit) {
         case 'second':
-            d.setSeconds(d.getSeconds() + direction);
-            break;
+            return new Date(date.getTime() + direction * 1000);
         case 'minute':
-            d.setMinutes(d.getMinutes() + direction);
-            break;
+            return new Date(date.getTime() + direction * 60_000);
         case 'hour':
-            d.setHours(d.getHours() + direction);
-            break;
+            return new Date(date.getTime() + direction * 3_600_000);
         case 'day':
-            d.setDate(d.getDate() + direction);
-            break;
+            return new Date(date.getTime() + direction * 86_400_000);
         case 'month': {
             // Use hybrid calendar month addition (handles Julian/Gregorian
             // switchover, day clamping like Jan 31 + 1 month → Feb 28)
@@ -104,7 +99,6 @@ function advanceByUnit(date: Date, unit: TimeUnit, direction: 1 | -1): Date {
             return dateIntervalToDate(newDI);
         }
     }
-    return d;
 }
 
 /**

@@ -993,7 +993,9 @@ async function main() {
     function handleDstTransition() {
         console.log('[dst-detect] Timezone/DST change — rebuilding environments');
 
-        tzDeltaMs = computeTzDeltaMs(locationTimezone);
+        // Use displayed time — in offset 1× mode the displayed date may
+        // be in a different DST state than the real date.
+        tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
 
         for (const face of faces) {
             if (!face.enabled) continue;
@@ -1067,8 +1069,10 @@ async function main() {
             return;
         }
 
-        // Add 2-second buffer to ensure we're past the boundary
-        delay = Math.max(0, delay) + 2000;
+        // Add a small buffer to ensure we're past the boundary.
+        // The binary search already converges to the exact minute, so
+        // 100ms is sufficient.
+        delay = Math.max(0, delay) + 100;
 
         console.log(`[dst-detect] Next transition at ${next.toISOString()} — timer set for ${Math.round(delay / 1000)}s`);
         _dstTimerId = setTimeout(() => {
