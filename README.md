@@ -2,13 +2,17 @@
 
 A web port of [Emerald Chronometer](https://github.com/EmeraldSequoia/Chronometer), an astronomical watch-face app originally built for iPhone and iPad in Objective-C, C++, and C. This project re-implements the app entirely in TypeScript, rendering animated watch faces to HTML Canvas. Like the original iOS app, it requires **no backend server** — it runs completely in the browser using only the device's clock and location (while the location is being set a map will be displayed using OpenStreetMap if the internet is available, but it is not required for any functionality).
 
-The original Emerald Chronometer was developed by Steve Pucci and Bill Arnett of [Emerald Sequoia LLC](https://emeraldsequoia.com) and was one of the first 500 apps in the App Store in 2008.
+The original Emerald Chronometer was developed by Steve Pucci and Bill Arnett of [Emerald Sequoia LLC](https://emeraldsequoia.com) and was one of the first 500 apps in the App Store in 2008. The iOS app has **a new owner** and can be found [here](https://www.scapaflowllc.com/new-page-1).
 
-This project is under very active development as of April 2026.
+This project (the web version here) is under very active development as of May 2026.
 
 ## How to Run
 
-### Option 1: Download and open locally
+### Option 1: Run from a server that serves the static files needed:
+* https://spucci.us/ecweb/
+* Add your server here! We're looking for volunteers to host mirror sites to host the static files. All we need is a directory on your server to host the files in dist/ and serve them over https. (See option 3 for details on how to do this).
+
+### Option 2: Download and open locally
 
 1. Download the `dist/` directory from this repository. The easiest way is to download the `dist.zip` archive from the [latest release](https://github.com/emeraldsequoia/chronometer-web/releases), or clone the repo and use the `dist/` directory directly.
 2. Unzip (if needed) and double-click **`index.html`** to open it in your browser, or open any of the individual face HTML files (e.g. `mauna-kea.html`). If you bookmark the page after setting the location, you can use that bookmark later and it will include the location settings (as URL parameters) so you don't have to set the location again.
@@ -20,7 +24,7 @@ Almost everything works when opened via `file://` URLs. The exceptions are:
 
 See [file-url-limitations.md](planning/file-url-limitations.md) for full details.
 
-### Option 2: Serve from a web server
+### Option 3: Run from your own local web server
 
 Serve all files in the `dist/` directory from any static web server. To support browser-based location detection, the files must be served over **`https:`**.
 
