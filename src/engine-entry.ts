@@ -43,7 +43,7 @@ import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadErro
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
 import { resolveTimezone } from './tz-resolve.js';
-import { findNextDstTransition } from './dst-detect.js';
+import { findNextDstTransition, findPrevDstTransition } from './dst-detect.js';
 import {
     localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
     kECJulianGregorianSwitchoverTimeInterval,
@@ -720,6 +720,9 @@ async function main() {
             // Hand states are preserved — their angle expressions will
             // be re-evaluated by tickAnimations using the fresh env
         }
+        // Reschedule the DST timer — displayed time and/or direction may
+        // have changed, so the next transition point could be different.
+        scheduleDstRebuild();
     }
 
 
@@ -1032,14 +1035,19 @@ async function main() {
         const displayNow = rawGetNow();
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-        // Find next transition in location timezone
+        // Choose search direction based on time controller state.
+        // In -1× mode, time moves backward so we need the previous transition.
+        const isBackward = timeController.currentDirection === -1 && timeController.currentRate === null;
+        const findTransition = isBackward ? findPrevDstTransition : findNextDstTransition;
+
+        // Find next/prev transition in location timezone
         const locNext = locationTimezone
-            ? findNextDstTransition(locationTimezone, displayNow)
+            ? findTransition(locationTimezone, displayNow)
             : null;
 
-        // Find next transition in browser timezone (only if different)
+        // Find next/prev transition in browser timezone (only if different)
         const browserNext = (browserTz !== locationTimezone)
-            ? findNextDstTransition(browserTz, displayNow)
+            ? findTransition(browserTz, displayNow)
             : null;
 
         // Take the earliest
@@ -1055,10 +1063,14 @@ async function main() {
             return;
         }
 
-        // Compute delay in real time: the display-time delta equals real-time
-        // delta in 1× mode.  In accelerated modes, rebuildEnvironments() is
-        // called on every tick so this timer isn't needed.
-        let delay = next.getTime() - displayNow.getTime();
+        // Compute delay in real time.  In 1× mode the display-time delta
+        // equals real-time delta.  In -1× mode the display time moves
+        // backward, so the delay is how far back in display time the
+        // target is (absolute difference either way).
+        // In accelerated modes, rebuildEnvironments() runs on every tick
+        // and already calls scheduleDstRebuild(), so this timer is
+        // redundant but harmless.
+        let delay = Math.abs(next.getTime() - displayNow.getTime());
 
         // setTimeout max is ~24.8 days (2^31 - 1 ms).
         // If further out, set a wake-up at 24 days to re-check.

@@ -85,6 +85,47 @@ export function findNextDstTransition(
 }
 
 /**
+ * Find the most recent past DST transition in a given IANA timezone.
+ *
+ * Returns the Date of the transition (snapped to the top of the minute,
+ * i.e. XX:XX:00.000), or null if no DST transition is found within the
+ * past ~400 days.
+ *
+ * Used when time is running backward (-1× mode) to detect when the
+ * displayed time crosses a DST boundary into the past.
+ */
+export function findPrevDstTransition(
+    olsonId: string,
+    from: Date,
+): Date | null {
+    const startMs = from.getTime();
+    const currentOffset = getTimezoneOffsetMinutes(olsonId, from);
+
+    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+    const MAX_PROBES = 30;  // 14 days × 30 = 420 days
+
+    let hiMs = startMs;
+
+    for (let i = 1; i <= MAX_PROBES; i++) {
+        const loMs = startMs - i * FOURTEEN_DAYS_MS;
+        const loOffset = getTimezoneOffsetMinutes(olsonId, new Date(loMs));
+
+        if (loOffset !== currentOffset) {
+            // Transition happened between loMs and hiMs — binary search.
+            // loMs has loOffset (different), hiMs has currentOffset.
+            // binarySearchTransition expects lo=baseOffset, hi=different,
+            // so pass loOffset as the base.
+            return binarySearchTransition(olsonId, loMs, hiMs, loOffset);
+        }
+
+        hiMs = loMs;
+    }
+
+    // No transition found in ~420 days
+    return null;
+}
+
+/**
  * Binary search for the exact minute boundary of a DST transition.
  *
  * Precondition: getTimezoneOffsetMinutes(olsonId, loMs) === baseOffset

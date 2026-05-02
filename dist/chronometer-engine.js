@@ -17088,6 +17088,22 @@
     }
     return null;
   }
+  function findPrevDstTransition(olsonId, from) {
+    const startMs = from.getTime();
+    const currentOffset = getTimezoneOffsetMinutes(olsonId, from);
+    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1e3;
+    const MAX_PROBES = 30;
+    let hiMs = startMs;
+    for (let i = 1; i <= MAX_PROBES; i++) {
+      const loMs = startMs - i * FOURTEEN_DAYS_MS;
+      const loOffset = getTimezoneOffsetMinutes(olsonId, new Date(loMs));
+      if (loOffset !== currentOffset) {
+        return binarySearchTransition(olsonId, loMs, hiMs, loOffset);
+      }
+      hiMs = loMs;
+    }
+    return null;
+  }
   function binarySearchTransition(olsonId, loMs, hiMs, baseOffset) {
     const ONE_MINUTE_MS = 6e4;
     while (hiMs - loMs > ONE_MINUTE_MS) {
@@ -17588,6 +17604,7 @@
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       }
+      scheduleDstRebuild();
     }
     timeController.onTick = rebuildEnvironments;
     let idleTimerId = null;
@@ -17812,8 +17829,10 @@
       }
       const displayNow = rawGetNow();
       const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const locNext = locationTimezone ? findNextDstTransition(locationTimezone, displayNow) : null;
-      const browserNext = browserTz !== locationTimezone ? findNextDstTransition(browserTz, displayNow) : null;
+      const isBackward = timeController.currentDirection === -1 && timeController.currentRate === null;
+      const findTransition = isBackward ? findPrevDstTransition : findNextDstTransition;
+      const locNext = locationTimezone ? findTransition(locationTimezone, displayNow) : null;
+      const browserNext = browserTz !== locationTimezone ? findTransition(browserTz, displayNow) : null;
       let next = null;
       if (locNext && browserNext) {
         next = locNext < browserNext ? locNext : browserNext;
@@ -17824,7 +17843,7 @@
         console.log("[dst-detect] No DST transitions found \u2014 no timer set");
         return;
       }
-      let delay = next.getTime() - displayNow.getTime();
+      let delay = Math.abs(next.getTime() - displayNow.getTime());
       const MAX_TIMEOUT = 2147483647;
       if (delay > MAX_TIMEOUT) {
         console.log(`[dst-detect] Next transition > 24 days away \u2014 chaining timer`);

@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { findNextDstTransition, getTimezoneOffsetMinutes } from '../dst-detect.js';
+import { findNextDstTransition, findPrevDstTransition, getTimezoneOffsetMinutes } from '../dst-detect.js';
 
 // ============================================================================
 // getTimezoneOffsetMinutes
@@ -227,6 +227,136 @@ describe('findNextDstTransition — comprehensive timezone coverage', () => {
 
             // 3. Transition is in the future relative to 'from'
             expect(result.getTime()).toBeGreaterThan(from.getTime());
+        });
+    }
+});
+
+// ============================================================================
+// findPrevDstTransition — backward search
+// ============================================================================
+
+describe('findPrevDstTransition', () => {
+    test('no DST timezone returns null', () => {
+        const now = new Date('2024-06-15T12:00:00Z');
+        expect(findPrevDstTransition('Asia/Tokyo', now)).toBeNull();
+        expect(findPrevDstTransition('Pacific/Honolulu', now)).toBeNull();
+        expect(findPrevDstTransition('America/Phoenix', now)).toBeNull();
+        expect(findPrevDstTransition('Etc/UTC', now)).toBeNull();
+    });
+
+    test('America/New_York — finds most recent past transition (spring forward)', () => {
+        // Start in June 2024 — most recent past transition was March 10, 2024 (spring forward)
+        const from = new Date('2024-06-15T12:00:00Z');
+        const result = findPrevDstTransition('America/New_York', from);
+        expect(result).not.toBeNull();
+
+        // Should be March 10, 2024 at 07:00:00.000 UTC (2:00 AM EST)
+        expect(result!.toISOString()).toBe('2024-03-10T07:00:00.000Z');
+
+        // Verify offset changes at this boundary
+        const before = new Date(result!.getTime() - 1);
+        expect(getTimezoneOffsetMinutes('America/New_York', before)).toBe(-300); // EST
+        expect(getTimezoneOffsetMinutes('America/New_York', result!)).toBe(-240); // EDT
+    });
+
+    test('America/New_York — finds most recent past transition (fall back)', () => {
+        // Start in January 2024 — most recent past transition was Nov 5, 2023 (fall back)
+        const from = new Date('2024-01-15T12:00:00Z');
+        const result = findPrevDstTransition('America/New_York', from);
+        expect(result).not.toBeNull();
+
+        // Should be November 5, 2023 at 06:00:00.000 UTC (2:00 AM EDT)
+        expect(result!.toISOString()).toBe('2023-11-05T06:00:00.000Z');
+
+        // Verify offset changes
+        const before = new Date(result!.getTime() - 1);
+        expect(getTimezoneOffsetMinutes('America/New_York', before)).toBe(-240); // EDT
+        expect(getTimezoneOffsetMinutes('America/New_York', result!)).toBe(-300); // EST
+    });
+
+    test('symmetry: findPrev from after a transition finds the same boundary as findNext from before', () => {
+        // findNext from Jan 2024 should find March 10 spring-forward
+        const nextResult = findNextDstTransition('America/New_York', new Date('2024-01-15T12:00:00Z'));
+        expect(nextResult).not.toBeNull();
+
+        // findPrev from April 2024 should find the same March 10 boundary
+        const prevResult = findPrevDstTransition('America/New_York', new Date('2024-04-15T12:00:00Z'));
+        expect(prevResult).not.toBeNull();
+
+        expect(prevResult!.toISOString()).toBe(nextResult!.toISOString());
+    });
+
+    test('result is snapped to top of minute', () => {
+        const from = new Date('2024-06-15T12:00:00Z');
+        const result = findPrevDstTransition('America/New_York', from);
+        expect(result).not.toBeNull();
+
+        expect(result!.getTime() % 60000).toBe(0);
+        expect(result!.getUTCSeconds()).toBe(0);
+        expect(result!.getUTCMilliseconds()).toBe(0);
+    });
+
+    test('result is in the past relative to from', () => {
+        const from = new Date('2024-06-15T12:00:00Z');
+        const result = findPrevDstTransition('America/New_York', from);
+        expect(result).not.toBeNull();
+        expect(result!.getTime()).toBeLessThan(from.getTime());
+    });
+
+    test('Australia/Lord_Howe — 30-minute DST backward', () => {
+        // From July 2024 (winter), the most recent past transition is April 2024 (DST ended)
+        const from = new Date('2024-07-15T12:00:00Z');
+        const result = findPrevDstTransition('Australia/Lord_Howe', from);
+        expect(result).not.toBeNull();
+
+        const before = new Date(result!.getTime() - 1);
+        const offsetBefore = getTimezoneOffsetMinutes('Australia/Lord_Howe', before);
+        const offsetAfter = getTimezoneOffsetMinutes('Australia/Lord_Howe', result!);
+        expect(Math.abs(offsetAfter - offsetBefore)).toBe(30);
+    });
+});
+
+// ============================================================================
+// findPrevDstTransition — comprehensive timezone coverage
+// ============================================================================
+
+describe('findPrevDstTransition — comprehensive timezone coverage', () => {
+    const timezones = [
+        'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+        'America/Anchorage', 'America/Phoenix',
+        'America/Halifax', 'America/St_Johns',
+        'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+        'Asia/Tokyo', 'Asia/Kolkata', 'Asia/Dubai',
+        'Australia/Sydney', 'Australia/Lord_Howe',
+        'Pacific/Auckland', 'Pacific/Honolulu',
+        'Etc/UTC',
+    ];
+
+    for (const tz of timezones) {
+        test(`${tz}: prev transition is valid or null`, () => {
+            const from = new Date('2024-06-15T12:00:00Z');
+            const result = findPrevDstTransition(tz, from);
+
+            if (result === null) {
+                // No DST — verify offset is constant across the year
+                const jan = getTimezoneOffsetMinutes(tz, new Date('2024-01-15T12:00:00Z'));
+                const jul = getTimezoneOffsetMinutes(tz, new Date('2024-07-15T12:00:00Z'));
+                expect(jan).toBe(jul);
+                return;
+            }
+
+            // Has DST — verify the transition is valid:
+            // 1. Result is on a minute boundary
+            expect(result.getTime() % 60000).toBe(0);
+
+            // 2. Offset changes at this exact point
+            const before = new Date(result.getTime() - 1);
+            const offsetBefore = getTimezoneOffsetMinutes(tz, before);
+            const offsetAfter = getTimezoneOffsetMinutes(tz, result);
+            expect(offsetBefore).not.toBe(offsetAfter);
+
+            // 3. Transition is in the past relative to 'from'
+            expect(result.getTime()).toBeLessThan(from.getTime());
         });
     }
 });
