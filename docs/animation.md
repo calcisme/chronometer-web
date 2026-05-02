@@ -217,4 +217,5 @@ The terminator leaf system (`terminator.ts`) also uses the unified core via `sta
 ## Related Docs
 
 - [Rendering](rendering.md) — How animated parts are drawn each frame
+- [Timezone & DST](timezone-and-dst.md) — DST transition detection and environment rebuild triggers
 - [Development Rules](development-rules.md) — Schedule reset rules (§6), never rebuild parts (§3)

@@ -106,4 +106,5 @@ When a location is set (from any source), the system:
 ## Related Docs
 
 - [World-Time Slots](world-time-slots.md) — How location feeds into Terra/Gaia slot systems
+- [Timezone & DST](timezone-and-dst.md) — DST transition detection and timezone offset handling
 - [Architecture Overview](architecture-overview.md) — No-backend design constraint

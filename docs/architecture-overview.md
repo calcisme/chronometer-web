@@ -96,4 +96,5 @@ Well within the 100 MB budget target.
 
 - [Rendering](rendering.md) — Static cache and window cutout details
 - [Animation](animation.md) — Two-time-base system and scrubbing
+- [Timezone & DST](timezone-and-dst.md) — DST transition detection and timezone offset handling
 - [Build System](build-system.md) — How face bundles are built
