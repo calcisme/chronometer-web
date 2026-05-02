@@ -501,6 +501,32 @@
             font-style: italic;
         }
 
+        /* First-visit instructional hint (prominent) */
+        .lp-no-location-hint {
+            background: rgba(50, 50, 90, 0.4);
+            border: 1px solid #4a4a7e;
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+
+        .lp-hint-icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+        }
+
+        .lp-hint-text {
+            color: #ddc;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .lp-hint-sub {
+            color: #998;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
         /* Done button */
         .lp-dialog-footer {
             max-height: 0;
@@ -1299,7 +1325,12 @@ The dot at 6 oclock is black for PM and white for AM.
 
                 <!-- "No location set yet" placeholder -->
                 <div class="lp-no-location" id="lp-no-location">
-                    <div class="lp-no-location-text">No location set yet</div>
+                    <div class="lp-no-location-hint" id="lp-no-location-hint" style="display:none">
+                        <div class="lp-hint-icon">📍</div>
+                        <div class="lp-hint-text">No location specified via URL</div>
+                        <div class="lp-hint-sub">To skip this dialog in the future, bookmark the page after selecting a location below</div>
+                    </div>
+                    <div class="lp-no-location-text" id="lp-no-location-default">No location set yet</div>
                 </div>
 
                 <div class="lp-search-section">

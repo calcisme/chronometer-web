@@ -383,6 +383,32 @@
             font-style: italic;
         }
 
+        /* First-visit instructional hint (prominent) */
+        .lp-no-location-hint {
+            background: rgba(50, 50, 90, 0.4);
+            border: 1px solid #4a4a7e;
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+
+        .lp-hint-icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+        }
+
+        .lp-hint-text {
+            color: #ddc;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .lp-hint-sub {
+            color: #998;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
         /* Done button */
         .lp-dialog-footer {
             max-height: 0;

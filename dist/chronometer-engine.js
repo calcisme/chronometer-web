@@ -17219,6 +17219,8 @@
     const lpOsmOffline = document.getElementById("lp-osm-offline");
     const lpStatusSection = document.getElementById("lp-status-section");
     const lpNoLocation = document.getElementById("lp-no-location");
+    const lpNoLocationHint = document.getElementById("lp-no-location-hint");
+    const lpNoLocationDefault = document.getElementById("lp-no-location-default");
     const lpLocationName = document.getElementById("lp-location-name");
     const lpLocationTz = document.getElementById("lp-location-tz");
     const lpOsmAttribution = document.getElementById("lp-osm-attribution");
@@ -18216,6 +18218,13 @@
       } else {
         lpStatusSection.classList.remove("visible");
         lpNoLocation.classList.remove("hidden");
+        if (needsPrompt) {
+          lpNoLocationHint.style.display = "";
+          lpNoLocationDefault.style.display = "none";
+        } else {
+          lpNoLocationHint.style.display = "none";
+          lpNoLocationDefault.style.display = "";
+        }
       }
       lpDialogFooter.classList.toggle("visible", !needsPrompt || hasLocation);
       const btn = lpUseBrowser;
