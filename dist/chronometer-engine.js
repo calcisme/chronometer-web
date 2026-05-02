@@ -17056,6 +17056,59 @@
     }
   }
 
+  // src/dst-detect.ts
+  function getTimezoneOffsetMinutes(olsonId, date) {
+    try {
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: olsonId,
+        timeZoneName: "longOffset"
+      });
+      const parts = fmt.formatToParts(date);
+      const tzStr = parts.find((p) => p.type === "timeZoneName")?.value || "";
+      if (tzStr === "GMT" || tzStr === "UTC" || !tzStr) {
+        return 0;
+      }
+      const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+      if (m) {
+        const sign = m[1] === "+" ? 1 : -1;
+        return sign * (parseInt(m[2], 10) * 60 + (m[3] ? parseInt(m[3], 10) : 0));
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }
+  function findNextDstTransition(olsonId, from) {
+    const startMs = from.getTime();
+    const currentOffset = getTimezoneOffsetMinutes(olsonId, from);
+    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1e3;
+    const MAX_PROBES = 30;
+    let loMs = startMs;
+    for (let i = 1; i <= MAX_PROBES; i++) {
+      const hiMs = startMs + i * FOURTEEN_DAYS_MS;
+      const hiOffset = getTimezoneOffsetMinutes(olsonId, new Date(hiMs));
+      if (hiOffset !== currentOffset) {
+        return binarySearchTransition(olsonId, loMs, hiMs, currentOffset);
+      }
+      loMs = hiMs;
+    }
+    return null;
+  }
+  function binarySearchTransition(olsonId, loMs, hiMs, baseOffset) {
+    const ONE_MINUTE_MS = 6e4;
+    while (hiMs - loMs > ONE_MINUTE_MS) {
+      const midMs = Math.floor((loMs + hiMs) / 2);
+      const midOffset = getTimezoneOffsetMinutes(olsonId, new Date(midMs));
+      if (midOffset === baseOffset) {
+        loMs = midMs;
+      } else {
+        hiMs = midMs;
+      }
+    }
+    const snapped = Math.floor(hiMs / ONE_MINUTE_MS) * ONE_MINUTE_MS;
+    return new Date(snapped);
+  }
+
   // src/engine-entry.ts
   function requestBrowserLocation(timeoutMs) {
     if (!navigator.geolocation) return Promise.resolve({ status: "unavailable" });
@@ -17735,6 +17788,72 @@
       stopScheduler();
       rafId = requestAnimationFrame(frame);
     }
+    let _dstTimerId = null;
+    function handleDstTransition() {
+      console.log("[dst-detect] Timezone/DST change \u2014 rebuilding environments");
+      tzDeltaMs = computeTzDeltaMs(locationTimezone);
+      for (const face of faces) {
+        if (!face.enabled) continue;
+        const oldKnockout = face.env._terraCityKnockout;
+        face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
+        invalidateDayNightCaches(face.watch);
+        if (face.terminatorLeaves.length > 0) {
+          updateLeafAngles(face.terminatorLeaves, face.env);
+          resetLeafSchedules(face.terminatorLeaves);
+          face.lastTerminatorRebuild = 0;
+        }
+        const { canvas, watch, env, images, scale } = face;
+        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        resetHandSchedules(face.handStates);
+      }
+      updateTimezoneDisplay();
+      stopScheduler();
+      startScheduler();
+    }
+    function scheduleDstRebuild() {
+      if (_dstTimerId !== null) {
+        clearTimeout(_dstTimerId);
+        _dstTimerId = null;
+      }
+      const now = /* @__PURE__ */ new Date();
+      const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const locNext = locationTimezone ? findNextDstTransition(locationTimezone, now) : null;
+      const browserNext = browserTz !== locationTimezone ? findNextDstTransition(browserTz, now) : null;
+      let next = null;
+      if (locNext && browserNext) {
+        next = locNext < browserNext ? locNext : browserNext;
+      } else {
+        next = locNext || browserNext;
+      }
+      if (!next) {
+        console.log("[dst-detect] No DST transitions found \u2014 no timer set");
+        return;
+      }
+      let delay = next.getTime() - Date.now();
+      const MAX_TIMEOUT = 2147483647;
+      if (delay > MAX_TIMEOUT) {
+        console.log(`[dst-detect] Next transition > 24 days away \u2014 chaining timer`);
+        _dstTimerId = setTimeout(scheduleDstRebuild, MAX_TIMEOUT);
+        return;
+      }
+      delay = Math.max(0, delay) + 2e3;
+      console.log(`[dst-detect] Next transition at ${next.toISOString()} \u2014 timer set for ${Math.round(delay / 1e3)}s`);
+      _dstTimerId = setTimeout(() => {
+        _dstTimerId = null;
+        handleDstTransition();
+        scheduleDstRebuild();
+      }, delay);
+    }
+    let _cachedBrowserTzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setInterval(() => {
+      const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (currentTz === _cachedBrowserTzName) return;
+      console.log(`[tz-detect] Browser timezone changed: ${_cachedBrowserTzName} \u2192 ${currentTz}`);
+      _cachedBrowserTzName = currentTz;
+      handleDstTransition();
+      scheduleDstRebuild();
+    }, 1e3);
     const GAP_PX = 12;
     const PADDING_PX = 12;
     const POPOVER_GAP = 8;
@@ -17987,7 +18106,10 @@
         applySize(face, size);
         face.cachesBuilt = false;
       }
-      buildAllCachesSequentially(faces.filter((f) => f.enabled), startScheduler);
+      buildAllCachesSequentially(faces.filter((f) => f.enabled), () => {
+        startScheduler();
+        scheduleDstRebuild();
+      });
     }
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -18204,6 +18326,7 @@
       locationTimezone = resolveTimezone(newLat, newLon, cityTz);
       tzDeltaMs = computeTzDeltaMs(locationTimezone);
       rebuildAllForLocation(newLat, newLon);
+      scheduleDstRebuild();
       if (writeToUrl) {
         writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
       }

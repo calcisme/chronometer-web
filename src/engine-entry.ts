@@ -43,6 +43,7 @@ import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadErro
 import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
 import { resolveTimezone } from './tz-resolve.js';
+import { findNextDstTransition } from './dst-detect.js';
 import {
     localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
     kECJulianGregorianSwitchoverTimeInterval,
@@ -971,6 +972,126 @@ async function main() {
     }
 
     // =========================================================================
+    // DST transition detection
+    // =========================================================================
+    // The watch environments capture timezone-related values (tzDeltaMs,
+    // tzOffsetSeconds) as constants at creation time.  When a DST transition
+    // occurs in either the location timezone or the browser's system timezone,
+    // these values become stale.  We compute the exact next transition time
+    // and set a precise timer rather than polling.
+    //
+    // A lightweight 1-second poll of the browser's IANA timezone *name*
+    // handles manual OS timezone changes (which invalidate tzDeltaMs
+    // immediately and may change the browser-TZ DST schedule).
+
+    let _dstTimerId: ReturnType<typeof setTimeout> | null = null;
+
+    /**
+     * Rebuild environments when a DST transition occurs or the browser's
+     * system timezone changes.  Follows the §3 animation-preserving pattern.
+     */
+    function handleDstTransition() {
+        console.log('[dst-detect] Timezone/DST change — rebuilding environments');
+
+        tzDeltaMs = computeTzDeltaMs(locationTimezone);
+
+        for (const face of faces) {
+            if (!face.enabled) continue;
+            const oldKnockout = (face.env as any)._terraCityKnockout;
+            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            if (oldKnockout) (face.env as any)._terraCityKnockout = oldKnockout;
+            invalidateDayNightCaches(face.watch);
+            if (face.terminatorLeaves.length > 0) {
+                updateLeafAngles(face.terminatorLeaves, face.env);
+                resetLeafSchedules(face.terminatorLeaves);
+                face.lastTerminatorRebuild = 0;
+            }
+            const { canvas, watch, env, images, scale } = face;
+            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+            resetHandSchedules(face.handStates);
+        }
+
+        updateTimezoneDisplay();
+        stopScheduler();
+        startScheduler();
+    }
+
+    /**
+     * Compute the next DST transition in either the location timezone or
+     * the browser timezone, and set a setTimeout for that moment.
+     * Chains via setTimeout for delays exceeding the 2^31-1 ms limit.
+     */
+    function scheduleDstRebuild() {
+        if (_dstTimerId !== null) { clearTimeout(_dstTimerId); _dstTimerId = null; }
+
+        const now = new Date();
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+        // Find next transition in location timezone
+        const locNext = locationTimezone
+            ? findNextDstTransition(locationTimezone, now)
+            : null;
+
+        // Find next transition in browser timezone (only if different)
+        const browserNext = (browserTz !== locationTimezone)
+            ? findNextDstTransition(browserTz, now)
+            : null;
+
+        // Take the earliest
+        let next: Date | null = null;
+        if (locNext && browserNext) {
+            next = locNext < browserNext ? locNext : browserNext;
+        } else {
+            next = locNext || browserNext;
+        }
+
+        if (!next) {
+            console.log('[dst-detect] No DST transitions found — no timer set');
+            return;
+        }
+
+        let delay = next.getTime() - Date.now();
+
+        // setTimeout max is ~24.8 days (2^31 - 1 ms).
+        // If further out, set a wake-up at 24 days to re-check.
+        const MAX_TIMEOUT = 2_147_483_647; // 2^31 - 1
+        if (delay > MAX_TIMEOUT) {
+            console.log(`[dst-detect] Next transition > 24 days away — chaining timer`);
+            _dstTimerId = setTimeout(scheduleDstRebuild, MAX_TIMEOUT);
+            return;
+        }
+
+        // Add 2-second buffer to ensure we're past the boundary
+        delay = Math.max(0, delay) + 2000;
+
+        console.log(`[dst-detect] Next transition at ${next.toISOString()} — timer set for ${Math.round(delay / 1000)}s`);
+        _dstTimerId = setTimeout(() => {
+            _dstTimerId = null;
+            handleDstTransition();
+            scheduleDstRebuild(); // Schedule the next one
+        }, delay);
+    }
+
+    // --- Lightweight browser TZ name poll ---
+    // Detects manual OS timezone changes, which invalidate tzDeltaMs
+    // immediately and may change the browser-TZ DST schedule.
+    let _cachedBrowserTzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    setInterval(() => {
+        const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (currentTz === _cachedBrowserTzName) return;
+
+        console.log(`[tz-detect] Browser timezone changed: ${_cachedBrowserTzName} → ${currentTz}`);
+        _cachedBrowserTzName = currentTz;
+
+        // Immediately rebuild envs so tzDeltaMs is recalculated
+        handleDstTransition();
+
+        // Reschedule DST timer for the new browser TZ
+        scheduleDstRebuild();
+    }, 1000);
+
+    // =========================================================================
     // Resize handling
     // =========================================================================
 
@@ -1326,7 +1447,10 @@ async function main() {
             face.cachesBuilt = false;
         }
 
-        buildAllCachesSequentially(faces.filter(f => f.enabled), startScheduler);
+        buildAllCachesSequentially(faces.filter(f => f.enabled), () => {
+            startScheduler();
+            scheduleDstRebuild();
+        });
     }
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1600,6 +1724,8 @@ async function main() {
         locationTimezone = resolveTimezone(newLat, newLon, cityTz);
         tzDeltaMs = computeTzDeltaMs(locationTimezone);
         rebuildAllForLocation(newLat, newLon);
+        // Reschedule DST timer — location timezone may have changed
+        scheduleDstRebuild();
         if (writeToUrl) {
             writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
         }
