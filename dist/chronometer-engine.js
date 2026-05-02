@@ -17816,10 +17816,10 @@
         clearTimeout(_dstTimerId);
         _dstTimerId = null;
       }
-      const now = /* @__PURE__ */ new Date();
+      const displayNow = rawGetNow();
       const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const locNext = locationTimezone ? findNextDstTransition(locationTimezone, now) : null;
-      const browserNext = browserTz !== locationTimezone ? findNextDstTransition(browserTz, now) : null;
+      const locNext = locationTimezone ? findNextDstTransition(locationTimezone, displayNow) : null;
+      const browserNext = browserTz !== locationTimezone ? findNextDstTransition(browserTz, displayNow) : null;
       let next = null;
       if (locNext && browserNext) {
         next = locNext < browserNext ? locNext : browserNext;
@@ -17830,7 +17830,7 @@
         console.log("[dst-detect] No DST transitions found \u2014 no timer set");
         return;
       }
-      let delay = next.getTime() - Date.now();
+      let delay = next.getTime() - displayNow.getTime();
       const MAX_TIMEOUT = 2147483647;
       if (delay > MAX_TIMEOUT) {
         console.log(`[dst-detect] Next transition > 24 days away \u2014 chaining timer`);
@@ -18507,21 +18507,21 @@
     const tpRateLabel = document.getElementById("tp-rate-label");
     const tpTransport = document.getElementById("tp-transport");
     const tpClose = document.getElementById("tp-close");
-    function formatTimezoneDisplay(olsonId) {
+    function formatTimezoneDisplay(olsonId, referenceDate) {
       if (!olsonId) return "";
       try {
-        const now = /* @__PURE__ */ new Date();
+        const ref = referenceDate || /* @__PURE__ */ new Date();
         const shortFmt = new Intl.DateTimeFormat("en-US", {
           timeZone: olsonId,
           timeZoneName: "short"
         });
-        const shortParts = shortFmt.formatToParts(now);
+        const shortParts = shortFmt.formatToParts(ref);
         const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
         const longFmt = new Intl.DateTimeFormat("en-US", {
           timeZone: olsonId,
           timeZoneName: "longOffset"
         });
-        const longParts = longFmt.formatToParts(now);
+        const longParts = longFmt.formatToParts(ref);
         const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
         let utcStr = offsetStr.replace("GMT", "UTC");
         utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
@@ -18531,7 +18531,7 @@
       }
     }
     function updateTimezoneDisplay() {
-      const formatted = formatTimezoneDisplay(locationTimezone);
+      const formatted = formatTimezoneDisplay(locationTimezone, rawGetNow());
       locationTzLabel.innerHTML = formatted;
       lpLocationTz.innerHTML = formatted;
     }
@@ -18662,6 +18662,7 @@
       }
       tpRateLabel.textContent = timeController.statusLabel;
       renderTransport();
+      updateTimezoneDisplay();
       const simDI = dateToDateInterval(sim);
       const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
       document.getElementById("tp-year").value = simCs.year.toString();

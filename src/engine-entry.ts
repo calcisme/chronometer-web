@@ -1024,17 +1024,20 @@ async function main() {
     function scheduleDstRebuild() {
         if (_dstTimerId !== null) { clearTimeout(_dstTimerId); _dstTimerId = null; }
 
-        const now = new Date();
+        // Use the *displayed* time (not real time) to find the next transition.
+        // In 1× forward with an offset, displayed time may cross DST boundaries
+        // at a different wall-clock time than the real time.
+        const displayNow = rawGetNow();
         const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
         // Find next transition in location timezone
         const locNext = locationTimezone
-            ? findNextDstTransition(locationTimezone, now)
+            ? findNextDstTransition(locationTimezone, displayNow)
             : null;
 
         // Find next transition in browser timezone (only if different)
         const browserNext = (browserTz !== locationTimezone)
-            ? findNextDstTransition(browserTz, now)
+            ? findNextDstTransition(browserTz, displayNow)
             : null;
 
         // Take the earliest
@@ -1050,7 +1053,10 @@ async function main() {
             return;
         }
 
-        let delay = next.getTime() - Date.now();
+        // Compute delay in real time: the display-time delta equals real-time
+        // delta in 1× mode.  In accelerated modes, rebuildEnvironments() is
+        // called on every tick so this timer isn't needed.
+        let delay = next.getTime() - displayNow.getTime();
 
         // setTimeout max is ~24.8 days (2^31 - 1 ms).
         // If further out, set a wake-up at 24 days to re-check.
@@ -1969,16 +1975,16 @@ async function main() {
 
     /** Format the current timezone for display in the time bar.
      *  Output: "America/Los_Angeles\u00a0(PDT)\u00a0UTC-7:00" with non-breaking spaces. */
-    function formatTimezoneDisplay(olsonId: string | undefined): string {
+    function formatTimezoneDisplay(olsonId: string | undefined, referenceDate?: Date): string {
         if (!olsonId) return '';
         try {
-            const now = new Date();
+            const ref = referenceDate || new Date();
             // Get short abbreviation like "PDT", "EST"
             const shortFmt = new Intl.DateTimeFormat('en-US', {
                 timeZone: olsonId,
                 timeZoneName: 'short',
             });
-            const shortParts = shortFmt.formatToParts(now);
+            const shortParts = shortFmt.formatToParts(ref);
             const abbr = shortParts.find(p => p.type === 'timeZoneName')?.value || '';
 
             // Get UTC offset like "GMT-07:00"
@@ -1986,7 +1992,7 @@ async function main() {
                 timeZone: olsonId,
                 timeZoneName: 'longOffset',
             });
-            const longParts = longFmt.formatToParts(now);
+            const longParts = longFmt.formatToParts(ref);
             const offsetStr = longParts.find(p => p.type === 'timeZoneName')?.value || '';
             // Convert "GMT-07:00" to "UTC-7:00", "GMT+05:30" to "UTC+5:30", "GMT" to "UTC"
             let utcStr = offsetStr.replace('GMT', 'UTC');
@@ -2002,7 +2008,9 @@ async function main() {
     }
 
     function updateTimezoneDisplay() {
-        const formatted = formatTimezoneDisplay(locationTimezone);
+        // Use the displayed time so the abbreviation/offset reflects
+        // the DST state at the displayed date, not the current date.
+        const formatted = formatTimezoneDisplay(locationTimezone, rawGetNow());
         locationTzLabel.innerHTML = formatted;
         lpLocationTz.innerHTML = formatted;
     }
@@ -2167,6 +2175,9 @@ async function main() {
 
         // Rebuild transport bar
         renderTransport();
+
+        // Update timezone display in case DST state changed
+        updateTimezoneDisplay();
 
         // Populate date inputs with current sim time (hybrid calendar)
         const simDI = dateToDateInterval(sim);
