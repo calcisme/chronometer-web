@@ -441,6 +441,8 @@
   var lpOsmOffline = document.getElementById("lp-osm-offline");
   var lpStatusSection = document.getElementById("lp-status-section");
   var lpNoLocation = document.getElementById("lp-no-location");
+  var lpNoLocationHint = document.getElementById("lp-no-location-hint");
+  var lpNoLocationDefault = document.getElementById("lp-no-location-default");
   var lpLocationName = document.getElementById("lp-location-name");
   var lpOsmAttribution = document.getElementById("lp-osm-attribution");
   var lpDoneBtn = document.getElementById("lp-done");
@@ -452,6 +454,7 @@
   var locationSource = "";
   var locationFullLabel = "";
   var locationSourceType = "none";
+  var needsPrompt = false;
   function showPrompt(geoDenied) {
     locationPrompt.style.display = "";
     if (geoDenied) {
@@ -466,6 +469,13 @@
     } else {
       lpStatusSection.classList.remove("visible");
       lpNoLocation.classList.remove("hidden");
+      if (needsPrompt) {
+        lpNoLocationHint.style.display = "";
+        lpNoLocationDefault.style.display = "none";
+      } else {
+        lpNoLocationHint.style.display = "none";
+        lpNoLocationDefault.style.display = "";
+      }
     }
     lpDialogFooter.classList.toggle("visible", hasLocation);
   }
@@ -673,13 +683,16 @@
         locationSourceType = "browser";
         updateLinks();
       } else if (result.status === "denied") {
+        needsPrompt = true;
         showPrompt(true);
         updateLinks();
       } else {
+        needsPrompt = true;
         showPrompt(false);
         updateLinks();
       }
     } else {
+      needsPrompt = true;
       showPrompt(false);
       updateLinks();
     }

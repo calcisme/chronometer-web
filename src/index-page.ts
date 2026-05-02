@@ -137,6 +137,8 @@ const lpMapMarker = document.getElementById('lp-map-marker')!;
 const lpOsmOffline = document.getElementById('lp-osm-offline')!;
 const lpStatusSection = document.getElementById('lp-status-section')!;
 const lpNoLocation = document.getElementById('lp-no-location')!;
+const lpNoLocationHint = document.getElementById('lp-no-location-hint')!;
+const lpNoLocationDefault = document.getElementById('lp-no-location-default')!;
 const lpLocationName = document.getElementById('lp-location-name')!;
 const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
 const lpDoneBtn = document.getElementById('lp-done')!;
@@ -149,6 +151,7 @@ let currentLon = 0;
 let locationSource = '';
 let locationFullLabel = '';  // Full "City, State, Country" for dialog display
 let locationSourceType: 'url-city' | 'browser' | 'manual' | 'none' = 'none';
+let needsPrompt = false;  // true when showing prompt at startup (no URL location)
 
 function showPrompt(geoDenied: boolean) {
     locationPrompt.style.display = '';
@@ -168,6 +171,15 @@ function showPrompt(geoDenied: boolean) {
     } else {
         lpStatusSection.classList.remove('visible');
         lpNoLocation.classList.remove('hidden');
+        // Show prominent hint on first visit (no URL location params),
+        // plain "No location set yet" otherwise.
+        if (needsPrompt) {
+            lpNoLocationHint.style.display = '';
+            lpNoLocationDefault.style.display = 'none';
+        } else {
+            lpNoLocationHint.style.display = 'none';
+            lpNoLocationDefault.style.display = '';
+        }
     }
     lpDialogFooter.classList.toggle('visible', hasLocation);
 }
@@ -420,15 +432,18 @@ lpCityInput.addEventListener('keydown', (e: KeyboardEvent) => {
             updateLinks();
         } else if (result.status === 'denied') {
             // User explicitly denied — show prompt with button disabled
+            needsPrompt = true;
             showPrompt(true);
             updateLinks();
         } else {
             // Timeout or unavailable — show prompt as if user opened it
+            needsPrompt = true;
             showPrompt(false);
             updateLinks();
         }
     } else {
         // No location and no bloc — show prompt
+        needsPrompt = true;
         showPrompt(false);
         updateLinks();
     }
