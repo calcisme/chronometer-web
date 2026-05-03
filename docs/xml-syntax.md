@@ -535,10 +535,10 @@ A Sun marker glyph shows today's position along the path. Colored tick marks at 
 
 ### Rendering Architecture
 
-- **State**: `AnalemmaState` (in `analemma.ts`) holds the 365-point path, pre-computed bounding-box centering offset, cached `Path2D` for the channel, background disc bitmap, and a pre-rendered Sun glyph bitmap with drop shadow.
+- **State**: `AnalemmaState` (in `analemma.ts`) holds the 365-point path, pre-computed bounding-box centering offset, and three pre-rendered `OffscreenCanvas` bitmaps: background disc (with border baked in), channel path + season ticks + dark overlay, and Sun glyph with drop shadow.
 - **Tick**: `tickAnalemma()` is called every frame but only recomputes Sun position and sky rotation when the update interval elapses.
-- **Draw**: `drawAnalemma()` draws background disc → dark overlay → channel path → season ticks → Sun bitmap → disc border. The channel, ticks, and Sun all rotate together by `sunSkyOrientationAngle()`.
-- **No per-frame shadow cost**: The Sun glyph + shadow is pre-rendered onto an `OffscreenCanvas` at init (matching the hand shadow paradigm).
+- **Draw**: `drawAnalemma()` is pure blitting — three `drawImage()` calls plus one `arc()` clip: background bitmap → clip to disc → rotated channel bitmap → rotated Sun bitmap. No canvas drawing primitives (path strokes, fills, etc.) are executed per-frame.
+- **Shadow paradigm**: The Sun glyph + shadow is pre-rendered onto an `OffscreenCanvas` at init, matching the hand shadow approach used elsewhere.
 
 ---
 

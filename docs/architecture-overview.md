@@ -46,7 +46,7 @@ Each XML part type is classified as static (drawn once, cached) or dynamic (redr
 | QHand | **Dynamic** | Moves per-frame |
 | QWedge | **Dynamic** | Moves per-frame (filled arc segments) |
 | Terminator | **Dynamic** | Moon phase leaves animate |
-| Analemma | **Dynamic** | Sun position and sky rotation update periodically; Sun bitmap pre-cached |
+| Analemma | **Dynamic** | Pure blitting: 3 pre-rendered bitmaps (bg+border, channel+ticks, Sun+shadow) |
 | EotDial | Static | Procedural EOT subdial (arc, ticks, labels) drawn once into cache |
 | CalendarRowCover | **Dynamic** | Slides during month transitions |
 | Button | Dynamic | Not drawn yet, but will need per-frame position |
