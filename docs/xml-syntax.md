@@ -502,6 +502,79 @@ Leaf-shaped elements that compose a moon phase disc.
 
 ---
 
+## `<analemma>` — Sun Analemma Display (Vienna)
+
+Displays the Sun's [analemma](https://en.wikipedia.org/wiki/Analemma) — the figure-eight path traced by the Sun's sky position when observed at the same time each day over a year. The path is pre-computed at init time for a reference location (45°N, 0°E, noon UT), then rotated at runtime to match the observer's actual sky orientation.
+
+A Sun marker glyph shows today's position along the path. Colored tick marks at the equinoxes and solstices are drawn outside the channel. The entire display is rendered within a circular disc clipped from the face image.
+
+**Not from the iOS app.** This element was created for the web port; it has no iOS/Android counterpart.
+
+```xml
+<analemma name='analemma'
+          x='0' y='-48' modes='front'
+          radius='40' sunRadius='3.75'
+          sunFillColor='0xfff2e407' sunStrokeColor='0xff8b814b'
+          channelColor='0xff000000' channelWidth='0.8'
+          bgSrc='face.png' bgRotates='0' update='300' />
+```
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `x`, `y` | expr | Disc center position |
+| `modes` | string | Rendering mode (`front`, `back`) |
+| `radius` | expr | Disc radius in XML units |
+| `sunRadius` | expr | Sun glyph radius (default 2.5) |
+| `sunFillColor` | color-expr | Sun glyph fill color |
+| `sunStrokeColor` | color-expr | Sun glyph stroke color (unused when stroke removed) |
+| `channelColor` | color-expr | Analemma channel (path) stroke color |
+| `channelWidth` | expr | Channel stroke width |
+| `bgSrc` | string | Source image for the circular background clip |
+| `bgRotates` | expr | If 1, the background rotates with the analemma; if 0, stays fixed |
+| `update` | expr | Recompute interval in seconds (default 300 = 5 min) |
+
+### Rendering Architecture
+
+- **State**: `AnalemmaState` (in `analemma.ts`) holds the 365-point path, pre-computed bounding-box centering offset, cached `Path2D` for the channel, background disc bitmap, and a pre-rendered Sun glyph bitmap with drop shadow.
+- **Tick**: `tickAnalemma()` is called every frame but only recomputes Sun position and sky rotation when the update interval elapses.
+- **Draw**: `drawAnalemma()` draws background disc → dark overlay → channel path → season ticks → Sun bitmap → disc border. The channel, ticks, and Sun all rotate together by `sunSkyOrientationAngle()`.
+- **No per-frame shadow cost**: The Sun glyph + shadow is pre-rendered onto an `OffscreenCanvas` at init (matching the hand shadow paradigm).
+
+---
+
+## `<eotDial>` — Equation of Time Subdial (Vienna)
+
+A procedurally rendered subdial showing the [Equation of Time](https://en.wikipedia.org/wiki/Equation_of_time) scale from −15 to +15 minutes. Drawn as a 210° arc with major/minor tick marks, numeric labels, "−"/"+" symbols, a title label, and a center axle dot.
+
+**Not from the iOS app.** Replaces a bitmap (`EOT.png`) used in the original app with a fully procedural renderer.
+
+```xml
+<eotDial name='eot dial' x='0' y='ly+6' modes='front' radius='43'
+         strokeColor='fgColor' fontSize='5' />
+```
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `x`, `y` | expr | Dial center position |
+| `modes` | string | Rendering mode |
+| `radius` | expr | Dial arc radius (also sets the EOT hand length) |
+| `strokeColor` | color-expr | Color for ticks, labels, and arc |
+| `fontSize` | expr | Base font size for tick labels |
+
+### Rendering Details
+
+Rendered into the static cache via `drawEotDial()` in `renderer.ts`. The arc spans 210° (±105° from 12 o'clock), with:
+- **Major ticks** at every 5 minutes, **minor ticks** at every minute
+- **Numeric labels** at 5, 10, 15 on both sides (scaled to `1.92 × fontSize`)
+- **"0"** label at 12 o'clock
+- **"−" / "+"** symbols aligned with the ±15-minute marks
+- **"Equation of Time"** title below the arc (Arial Narrow font)
+- A small black **axle dot** at the center
+
+Paired with a standard `<QHand>` using `angle='24 * EOTAngle()'` for the indicator needle.
+
+---
+
 ## `<CalendarRowCover>` — Calendar Grid Covers (Babylon)
 
 Sliding covers that reveal/hide partial-week rows in the Babylon calendar grid.
@@ -655,7 +728,8 @@ Sentinel functions compute the true next astronomical event time in display time
 |------|---------|
 | [xml-parser.ts](../src/watch/xml-parser.ts) | Parses XML into `Watch` model |
 | [types.ts](../src/watch/types.ts) | TypeScript interfaces for all part types |
-| [renderer.ts](../src/watch/renderer.ts) | Draws each part type to canvas |
+| [renderer.ts](../src/watch/renderer.ts) | Draws each part type to canvas (including `drawEotDial()`) |
+| [analemma.ts](../src/watch/analemma.ts) | Analemma state, path computation, Sun position, and rendering |
 | [watch-env.ts](../src/watch/watch-env.ts) | Expression evaluator with time/astronomy functions |
 | [animation.ts](../src/watch/animation.ts) | Hand state machine, kind→angle mapping |
 

@@ -32,8 +32,8 @@ The rendering pipeline splits work into a **static cache** (drawn once, reused a
 
 ### `buildStaticCache` → `renderFrame` Split
 
-- **`buildStaticCache()`**: Called once (or on env change). Renders all static parts — dials, text, tick marks, images, QRects, wheels, windows — onto an `OffscreenCanvas`. Window holes are cut during this pass.
-- **`renderFrame()`**: Called at up to 240fps. Blits the static cache in one `drawImage()` call, then draws only dynamic parts (hands, animated wheels, terminator leaves) on top.
+- **`buildStaticCache()`**: Called once (or on env change). Renders all static parts — dials, text, tick marks, images, QRects, wheels, windows, and procedural elements like `<eotDial>` — onto an `OffscreenCanvas`. Window holes are cut during this pass.
+- **`renderFrame()`**: Called at up to 240fps. Blits the static cache in one `drawImage()` call, then draws only dynamic parts (hands, animated wheels, terminator leaves, analemma) on top.
 
 ### Cache Invalidation Triggers
 
