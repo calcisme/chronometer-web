@@ -16655,7 +16655,7 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillStyle = color;
-    const arcBottomY = Math.sin(arcEnd) * radius;
+    const arcBottomY = Math.sin(arcEnd) * radius + 2;
     ctx.fillText(labelText, 0, arcBottomY);
     ctx.restore();
   }
