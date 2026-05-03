@@ -14026,7 +14026,6 @@
       pathScaled[i][0] -= pathOffsetX;
       pathScaled[i][1] -= pathOffsetY;
     }
-    const channelPath2D = buildChannelPath2D(pathScaled);
     let bgBitmap = null;
     if (part.bgSrc) {
       const loaded2 = images.get(part.bgSrc);
@@ -14034,7 +14033,16 @@
         bgBitmap = createDiscBackground(loaded2.bitmap, loaded2.scale, radius);
       }
     }
+    if (!bgBitmap) {
+      bgBitmap = createFallbackDiscBackground(radius);
+    }
     const { bitmap: sunBitmap, anchorX: sunAnchorX, anchorY: sunAnchorY, w: sunW, h: sunH } = buildSunBitmap(sunRadius, sunFillColor, sunStrokeColor);
+    const channelBitmap = buildChannelBitmap(
+      pathScaled,
+      radius,
+      channelColor,
+      channelWidth
+    );
     const state = {
       path,
       pathScaled,
@@ -14057,7 +14065,7 @@
       currentRotation: 0,
       updateIntervalSec,
       nextUpdateTime: 0,
-      channelPath2D,
+      channelBitmap,
       bgBitmap,
       sunBitmap,
       sunBitmapAnchorX: sunAnchorX,
@@ -14077,6 +14085,56 @@
     }
     p.closePath();
     return p;
+  }
+  function buildChannelBitmap(pathScaled, radius, channelColor, channelWidth) {
+    const scale = 4;
+    const size = radius * 2;
+    const pxSize = Math.ceil(size * scale);
+    const canvas = new OffscreenCanvas(pxSize, pxSize);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.translate(radius, radius);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+    ctx.fill();
+    const channelPath = buildChannelPath2D(pathScaled);
+    ctx.strokeStyle = channelColor;
+    ctx.lineWidth = channelWidth;
+    ctx.lineJoin = "round";
+    ctx.stroke(channelPath);
+    const tickLen = 2;
+    const tickAlong = 0.5;
+    const gap = channelWidth / 2;
+    for (const { dayIndex, color } of SEASON_TICKS) {
+      const idx = dayIndex % pathScaled.length;
+      const [px, py] = pathScaled[idx];
+      const prev = (idx - 1 + pathScaled.length) % pathScaled.length;
+      const next = (idx + 1) % pathScaled.length;
+      const dx = pathScaled[next][0] - pathScaled[prev][0];
+      const dy = pathScaled[next][1] - pathScaled[prev][1];
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len === 0) continue;
+      const tx = dx / len;
+      const ty = dy / len;
+      const nx = -ty;
+      const ny = tx;
+      ctx.fillStyle = color;
+      for (const side of [1, -1]) {
+        const innerX = px + side * nx * gap;
+        const innerY = py + side * ny * gap;
+        const outerX = px + side * nx * (gap + tickLen);
+        const outerY = py + side * ny * (gap + tickLen);
+        const midX = (innerX + outerX) / 2;
+        const midY = (innerY + outerY) / 2;
+        ctx.save();
+        ctx.translate(midX, -midY);
+        ctx.rotate(-Math.atan2(ty, tx));
+        ctx.fillRect(-tickAlong, -tickLen / 2, tickAlong * 2, tickLen);
+        ctx.restore();
+      }
+    }
+    return canvas;
   }
   function buildSunBitmap(sunRadius, fillColor, strokeColor) {
     const shadowBlur = 1.5;
@@ -14122,6 +14180,27 @@
     ctx.scale(drawScale, drawScale);
     ctx.drawImage(faceImage, -imgW / 2, -imgH / 2, imgW, imgH);
     ctx.restore();
+    ctx.beginPath();
+    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2 - 1, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    return canvas;
+  }
+  function createFallbackDiscBackground(discRadius) {
+    const size = Math.ceil(discRadius * 2);
+    const pxSize = Math.ceil(size * 4);
+    const canvas = new OffscreenCanvas(pxSize, pxSize);
+    const ctx = canvas.getContext("2d");
+    ctx.beginPath();
+    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2 - 1, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
     return canvas;
   }
   function updateAnalemmaValues(state, env) {
@@ -14188,41 +14267,6 @@
     { dayIndex: 275, color: "#2266cc" }
     // Winter solstice — blue
   ];
-  function drawSeasonTicks(ctx, state) {
-    const { pathScaled, channelWidth } = state;
-    if (pathScaled.length === 0) return;
-    const tickLen = 2;
-    const tickAlong = 0.5;
-    const gap = channelWidth / 2;
-    for (const { dayIndex, color } of SEASON_TICKS) {
-      const idx = dayIndex % pathScaled.length;
-      const [px, py] = pathScaled[idx];
-      const prev = (idx - 1 + pathScaled.length) % pathScaled.length;
-      const next = (idx + 1) % pathScaled.length;
-      const dx = pathScaled[next][0] - pathScaled[prev][0];
-      const dy = pathScaled[next][1] - pathScaled[prev][1];
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len === 0) continue;
-      const tx = dx / len;
-      const ty = dy / len;
-      const nx = -ty;
-      const ny = tx;
-      ctx.fillStyle = color;
-      for (const side of [1, -1]) {
-        const innerX = px + side * nx * gap;
-        const innerY = py + side * ny * gap;
-        const outerX = px + side * nx * (gap + tickLen);
-        const outerY = py + side * ny * (gap + tickLen);
-        const midX = (innerX + outerX) / 2;
-        const midY = (innerY + outerY) / 2;
-        ctx.save();
-        ctx.translate(midX, -midY);
-        ctx.rotate(-Math.atan2(ty, tx));
-        ctx.fillRect(-tickAlong, -tickLen / 2, tickAlong * 2, tickLen);
-        ctx.restore();
-      }
-    }
-  }
   function drawAnalemma(ctx, state) {
     const { centerX, centerY, radius, currentRotation, bgRotates } = state;
     ctx.save();
@@ -14236,28 +14280,15 @@
       } else {
         drawBackground(ctx, state);
       }
-    } else {
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(0,0,0,0.25)";
-      ctx.fill();
     }
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-    ctx.fill();
     ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.clip();
     ctx.rotate(currentRotation);
-    if (state.channelPath2D) {
-      ctx.strokeStyle = state.channelColor;
-      ctx.lineWidth = state.channelWidth;
-      ctx.lineJoin = "round";
-      ctx.stroke(state.channelPath2D);
+    if (state.channelBitmap) {
+      ctx.drawImage(state.channelBitmap, -radius, -radius, radius * 2, radius * 2);
     }
-    drawSeasonTicks(ctx, state);
     if (state.sunBitmap) {
       ctx.drawImage(
         state.sunBitmap,
@@ -14268,11 +14299,6 @@
       );
     }
     ctx.restore();
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(0,0,0,0.8)";
-    ctx.lineWidth = 0.5;
-    ctx.stroke();
     ctx.restore();
   }
   function drawBackground(ctx, state) {
