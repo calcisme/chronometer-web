@@ -533,12 +533,18 @@ A Sun marker glyph shows today's position along the path. Colored tick marks at 
 | `bgRotates` | expr | If 1, the background rotates with the analemma; if 0, stays fixed |
 | `update` | expr | Recompute interval in seconds (default 300 = 5 min) |
 
+### Azimuth Foreshortening
+
+The raw path from `computeAnalemmaPath()` produces delta-azimuth and delta-altitude values in radians. On the sky, a degree of azimuth subtends **less** angular distance than a degree of altitude — by a factor of `cos(altitude)`. Without correction, the analemma appears too wide ("fat").
+
+Each point's `deltaAz` is multiplied by `cos(refAlt + deltaAlt)`, applying the correct foreshortening at that point's actual altitude. This varies from `cos(~22°) ≈ 0.93` at winter solstice to `cos(~68°) ≈ 0.37` at summer solstice, producing the physically accurate narrow figure-eight shape that matches photographs. The same correction is applied to the runtime Sun position.
+
 ### Rendering Architecture
 
-- **State**: `AnalemmaState` (in `analemma.ts`) holds the 365-point path, pre-computed bounding-box centering offset, and three pre-rendered `OffscreenCanvas` bitmaps: background disc (with border baked in), channel path + season ticks + dark overlay, and Sun glyph with drop shadow.
+- **State**: `AnalemmaState` (in `analemma.ts`) holds the 365-point path (with azimuth foreshortening applied), pre-computed bounding-box centering offset, and three pre-rendered `OffscreenCanvas` bitmaps: background disc (with border baked in), channel path + season ticks + dark overlay, and Sun glyph with drop shadow.
 - **Tick**: `tickAnalemma()` is called every frame but only recomputes Sun position and sky rotation when the update interval elapses.
 - **Draw**: `drawAnalemma()` is pure blitting — three `drawImage()` calls plus one `arc()` clip: background bitmap → clip to disc → rotated channel bitmap → rotated Sun bitmap. No canvas drawing primitives (path strokes, fills, etc.) are executed per-frame.
-- **Shadow paradigm**: The Sun glyph + shadow is pre-rendered onto an `OffscreenCanvas` at init, matching the hand shadow approach used elsewhere.
+- **Sun glyph**: Rays and central disc are drawn as a single combined path to ensure uniform fill color. Pre-rendered with drop shadow onto an `OffscreenCanvas` at init.
 
 ---
 

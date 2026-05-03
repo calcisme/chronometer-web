@@ -14253,8 +14253,6 @@
       ctx.lineTo(ccwX, ccwY);
       ctx.closePath();
     }
-    ctx.fill();
-    ctx.beginPath();
     ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
     ctx.fill();
   }

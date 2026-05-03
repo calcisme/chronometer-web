@@ -586,7 +586,7 @@ function drawSunGlyph(
 
     ctx.fillStyle = fillColor;
 
-    // Draw rays as triangles from inner disc to tips
+    // Draw rays + central disc as a single path to avoid double-fill overlap
     ctx.beginPath();
     for (let i = 0; i < nRays; i++) {
         const theta = 2 * Math.PI * i / nRays;
@@ -602,10 +602,6 @@ function drawSunGlyph(
         ctx.lineTo(ccwX, ccwY);
         ctx.closePath();
     }
-    ctx.fill();
-
-    // Draw central disc
-    ctx.beginPath();
     ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
     ctx.fill();
 }
