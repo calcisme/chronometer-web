@@ -14021,6 +14021,7 @@
         bgBitmap = createDiscBackground(loaded2.bitmap, loaded2.scale, radius);
       }
     }
+    const { bitmap: sunBitmap, anchorX: sunAnchorX, anchorY: sunAnchorY, w: sunW, h: sunH } = buildSunBitmap(sunRadius, sunFillColor, sunStrokeColor);
     const state = {
       path,
       pathScaled,
@@ -14042,7 +14043,12 @@
       updateIntervalSec,
       nextUpdateTime: 0,
       channelPath2D,
-      bgBitmap
+      bgBitmap,
+      sunBitmap,
+      sunBitmapAnchorX: sunAnchorX,
+      sunBitmapAnchorY: sunAnchorY,
+      sunBitmapW: sunW,
+      sunBitmapH: sunH
     };
     updateAnalemmaValues(state, env);
     return state;
@@ -14056,6 +14062,34 @@
     }
     p.closePath();
     return p;
+  }
+  function buildSunBitmap(sunRadius, fillColor, strokeColor) {
+    const shadowBlur = 1.5;
+    const shadowOffsetX = 0.5;
+    const shadowOffsetY = 0.5;
+    const shadowPad = shadowBlur * 3 + Math.max(Math.abs(shadowOffsetX), Math.abs(shadowOffsetY));
+    const extent = sunRadius + 0.5 + shadowPad;
+    const w = extent * 2;
+    const h = extent * 2;
+    const scale = 8;
+    const pxW = Math.ceil(w * scale);
+    const pxH = Math.ceil(h * scale);
+    const canvas = new OffscreenCanvas(pxW, pxH);
+    const ctx = canvas.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+    ctx.shadowBlur = shadowBlur * scale;
+    ctx.shadowOffsetX = shadowOffsetX * scale;
+    ctx.shadowOffsetY = shadowOffsetY * scale;
+    drawSunGlyph(ctx, extent, extent, sunRadius, fillColor, strokeColor);
+    return {
+      bitmap: canvas,
+      anchorX: extent,
+      // pivot is at center
+      anchorY: extent,
+      w,
+      h
+    };
   }
   function createDiscBackground(faceImage, faceImageScale, discRadius) {
     const size = Math.ceil(discRadius * 2);
@@ -14110,8 +14144,6 @@
     const innerRadius = radius * 0.5;
     const rayTip = radius;
     ctx.fillStyle = fillColor;
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 0.3;
     ctx.beginPath();
     for (let i = 0; i < nRays; i++) {
       const theta = 2 * Math.PI * i / nRays;
@@ -14127,11 +14159,9 @@
       ctx.closePath();
     }
     ctx.fill();
-    ctx.stroke();
     ctx.beginPath();
     ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
     ctx.fill();
-    ctx.stroke();
   }
   function drawAnalemma(ctx, state) {
     const { centerX, centerY, radius, currentRotation, bgRotates } = state;
@@ -14152,6 +14182,10 @@
       ctx.fillStyle = "rgba(0,0,0,0.25)";
       ctx.fill();
     }
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+    ctx.fill();
     ctx.save();
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -14163,22 +14197,15 @@
       ctx.lineJoin = "round";
       ctx.stroke(state.channelPath2D);
     }
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    drawSunGlyph(
-      ctx,
-      state.currentSunX,
-      -state.currentSunY,
-      // negate Y for canvas
-      state.sunRadius,
-      state.sunFillColor,
-      state.sunStrokeColor
-    );
-    ctx.restore();
-    ctx.beginPath();
-    ctx.arc(state.currentSunX, -state.currentSunY, 0.25, 0, Math.PI * 2);
-    ctx.fillStyle = "black";
-    ctx.fill();
+    if (state.sunBitmap) {
+      ctx.drawImage(
+        state.sunBitmap,
+        state.currentSunX - state.sunBitmapAnchorX,
+        -state.currentSunY - state.sunBitmapAnchorY,
+        state.sunBitmapW,
+        state.sunBitmapH
+      );
+    }
     ctx.restore();
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);

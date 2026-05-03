@@ -145,6 +145,13 @@ export interface AnalemmaState {
     // Cached rendering
     channelPath2D: Path2D | null;
     bgBitmap: OffscreenCanvas | null;
+
+    // Pre-rendered Sun glyph with shadow (bitmap cache)
+    sunBitmap: OffscreenCanvas | null;
+    sunBitmapAnchorX: number;  // pivot offset within bitmap (XML coords)
+    sunBitmapAnchorY: number;
+    sunBitmapW: number;        // bitmap dimensions in XML coords
+    sunBitmapH: number;
 }
 
 // ============================================================================
@@ -213,6 +220,10 @@ export function expandAnalemma(
         }
     }
 
+    // Build pre-rendered Sun glyph + shadow bitmap
+    const { bitmap: sunBitmap, anchorX: sunAnchorX, anchorY: sunAnchorY, w: sunW, h: sunH } =
+        buildSunBitmap(sunRadius, sunFillColor, sunStrokeColor);
+
     const state: AnalemmaState = {
         path,
         pathScaled,
@@ -235,6 +246,11 @@ export function expandAnalemma(
         nextUpdateTime: 0,
         channelPath2D,
         bgBitmap,
+        sunBitmap,
+        sunBitmapAnchorX: sunAnchorX,
+        sunBitmapAnchorY: sunAnchorY,
+        sunBitmapW: sunW,
+        sunBitmapH: sunH,
     };
 
     // Compute initial position
@@ -256,6 +272,54 @@ function buildChannelPath2D(pathScaled: [number, number][]): Path2D {
     }
     p.closePath();
     return p;
+}
+
+/**
+ * Pre-render the Sun glyph with a drop shadow onto an OffscreenCanvas.
+ * Returns the bitmap and layout info for blitting at runtime.
+ * The bitmap is at a fixed 8x resolution for quality.
+ */
+function buildSunBitmap(
+    sunRadius: number,
+    fillColor: string,
+    strokeColor: string,
+): { bitmap: OffscreenCanvas; anchorX: number; anchorY: number; w: number; h: number } {
+    // Shadow parameters (in XML coords)
+    const shadowBlur = 1.5;
+    const shadowOffsetX = 0.5;
+    const shadowOffsetY = 0.5;
+    const shadowPad = shadowBlur * 3 + Math.max(Math.abs(shadowOffsetX), Math.abs(shadowOffsetY));
+
+    // Total extent in XML coords: Sun radius + stroke + shadow padding
+    const extent = sunRadius + 0.5 + shadowPad;
+    const w = extent * 2;
+    const h = extent * 2;
+
+    // Bitmap at 8x resolution
+    const scale = 8;
+    const pxW = Math.ceil(w * scale);
+    const pxH = Math.ceil(h * scale);
+    const canvas = new OffscreenCanvas(pxW, pxH);
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.scale(scale, scale);
+
+    // Set up shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = shadowBlur * scale;  // shadowBlur is in pixel space
+    ctx.shadowOffsetX = shadowOffsetX * scale;
+    ctx.shadowOffsetY = shadowOffsetY * scale;
+
+    // Draw Sun glyph centered in the bitmap
+    drawSunGlyph(ctx, extent, extent, sunRadius, fillColor, strokeColor);
+
+    return {
+        bitmap: canvas,
+        anchorX: extent,   // pivot is at center
+        anchorY: extent,
+        w,
+        h,
+    };
 }
 
 /**
@@ -385,8 +449,6 @@ function drawSunGlyph(
     const rayTip = radius;               // tip of rays
 
     ctx.fillStyle = fillColor;
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 0.3;
 
     // Draw rays as triangles from inner disc to tips
     ctx.beginPath();
@@ -405,13 +467,11 @@ function drawSunGlyph(
         ctx.closePath();
     }
     ctx.fill();
-    ctx.stroke();
 
     // Draw central disc
     ctx.beginPath();
     ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
     ctx.fill();
-    ctx.stroke();
 }
 
 /**
@@ -454,6 +514,12 @@ export function drawAnalemma(
         ctx.fill();
     }
 
+    // --- Dark overlay to improve Sun visibility ---
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fill();
+
     // --- Clip to disc for channel and sun ---
     ctx.save();
     ctx.beginPath();
@@ -471,24 +537,16 @@ export function drawAnalemma(
         ctx.stroke(state.channelPath2D);
     }
 
-    // --- Sun marker (Mauna Kea style sun glyph) at 75% opacity ---
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    drawSunGlyph(
-        ctx,
-        state.currentSunX,
-        -state.currentSunY,  // negate Y for canvas
-        state.sunRadius,
-        state.sunFillColor,
-        state.sunStrokeColor,
-    );
-    ctx.restore();
-
-    // --- Black center dot (1 XML-unit diameter) ---
-    ctx.beginPath();
-    ctx.arc(state.currentSunX, -state.currentSunY, 0.25, 0, Math.PI * 2);
-    ctx.fillStyle = 'black';
-    ctx.fill();
+    // --- Sun marker (pre-rendered bitmap with shadow) ---
+    if (state.sunBitmap) {
+        ctx.drawImage(
+            state.sunBitmap,
+            state.currentSunX - state.sunBitmapAnchorX,
+            -state.currentSunY - state.sunBitmapAnchorY,
+            state.sunBitmapW,
+            state.sunBitmapH,
+        );
+    }
 
     ctx.restore();  // unclip
 
