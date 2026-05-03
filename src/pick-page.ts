@@ -387,10 +387,14 @@ function navigateDone(): void {
     window.location.href = buildDoneUrl();
 }
 
-// Close sheet with Escape key
+// Escape key: close sheet if open, otherwise trigger Done
 document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && sheetPanel.classList.contains('visible')) {
-        closeSheet();
+    if (e.key === 'Escape') {
+        if (sheetPanel.classList.contains('visible')) {
+            closeSheet();
+        } else {
+            navigateDone();
+        }
     }
 });
 

@@ -259,8 +259,12 @@
     window.location.href = buildDoneUrl();
   }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && sheetPanel.classList.contains("visible")) {
-      closeSheet();
+    if (e.key === "Escape") {
+      if (sheetPanel.classList.contains("visible")) {
+        closeSheet();
+      } else {
+        navigateDone();
+      }
     }
   });
   (function init() {
