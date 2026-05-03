@@ -13999,18 +13999,19 @@
     const updateIntervalSec = evalAttr(part.update, env) || DEFAULT_UPDATE_SEC;
     const { path, refAlt, refAz } = computeAnalemmaPath();
     const usableRadius = radius * (1 - PATH_MARGIN_FRACTION);
-    let maxAbsAz = 0;
-    let maxAbsAlt = 0;
+    let maxAbsX = 0;
+    let maxAbsY = 0;
     for (const pt of path) {
-      const absAz = Math.abs(pt.deltaAz);
-      const absAlt = Math.abs(pt.deltaAlt);
-      if (absAz > maxAbsAz) maxAbsAz = absAz;
-      if (absAlt > maxAbsAlt) maxAbsAlt = absAlt;
+      const correctedAz = pt.deltaAz * Math.cos(refAlt + pt.deltaAlt);
+      const absX = Math.abs(correctedAz);
+      const absY = Math.abs(pt.deltaAlt);
+      if (absX > maxAbsX) maxAbsX = absX;
+      if (absY > maxAbsY) maxAbsY = absY;
     }
-    const maxExtent = Math.max(maxAbsAz, maxAbsAlt);
+    const maxExtent = Math.max(maxAbsX, maxAbsY);
     const scaleFactor = maxExtent > 0 ? usableRadius / maxExtent : 1;
     const pathScaled = path.map((pt) => [
-      pt.deltaAz * scaleFactor,
+      pt.deltaAz * Math.cos(refAlt + pt.deltaAlt) * scaleFactor,
       pt.deltaAlt * scaleFactor
     ]);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -14219,7 +14220,7 @@
     const noonDI = dateToDateInterval(nowUTC);
     const alt = sunAltitude(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
     const az = sunAzimuth(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
-    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor - state.pathOffsetX;
+    state.currentSunX = normalizeAngleDelta(az - state.refAz) * Math.cos(alt) * state.scaleFactor - state.pathOffsetX;
     state.currentSunY = (alt - state.refAlt) * state.scaleFactor - state.pathOffsetY;
     const obsLat = env.observerLatRad ?? 0;
     const obsLon = env.observerLonRad ?? 0;

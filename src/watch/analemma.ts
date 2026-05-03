@@ -187,26 +187,26 @@ export function expandAnalemma(
     // Generate the path
     const { path, refAlt, refAz } = computeAnalemmaPath();
 
-    // Scale the path to fit within the disc, using max extent in each axis
-    // independently so the figure-eight shape fills the disc well
-    // (altitude range is much larger than azimuth range).
+    // Scale the path to fit within the disc.
+    // Azimuth is foreshortened by cos(altitude) — a degree of azimuth
+    // subtends less sky angle at higher altitudes.  Apply per-point.
     const usableRadius = radius * (1 - PATH_MARGIN_FRACTION);
-    let maxAbsAz = 0;
-    let maxAbsAlt = 0;
+    let maxAbsX = 0;
+    let maxAbsY = 0;
     for (const pt of path) {
-        const absAz = Math.abs(pt.deltaAz);
-        const absAlt = Math.abs(pt.deltaAlt);
-        if (absAz > maxAbsAz) maxAbsAz = absAz;
-        if (absAlt > maxAbsAlt) maxAbsAlt = absAlt;
+        const correctedAz = pt.deltaAz * Math.cos(refAlt + pt.deltaAlt);
+        const absX = Math.abs(correctedAz);
+        const absY = Math.abs(pt.deltaAlt);
+        if (absX > maxAbsX) maxAbsX = absX;
+        if (absY > maxAbsY) maxAbsY = absY;
     }
-    // Scale each axis so the path fills the disc circle.
-    // Use the same scale for both to maintain aspect ratio.
-    const maxExtent = Math.max(maxAbsAz, maxAbsAlt);
+    // Use the same scale for both axes to maintain aspect ratio.
+    const maxExtent = Math.max(maxAbsX, maxAbsY);
     const scaleFactor = maxExtent > 0 ? usableRadius / maxExtent : 1;
 
-    // Scale path to XML coords: deltaAz → x, deltaAlt → y
+    // Scale path to XML coords: corrected deltaAz → x, deltaAlt → y
     const pathScaled: [number, number][] = path.map(pt => [
-        pt.deltaAz * scaleFactor,
+        pt.deltaAz * Math.cos(refAlt + pt.deltaAlt) * scaleFactor,
         pt.deltaAlt * scaleFactor,
     ]);
 
@@ -526,7 +526,7 @@ function updateAnalemmaValues(state: AnalemmaState, env: Environment): void {
     const alt = sunAltitude(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
     const az = sunAzimuth(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
 
-    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor - state.pathOffsetX;
+    state.currentSunX = normalizeAngleDelta(az - state.refAz) * Math.cos(alt) * state.scaleFactor - state.pathOffsetX;
     state.currentSunY = (alt - state.refAlt) * state.scaleFactor - state.pathOffsetY;
 
     // --- Rotation (at observer's actual location/time) ---
