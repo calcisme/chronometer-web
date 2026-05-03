@@ -43,6 +43,8 @@ The Android help files use iOS-derived directory names, but the face names in th
 │   └── gaia_i.html         → Gaia face help
 ├── babylon/
 │   └── babylon_i.html      → Babylon face help
+├── vienna/
+│   └── vienna_i.html       → Vienna face help
 └── product.css              → Legacy Android help stylesheet (not used)
 ```
 
@@ -77,7 +79,7 @@ The help content was extracted manually (no automated script) with the following
 
 The Android help includes faces not yet in our web app. These are **not** included:
 
-- Alexandria, Atlantis, Milano, Paris, Vienna, McAlester, Mauna Loa, Padua
+- Alexandria, Atlantis, Milano, Paris, McAlester, Mauna Loa, Padua
 
 Cross-face links pointing to unported faces are rendered as plain text.
 

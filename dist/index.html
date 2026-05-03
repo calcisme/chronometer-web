@@ -1183,6 +1183,15 @@ Similarly, the last few days of the previous month are shown with sliders that s
 <img src="help/images/babylon/PrevMonthUnderlays@2x.png" width='106'/>
 </center>
 </details>
+<details class="face-help-section" data-face="vienna"><summary>Vienna</summary>
+<b>Vienna</b> is a 24-hour face.  The hour dial is marked with 24 hours instead of the usual 12 and the hour hand makes just one revolution per day.  The minute hand makes one revolution per hour as usual.
+<p>
+Unlike traditional 24-hour watches, Vienna's black and white ring shows
+ the actual daylight hours for this locale.
+And the gray zone indicates the nighttime hours when the Moon is up.
+<p>
+The small green hand shows the UTC time.
+</details>
     </template>
     <header>
         <h1>Emerald Chronometer</h1>
@@ -1287,6 +1296,12 @@ Similarly, the last few days of the previous month are shown with sliders that s
             <p class="desc">World clock with four city subdials</p>
         </a>
 
+        <a class="face-card" href="vienna.html">
+            <img class="thumb" src="thumb-vienna.png" alt="Vienna">
+            <h2>Vienna</h2>
+            <p class="desc">24-hour dial with day/night rings</p>
+        </a>
+
     </div>
 
         <!-- Location prompt overlay (hidden by default) -->
@@ -1383,7 +1398,7 @@ Similarly, the last few days of the previous month are shown with sliders that s
                         a.setAttribute('rel', 'noopener');
                     });
                     // Reorder to match index page face card order
-                    const indexOrder = ['babylon','mauna-kea','haleakala','hana','chandra','selene','geneva','basel','firenze','venezia','terra','miami','gaia'];
+                    const indexOrder = ['babylon','mauna-kea','haleakala','hana','chandra','selene','geneva','basel','firenze','venezia','terra','miami','gaia','vienna'];
                     const byFace = new Map();
                     helpDiv.querySelectorAll('.face-help-section[data-face]').forEach(el => byFace.set(el.dataset.face, el));
                     for (const slug of indexOrder) {
