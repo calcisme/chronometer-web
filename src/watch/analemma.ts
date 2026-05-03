@@ -119,6 +119,8 @@ export interface AnalemmaState {
     path: AnalemmaPathPoint[];
     pathScaled: [number, number][];  // path in XML coords (x, y)
     scaleFactor: number;              // radians → XML coord scaling
+    pathOffsetX: number;              // bounding box centering offset (XML coords)
+    pathOffsetY: number;
     refAlt: number;
     refAz: number;
     centerX: number;
@@ -208,6 +210,21 @@ export function expandAnalemma(
         pt.deltaAlt * scaleFactor,
     ]);
 
+    // Center the figure-eight within the disc by shifting to bounding box midpoint
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [px, py] of pathScaled) {
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+    }
+    const pathOffsetX = (minX + maxX) / 2;
+    const pathOffsetY = (minY + maxY) / 2;
+    for (let i = 0; i < pathScaled.length; i++) {
+        pathScaled[i][0] -= pathOffsetX;
+        pathScaled[i][1] -= pathOffsetY;
+    }
+
     // Build Path2D for the channel
     const channelPath2D = buildChannelPath2D(pathScaled);
 
@@ -228,6 +245,8 @@ export function expandAnalemma(
         path,
         pathScaled,
         scaleFactor,
+        pathOffsetX,
+        pathOffsetY,
         refAlt,
         refAz,
         centerX,
@@ -390,8 +409,8 @@ function updateAnalemmaValues(state: AnalemmaState, env: Environment): void {
     const alt = sunAltitude(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
     const az = sunAzimuth(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
 
-    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor;
-    state.currentSunY = (alt - state.refAlt) * state.scaleFactor;
+    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor - state.pathOffsetX;
+    state.currentSunY = (alt - state.refAlt) * state.scaleFactor - state.pathOffsetY;
 
     // --- Rotation (at observer's actual location/time) ---
     const obsLat = env.observerLatRad ?? 0;
@@ -475,6 +494,67 @@ function drawSunGlyph(
 }
 
 /**
+ * Season tick marks: colored squares straddling the channel at equinox/solstice points.
+ * Perpendicular to the local path direction, 1 unit on a side.
+ */
+const SEASON_TICKS: { dayIndex: number; color: string }[] = [
+    { dayIndex: 0,   color: '#22aa22' },  // Vernal equinox — green
+    { dayIndex: 93,  color: '#ddcc00' },  // Summer solstice — yellow
+    { dayIndex: 184, color: '#ee7722' },  // Autumnal equinox — orange
+    { dayIndex: 275, color: '#2266cc' },  // Winter solstice — blue
+];
+
+function drawSeasonTicks(
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+    state: AnalemmaState,
+): void {
+    const { pathScaled, channelWidth } = state;
+    if (pathScaled.length === 0) return;
+
+    const tickLen = 2;        // extent perpendicular to channel (outward)
+    const tickAlong = 0.5;    // half-width along the channel direction
+    const gap = channelWidth / 2;  // start just outside the channel edge
+
+    for (const { dayIndex, color } of SEASON_TICKS) {
+        const idx = dayIndex % pathScaled.length;
+        const [px, py] = pathScaled[idx];
+
+        // Compute tangent from neighboring points for perpendicular direction
+        const prev = (idx - 1 + pathScaled.length) % pathScaled.length;
+        const next = (idx + 1) % pathScaled.length;
+        const dx = pathScaled[next][0] - pathScaled[prev][0];
+        const dy = pathScaled[next][1] - pathScaled[prev][1];
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len === 0) continue;
+
+        // Tangent and perpendicular unit vectors
+        const tx = dx / len;
+        const ty = dy / len;
+        const nx = -ty;  // perpendicular
+        const ny = tx;
+
+        ctx.fillStyle = color;
+
+        // Draw tick on both sides, outside the channel
+        for (const side of [1, -1]) {
+            // Inner edge at gap from center, outer edge at gap + tickLen
+            const innerX = px + side * nx * gap;
+            const innerY = py + side * ny * gap;
+            const outerX = px + side * nx * (gap + tickLen);
+            const outerY = py + side * ny * (gap + tickLen);
+            const midX = (innerX + outerX) / 2;
+            const midY = (innerY + outerY) / 2;
+
+            ctx.save();
+            ctx.translate(midX, -midY);
+            ctx.rotate(-Math.atan2(ty, tx));
+            ctx.fillRect(-tickAlong, -tickLen / 2, tickAlong * 2, tickLen);
+            ctx.restore();
+        }
+    }
+}
+
+/**
  * Draw the analemma onto the canvas.
  *
  * Drawing order:
@@ -536,6 +616,9 @@ export function drawAnalemma(
         ctx.lineJoin = 'round';
         ctx.stroke(state.channelPath2D);
     }
+
+    // --- Equinox/solstice tick marks on the channel ---
+    drawSeasonTicks(ctx, state);
 
     // --- Sun marker (pre-rendered bitmap with shadow) ---
     if (state.sunBitmap) {

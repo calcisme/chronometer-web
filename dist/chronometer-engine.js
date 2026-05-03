@@ -14013,6 +14013,19 @@
       pt.deltaAz * scaleFactor,
       pt.deltaAlt * scaleFactor
     ]);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [px, py] of pathScaled) {
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+    const pathOffsetX = (minX + maxX) / 2;
+    const pathOffsetY = (minY + maxY) / 2;
+    for (let i = 0; i < pathScaled.length; i++) {
+      pathScaled[i][0] -= pathOffsetX;
+      pathScaled[i][1] -= pathOffsetY;
+    }
     const channelPath2D = buildChannelPath2D(pathScaled);
     let bgBitmap = null;
     if (part.bgSrc) {
@@ -14026,6 +14039,8 @@
       path,
       pathScaled,
       scaleFactor,
+      pathOffsetX,
+      pathOffsetY,
       refAlt,
       refAz,
       centerX,
@@ -14125,8 +14140,8 @@
     const noonDI = dateToDateInterval(nowUTC);
     const alt = sunAltitude(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
     const az = sunAzimuth(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
-    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor;
-    state.currentSunY = (alt - state.refAlt) * state.scaleFactor;
+    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor - state.pathOffsetX;
+    state.currentSunY = (alt - state.refAlt) * state.scaleFactor - state.pathOffsetY;
     const obsLat = env.observerLatRad ?? 0;
     const obsLon = env.observerLonRad ?? 0;
     state.currentRotation = sunSkyOrientationAngle(di, obsLat, obsLon, null);
@@ -14163,6 +14178,51 @@
     ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
     ctx.fill();
   }
+  var SEASON_TICKS = [
+    { dayIndex: 0, color: "#22aa22" },
+    // Vernal equinox — green
+    { dayIndex: 93, color: "#ddcc00" },
+    // Summer solstice — yellow
+    { dayIndex: 184, color: "#ee7722" },
+    // Autumnal equinox — orange
+    { dayIndex: 275, color: "#2266cc" }
+    // Winter solstice — blue
+  ];
+  function drawSeasonTicks(ctx, state) {
+    const { pathScaled, channelWidth } = state;
+    if (pathScaled.length === 0) return;
+    const tickLen = 2;
+    const tickAlong = 0.5;
+    const gap = channelWidth / 2;
+    for (const { dayIndex, color } of SEASON_TICKS) {
+      const idx = dayIndex % pathScaled.length;
+      const [px, py] = pathScaled[idx];
+      const prev = (idx - 1 + pathScaled.length) % pathScaled.length;
+      const next = (idx + 1) % pathScaled.length;
+      const dx = pathScaled[next][0] - pathScaled[prev][0];
+      const dy = pathScaled[next][1] - pathScaled[prev][1];
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len === 0) continue;
+      const tx = dx / len;
+      const ty = dy / len;
+      const nx = -ty;
+      const ny = tx;
+      ctx.fillStyle = color;
+      for (const side of [1, -1]) {
+        const innerX = px + side * nx * gap;
+        const innerY = py + side * ny * gap;
+        const outerX = px + side * nx * (gap + tickLen);
+        const outerY = py + side * ny * (gap + tickLen);
+        const midX = (innerX + outerX) / 2;
+        const midY = (innerY + outerY) / 2;
+        ctx.save();
+        ctx.translate(midX, -midY);
+        ctx.rotate(-Math.atan2(ty, tx));
+        ctx.fillRect(-tickAlong, -tickLen / 2, tickAlong * 2, tickLen);
+        ctx.restore();
+      }
+    }
+  }
   function drawAnalemma(ctx, state) {
     const { centerX, centerY, radius, currentRotation, bgRotates } = state;
     ctx.save();
@@ -14197,6 +14257,7 @@
       ctx.lineJoin = "round";
       ctx.stroke(state.channelPath2D);
     }
+    drawSeasonTicks(ctx, state);
     if (state.sunBitmap) {
       ctx.drawImage(
         state.sunBitmap,
