@@ -22,6 +22,8 @@ import type {
     QDayNightRingPart,
     CalendarRowCoverPart,
     CalendarHeaderPart,
+    AnalemmaPart,
+    EotDialPart,
 } from './types.js';
 import { parse } from '../expr/parser.js';
 import type { ASTNode } from '../expr/parser.js';
@@ -196,6 +198,18 @@ function processElement(
 
         case 'tick':
             // Skipped for now
+            break;
+
+        case 'analemma':
+            if (matchesMode(el, mode)) {
+                parts.push(parseAnalemma(el));
+            }
+            break;
+
+        case 'eotdial':
+            if (matchesMode(el, mode)) {
+                parts.push(parseEotDial(el));
+            }
             break;
 
         default:
@@ -467,6 +481,40 @@ function parseTerminator(el: Element): TerminatorPart {
         updateOffset: attrExpr(el, 'updateOffset'),
         phaseAngle: attrExpr(el, 'phaseAngle'),
         rotation: attrExpr(el, 'rotation'),
+    };
+}
+
+function parseAnalemma(el: Element): AnalemmaPart {
+    return {
+        type: 'Analemma',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        radius: attrExpr(el, 'radius'),
+        sunRadius: attrExpr(el, 'sunRadius'),
+        sunFillColor: attrExpr(el, 'sunFillColor'),
+        sunStrokeColor: attrExpr(el, 'sunStrokeColor'),
+        channelColor: attrExpr(el, 'channelColor'),
+        channelWidth: attrExpr(el, 'channelWidth'),
+        bgSrc: attr(el, 'bgSrc'),
+        bgRotates: attrExpr(el, 'bgRotates'),
+        update: attrExpr(el, 'update'),
+    };
+}
+
+function parseEotDial(el: Element): EotDialPart {
+    return {
+        type: 'EotDial',
+        name: partName(el),
+        x: attrExpr(el, 'x'),
+        y: attrExpr(el, 'y'),
+        modes: attr(el, 'modes'),
+        radius: attrExpr(el, 'radius'),
+        arcSpan: attrExpr(el, 'arcSpan'),
+        strokeColor: attrExpr(el, 'strokeColor'),
+        fontSize: attrExpr(el, 'fontSize'),
+        labelText: attr(el, 'labelText'),
     };
 }
 

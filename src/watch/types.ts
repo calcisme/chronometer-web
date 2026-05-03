@@ -59,7 +59,9 @@ export type WatchPart =
     | QWedgePart
     | QDayNightRingPart
     | CalendarRowCoverPart
-    | CalendarHeaderPart;
+    | CalendarHeaderPart
+    | AnalemmaPart
+    | EotDialPart;
 
 // ============================================================================
 // Shared base for all parts
@@ -428,4 +430,48 @@ export interface CalendarHeaderPart extends PartBase {
     fontName?: string;
     parkX?: ASTNode;
     parkY?: ASTNode;
+}
+
+// ============================================================================
+// Analemma — Sun analemma figure-eight display
+// ============================================================================
+
+export interface AnalemmaPart extends PartBase {
+    type: 'Analemma';
+    /** Radius of the circular disc in XML units. */
+    radius?: ASTNode;
+    /** Radius of the Sun marker dot. */
+    sunRadius?: ASTNode;
+    /** Fill color for the Sun marker. */
+    sunFillColor?: ASTNode;
+    /** Stroke color for the Sun marker. */
+    sunStrokeColor?: ASTNode;
+    /** Color of the analemma path/channel line. */
+    channelColor?: ASTNode;
+    /** Width of the path/channel line. */
+    channelWidth?: ASTNode;
+    /** Image filename for the background disc (e.g. miniature of face image). */
+    bgSrc?: string;
+    /** 0 = background stays fixed while channel rotates; 1 = background rotates with channel. */
+    bgRotates?: ASTNode;
+    /** Update interval in seconds (default 300 = 5 minutes). */
+    update?: ASTNode;
+}
+
+// ============================================================================
+// EOT Dial — procedurally drawn Equation of Time dial
+// ============================================================================
+
+export interface EotDialPart extends PartBase {
+    type: 'EotDial';
+    /** Radius of the tick-mark arc in XML units. */
+    radius?: ASTNode;
+    /** Total arc span in radians (default 7π/6 ≈ 210°). */
+    arcSpan?: ASTNode;
+    /** Color for tick marks, arc, and labels. */
+    strokeColor?: ASTNode;
+    /** Font size for the title label and +/- symbols. */
+    fontSize?: ASTNode;
+    /** Title label text (default "Equation of Time"). */
+    labelText?: string;
 }

@@ -31,11 +31,14 @@ import type {
     QDayNightRingPart,
     CalendarRowCoverPart,
     CalendarHeaderPart,
+    EotDialPart,
 } from './types.js';
 import { evalAttr, evalColor } from './watch-env.js';
 import type { LoadedImage } from './image-loader.js';
 import type { TerminatorLeafState } from './terminator.js';
 import { drawTerminator } from './terminator.js';
+import type { AnalemmaState } from './analemma.js';
+import { drawAnalemma } from './analemma.js';
 
 /** Returns true if a CSS color string has alpha = 0 (fully transparent). */
 function isTransparent(cssColor: string): boolean {
@@ -584,6 +587,7 @@ export function renderFrame(
     scale: number,
     images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
+    analemmaState?: AnalemmaState | null,
 ): void {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
@@ -593,7 +597,7 @@ export function renderFrame(
     ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
 
-    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves);
+    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves, analemmaState);
     drawBezel(ctx, watch);
 
     ctx.restore();
@@ -638,6 +642,7 @@ function renderPartsDocumentOrder(
     scale: number,
     images?: Map<string, LoadedImage>,
     terminatorLeaves?: TerminatorLeafState[],
+    analemmaState?: AnalemmaState | null,
 ): void {
     const pendingWindows: WindowPart[] = [];
 
@@ -692,6 +697,13 @@ function renderPartsDocumentOrder(
         if (part.type === 'Terminator') {
             if (terminatorLeaves && terminatorLeaves.length > 0) {
                 drawTerminator(ctx, terminatorLeaves);
+            }
+            continue;
+        }
+
+        if (part.type === 'Analemma') {
+            if (analemmaState) {
+                drawAnalemma(ctx, analemmaState);
             }
             continue;
         }
@@ -958,6 +970,11 @@ function renderPartsWithWindows(
             continue;
         }
 
+        if (part.type === 'Analemma') {
+            // Analemma is always dynamic — skip in static cache builds
+            continue;
+        }
+
         seenDrawable = true;
 
         if (pendingWindows.length > 0) {
@@ -1134,6 +1151,9 @@ function drawStaticPart(
             break;
         case 'CalendarHeader':
             drawCalendarHeader(ctx, part, env);
+            break;
+        case 'EotDial':
+            drawEotDial(ctx, part, env);
             break;
         case 'Window':
             // Standalone window (no following part to clip) — just draw border
@@ -3616,6 +3636,128 @@ function drawCalendarHeader(
         const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2;
         ctx.fillText(dayNames[dayIndex], cx, textVisualCenterY(ctx, dayNames[dayIndex]));
     }
+
+    ctx.restore();
+}
+
+// ============================================================================
+// EOT Dial — procedurally drawn Equation of Time subdial
+// ============================================================================
+
+function drawEotDial(
+    ctx: CanvasRenderingContext2D,
+    part: EotDialPart,
+    env: Environment,
+): void {
+    const cx = evalAttr(part.x, env);
+    const cy = evalAttr(part.y, env);
+    const radius = evalAttr(part.radius, env) || 20;
+    const arcSpanRad = evalAttr(part.arcSpan, env) || (7 * Math.PI / 6); // 210°
+    const color = part.strokeColor ? evalColor(part.strokeColor, env) : 'black';
+    const fontSize = evalAttr(part.fontSize, env) || 6;
+    const labelText = part.labelText || 'Equation of Time';
+
+    // EOT range: ±15 minutes → ±π/2 radians on the dial
+    // 0 minutes = 12 o'clock (top, angle = -π/2 in canvas coords)
+    // +15 min = 3 o'clock, -15 min = 9 o'clock
+    // The arc spans arcSpanRad centered on 12 o'clock
+
+    const halfArc = arcSpanRad / 2;
+    // In canvas, 0 rad = 3 o'clock, so 12 o'clock = -π/2
+    // Arc goes from (-π/2 - halfArc) to (-π/2 + halfArc)
+    const arcStart = -Math.PI / 2 - halfArc;
+    const arcEnd = -Math.PI / 2 + halfArc;
+
+    // Minutes per radian: 15 min = π/2 rad, so 1 min = π/30 rad
+    const radPerMin = Math.PI / 30;
+
+    ctx.save();
+    ctx.translate(cx, -cy); // watch coords: y+ is up
+
+    // --- Arc backbone ---
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, arcStart, arcEnd);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+
+    // --- Center axle dot ---
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // --- Tick marks ---
+    // Major ticks at 0, ±5, ±10, ±15 minutes; minor at every minute
+    // Extend past ±15 to the arc ends (halfArc ≈ 17.5 min at 210°)
+    const maxTickMin = Math.floor(halfArc / radPerMin);
+    const majorTickLen = radius * 0.15;
+    const minorTickLen = radius * 0.07;
+    for (let min = -maxTickMin; min <= maxTickMin; min++) {
+        const angle = -Math.PI / 2 + min * radPerMin;
+        const isMajor = (min % 5 === 0) && (Math.abs(min) <= 15);
+        const tickInner = isMajor ? radius - majorTickLen : radius - minorTickLen;
+        const tickOuter = radius;
+
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+
+        ctx.beginPath();
+        ctx.moveTo(cosA * tickInner, sinA * tickInner);
+        ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
+        ctx.lineWidth = isMajor ? 0.6 : 0.3;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+    }
+
+    // --- Numeric labels at major ticks (inside the arc) ---
+    const labelFontSize = fontSize * 1.92;
+    ctx.font = `${labelFontSize}px Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55;
+
+    // "0" at the top
+    const zeroAngle = -Math.PI / 2;
+    ctx.fillText('0', Math.cos(zeroAngle) * numLabelRadius, Math.sin(zeroAngle) * numLabelRadius);
+
+    for (const min of [5, 10, 15]) {
+        const label = String(min);
+        // Positive side (right)
+        const posAngle = -Math.PI / 2 + min * radPerMin;
+        ctx.fillText(label, Math.cos(posAngle) * numLabelRadius, Math.sin(posAngle) * numLabelRadius);
+        // Negative side (left) — same number, no sign
+        const negAngle = -Math.PI / 2 - min * radPerMin;
+        ctx.fillText(label, Math.cos(negAngle) * numLabelRadius, Math.sin(negAngle) * numLabelRadius);
+    }
+
+    // --- "−" and "+" symbols aligned with the 15 labels, further inward ---
+    const symbolFontSize = fontSize * 2.0;
+    ctx.font = `bold ${symbolFontSize}px Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Same angle as 15 labels but further inward
+    const symbolRadius = numLabelRadius - labelFontSize * 1.0 - 1;
+
+    // "−" on the left (negative EOT side, at -15 min angle)
+    const negSymAngle = -Math.PI / 2 - 15 * radPerMin;
+    ctx.fillText('−', Math.cos(negSymAngle) * symbolRadius, Math.sin(negSymAngle) * symbolRadius);
+
+    // "+" on the right (positive EOT side, at +15 min angle)
+    const posSymAngle = -Math.PI / 2 + 15 * radPerMin;
+    ctx.fillText('+', Math.cos(posSymAngle) * symbolRadius, Math.sin(posSymAngle) * symbolRadius);
+
+    // --- Title label just below the arc ---
+    const titleFontSize = fontSize * 3;
+    ctx.font = `${titleFontSize}px 'Arial Narrow', Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = color;
+    const arcBottomY = Math.sin(arcEnd) * radius;
+    ctx.fillText(labelText, 0, arcBottomY);
 
     ctx.restore();
 }

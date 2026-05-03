@@ -520,6 +520,69 @@ export function moonRelativeAngle(
 
     return angle;
 }
+
+// ============================================================================
+// Sun sky orientation angle (analemma rotation as seen in the sky)
+// ============================================================================
+
+/**
+ * Rotation angle for the analemma display at the Sun's current sky position.
+ *
+ * Computes the angle from celestial north as projected on the observer's
+ * sky plane at the Sun's position, using northAngleForObject(). This tells
+ * us how to rotate the analemma figure so that "up" in the analemma
+ * (increasing altitude / declination) aligns with celestial north's
+ * direction at the Sun's current position in the sky.
+ *
+ * Analogous to moonRelativeAngle() but without the Moon-specific
+ * position-angle-of-axis (Meeus p373) term.
+ *
+ * @returns angle in [0, 2π)
+ */
+export function sunSkyOrientationAngle(
+    dateInterval: number,
+    observerLatitude: number,
+    observerLongitude: number,
+    cache: AstroCache | null,
+): number {
+    // Sun RA/Decl
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+
+    // Sun local hour angle, altitude, azimuth
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const sunHourAngle = lst - sunRA;
+    const sinAlt = Math.sin(sunDecl) * Math.sin(observerLatitude)
+        + Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.cos(sunHourAngle);
+    const sunAz = Math.atan2(
+        -Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.sin(sunHourAngle),
+        Math.sin(sunDecl) - Math.sin(observerLatitude) * sinAlt,
+    );
+    const sunAlt = Math.asin(sinAlt);
+
+    // North angle for the Sun — the angle from the Sun to celestial north
+    // as projected on the observer's sky plane.
+    const northAngle = northAngleForObject(sunAlt, sunAz, observerLatitude);
+
+    // For the analemma, "up" in the path = increasing altitude ≈ celestial
+    // north direction. northAngle tells us where celestial north is from
+    // the Sun's position on the sky plane. We negate to convert from
+    // "north is at this angle" to "rotate the figure by this much."
+    //
+    // The constant offset aligns the reference frame if needed.
+    // Start with 0 and tune empirically.
+    const kAnalemmaOrientationOffset = 0;
+    let angle = -northAngle + kAnalemmaOrientationOffset;
+
+    // Normalize to [0, 2π)
+    if (angle < 0) angle += TWO_PI;
+    else if (angle > TWO_PI) angle -= TWO_PI;
+
+    return angle;
+}
+
 // ============================================================================
 // Eclipse calculation — ported from iOS ESAstronomy.cpp
 // ============================================================================

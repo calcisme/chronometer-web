@@ -36,6 +36,8 @@ import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
+import type { AnalemmaState } from './watch/analemma.js';
+import { expandAnalemma, tickAnalemma, resetAnalemmaSchedule } from './watch/analemma.js';
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 import { readUrlState, writeUrlState, initNavigationLinks, updateNavigationLinks } from './url-state.js';
@@ -159,6 +161,7 @@ interface FaceInstance {
     enabled: boolean;
     scale: number;
     terminatorLeaves: TerminatorLeafState[];
+    analemmaState: AnalemmaState | null;
     lastTerminatorRebuild: number;
     faceDataIndex: number;
     /** Per-face slot overrides for Terra/Gaia world-clock faces. */
@@ -607,6 +610,7 @@ async function main() {
             enabled: true,
             scale: 1,
             terminatorLeaves: [],
+            analemmaState: null,
             lastTerminatorRebuild: 0,
             faceDataIndex: i,
             terraSlotOverrides: faceOverrides,
@@ -674,6 +678,14 @@ async function main() {
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         buildHandShadowCaches(watch, env, scale, images);
         face.cachesBuilt = true;
+        // Expand analemma parts
+        face.analemmaState = null;
+        for (const part of watch.parts) {
+            if (part.type === 'Analemma') {
+                face.analemmaState = expandAnalemma(part, env, images);
+                break;  // Only one analemma per face
+            }
+        }
         face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond), rawGetNow);
     }
 
@@ -719,6 +731,8 @@ async function main() {
             // Just update the static caches with current leaf positions.
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+            // Force analemma to recompute on the next frame
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
             // Hand states are preserved — their angle expressions will
             // be re-evaluated by tickAnimations using the fresh env
         }
@@ -795,8 +809,14 @@ async function main() {
                 }
             }
 
+            // Tick analemma — in accelerated mode, force update every frame
+            if (face.analemmaState) {
+                if (tickMs !== null) resetAnalemmaSchedule(face.analemmaState);
+                tickAnalemma(face.analemmaState, face.env, now);
+            }
+
             const renderStart = performance.now();
-            renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
+            renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves, face.analemmaState);
 
             // Gaia: draw city name labels and 24-hour numbers on each subdial
             if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
@@ -1013,6 +1033,7 @@ async function main() {
                 resetLeafSchedules(face.terminatorLeaves);
                 face.lastTerminatorRebuild = 0;
             }
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
             resetHandSchedules(face.handStates);
@@ -1536,6 +1557,7 @@ async function main() {
                 resetLeafSchedules(face.terminatorLeaves);
                 face.lastTerminatorRebuild = 0;
             }
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
             // Rebuild static caches (day/night rings, sunrise marks, etc.)
             invalidateDayNightCaches(face.watch);
             const { canvas, watch, env, images, scale } = face;
@@ -2356,6 +2378,7 @@ async function main() {
         for (const face of faces) {
             finishAnimations(face.handStates);
             finishLeafAnimations(face.terminatorLeaves);
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         }
     }
 
@@ -2364,6 +2387,7 @@ async function main() {
         for (const face of faces) {
             resetHandSchedules(face.handStates);
             resetLeafSchedules(face.terminatorLeaves);
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         }
     }
 
@@ -2495,6 +2519,7 @@ async function main() {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
+                if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
                 tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
                 tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
             }
@@ -2536,6 +2561,7 @@ async function main() {
                 if (!face.enabled || !face.cachesBuilt) continue;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
+                if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
                 tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
                 tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
             }
@@ -2803,6 +2829,7 @@ async function main() {
                         resetLeafSchedules(face.terminatorLeaves);
                         face.lastTerminatorRebuild = 0;  // force static cache rebuild
                     }
+                    if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
                     // Rebuild static caches (background, marks, windows)
                     const { canvas, watch, env, images, scale } = face;
                     buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
@@ -2913,6 +2940,7 @@ async function main() {
                         resetLeafSchedules(face.terminatorLeaves);
                         face.lastTerminatorRebuild = 0;
                     }
+                    if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
                     (face.env as any)._terraCityKnockout = null;
                     const { canvas, watch, env, images, scale } = face;
                     buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
@@ -3226,6 +3254,7 @@ async function main() {
                         resetLeafSchedules(face.terminatorLeaves);
                         face.lastTerminatorRebuild = 0;
                     }
+                    if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
                     const { canvas, watch, env, images, scale } = face;
                     buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
                     for (const hs of face.handStates) {

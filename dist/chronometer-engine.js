@@ -541,6 +541,16 @@
         break;
       case "tick":
         break;
+      case "analemma":
+        if (matchesMode(el, mode)) {
+          parts.push(parseAnalemma(el));
+        }
+        break;
+      case "eotdial":
+        if (matchesMode(el, mode)) {
+          parts.push(parseEotDial(el));
+        }
+        break;
       default:
         break;
     }
@@ -780,6 +790,38 @@
       updateOffset: attrExpr(el, "updateOffset"),
       phaseAngle: attrExpr(el, "phaseAngle"),
       rotation: attrExpr(el, "rotation")
+    };
+  }
+  function parseAnalemma(el) {
+    return {
+      type: "Analemma",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      radius: attrExpr(el, "radius"),
+      sunRadius: attrExpr(el, "sunRadius"),
+      sunFillColor: attrExpr(el, "sunFillColor"),
+      sunStrokeColor: attrExpr(el, "sunStrokeColor"),
+      channelColor: attrExpr(el, "channelColor"),
+      channelWidth: attrExpr(el, "channelWidth"),
+      bgSrc: attr(el, "bgSrc"),
+      bgRotates: attrExpr(el, "bgRotates"),
+      update: attrExpr(el, "update")
+    };
+  }
+  function parseEotDial(el) {
+    return {
+      type: "EotDial",
+      name: partName(el),
+      x: attrExpr(el, "x"),
+      y: attrExpr(el, "y"),
+      modes: attr(el, "modes"),
+      radius: attrExpr(el, "radius"),
+      arcSpan: attrExpr(el, "arcSpan"),
+      strokeColor: attrExpr(el, "strokeColor"),
+      fontSize: attrExpr(el, "fontSize"),
+      labelText: attr(el, "labelText")
     };
   }
   function parseQWedge(el) {
@@ -11775,6 +11817,26 @@
     }
     return angle;
   }
+  function sunSkyOrientationAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const sunHourAngle = lst - sunRA;
+    const sinAlt = Math.sin(sunDecl) * Math.sin(observerLatitude) + Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.cos(sunHourAngle);
+    const sunAz = Math.atan2(
+      -Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.sin(sunHourAngle),
+      Math.sin(sunDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const sunAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(sunAlt, sunAz, observerLatitude);
+    const kAnalemmaOrientationOffset = 0;
+    let angle = -northAngle + kAnalemmaOrientationOffset;
+    if (angle < 0) angle += TWO_PI4;
+    else if (angle > TWO_PI4) angle -= TWO_PI4;
+    return angle;
+  }
   function angularSeparation(ra1, decl1, ra2, decl2) {
     const sinDecl1 = Math.sin(decl1);
     const cosDecl1 = Math.cos(decl1);
@@ -12580,6 +12642,10 @@
     functions.set("sunAzimuth", () => {
       const di = dateToDateInterval(getNow());
       return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set("sunSkyOrientationAngle", () => {
+      const di = dateToDateInterval(getNow());
+      return sunSkyOrientationAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     function riseSetForDay(riseNotSet, planetNumber) {
       const now2 = getNow();
@@ -13889,6 +13955,245 @@
     return city.replace(/_/g, " ");
   }
 
+  // src/watch/analemma.ts
+  var REF_LAT_RAD = 45 * Math.PI / 180;
+  var REF_LON_RAD = 0;
+  var REF_EPOCH_SECONDS = (() => {
+    const d = new Date(Date.UTC(2024, 2, 20, 12, 0, 0));
+    return d.getTime() / 1e3 - 978307200;
+  })();
+  var PATH_DAYS = 365;
+  var DEFAULT_UPDATE_SEC = 300;
+  var PATH_MARGIN_FRACTION = 0.15;
+  function normalizeAngleDelta(delta) {
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+    return delta;
+  }
+  function computeAnalemmaPath() {
+    const refAlt = sunAltitude(REF_EPOCH_SECONDS, REF_LAT_RAD, REF_LON_RAD, null);
+    const refAz = sunAzimuth(REF_EPOCH_SECONDS, REF_LAT_RAD, REF_LON_RAD, null);
+    const path = [];
+    for (let d = 0; d < PATH_DAYS; d++) {
+      const di = REF_EPOCH_SECONDS + d * 86400;
+      const alt = sunAltitude(di, REF_LAT_RAD, REF_LON_RAD, null);
+      const az = sunAzimuth(di, REF_LAT_RAD, REF_LON_RAD, null);
+      path.push({
+        dayOfYear: d,
+        deltaAz: normalizeAngleDelta(az - refAz),
+        deltaAlt: alt - refAlt
+      });
+    }
+    return { path, refAlt, refAz };
+  }
+  function expandAnalemma(part, env, images) {
+    const centerX = evalAttr(part.x, env);
+    const centerY = evalAttr(part.y, env);
+    const radius = evalAttr(part.radius, env) || 40;
+    const sunRadius = evalAttr(part.sunRadius, env) || 2.5;
+    const sunFillColor = part.sunFillColor ? evalColor(part.sunFillColor, env) : "rgba(242,228,7,1)";
+    const sunStrokeColor = part.sunStrokeColor ? evalColor(part.sunStrokeColor, env) : "rgba(139,129,75,1)";
+    const channelColor = part.channelColor ? evalColor(part.channelColor, env) : "rgba(0,0,0,1)";
+    const channelWidth = evalAttr(part.channelWidth, env) || 0.8;
+    const bgRotates = (evalAttr(part.bgRotates, env) || 0) !== 0;
+    const updateIntervalSec = evalAttr(part.update, env) || DEFAULT_UPDATE_SEC;
+    const { path, refAlt, refAz } = computeAnalemmaPath();
+    const usableRadius = radius * (1 - PATH_MARGIN_FRACTION);
+    let maxAbsAz = 0;
+    let maxAbsAlt = 0;
+    for (const pt of path) {
+      const absAz = Math.abs(pt.deltaAz);
+      const absAlt = Math.abs(pt.deltaAlt);
+      if (absAz > maxAbsAz) maxAbsAz = absAz;
+      if (absAlt > maxAbsAlt) maxAbsAlt = absAlt;
+    }
+    const maxExtent = Math.max(maxAbsAz, maxAbsAlt);
+    const scaleFactor = maxExtent > 0 ? usableRadius / maxExtent : 1;
+    const pathScaled = path.map((pt) => [
+      pt.deltaAz * scaleFactor,
+      pt.deltaAlt * scaleFactor
+    ]);
+    const channelPath2D = buildChannelPath2D(pathScaled);
+    let bgBitmap = null;
+    if (part.bgSrc) {
+      const loaded2 = images.get(part.bgSrc);
+      if (loaded2) {
+        bgBitmap = createDiscBackground(loaded2.bitmap, loaded2.scale, radius);
+      }
+    }
+    const state = {
+      path,
+      pathScaled,
+      scaleFactor,
+      refAlt,
+      refAz,
+      centerX,
+      centerY,
+      radius,
+      sunRadius,
+      sunFillColor,
+      sunStrokeColor,
+      channelColor,
+      channelWidth,
+      bgRotates,
+      currentSunX: 0,
+      currentSunY: 0,
+      currentRotation: 0,
+      updateIntervalSec,
+      nextUpdateTime: 0,
+      channelPath2D,
+      bgBitmap
+    };
+    updateAnalemmaValues(state, env);
+    return state;
+  }
+  function buildChannelPath2D(pathScaled) {
+    const p = new Path2D();
+    if (pathScaled.length === 0) return p;
+    p.moveTo(pathScaled[0][0], -pathScaled[0][1]);
+    for (let i = 1; i < pathScaled.length; i++) {
+      p.lineTo(pathScaled[i][0], -pathScaled[i][1]);
+    }
+    p.closePath();
+    return p;
+  }
+  function createDiscBackground(faceImage, faceImageScale, discRadius) {
+    const size = Math.ceil(discRadius * 2);
+    const pxSize = Math.ceil(size * 4);
+    const canvas = new OffscreenCanvas(pxSize, pxSize);
+    const ctx = canvas.getContext("2d");
+    ctx.beginPath();
+    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+    const imgW = faceImage.width * faceImageScale;
+    const imgH = faceImage.height * faceImageScale;
+    const drawScale = pxSize / (discRadius * 2);
+    ctx.save();
+    ctx.translate(pxSize / 2, pxSize / 2);
+    ctx.scale(drawScale, drawScale);
+    ctx.drawImage(faceImage, -imgW / 2, -imgH / 2, imgW, imgH);
+    ctx.restore();
+    return canvas;
+  }
+  function updateAnalemmaValues(state, env) {
+    const getNow = env.getNow;
+    if (!getNow) return;
+    const now = getNow();
+    const di = dateToDateInterval(now);
+    const nowUTC = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      12,
+      0,
+      0
+    ));
+    const noonDI = dateToDateInterval(nowUTC);
+    const alt = sunAltitude(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
+    const az = sunAzimuth(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
+    state.currentSunX = normalizeAngleDelta(az - state.refAz) * state.scaleFactor;
+    state.currentSunY = (alt - state.refAlt) * state.scaleFactor;
+    const obsLat = env.observerLatRad ?? 0;
+    const obsLon = env.observerLonRad ?? 0;
+    state.currentRotation = sunSkyOrientationAngle(di, obsLat, obsLon, null);
+  }
+  function tickAnalemma(state, env, now) {
+    if (now >= state.nextUpdateTime) {
+      updateAnalemmaValues(state, env);
+      state.nextUpdateTime = now + state.updateIntervalSec * 1e3;
+    }
+  }
+  function resetAnalemmaSchedule(state) {
+    state.nextUpdateTime = 0;
+  }
+  function drawSunGlyph(ctx, cx, cy, radius, fillColor, strokeColor, nRays = 8) {
+    const innerRadius = radius * 0.5;
+    const rayTip = radius;
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 0.3;
+    ctx.beginPath();
+    for (let i = 0; i < nRays; i++) {
+      const theta = 2 * Math.PI * i / nRays;
+      const tipX = cx + rayTip * Math.cos(theta);
+      const tipY = cy + rayTip * Math.sin(theta);
+      const cwX = cx + innerRadius * Math.cos(theta + Math.PI / nRays);
+      const cwY = cy + innerRadius * Math.sin(theta + Math.PI / nRays);
+      const ccwX = cx + innerRadius * Math.cos(theta - Math.PI / nRays);
+      const ccwY = cy + innerRadius * Math.sin(theta - Math.PI / nRays);
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(cwX, cwY);
+      ctx.lineTo(ccwX, ccwY);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+  }
+  function drawAnalemma(ctx, state) {
+    const { centerX, centerY, radius, currentRotation, bgRotates } = state;
+    ctx.save();
+    ctx.translate(centerX, -centerY);
+    if (state.bgBitmap) {
+      if (bgRotates) {
+        ctx.save();
+        ctx.rotate(currentRotation);
+        drawBackground(ctx, state);
+        ctx.restore();
+      } else {
+        drawBackground(ctx, state);
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.rotate(currentRotation);
+    if (state.channelPath2D) {
+      ctx.strokeStyle = state.channelColor;
+      ctx.lineWidth = state.channelWidth;
+      ctx.lineJoin = "round";
+      ctx.stroke(state.channelPath2D);
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    drawSunGlyph(
+      ctx,
+      state.currentSunX,
+      -state.currentSunY,
+      // negate Y for canvas
+      state.sunRadius,
+      state.sunFillColor,
+      state.sunStrokeColor
+    );
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(state.currentSunX, -state.currentSunY, 0.25, 0, Math.PI * 2);
+    ctx.fillStyle = "black";
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawBackground(ctx, state) {
+    if (!state.bgBitmap) return;
+    const { radius } = state;
+    const bmp = state.bgBitmap;
+    ctx.drawImage(bmp, -radius, -radius, radius * 2, radius * 2);
+  }
+
   // src/watch/renderer.ts
   function isTransparent(cssColor) {
     const m = cssColor.match(/,([\d.]+)\)$/);
@@ -14215,18 +14520,18 @@
     part._shadowBitmapW = bboxW;
     part._shadowBitmapH = bboxH;
   }
-  function renderFrame(ctx, watch, env, scale, images, terminatorLeaves) {
+  function renderFrame(ctx, watch, env, scale, images, terminatorLeaves, analemmaState) {
     const w = ctx.canvas.width;
     const h = ctx.canvas.height;
     ctx.clearRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.scale(scale, scale);
-    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves);
+    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves, analemmaState);
     drawBezel(ctx, watch);
     ctx.restore();
   }
-  function renderPartsDocumentOrder(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves) {
+  function renderPartsDocumentOrder(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, analemmaState) {
     const pendingWindows = [];
     for (const part of parts) {
       if (part.type === "Window") {
@@ -14263,6 +14568,12 @@
       if (part.type === "Terminator") {
         if (terminatorLeaves && terminatorLeaves.length > 0) {
           drawTerminator(ctx, terminatorLeaves);
+        }
+        continue;
+      }
+      if (part.type === "Analemma") {
+        if (analemmaState) {
+          drawAnalemma(ctx, analemmaState);
         }
         continue;
       }
@@ -14451,6 +14762,9 @@
         }
         continue;
       }
+      if (part.type === "Analemma") {
+        continue;
+      }
       seenDrawable = true;
       if (pendingWindows.length > 0) {
         renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
@@ -14562,6 +14876,9 @@
         break;
       case "CalendarHeader":
         drawCalendarHeader(ctx, part, env);
+        break;
+      case "EotDial":
+        drawEotDial(ctx, part, env);
         break;
       case "Window":
         drawWindowBorder(ctx, part, env);
@@ -16155,6 +16472,80 @@
     }
     ctx.restore();
   }
+  function drawEotDial(ctx, part, env) {
+    const cx = evalAttr(part.x, env);
+    const cy = evalAttr(part.y, env);
+    const radius = evalAttr(part.radius, env) || 20;
+    const arcSpanRad = evalAttr(part.arcSpan, env) || 7 * Math.PI / 6;
+    const color = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
+    const fontSize = evalAttr(part.fontSize, env) || 6;
+    const labelText = part.labelText || "Equation of Time";
+    const halfArc = arcSpanRad / 2;
+    const arcStart = -Math.PI / 2 - halfArc;
+    const arcEnd = -Math.PI / 2 + halfArc;
+    const radPerMin = Math.PI / 30;
+    ctx.save();
+    ctx.translate(cx, -cy);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, arcStart, arcEnd);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    const maxTickMin = Math.floor(halfArc / radPerMin);
+    const majorTickLen = radius * 0.15;
+    const minorTickLen = radius * 0.07;
+    for (let min = -maxTickMin; min <= maxTickMin; min++) {
+      const angle = -Math.PI / 2 + min * radPerMin;
+      const isMajor = min % 5 === 0 && Math.abs(min) <= 15;
+      const tickInner = isMajor ? radius - majorTickLen : radius - minorTickLen;
+      const tickOuter = radius;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      ctx.beginPath();
+      ctx.moveTo(cosA * tickInner, sinA * tickInner);
+      ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
+      ctx.lineWidth = isMajor ? 0.6 : 0.3;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+    const labelFontSize = fontSize * 1.92;
+    ctx.font = `${labelFontSize}px Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55;
+    const zeroAngle = -Math.PI / 2;
+    ctx.fillText("0", Math.cos(zeroAngle) * numLabelRadius, Math.sin(zeroAngle) * numLabelRadius);
+    for (const min of [5, 10, 15]) {
+      const label = String(min);
+      const posAngle = -Math.PI / 2 + min * radPerMin;
+      ctx.fillText(label, Math.cos(posAngle) * numLabelRadius, Math.sin(posAngle) * numLabelRadius);
+      const negAngle = -Math.PI / 2 - min * radPerMin;
+      ctx.fillText(label, Math.cos(negAngle) * numLabelRadius, Math.sin(negAngle) * numLabelRadius);
+    }
+    const symbolFontSize = fontSize * 2;
+    ctx.font = `bold ${symbolFontSize}px Arial, sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const symbolRadius = numLabelRadius - labelFontSize * 1 - 1;
+    const negSymAngle = -Math.PI / 2 - 15 * radPerMin;
+    ctx.fillText("\u2212", Math.cos(negSymAngle) * symbolRadius, Math.sin(negSymAngle) * symbolRadius);
+    const posSymAngle = -Math.PI / 2 + 15 * radPerMin;
+    ctx.fillText("+", Math.cos(posSymAngle) * symbolRadius, Math.sin(posSymAngle) * symbolRadius);
+    const titleFontSize = fontSize * 3;
+    ctx.font = `${titleFontSize}px 'Arial Narrow', Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = color;
+    const arcBottomY = Math.sin(arcEnd) * radius;
+    ctx.fillText(labelText, 0, arcBottomY);
+    ctx.restore();
+  }
 
   // src/time-controller.ts
   var RATE_OPTIONS = [
@@ -17527,6 +17918,7 @@
         enabled: true,
         scale: 1,
         terminatorLeaves: [],
+        analemmaState: null,
         lastTerminatorRebuild: 0,
         faceDataIndex: i,
         terraSlotOverrides: faceOverrides,
@@ -17582,6 +17974,13 @@
       buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
       buildHandShadowCaches(watch, env, scale, images);
       face.cachesBuilt = true;
+      face.analemmaState = null;
+      for (const part of watch.parts) {
+        if (part.type === "Analemma") {
+          face.analemmaState = expandAnalemma(part, env, images);
+          break;
+        }
+      }
       face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond), rawGetNow);
     }
     function buildAllCachesSequentially(facesToBuild, onDone) {
@@ -17605,6 +18004,7 @@
         invalidateDayNightCaches(face.watch);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
+        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
       }
       scheduleDstRebuild();
     }
@@ -17659,8 +18059,12 @@
             face.lastTerminatorRebuild = now;
           }
         }
+        if (face.analemmaState) {
+          if (tickMs !== null) resetAnalemmaSchedule(face.analemmaState);
+          tickAnalemma(face.analemmaState, face.env, now);
+        }
         const renderStart = performance.now();
-        renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves);
+        renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves, face.analemmaState);
         if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
           const ctx2d = face.ctx;
           const fw = face.env.variables.get("faceWidth") || 278;
@@ -17816,6 +18220,7 @@
           resetLeafSchedules(face.terminatorLeaves);
           face.lastTerminatorRebuild = 0;
         }
+        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         resetHandSchedules(face.handStates);
@@ -18175,6 +18580,7 @@
           resetLeafSchedules(face.terminatorLeaves);
           face.lastTerminatorRebuild = 0;
         }
+        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         invalidateDayNightCaches(face.watch);
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
@@ -18843,12 +19249,14 @@
       for (const face of faces) {
         finishAnimations(face.handStates);
         finishLeafAnimations(face.terminatorLeaves);
+        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
       }
     }
     function resetAllSchedules() {
       for (const face of faces) {
         resetHandSchedules(face.handStates);
         resetLeafSchedules(face.terminatorLeaves);
+        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
       }
     }
     function writeTimeState() {
@@ -18943,6 +19351,7 @@
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
+          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
           tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
           tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
         }
@@ -18974,6 +19383,7 @@
           if (!face.enabled || !face.cachesBuilt) continue;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
+          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
           tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
           tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
         }
@@ -19143,6 +19553,7 @@
               resetLeafSchedules(face.terminatorLeaves);
               face.lastTerminatorRebuild = 0;
             }
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
             for (const hs of face.handStates) {
@@ -19261,6 +19672,7 @@
               resetLeafSchedules(face.terminatorLeaves);
               face.lastTerminatorRebuild = 0;
             }
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
             face.env._terraCityKnockout = null;
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
@@ -19518,6 +19930,7 @@
               resetLeafSchedules(face.terminatorLeaves);
               face.lastTerminatorRebuild = 0;
             }
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
             const { canvas, watch, env, images, scale } = face;
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
             for (const hs of face.handStates) {

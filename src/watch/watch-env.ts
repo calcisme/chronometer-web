@@ -43,6 +43,7 @@ import {
     localSiderealTime,
     planetAltAz,
     positionAngle, northAngleForObject,
+    sunSkyOrientationAngle,
 } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined, planettransitTimeRefined, type RiseSetResult } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, ECWBPrecision, isNoRiseSet, isAlwaysAbove, fmod } from '../astronomy/astro-constants.js';
@@ -480,6 +481,10 @@ function registerTimeFunctions(
     functions.set('sunAzimuth', () => {
         const di = dateToDateInterval(getNow());
         return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
+    });
+    functions.set('sunSkyOrientationAngle', () => {
+        const di = dateToDateInterval(getNow());
+        return sunSkyOrientationAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
 
     // --- Rise/set "for day" helpers ---
