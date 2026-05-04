@@ -33,22 +33,22 @@
 <!-- == Front == -->
 
 <!-- Date wheels: month+day on left, year on right, centered vertically -->
-  <QRect	name='day bak'	    x='-44' y='-2' w='22' h='13' bgColor='white' panes='2' />
-  <SWheel	name='day'	    x='-60' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='three' update='1 * days()' angle='fmod((dayNumber()+1),          10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
-  <SWheel	refName='day'	    x='-71' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='three' update='1 * days()' angle='fmod(floor((dayNumber()+1)/10),10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
-  <QRect	name='mon bak'	    x='-86' y='-2' w='35' h='13' bgColor='white' />
-  <Swheel	name='Qmonths'	    x='-108' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='58' orientation='three' update='1 * days()'	angle='monthNumber()              *2*pi/12' fontSize='16' fontName='Arial' text='JAN,FEB,MAR,APR,MAY,JUN,JUL,AUG,SEP,OCT,NOV,DEC' strokeColor='black' bgColor='clear' />
+  <QRect	name='day bak'	    x='-43' y='0' w='22' h='13' bgColor='white' panes='2' />
+  <SWheel	name='day'	    x='-59' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='three' update='1 * days()' angle='fmod((dayNumber()+1),          10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
+  <SWheel	refName='day'	    x='-70' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='three' update='1 * days()' angle='fmod(floor((dayNumber()+1)/10),10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
+  <QRect	name='mon bak'	    x='-85' y='0' w='35' h='13' bgColor='white' />
+  <Swheel	name='Qmonths'	    x='-107' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='58' orientation='three' update='1 * days()'	angle='monthNumber()              *2*pi/12' fontSize='16' fontName='Arial' text='JAN,FEB,MAR,APR,MAY,JUN,JUL,AUG,SEP,OCT,NOV,DEC' strokeColor='black' bgColor='clear' />
 
-  <QRect	name='year bak'	    x='35' y='-2' w='40' h='13' bgColor='white' panes='4' />
-  <SWheel	name='year'	    x='102' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(yearNumber(),             10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
-  <SWheel	refName='year'	    x='92' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/10),   10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
-  <SWheel	refName='year'	    x='82' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/100),  10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
-  <SWheel	refName='year'	    x='72' y='4'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/1000), 10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
+  <QRect	name='year bak'	    x='35' y='0' w='40' h='13' bgColor='white' panes='4' />
+  <SWheel	name='year'	    x='102' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(yearNumber(),             10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
+  <SWheel	refName='year'	    x='92' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/10),   10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
+  <SWheel	refName='year'	    x='82' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/100),  10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
+  <SWheel	refName='year'	    x='72' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/1000), 10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
 
   <static   name='front' modes='front' n='3'>
-    <window	name='mon win'	    x='-86' y='-2' w='35' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
-    <window	name='day win'	    x='-44' y='-2' w='22' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
-    <window	name='year win'	    x='35'  y='-2' w='40' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
+    <window	name='mon win'	    x='-85' y='0' w='35' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
+    <window	name='day win'	    x='-43' y='0' w='22' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
+    <window	name='year win'	    x='35'  y='0' w='40' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
     <QRect      name='face'         x='-rb' y='-rb'     modes='front'  w='rb*2' h='rb*2' bgColor='black'/>
     <Image	name='dial '	    x='0' y='0'	modes='front'	src='face.png' />
     <QDial	name='min nums'     x='0' y='0'	modes='front' radius='minDialR' orientation='demi' demiTweak='0' fontSize='minSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='60,05,10,15,20,25,30,35,40,45,50,55' />
@@ -60,10 +60,10 @@
     <QDial	name='ring backg ' x='0' y='0'	modes='front' radius='dnR' markWidth='5' marks='tickOut' nMarks='240' mSize='ringW' bgColor='clear' />
     <QDial	name='x1'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='0' />
     <QDial	name='x2'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='pi/2' />
-    <eotDial    name='eot dial'     x='0' y='ly+6' modes='front' radius='43' strokeColor='fgColor' fontSize='5' />
+    <eotDial    name='eot dial'     x='0' y='ly+6' modes='front' radius='36.5' strokeColor='fgColor' fontSize='4.25' />
   </static>
 
-  <Qhand	name='EOT'	    x=' 0'  y='ly+6' z='2' thick='3' modes='front'  length='43' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgColor' fillColor='fgColor' />
+  <Qhand	name='EOT'	    x=' 0'  y='ly+6' z='2' thick='3' modes='front'  length='36.5' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgColor' fillColor='fgColor' />
 
 <!-- the day/night rings that make this a *proper* 24-hour watch -->
 <!-- and moon day/night rings for the amateur astronomer! -->
