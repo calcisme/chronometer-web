@@ -61,7 +61,7 @@
     <QDial	name='ring backg ' x='0' y='0'	modes='front' radius='dnR' markWidth='5' marks='tickOut' nMarks='240' mSize='ringW' bgColor='clear' />
     <QDial	name='x1'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='0' />
     <QDial	name='x2'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='pi/2' />
-    <eotDial    name='eot dial'     x='0' y='ly+6' modes='front' radius='36.5' strokeColor='fgColor' fontSize='4.25' />
+    <eotDial    name='eot dial'     x='0' y='ly+6' modes='front' radius='36.5' strokeColor='fgColor' fontSize='4.25' titleFontSize='11.15' />
   </static>
 
   <Qhand	name='EOT'	    x=' 0'  y='ly+6' z='2' thick='3' modes='front'  length='36.5' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgColor' fillColor='fgColor' />

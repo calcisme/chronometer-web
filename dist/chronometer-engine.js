@@ -821,6 +821,7 @@
       arcSpan: attrExpr(el, "arcSpan"),
       strokeColor: attrExpr(el, "strokeColor"),
       fontSize: attrExpr(el, "fontSize"),
+      titleFontSize: attrExpr(el, "titleFontSize"),
       labelText: attr(el, "labelText")
     };
   }
@@ -16660,8 +16661,8 @@
     ctx.fillText("\u2212", Math.cos(negSymAngle) * symbolRadius, Math.sin(negSymAngle) * symbolRadius);
     const posSymAngle = -Math.PI / 2 + 15 * radPerMin;
     ctx.fillText("+", Math.cos(posSymAngle) * symbolRadius, Math.sin(posSymAngle) * symbolRadius);
-    const titleFontSize = fontSize * 3;
-    ctx.font = `${titleFontSize}px 'Arial Narrow', Arial, sans-serif`;
+    const titleFSize = part.titleFontSize ? evalAttr(part.titleFontSize, env) : fontSize * 3;
+    ctx.font = `${titleFSize}px 'Arial Narrow', Arial, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillStyle = color;

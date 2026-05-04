@@ -470,8 +470,10 @@ export interface EotDialPart extends PartBase {
     arcSpan?: ASTNode;
     /** Color for tick marks, arc, and labels. */
     strokeColor?: ASTNode;
-    /** Font size for the title label and +/- symbols. */
+    /** Font size for the +/- symbols and tick labels. */
     fontSize?: ASTNode;
+    /** Font size for the title label (default: fontSize * 3). */
+    titleFontSize?: ASTNode;
     /** Title label text (default "Equation of Time"). */
     labelText?: string;
 }

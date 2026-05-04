@@ -514,6 +514,7 @@ function parseEotDial(el: Element): EotDialPart {
         arcSpan: attrExpr(el, 'arcSpan'),
         strokeColor: attrExpr(el, 'strokeColor'),
         fontSize: attrExpr(el, 'fontSize'),
+        titleFontSize: attrExpr(el, 'titleFontSize'),
         labelText: attr(el, 'labelText'),
     };
 }
