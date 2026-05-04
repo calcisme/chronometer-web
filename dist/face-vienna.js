@@ -50,9 +50,9 @@
   <SWheel	refName='year'	    x='72' y='6'  dragAnimationType='dragAnimationAlways' modes='front'  radius='36' orientation='nine' update='1 * days()' angle='fmod(floor(yearNumber()/1000), 10)*2*pi/10' fontSize='16' fontName='Arial' text='0,1,2,3,4,5,6,7,8,9' strokeColor='black' bgColor='white' />
 
   <static   name='front' modes='front' n='3'>
-    <window	name='mon win'	    x='-85' y='0' w='35' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
-    <window	name='day win'	    x='-43' y='0' w='22' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
-    <window	name='year win'	    x='35'  y='0' w='40' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.7' shadowSigma='2.5' shadowOffset='1.5' />
+    <window	name='mon win'	    x='-85' y='0' w='35' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.47' shadowSigma='2.5' shadowOffset='1.5' />
+    <window	name='day win'	    x='-43' y='0' w='22' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.47' shadowSigma='2.5' shadowOffset='1.5' />
+    <window	name='year win'	    x='35'  y='0' w='40' h='13' modes='front' border='2' strokeColor='darkGray' shadowOpacity='0.47' shadowSigma='2.5' shadowOffset='1.5' />
     <QRect      name='face'         x='-rb' y='-rb'     modes='front'  w='rb*2' h='rb*2' bgColor='black'/>
     <Image	name='dial '	    x='0' y='0'	modes='front'	src='face.png' />
     <QDial	name='min nums'     x='0' y='0'	modes='front' radius='minDialR' orientation='demi' demiTweak='0' fontSize='minSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='60,05,10,15,20,25,30,35,40,45,50,55' />
@@ -89,7 +89,7 @@
             channelColor='0xff000000'
             channelWidth='0.8'
             bgSrc='face.png'
-            bgRotates='0'
+            bgRotates='1'
             update='300'
   />
 
