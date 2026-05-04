@@ -6,6 +6,8 @@ This document collects critical invariants, rules, and pitfalls that must be obs
 
 If you change anything that would invalidate a doc in this directory, update the doc at the same time. If you add something that should be covered by the docs but isn't, add that too. The docs should always reflect the current state of the codebase.
 
+When editing HTML files (especially the help files in `src/help/`), format them with Prettier: `npx -y prettier --write src/help/*.html`.
+
 ## 2. Never Simplify iOS Algorithms
 
 When porting logic from the iOS reference code (`.chronometer-ref/`, `.esastro-ref/`, `.estime-ref/`), **never simplify** the logic. Code that appears redundant or overly complex is almost always handling an edge case that is not immediately obvious.
