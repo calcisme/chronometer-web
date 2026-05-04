@@ -50,7 +50,7 @@ import {
     localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
     kECJulianGregorianSwitchoverTimeInterval,
 } from './astronomy/es-calendar.js';
-import { dateToDateInterval, dateIntervalToDate } from './astronomy/es-time.js';
+import { dateToDateInterval, dateIntervalToDate, MIN_DISPLAY_DATE_MS, MAX_DISPLAY_DATE_MS } from './astronomy/es-time.js';
 
 // ============================================================================
 // Location helpers
@@ -775,6 +775,14 @@ async function main() {
         // Snapshot the time for this frame — all getNow() calls within
         // this frame will return the exact same value.
         timeController.beginFrame();
+        // Safety net: in 1×/-1× continuous mode with offset, the display time
+        // can drift past the supported astronomical range (4000 BCE – 2800 CE).
+        // Clamp here so the boundary is enforced every frame.
+        if (timeController.clampDisplayTime()) {
+            finishAllAnimations();
+            updateTimeUI();
+            writeTimeState();
+        }
         const frameRealTime = new Date();  // capture real time at same instant as sim
 
         // Compute tick parameters for the animation system
@@ -940,6 +948,10 @@ async function main() {
             if (!timeController.isRealTime) {
                 timeBarOffset.textContent = formatOffset(sim, frameRealTime);
             }
+            // Update at-limit indicator each frame
+            const ms = sim.getTime();
+            const atLimit = ms <= MIN_DISPLAY_DATE_MS || ms >= MAX_DISPLAY_DATE_MS;
+            timeBar.classList.toggle('at-limit', atLimit);
         }
 
         timeController.endFrame();
@@ -2126,6 +2138,12 @@ async function main() {
         if (di < kECJulianGregorianSwitchoverTimeInterval) {
             suffix += ' (Julian)';
         }
+        const ms = d.getTime();
+        if (ms <= MIN_DISPLAY_DATE_MS) {
+            suffix += ' — AT LIMIT';
+        } else if (ms >= MAX_DISPLAY_DATE_MS) {
+            suffix += ' — AT LIMIT';
+        }
         return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
     }
 
@@ -2215,6 +2233,11 @@ async function main() {
         // Always update the displayed time
         const sim = timeController.getDisplayTime();
         timeBarDate.textContent = formatSimTime(sim);
+
+        // Toggle at-limit class for boundary indicator (pulsing amber background)
+        const simMs = sim.getTime();
+        const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
+        timeBar.classList.toggle('at-limit', atLimit);
 
         if (!isReal) {
             timeBarRate.textContent = timeController.statusLabel;
@@ -2606,7 +2629,10 @@ async function main() {
         const tzOff = targetTzOffsetSec(refDate);
         const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
         const d = dateIntervalToDate(di);
-        timeController.setTime(d);
+        // Clamp to supported astronomical range (4000 BCE – 2800 CE)
+        const clampedMs = Math.max(MIN_DISPLAY_DATE_MS,
+                                   Math.min(MAX_DISPLAY_DATE_MS, d.getTime()));
+        timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
         finishAllAnimations();
         resetAllSchedules();
         updateTimeUI();

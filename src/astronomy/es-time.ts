@@ -18,6 +18,30 @@ import type { AstroCache } from './astro-cache';
 import { CacheSlot } from './astro-cache';
 
 // ============================================================================
+// Supported astronomical date range
+// ============================================================================
+
+/**
+ * Earliest supported astronomical date: Jan 1, 4000 BCE 00:00:00 UTC.
+ * Apple epoch seconds (since Jan 1, 2001 00:00:00 UTC).
+ * From ESTime.hpp: ESMinimumSupportedAstroDate.
+ */
+export const ES_MIN_ASTRO_DATE = -189344476800.0;
+
+/**
+ * Latest supported astronomical date: Jan 1, 2801 CE 00:00:00 UTC.
+ * Apple epoch seconds (since Jan 1, 2001 00:00:00 UTC).
+ * From ESTime.hpp: ESMaximumSupportedAstroDate.
+ */
+export const ES_MAX_ASTRO_DATE = 25245561600.0;
+
+/** Earliest supported date as JS Date.getTime() milliseconds. */
+export const MIN_DISPLAY_DATE_MS = (ES_MIN_ASTRO_DATE + 978307200) * 1000;
+
+/** Latest supported date as JS Date.getTime() milliseconds. */
+export const MAX_DISPLAY_DATE_MS = (ES_MAX_ASTRO_DATE + 978307200) * 1000;
+
+// ============================================================================
 // Delta T tables and functions
 // ============================================================================
 

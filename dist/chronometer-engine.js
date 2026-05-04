@@ -1274,6 +1274,10 @@
   }
 
   // src/astronomy/es-time.ts
+  var ES_MIN_ASTRO_DATE = -189344476800;
+  var ES_MAX_ASTRO_DATE = 25245561600;
+  var MIN_DISPLAY_DATE_MS = (ES_MIN_ASTRO_DATE + 978307200) * 1e3;
+  var MAX_DISPLAY_DATE_MS = (ES_MAX_ASTRO_DATE + 978307200) * 1e3;
   function espenakDeltaT(yearValue) {
     if (yearValue >= 2005 && yearValue <= 2050) {
       const t = yearValue - 2e3;
@@ -16910,6 +16914,7 @@
         this.tickTime = new Date(this.nextTickTime.getTime());
         this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
         this.lastTickRealMs = nowPerfMs;
+        this.clampDisplayTime();
         return true;
       }
       return false;
@@ -16950,6 +16955,7 @@
       }
       this.nextTickTime = advanceByUnit(this.tickTime, rate.unit, this.direction);
       this.lastTickRealMs = performance.now();
+      this.clampDisplayTime();
       this.onTick?.();
     }
     /** Set direction (forward or reverse). Preserves current rate. */
@@ -16965,6 +16971,7 @@
         this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, dir);
         this.lastTickRealMs = performance.now();
       }
+      this.clampDisplayTime();
       this.onTick?.();
     }
     /** Stop time. */
@@ -16993,6 +17000,7 @@
         this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
         this.lastTickRealMs = performance.now();
       }
+      this.clampDisplayTime();
       this.onTick?.();
     }
     /** Set an exact date/time. Stops the clock. */
@@ -17001,6 +17009,7 @@
       this.tickTime = date;
       this.nextTickTime = date;
       this.offsetMs = date.getTime() - Date.now();
+      this.clampDisplayTime();
       this.onTick?.();
     }
     /** Reset to real time, 1× forward. */
@@ -17023,7 +17032,42 @@
       this.tickTime = new Date(Date.now() + ms);
       this.nextTickTime = new Date(Date.now() + ms);
       this.lastTickRealMs = 0;
+      this.clampDisplayTime();
       this.onTick?.();
+    }
+    // ========================================================================
+    // Date range constraint
+    // ========================================================================
+    /**
+     * Check if the current display time exceeds the supported astronomical
+     * range (4000 BCE – 2800 CE) and constrain it. Returns true if clamping
+     * occurred.
+     *
+     * Mirrors iOS ESWatchTime::checkAndConstrainAbsoluteTime:
+     * - If time is running, stop the clock at the boundary
+     * - If time is stopped, clamp the frozen value to the boundary
+     */
+    clampDisplayTime() {
+      const t = this.getDisplayTime().getTime();
+      if (t <= MIN_DISPLAY_DATE_MS) {
+        if (!this.stopped) {
+          this.stop();
+        }
+        this.tickTime = new Date(MIN_DISPLAY_DATE_MS);
+        this.nextTickTime = new Date(MIN_DISPLAY_DATE_MS);
+        this.offsetMs = MIN_DISPLAY_DATE_MS - Date.now();
+        return true;
+      }
+      if (t >= MAX_DISPLAY_DATE_MS) {
+        if (!this.stopped) {
+          this.stop();
+        }
+        this.tickTime = new Date(MAX_DISPLAY_DATE_MS);
+        this.nextTickTime = new Date(MAX_DISPLAY_DATE_MS);
+        this.offsetMs = MAX_DISPLAY_DATE_MS - Date.now();
+        return true;
+      }
+      return false;
     }
     _setupReverseOneX(prevTime) {
       if (this.direction === -1) {
@@ -18146,6 +18190,11 @@
       let stillAnimating = false;
       timeController.checkTick(now);
       timeController.beginFrame();
+      if (timeController.clampDisplayTime()) {
+        finishAllAnimations();
+        updateTimeUI();
+        writeTimeState();
+      }
       const frameRealTime = /* @__PURE__ */ new Date();
       const rate = timeController.currentRate;
       const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
@@ -18271,6 +18320,9 @@
         if (!timeController.isRealTime) {
           timeBarOffset.textContent = formatOffset(sim, frameRealTime);
         }
+        const ms = sim.getTime();
+        const atLimit = ms <= MIN_DISPLAY_DATE_MS || ms >= MAX_DISPLAY_DATE_MS;
+        timeBar.classList.toggle("at-limit", atLimit);
       }
       timeController.endFrame();
       _frameTotalMs += performance.now() - frameStart;
@@ -19126,6 +19178,12 @@
       if (di < kECJulianGregorianSwitchoverTimeInterval) {
         suffix += " (Julian)";
       }
+      const ms = d.getTime();
+      if (ms <= MIN_DISPLAY_DATE_MS) {
+        suffix += " \u2014 AT LIMIT";
+      } else if (ms >= MAX_DISPLAY_DATE_MS) {
+        suffix += " \u2014 AT LIMIT";
+      }
       return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
     }
     function renderTransport() {
@@ -19197,6 +19255,9 @@
       timeBar.classList.toggle("overridden", !isReal);
       const sim = timeController.getDisplayTime();
       timeBarDate.textContent = formatSimTime(sim);
+      const simMs = sim.getTime();
+      const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
+      timeBar.classList.toggle("at-limit", atLimit);
       if (!isReal) {
         timeBarRate.textContent = timeController.statusLabel;
         timeBarOffset.textContent = formatOffset(sim, /* @__PURE__ */ new Date());
@@ -19531,7 +19592,11 @@
       const tzOff = targetTzOffsetSec(refDate);
       const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
       const d = dateIntervalToDate(di);
-      timeController.setTime(d);
+      const clampedMs = Math.max(
+        MIN_DISPLAY_DATE_MS,
+        Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
+      );
+      timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
       finishAllAnimations();
       resetAllSchedules();
       updateTimeUI();

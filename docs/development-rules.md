@@ -93,3 +93,12 @@ When switching bodies, preserve existing `HandState` objects rather than recreat
 ## 9. If Blocked, Ask
 
 If you cannot implement the iOS algorithm directly, cannot find the source of a rendering bug, or believe a fundamental architectural constraint needs to be violated — **stop and ask the user** how to proceed. Do not attempt speculative workarounds.
+
+## 10. Date Range Constraint: 4000 BCE – 2800 CE
+
+The astronomical series approximations (Willmann-Bell planetary/sun tables) are only valid for the range **4000 BCE to 2800 CE**. All time-mutation paths must enforce this invariant:
+
+- `TimeController.clampDisplayTime()` checks the current display time against the boundary constants `MIN_DISPLAY_DATE_MS` / `MAX_DISPLAY_DATE_MS` (from `es-time.ts`). When the limit is hit, the clock stops (if running) or the frozen value is clamped (if stopped). This mirrors iOS `ESWatchTime::checkAndConstrainAbsoluteTime()`.
+- The method is called after every time mutation (`step`, `setTime`, `setRate`, `setDirection`, `setOffset`, `checkTick`) and in the render-loop frame callback (for 1×/-1× with offset).
+- Date input fields in `applyDateInputs()` clamp the constructed date before passing it to `setTime()`.
+- `formatSimTime()` appends "⚠ earliest" or "⚠ latest" at the boundary.

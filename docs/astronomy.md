@@ -104,12 +104,34 @@ The `planetaryRiseSetTimeRefined` function returns a `RiseSetResult` with both `
 
 Determining whether a planet is currently above the horizon must use the same altitude threshold as the rise/set algorithm. iOS (`ECAstronomy.m` line 3427-3430) compares the planet's altitude against `altitudeAtRiseSet()` — a negative value accounting for atmospheric refraction and body semidiameter (~-0.8° to -1.0° for the Moon) — **not** against zero. Using `alt > 0` creates a several-minute gap near rise/set where the altitude check and the algorithm disagree, causing the day/night ring to briefly show tomorrow's event instead of today's.
 
+## Supported Date Range
+
+The Willmann-Bell series tables have finite validity:
+
+- **Planetary/Sun tables** (Bretagnon & Simon): 4000 BCE – 2800 CE
+- **Lunar tables** (Chapront-Touzé): 4000 BCE – 8000 CE
+
+The limiting factor is the planetary/sun tables: **4000 BCE to 2800 CE**. Outside this range, inner-planet polynomial series and sun position functions produce incorrect results.
+
+The `TimeController.clampDisplayTime()` method enforces this range, mirroring the iOS `ESWatchTime::checkAndConstrainAbsoluteTime()` function. When the display time reaches a boundary:
+
+- If time is running (any rate), the clock stops automatically
+- If time is stopped, the frozen value is clamped to the boundary
+
+The limit constants are defined in `es-time.ts`:
+
+- `ES_MIN_ASTRO_DATE = -189344476800.0` — Jan 1, 4000 BCE (Apple epoch seconds)
+- `ES_MAX_ASTRO_DATE = 25245561600.0` — Jan 1, 2801 CE (Apple epoch seconds)
+
+The time bar displays "⚠ earliest" or "⚠ latest" when at the boundary.
+
 ## Key Source Files
 
 | File | Purpose |
 |------|---------|
 | `src/astronomy/es-astro.ts` | Main astronomy API |
 | `src/astronomy/astro-cache.ts` | Per-frame result caching |
+| `src/astronomy/es-time.ts` | Date range constants (`ES_MIN_ASTRO_DATE`, `ES_MAX_ASTRO_DATE`) |
 | `src/watch/watch-env.ts` | Wires astronomy functions into the expression environment |
 
 ## Related Docs
@@ -117,4 +139,4 @@ Determining whether a planet is currently above the horizon must use the same al
 - [Expressions](expressions.md) — How astronomy functions are called from XML expressions
 - [iOS Reference](ios-reference.md) — Full tracing guide for opcodes
 - [Terminator](terminator.md) — Moon phase display using `moonAgeAngle` and `moonRelativePositionAngle`
-- [Development Rules](development-rules.md) — Never-simplify rule, NaN guards
+- [Development Rules](development-rules.md) — Never-simplify rule, NaN guards, date range constraint

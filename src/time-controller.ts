@@ -57,7 +57,7 @@ import {
     addMonthsToTimeInterval, addYearsToTimeInterval,
     localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
 } from './astronomy/es-calendar.js';
-import { dateToDateInterval, dateIntervalToDate } from './astronomy/es-time.js';
+import { dateToDateInterval, dateIntervalToDate, MIN_DISPLAY_DATE_MS, MAX_DISPLAY_DATE_MS } from './astronomy/es-time.js';
 
 // ============================================================================
 // Calendar-aware time arithmetic
@@ -322,6 +322,7 @@ export class TimeController {
             // new tickTime via the frame snapshot. Calling onTick() would
             // trigger rebuildAllForTime() which re-initializes hand states
             // and destroys animation state.
+            this.clampDisplayTime();
             return true;
         }
         return false;
@@ -373,6 +374,7 @@ export class TimeController {
         }
         this.nextTickTime = advanceByUnit(this.tickTime, rate.unit, this.direction);
         this.lastTickRealMs = performance.now();
+        this.clampDisplayTime();
         this.onTick?.();
     }
 
@@ -393,6 +395,7 @@ export class TimeController {
             this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, dir);
             this.lastTickRealMs = performance.now();
         }
+        this.clampDisplayTime();
         this.onTick?.();
     }
 
@@ -428,6 +431,7 @@ export class TimeController {
             this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
             this.lastTickRealMs = performance.now();
         }
+        this.clampDisplayTime();
         this.onTick?.();
     }
 
@@ -437,6 +441,7 @@ export class TimeController {
         this.tickTime = date;
         this.nextTickTime = date;
         this.offsetMs = date.getTime() - Date.now();
+        this.clampDisplayTime();
         this.onTick?.();
     }
 
@@ -461,7 +466,44 @@ export class TimeController {
         this.tickTime = new Date(Date.now() + ms);
         this.nextTickTime = new Date(Date.now() + ms);
         this.lastTickRealMs = 0;
+        this.clampDisplayTime();
         this.onTick?.();
+    }
+
+    // ========================================================================
+    // Date range constraint
+    // ========================================================================
+
+    /**
+     * Check if the current display time exceeds the supported astronomical
+     * range (4000 BCE – 2800 CE) and constrain it. Returns true if clamping
+     * occurred.
+     *
+     * Mirrors iOS ESWatchTime::checkAndConstrainAbsoluteTime:
+     * - If time is running, stop the clock at the boundary
+     * - If time is stopped, clamp the frozen value to the boundary
+     */
+    clampDisplayTime(): boolean {
+        const t = this.getDisplayTime().getTime();
+        if (t <= MIN_DISPLAY_DATE_MS) {
+            if (!this.stopped) {
+                this.stop();
+            }
+            this.tickTime = new Date(MIN_DISPLAY_DATE_MS);
+            this.nextTickTime = new Date(MIN_DISPLAY_DATE_MS);
+            this.offsetMs = MIN_DISPLAY_DATE_MS - Date.now();
+            return true;
+        }
+        if (t >= MAX_DISPLAY_DATE_MS) {
+            if (!this.stopped) {
+                this.stop();
+            }
+            this.tickTime = new Date(MAX_DISPLAY_DATE_MS);
+            this.nextTickTime = new Date(MAX_DISPLAY_DATE_MS);
+            this.offsetMs = MAX_DISPLAY_DATE_MS - Date.now();
+            return true;
+        }
+        return false;
     }
 
     // ========================================================================
