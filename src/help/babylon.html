@@ -1,44 +1,78 @@
-<b>Babylon</b> takes its name from the ancient city
-of <a href="http://en.m.wikipedia.org/wiki/Babylon">Babylon<img src="help/images/extlink.png"></a>,
-where early calendars were invented.
+<b>Babylon</b> takes its name from the ancient city of
+<a href="http://en.m.wikipedia.org/wiki/Babylon"
+  >Babylon<img src="help/images/extlink.png" /></a
+>, where early calendars were invented.
+
 <p>
-Babylon displays a whole-month calendar in the usual format, including
-the last days of the previous month
-and the first days of the following month.  See <a href="#mechanical">below</a> for a description of the mechanics being simulated.
+  Babylon displays a whole-month calendar in the usual format, including the
+  last days of the previous month and the first days of the following month. See
+  <a href="#mechanical">below</a> for a description of the mechanics being
+  simulated.
+</p>
+
 <p>
-Two sets of red indicator wires (two horizontal and two vertical) move linearly to indicate the current day of the month (more precisely, the two horizontal indicators show the week, the two vertical ones show the weekday, and their intersection shows the current day).
+  Two sets of red indicator wires (two horizontal and two vertical) move
+  linearly to indicate the current day of the month (more precisely, the two
+  horizontal indicators show the week, the two vertical ones show the weekday,
+  and their intersection shows the current day).
+</p>
+
 <p>
-A moon phase indicator like that of <a href="chandra.html">Chandra</a> is present at the lower left, along with a month display at the top and a year display at the lower right.
+  A moon phase indicator like that of
+  <a href="chandra.html">Chandra</a> is present at the lower left, along with a
+  month display at the top and a year display at the lower right.
+</p>
+
 <p>
-<a name="mechanical"><b>Mechanical model</b></a>
+  <a name="mechanical"><b>Mechanical model</b></a>
+</p>
+
 <p>
-The calendar display is implemented with stacked wheels which rotate to show the 
-configuration for the current month in the window at the top of the dial.
-There are two primary wheels:
+  The calendar display is implemented with stacked wheels which rotate to show
+  the configuration for the current month in the window at the top of the dial.
+  There are two primary wheels:
+</p>
+
 <p>
-<center>
-<img src="help/images/babylon/SundayWheel012@2x.png" width='240'/>
-<img src="help/images/babylon/SundayWheel3456@2x.png" width='239'/>
-</center>
+  <center>
+    <img src="help/images/babylon/SundayWheel012@2x.png" width="240" />
+    <img src="help/images/babylon/SundayWheel3456@2x.png" width="239" />
+  </center>
+</p>
+
 <p>
-Spread over these two wheels are the seven possible 31-day month
-configurations, corresponding to the seven weekdays that the first
-falls on.  The bottom wheel shows four of these seven, and the top one
-shows the remaining three and has a "cutout" in the fourth position.
-When one of the top wheel's configurations is needed for the current month, that
-configuration rotates around to be at the top and thus visible in the
-window; when one of the bottom wheel's configurations is needed, the
-top wheel rotates so its cutout section is at the top, letting the
-bottom wheel show through.
+  Spread over these two wheels are the seven possible 31-day month
+  configurations, corresponding to the seven weekdays that the first falls on.
+  The bottom wheel shows four of these seven, and the top one shows the
+  remaining three and has a "cutout" in the fourth position. When one of the top
+  wheel's configurations is needed for the current month, that configuration
+  rotates around to be at the top and thus visible in the window; when one of
+  the bottom wheel's configurations is needed, the top wheel rotates so its
+  cutout section is at the top, letting the bottom wheel show through.
+</p>
+
 <p>
-Since all of the configurations on the primary wheels display 31-day months, covers slide in from the right to cover days which don't exist in the current month (for example, as shown below, the missing days 30 and 31 in a leap-year February).  These covers are inscribed with the days of the following month, and their numbers align with the correct days of the week:
+  Since all of the configurations on the primary wheels display 31-day months,
+  covers slide in from the right to cover days which don't exist in the current
+  month (for example, as shown below, the missing days 30 and 31 in a leap-year
+  February). These covers are inscribed with the days of the following month,
+  and their numbers align with the correct days of the week:
+</p>
+
 <p>
-<center>
-<img src="help/images/babylon/NextMonthCovers@2x.png" width='110'/>
-</center>
+  <center>
+    <img src="help/images/babylon/NextMonthCovers@2x.png" width="110" />
+  </center>
+</p>
+
 <p>
-Similarly, the last few days of the previous month are shown with sliders that slide underneath the current month, sliding to show the days in their proper weekday positions:
+  Similarly, the last few days of the previous month are shown with sliders that
+  slide underneath the current month, sliding to show the days in their proper
+  weekday positions:
+</p>
+
 <p>
-<center>
-<img src="help/images/babylon/PrevMonthUnderlays@2x.png" width='106'/>
-</center>
+  <center>
+    <img src="help/images/babylon/PrevMonthUnderlays@2x.png" width="106" />
+  </center>
+</p>
