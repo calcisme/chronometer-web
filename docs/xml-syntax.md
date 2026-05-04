@@ -565,7 +565,8 @@ A procedurally rendered subdial showing the [Equation of Time](https://en.wikipe
 | `modes` | string | Rendering mode |
 | `radius` | expr | Dial arc radius (also sets the EOT hand length) |
 | `strokeColor` | color-expr | Color for ticks, labels, and arc |
-| `fontSize` | expr | Base font size for tick labels |
+| `fontSize` | expr | Base font size for tick labels and +/− symbols |
+| `titleFontSize` | expr | Font size for the title label (default: `fontSize × 3`) |
 
 ### Rendering Details
 
@@ -578,6 +579,37 @@ Rendered into the static cache via `drawEotDial()` in `renderer.ts`. The arc spa
 - A small black **axle dot** at the center
 
 Paired with a standard `<QHand>` using `angle='24 * EOTAngle()'` for the indicator needle.
+
+---
+
+## Vienna Noon/Midnight Toggle
+
+Vienna is a 24-hour watch face that supports switching between **midnight on top** (default) and **noon on top** dial orientations. This is controlled by the `noonOnTop` init variable.
+
+### XML init variables
+
+```xml
+<init expr='noonOnTop=0' />
+<init expr='dialFlip = noonOnTop ? pi : 0' />
+```
+
+- `noonOnTop=0` (default): midnight at 12 o'clock, dial text `'24,1,...,23'`, `dialFlip=0`
+- `noonOnTop=1`: noon at 12 o'clock, dial text `'12,13,...,11'`, `dialFlip=pi`
+
+`dialFlip` is used in the hour hand (`+dialFlip`), UT hand (`+dialFlip`), and day/night ring (`masterOffset='dialFlip'`) angle expressions to rotate all 24-hour elements by 180°.
+
+### URL persistence
+
+The `vnoon=1` URL parameter overrides `noonOnTop` after init block evaluation (in `watch-env.ts`), following the same pattern as `body=` for Venezia. Absent or `vnoon=0` = midnight on top.
+
+### UI
+
+A pill toggle ("Midnight ↑ | Noon ↑") in `#vienna-noon-toggle` is shown below the face in single-face mode. On toggle, the engine:
+1. Updates `noonOnTop` and `dialFlip` in `env.variables`
+2. Swaps the 24-hour dial text array
+3. Rebuilds the static cache
+4. Resets hand and analemma schedules
+5. Writes `vnoon=1` to the URL (or removes it)
 
 ---
 

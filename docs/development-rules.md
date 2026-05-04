@@ -90,6 +90,15 @@ When the URL specifies a body parameter, it must be applied **after** XML init b
 
 When switching bodies, preserve existing `HandState` objects rather than recreating them. Update the environment, reset schedules, and let the animation system interpolate from old to new target values for smooth transitions. (This is an instance of the general rule in §3.)
 
+### Vienna noon/midnight toggle
+
+Vienna's 24-hour dial supports switching between midnight-on-top (default) and noon-on-top via a `vnoon=1` URL parameter and a pill toggle in `#vienna-noon-toggle`. The toggle:
+1. Sets `noonOnTop` and `dialFlip` env variables (the XML uses `dialFlip` in hand angles and day/night ring `masterOffset`)
+2. Swaps the 24-hour dial number text on the parsed `QDialPart`
+3. Rebuilds the static cache and resets hand/analemma schedules
+
+This follows the same post-init-override pattern as `body=` (applied after init blocks in `watch-env.ts`).
+
 ## 9. If Blocked, Ask
 
 If you cannot implement the iOS algorithm directly, cannot find the source of a rendering bug, or believe a fundamental architectural constraint needs to be violated — **stop and ask the user** how to proceed. Do not attempt speculative workarounds.
