@@ -187,6 +187,10 @@ echo "  → pick.html"
 cp "$SRC/help.html" "$DIST/help.html"
 echo "  → help.html"
 
+# privacy.html — privacy policy (simple copy)
+cp "$SRC/privacy.html" "$DIST/privacy.html"
+echo "  → privacy.html"
+
 # cities-data.js — city database for location picker (if generated)
 if [ -f "$SRC/cities-data.js" ]; then
   cp "$SRC/cities-data.js" "$DIST/cities-data.js"
