@@ -12496,6 +12496,12 @@
           env.variables.set("bodySlot", bodySlot);
         }
       }
+      const vnoonParam = params.get("vnoon");
+      if (vnoonParam === "1" || vnoonParam === "0") {
+        const noonOnTop = parseInt(vnoonParam, 10);
+        env.variables.set("noonOnTop", noonOnTop);
+        env.variables.set("dialFlip", noonOnTop ? Math.PI : 0);
+      }
     }
     return env;
   }
@@ -18704,11 +18710,13 @@
       const timeBarEl = document.getElementById("time-bar");
       const planetSelectorEl = document.getElementById("planet-selector");
       const changeCitiesBtnEl = document.getElementById("change-cities-btn");
+      const viennaToggleEl = document.getElementById("vienna-noon-toggle");
       const panelH = locationPanel ? locationPanel.offsetHeight : 0;
       const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
       const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
       const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
-      const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH;
+      const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
+      const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH;
       if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
       resizeDebounceTimer = setTimeout(() => {
         resizeDebounceTimer = null;
@@ -19784,6 +19792,79 @@
         });
         nextBtn.addEventListener("click", () => {
           selectPlanet2((selectedIdx + 1) % planetOrder.length);
+        });
+      }
+    }
+    const viennaFace = faces.find((f) => f.watch.urlAbbrev === "vi");
+    if (viennaFace && isSingleFace) {
+      const toggleContainer = document.getElementById("vienna-noon-toggle");
+      if (toggleContainer) {
+        let isNoonOnTop2 = function() {
+          return (viennaFace.env.variables.get("noonOnTop") ?? 0) !== 0;
+        }, updatePillHighlight2 = function() {
+          const noon = isNoonOnTop2();
+          midnightPill.classList.toggle("active", !noon);
+          noonPill.classList.toggle("active", noon);
+        }, setNoonOnTop2 = function(noonOnTop) {
+          const val = noonOnTop ? 1 : 0;
+          viennaFace.env.variables.set("noonOnTop", val);
+          viennaFace.env.variables.set("dialFlip", noonOnTop ? Math.PI : 0);
+          if (numDial) {
+            numDial.text = noonOnTop ? NOON_TEXT : MIDNIGHT_TEXT;
+          }
+          viennaFace.cachesBuilt = false;
+          buildAllCachesSequentially([viennaFace], () => {
+            startScheduler();
+          });
+          finishAllAnimations();
+          resetAllSchedules();
+          if (viennaFace.analemmaState) {
+            viennaFace.analemmaState.lastUpdateTime = 0;
+          }
+          const params = new URLSearchParams(window.location.search);
+          if (noonOnTop) {
+            params.set("vnoon", "1");
+          } else {
+            params.delete("vnoon");
+          }
+          const qs = params.toString();
+          history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+          updateNavigationLinks();
+          updatePillHighlight2();
+        };
+        var isNoonOnTop = isNoonOnTop2, updatePillHighlight = updatePillHighlight2, setNoonOnTop = setNoonOnTop2;
+        toggleContainer.style.display = "flex";
+        const midnightPill = toggleContainer.querySelector('[data-mode="midnight"]');
+        const noonPill = toggleContainer.querySelector('[data-mode="noon"]');
+        const MIDNIGHT_TEXT = "24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23";
+        const NOON_TEXT = "12,13,14,15,16,17,18,19,20,21,22,23,24,1,2,3,4,5,6,7,8,9,10,11";
+        let numDial;
+        for (const p of viennaFace.watch.parts) {
+          if (p.type === "Static") {
+            const found = p.children.find(
+              (c) => c.type === "QDial" && c.name.trim() === "24 nums"
+            );
+            if (found) {
+              numDial = found;
+              break;
+            }
+          }
+          if (p.type === "QDial" && p.name.trim() === "24 nums") {
+            numDial = p;
+            break;
+          }
+        }
+        if (isNoonOnTop2() && numDial) {
+          numDial.text = NOON_TEXT;
+        }
+        updatePillHighlight2();
+        midnightPill.addEventListener("click", () => {
+          if (!isNoonOnTop2()) return;
+          setNoonOnTop2(false);
+        });
+        noonPill.addEventListener("click", () => {
+          if (isNoonOnTop2()) return;
+          setNoonOnTop2(true);
         });
       }
     }

@@ -1163,6 +1163,52 @@
         }
 
         /* YYYY */
+        /* ============= Vienna Noon Toggle ============= */
+
+        #vienna-noon-toggle {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            padding: 6px 16px 4px;
+            border-top: 1px solid #2a2a3e;
+            background: rgba(25, 25, 42, 0.9);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .noon-pill {
+            background: #2a2a3e;
+            border: 1px solid #3a3a5e;
+            color: #99b;
+            font-size: 12px;
+            padding: 5px 14px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+        }
+
+        .noon-pill:first-child {
+            border-radius: 12px 0 0 12px;
+            border-right: none;
+        }
+
+        .noon-pill:last-child {
+            border-radius: 0 12px 12px 0;
+        }
+
+        .noon-pill:hover {
+            background: #3a3a5e;
+            color: #ccf;
+        }
+
+        .noon-pill.active {
+            background: #445;
+            border-color: #8af;
+            color: #8af;
+        }
+
         /* ============= Planet Selector (Venezia) ============= */
 
         #planet-selector {
@@ -1296,6 +1342,10 @@ The angular positions of the other planets with respect to the Earth can be esti
                 <span id="planet-name">Jupiter</span>
                 <button class="planet-nav-btn" id="planet-next">▶</button>
             </div>
+        </div>
+        <div id="vienna-noon-toggle" style="display:none">
+            <button class="noon-pill" data-mode="midnight">Midnight ↑</button>
+            <button class="noon-pill" data-mode="noon">Noon ↑</button>
         </div>
         <div id="time-bar">
             <button id="time-bar-label">⏱ Show time controller</button>

@@ -241,6 +241,15 @@ export function createWatchEnvironment(
                 env.variables.set('bodySlot', bodySlot);
             }
         }
+
+        // URL param override for 'noonOnTop' (Vienna noon-on-top toggle via ?vnoon=1)
+        // Must run AFTER init blocks so it overrides the XML's default noonOnTop=0.
+        const vnoonParam = params.get('vnoon');
+        if (vnoonParam === '1' || vnoonParam === '0') {
+            const noonOnTop = parseInt(vnoonParam, 10);
+            env.variables.set('noonOnTop', noonOnTop);
+            env.variables.set('dialFlip', noonOnTop ? Math.PI : 0);
+        }
     }
 
     return env;

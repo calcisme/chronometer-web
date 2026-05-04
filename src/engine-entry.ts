@@ -32,7 +32,7 @@ import { buildStaticBlockCaches, renderFrame, invalidateDayNightCaches, buildHan
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
-import type { Watch } from './watch/types.js';
+import type { Watch, QDialPart } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
@@ -1519,11 +1519,13 @@ async function main() {
         const timeBarEl = document.getElementById('time-bar');
         const planetSelectorEl = document.getElementById('planet-selector');
         const changeCitiesBtnEl = document.getElementById('change-cities-btn');
+        const viennaToggleEl = document.getElementById('vienna-noon-toggle');
         const panelH = locationPanel ? locationPanel.offsetHeight : 0;
         const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
         const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
         const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
-        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH;
+        const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
+        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH;
         if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = setTimeout(() => {
             resizeDebounceTimer = null;
@@ -2874,6 +2876,106 @@ async function main() {
             });
             nextBtn.addEventListener('click', () => {
                 selectPlanet((selectedIdx + 1) % planetOrder.length);
+            });
+        }
+    }
+
+    // =========================================================================
+    // Vienna noon-on-top toggle (single-face mode only)
+    // =========================================================================
+    const viennaFace = faces.find(f => f.watch.urlAbbrev === 'vi');
+    if (viennaFace && isSingleFace) {
+        const toggleContainer = document.getElementById('vienna-noon-toggle');
+        if (toggleContainer) {
+            toggleContainer.style.display = 'flex';
+            const midnightPill = toggleContainer.querySelector('[data-mode="midnight"]') as HTMLButtonElement;
+            const noonPill = toggleContainer.querySelector('[data-mode="noon"]') as HTMLButtonElement;
+
+            // Midnight-on-top dial: '24,1,...,23' (24 at top, hand gets no offset)
+            const MIDNIGHT_TEXT = '24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23';
+            // Noon-on-top dial: '12,13,...,11' (12 at top, hand gets +pi)
+            const NOON_TEXT = '12,13,14,15,16,17,18,19,20,21,22,23,24,1,2,3,4,5,6,7,8,9,10,11';
+
+            // Find the 24-hour number dial part to swap its text
+            // It's inside a <static> block, so search children
+            let numDial: QDialPart | undefined;
+            for (const p of viennaFace.watch.parts) {
+                if (p.type === 'Static') {
+                    const found = p.children.find(
+                        c => c.type === 'QDial' && c.name.trim() === '24 nums'
+                    );
+                    if (found) { numDial = found as QDialPart; break; }
+                }
+                if (p.type === 'QDial' && p.name.trim() === '24 nums') {
+                    numDial = p; break;
+                }
+            }
+
+            function isNoonOnTop(): boolean {
+                return (viennaFace!.env.variables.get('noonOnTop') ?? 0) !== 0;
+            }
+
+            function updatePillHighlight() {
+                const noon = isNoonOnTop();
+                midnightPill.classList.toggle('active', !noon);
+                noonPill.classList.toggle('active', noon);
+            }
+
+            function setNoonOnTop(noonOnTop: boolean) {
+                const val = noonOnTop ? 1 : 0;
+                // 1. Update env variables
+                viennaFace!.env.variables.set('noonOnTop', val);
+                viennaFace!.env.variables.set('dialFlip', noonOnTop ? Math.PI : 0);
+
+                // 2. Swap dial text
+                if (numDial) {
+                    numDial.text = noonOnTop ? NOON_TEXT : MIDNIGHT_TEXT;
+                }
+
+                // 3. Rebuild static cache
+                viennaFace!.cachesBuilt = false;
+                buildAllCachesSequentially([viennaFace!], () => {
+                    startScheduler();
+                });
+
+                // 4. Reset hand schedules so they snap to new angles
+                finishAllAnimations();
+                resetAllSchedules();
+
+                // 5. Reset analemma schedule
+                if (viennaFace!.analemmaState) {
+                    viennaFace!.analemmaState.lastUpdateTime = 0;
+                }
+
+                // 6. Update URL
+                const params = new URLSearchParams(window.location.search);
+                if (noonOnTop) {
+                    params.set('vnoon', '1');
+                } else {
+                    params.delete('vnoon');
+                }
+                const qs = params.toString();
+                history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+                updateNavigationLinks();
+
+                // 7. Update pill highlight
+                updatePillHighlight();
+            }
+
+            // Apply initial state from URL (env already has the right value from watch-env.ts)
+            if (isNoonOnTop() && numDial) {
+                numDial.text = NOON_TEXT;
+                // Static cache hasn't been built yet, so no rebuild needed here
+            }
+            updatePillHighlight();
+
+            midnightPill.addEventListener('click', () => {
+                if (!isNoonOnTop()) return; // already selected
+                setNoonOnTop(false);
+            });
+            noonPill.addEventListener('click', () => {
+                if (isNoonOnTop()) return; // already selected
+                setNoonOnTop(true);
             });
         }
     }

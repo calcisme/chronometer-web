@@ -26,6 +26,10 @@
   <init		expr='r=143, ri=r-5, rb=faceR+1, th=26, bx=r*cos(th*pi/180), by=r*sin(th*pi/180), dr=8, mx=dr*cos(th*pi/180), my=dr*sin(th*pi/180)' />
   <init         expr='moonclrn=0xffc08711' />
 
+<!-- noon-on-top toggle: noonOnTop=0 means midnight at 12-o'clock (default) -->
+  <init         expr='noonOnTop=0' />
+  <init         expr='dialFlip = noonOnTop ? pi : 0' />
+
 <!-- colors -->
   <init		expr='fgColor=black, fg2Color=0xff800000, secColor=red, nfgclr2=0xff008080, wheelFg=black, wheelBg=0xfff0e7da, windowBorderClr=0x40000000' />
 
@@ -56,7 +60,7 @@
     <QDial	name='min tic'	    x='0' y='0'	modes='front' radius='ticR'  markWidth='1.5' marks='tickOut' nMarks=' 12' mSize='7' bgColor='clear' />
     <QDial	name='min tic2'	    x='0' y='0'	modes='front' radius='ticR'  markWidth='0.7' marks='tickOut' nMarks=' 60' mSize='7' bgColor='clear' />
     <QDial	name='submin tic'   x='0' y='0'	modes='front' radius='ticR'  markWidth='0.5' marks='tickOut' nMarks='240' mSize='4' bgColor='clear' />
-    <QDial	name='24 nums'      x='0' y='0'	modes='front' radius='hrDialR+0.5' orientation='demi' demiTweak='0' fontSize='hrSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='12,13,14,15,16,17,18,19,20,21,22,23,24,1,2,3,4,5,6,7,8,9,10,11' />
+    <QDial	name='24 nums'      x='0' y='0'	modes='front' radius='hrDialR+0.5' orientation='demi' demiTweak='0' fontSize='hrSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23' />
     <QDial	name='ring backg ' x='0' y='0'	modes='front' radius='dnR' markWidth='5' marks='tickOut' nMarks='240' mSize='ringW' bgColor='clear' />
     <QDial	name='x1'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='0' />
     <QDial	name='x2'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='pi/2' />
@@ -68,10 +72,10 @@
 <!-- the day/night rings that make this a *proper* 24-hour watch -->
 <!-- and moon day/night rings for the amateur astronomer! -->
   <QdayNightRing name='moontime '    x='0' y='0' modes='front' outerRadius='ringOR' innerRadius='ringIR' update='5' strokeColor='0xff202020'  fillColor='moonLeafFill' input='0' numWedges='dnNum'
-  planetNumber='planetMoon' masterOffset='pi' />
+  planetNumber='planetMoon' masterOffset='dialFlip' />
   
   <QdayNightRing name='daytime'	    x='0' y='0' modes='front' outerRadius='ringOR' innerRadius='ringIR' update='5' strokeColor='leafBorder'  fillColor='leafFill' input='0' numWedges='dnNum'
-  planetNumber='planetSun' masterOffset='pi' />
+  planetNumber='planetSun' masterOffset='dialFlip' />
   
 
 <!-- the analemma: Sun figure-eight path in the bottom half of the face -->
@@ -90,10 +94,10 @@
   />
 
 <!-- the UTC hand -->
-  <Qhand        name='UT hand'	    x='0'   y='0' z='3' thick='1.5' modes='front' kind='hour24Kind' length='109' length2='95' width='3.5' tail='0' update='1' angle='hour24ValueAngle()-tzOffsetAngle()+pi' strokeColor='utHand' fillColor='utHand' />
+  <Qhand        name='UT hand'	    x='0'   y='0' z='3' thick='1.5' modes='front' kind='hour24Kind' length='109' length2='95' width='3.5' tail='0' update='1' angle='hour24ValueAngle()-tzOffsetAngle()+dialFlip' strokeColor='utHand' fillColor='utHand' />
     
 <!-- regular (24h) hands -->
-  <Qhand	name='hr'	    x='0' y='0'	z='4' thick='3' modes='front'	 kind='hour24Kind'  type='tri'  length='hrLen'  width='hrWid'   tail='hrLen/4'  update='  1' angle='hour24ValueAngle()+pi' strokeColor='fgColor' fillColor='fgColor'/>
+  <Qhand	name='hr'	    x='0' y='0'	z='4' thick='3' modes='front'	 kind='hour24Kind'  type='tri'  length='hrLen'  width='hrWid'   tail='hrLen/4'  update='  1' angle='hour24ValueAngle()+dialFlip' strokeColor='fgColor' fillColor='fgColor'/>
   <Qhand	name='min'	    x='0' y='0'	z='4' thick='3' modes='front' kind='minuteKind'  type='tri'  length='minLen' width='minWid'  tail='minLen/4' update='.25' angle='minuteValueAngle()' strokeColor='fgColor' fillColor='fgColor'/>
   <Qhand	name='sec'	    x='0' y='0'	z='4' thick='3' modes='front' kind='secondKind'  type='tri'  length='secLen' width='secWid'  tail='secLen/4' update='.125' angle='secondValueAngle()' strokeColor='secColor' fillColor='secColor'/>
 
