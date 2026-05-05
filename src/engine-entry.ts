@@ -1510,6 +1510,20 @@ async function main() {
         });
     }
 
+    /** Manually trigger a grid resize recalculation (used when UI elements
+     *  change visibility without changing the viewport size). */
+    function triggerManualResize() {
+        const appEl = grid.parentElement!;
+        const W = appEl.clientWidth;
+        const totalH = appEl.clientHeight;
+        const locPanelH = document.getElementById('location-panel')?.offsetHeight ?? 0;
+        const tbH = document.getElementById('time-bar')?.offsetHeight ?? 0;
+        const psH = document.getElementById('planet-selector')?.offsetHeight ?? 0;
+        const ccH = document.getElementById('change-cities-btn')?.offsetHeight ?? 0;
+        const vtH = document.getElementById('vienna-noon-toggle')?.offsetHeight ?? 0;
+        onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH);
+    }
+
     const resizeObserver = new ResizeObserver((entries) => {
         const entry = entries[0];
         if (!entry) return;
@@ -1587,14 +1601,7 @@ async function main() {
         // The ResizeObserver watches #app (viewport-sized) so it won't fire.
         // Defer a manual resize recalc so the face size accounts for the new panel height.
         requestAnimationFrame(() => {
-            const appEl = grid.parentElement!;
-            const W = appEl.clientWidth;
-            const totalH = appEl.clientHeight;
-            const locPanelH = document.getElementById('location-panel')?.offsetHeight ?? 0;
-            const tbH = document.getElementById('time-bar')?.offsetHeight ?? 0;
-            const psH = document.getElementById('planet-selector')?.offsetHeight ?? 0;
-            const ccH = document.getElementById('change-cities-btn')?.offsetHeight ?? 0;
-            onGridResize(W, totalH - locPanelH - tbH - psH - ccH);
+            triggerManualResize();
         });
         // Kick the scheduler to start animating immediately
         stopScheduler();
