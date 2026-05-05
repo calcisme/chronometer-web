@@ -122,6 +122,8 @@ export interface QDialPart extends PartBase {
     kind?: string;
     z?: ASTNode;
     thick?: ASTNode;
+    /** Optional animation state for orientation rotation (used by Vienna noon/midnight toggle). */
+    _orientationAnim?: import('../watch/animation.js').AnimatingValue;
 }
 
 // ============================================================================

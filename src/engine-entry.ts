@@ -797,11 +797,14 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
             tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
-            // Tick any in-flight QDayNightRing masterOffset animations
+            // Tick any in-flight QDayNightRing / QDial toggle animations
             for (const part of face.watch.parts) {
                 if (part.type === 'QDayNightRing' && part._masterOffsetAnim && part._masterOffsetAnim.animating) {
                     interpolateValue(part._masterOffsetAnim, now);
                     part._cachedAngles = undefined; // force re-draw with new offset
+                }
+                if (part.type === 'QDial' && part._orientationAnim && part._orientationAnim.animating) {
+                    interpolateValue(part._orientationAnim, now);
                 }
             }
             if (face.terminatorLeaves.length > 0) {
@@ -942,7 +945,10 @@ async function main() {
             }
             renderMs += performance.now() - renderStart;
 
-            const ringAnimating = face.watch.parts.some(p => p.type === 'QDayNightRing' && p._masterOffsetAnim?.animating);
+            const ringAnimating = face.watch.parts.some(p =>
+                (p.type === 'QDayNightRing' && p._masterOffsetAnim?.animating) ||
+                (p.type === 'QDial' && p._orientationAnim?.animating)
+            );
             const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
             if (faceAnimating) {
                 stillAnimating = true;
@@ -2960,7 +2966,7 @@ async function main() {
                     hs.nextUpdateTime = 0;
                 }
 
-                // 5. Start masterOffset animation on each QDayNightRing part
+                // 5. Start masterOffset / orientation animations on ring and dial parts
                 // previousFlip is the value before the toggle (opposite of targetFlip)
                 const previousFlip = noonOnTop ? 0 : Math.PI;
                 for (const part of viennaFace!.watch.parts) {
@@ -2970,8 +2976,14 @@ async function main() {
                         }
                         // Invalidate wedge angle cache so ring re-draws each frame
                         part._cachedAngles = undefined;
-                        // Start animation from current position to target
                         startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1.0);
+                    }
+                    // Animate the 24-hour number dial rotation
+                    if (part.type === 'QDial' && part.name === '24 nums') {
+                        if (!part._orientationAnim) {
+                            part._orientationAnim = makeAnimatingValue(previousFlip, now);
+                        }
+                        startAnimationRaw(part._orientationAnim, targetFlip, now, 1.0);
                     }
                 }
 

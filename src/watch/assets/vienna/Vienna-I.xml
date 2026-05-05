@@ -57,12 +57,14 @@
     <QDial	name='min tic'	    x='0' y='0'	modes='front' radius='ticR'  markWidth='1.5' marks='tickOut' nMarks=' 12' mSize='7' bgColor='clear' />
     <QDial	name='min tic2'	    x='0' y='0'	modes='front' radius='ticR'  markWidth='0.7' marks='tickOut' nMarks=' 60' mSize='7' bgColor='clear' />
     <QDial	name='submin tic'   x='0' y='0'	modes='front' radius='ticR'  markWidth='0.5' marks='tickOut' nMarks='240' mSize='4' bgColor='clear' />
-    <QDial	name='24 nums'      x='0' y='0'	modes='front' radius='hrDialR+0.5' orientation='demi' demiTweak='0' fontSize='hrSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23' />
     <QDial	name='ring backg ' x='0' y='0'	modes='front' radius='dnR' markWidth='5' marks='tickOut' nMarks='240' mSize='ringW' bgColor='clear' />
     <QDial	name='x1'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='0' />
     <QDial	name='x2'	    x='0' y='0'	modes='front' radius='dnR' bgColor='clear' marks='line' markWidth='.25' nMarks='1' angle1='pi/2' />
     <eotDial    name='eot dial'     x='0' y='ly+6' modes='front' radius='36.5' strokeColor='fgColor' fontSize='4.25' titleFontSize='11.15' />
   </static>
+
+<!-- 24-hour numbers: outside static block so they can animate during noon/midnight toggle -->
+  <QDial	name='24 nums'      x='0' y='0'	modes='front' radius='hrDialR+0.5' orientation='demi' demiTweak='0' fontSize='hrSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23' />
 
   <Qhand	name='EOT'	    x=' 0'  y='ly+6' z='2' thick='3' modes='front'  length='36.5' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgColor' fillColor='fgColor' />
 

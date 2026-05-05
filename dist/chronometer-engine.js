@@ -15067,6 +15067,9 @@
     const marks = parseMarksType(part.marks);
     ctx.save();
     ctx.translate(x, y);
+    if (part._orientationAnim) {
+      ctx.rotate(part._orientationAnim.currentValue);
+    }
     if (bgColor !== "rgba(0,0,0,0)") {
       ctx.fillStyle = bgColor;
       ctx.beginPath();
@@ -18217,6 +18220,9 @@
             interpolateValue(part._masterOffsetAnim, now);
             part._cachedAngles = void 0;
           }
+          if (part.type === "QDial" && part._orientationAnim && part._orientationAnim.animating) {
+            interpolateValue(part._orientationAnim, now);
+          }
         }
         if (face.terminatorLeaves.length > 0) {
           tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
@@ -18321,7 +18327,9 @@
           ctx2d.restore();
         }
         renderMs += performance.now() - renderStart;
-        const ringAnimating = face.watch.parts.some((p) => p.type === "QDayNightRing" && p._masterOffsetAnim?.animating);
+        const ringAnimating = face.watch.parts.some(
+          (p) => p.type === "QDayNightRing" && p._masterOffsetAnim?.animating || p.type === "QDial" && p._orientationAnim?.animating
+        );
         const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
         if (faceAnimating) {
           stillAnimating = true;
@@ -19840,6 +19848,12 @@
               }
               part._cachedAngles = void 0;
               startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1);
+            }
+            if (part.type === "QDial" && part.name === "24 nums") {
+              if (!part._orientationAnim) {
+                part._orientationAnim = makeAnimatingValue(previousFlip, now);
+              }
+              startAnimationRaw(part._orientationAnim, targetFlip, now, 1);
             }
           }
           if (viennaFace.terminatorLeaves.length > 0) {

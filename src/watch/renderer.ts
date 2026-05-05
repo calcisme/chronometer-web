@@ -1256,6 +1256,11 @@ function drawQDial(
     ctx.save();
     ctx.translate(x, y);
 
+    // Apply animated orientation rotation (e.g. Vienna noon/midnight toggle)
+    if (part._orientationAnim) {
+        ctx.rotate(part._orientationAnim.currentValue);
+    }
+
     // Background fill
     if (bgColor !== 'rgba(0,0,0,0)') {
         ctx.fillStyle = bgColor;
