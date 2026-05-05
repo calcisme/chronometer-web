@@ -131,7 +131,7 @@ open dist/index.html
 open "dist/mauna-kea.html?lat=37.33182&lon=-122.03118"
 ```
 
-TypeScript type checking (no emit):
+TypeScript type checking runs automatically as the first step of `build.sh` (via `npx tsc --noEmit`). The build will abort on any type error. To run it standalone:
 ```bash
 npx tsc --noEmit
 ```
