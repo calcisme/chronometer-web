@@ -132,6 +132,7 @@ The time bar displays "⚠ earliest" or "⚠ latest" when at the boundary.
 | `src/astronomy/es-astro.ts` | Main astronomy API |
 | `src/astronomy/astro-cache.ts` | Per-frame result caching |
 | `src/astronomy/es-time.ts` | Date range constants (`ES_MIN_ASTRO_DATE`, `ES_MAX_ASTRO_DATE`) |
+| `src/watch/astro-stepper.ts` | Astronomical event stepping (rise/set, moon phase, transit search) |
 | `src/watch/watch-env.ts` | Wires astronomy functions into the expression environment |
 
 ## Related Docs
@@ -139,4 +140,5 @@ The time bar displays "⚠ earliest" or "⚠ latest" when at the boundary.
 - [Expressions](expressions.md) — How astronomy functions are called from XML expressions
 - [iOS Reference](ios-reference.md) — Full tracing guide for opcodes
 - [Terminator](terminator.md) — Moon phase display using `moonAgeAngle` and `moonRelativePositionAngle`
+- [Animation](animation.md) — Astro Step Mode: how event stepping integrates with the animation engine
 - [Development Rules](development-rules.md) — Never-simplify rule, NaN guards, date range constraint

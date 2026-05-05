@@ -148,6 +148,26 @@ Used for hold-to-scrub at rates like 10 hr/s, 10 day/s:
 - Animations use natural speed (no compression)
 - `ensureSchedulerRunning()` keeps the rAF loop running while `anyAnimating` is true
 
+### Astro Step Mode
+
+- Triggered by tapping a ◀/▶ button on the **Astro tab** of the time controller
+- Jumps to the next/previous occurrence of an astronomical event (sunrise, sunset, moonrise, moonset, moon phase, transit)
+- **Flow**: `stop()` → `finishAllAnimations()` → `setTime(targetDate)` → `beginFrame()` → `tickAnimations()` per face → `endFrame()` → `startScheduler()`
+- Uses `computeAstroTarget()` (in `src/watch/astro-stepper.ts`) to find the event time
+- **Degree/radian conversion**: `lat`/`lon` are stored in degrees in `engine-entry.ts` but the astronomy routines expect radians; the handler converts with `× Math.PI / 180`
+- **Invalid date guard**: If the astro computation returns `null` or `NaN`, the button flashes red and no time change occurs (prevents time controller corruption)
+- **Venezia body swap**: On single-face Venezia, the moonrise/moonset/moon-transit rows are replaced with body-aware versions that use the currently selected planet. The body param propagates to navigation links via `updateNavigationLinks()`
+
+#### Astro Event Search Algorithms
+
+| Event | Function | Source |
+|-------|----------|--------|
+| Sunrise/Sunset | `findNextRiseSet()` | Ports iOS `nextPrevRiseSetInternal` via `planetaryRiseSetTimeRefined` |
+| Moonrise/Moonset | `findNextRiseSet()` | Same as above with `ECPlanetNumber.Moon` |
+| Moon Phase | `findNextQuarterPhase()` | Ports iOS `nextMoonPhase()` / `prevMoonPhase()` using `refineMoonAgeTargetForDate` |
+| Sun/Moon Transit | `findNextTransit()` | Uses `planettransitTimeRefined` with 12-hour fudge to avoid same-transit convergence |
+| Body Rise/Set/Transit | Same as above | Uses the selected body's `ECPlanetNumber` from Venezia's planet selector |
+
 ## Hold-Scrub Time Preservation
 
 When holding a step button, `timeController.setRate()` starts quantized scrubbing. The rate activation includes a `snapToUnit()` call that aligns to the nearest boundary.
@@ -161,6 +181,7 @@ When holding a step button, `timeController.setRate()` starts quantized scrubbin
 | Transition | What happens |
 |-----------|--------------|
 | **Single tap** | Stop time, snap in-flight animations, step by one unit, animate at natural speed |
+| **Astro tap** | Stop time, snap in-flight, compute next event, `setTime()`, animate all hands to new positions |
 | **Hold → scrub** | After 300ms hold delay, enter quantized mode. `resetHandSchedules()` forces immediate re-eval |
 | **Pause** | Freeze display time. `finishAnimations()` snaps all hands to targets |
 | **Resume (Play)** | Unfreeze at 1×. `resetHandSchedules()` forces immediate re-eval with normal scheduling |
@@ -209,6 +230,7 @@ The terminator leaf system (`terminator.ts`) also uses the unified core via `sta
 | File | Purpose |
 |------|---------|
 | `src/watch/animation.ts` | All animation logic: hand states, ticking, interpolation, unified core |
+| `src/watch/astro-stepper.ts` | Astronomical event stepping: rise/set, moon phase, transit search |
 | `src/watch/terminator.ts` | Moon-phase leaf animation (uses unified core) |
 | `src/time-controller.ts` | Display time management, rate control, tick scheduling |
 | `src/engine-entry.ts` | Main loop, scheduler, transition handling, `makeGetNow` |

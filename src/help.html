@@ -175,6 +175,8 @@
         <span class="sep">·</span>
         <a href="#eclipses" target="_self">Eclipses</a>
         <span class="sep">·</span>
+        <a href="#astro-stepping" target="_self">Astro Stepping</a>
+        <span class="sep">·</span>
         <a href="#physics" target="_self">Physics</a>
     </div>
 
@@ -482,6 +484,54 @@
     </div>
     </details>
 
+
+    <!-- ================================================================ -->
+    <details class="help-section" id="astro-stepping">
+    <summary>Astronomical Event Stepping</summary>
+    <div class="section-body">
+    <!-- ================================================================ -->
+
+    <h3>Overview</h3>
+    <p>The time controller popover has two tabs at the bottom: <b>Date</b> and <b>Astro</b>.
+    The Date tab allows you to set a specific date and time. The Astro tab allows you to
+    jump forward or backward to the next occurrence of specific astronomical events.</p>
+
+    <h3>Available events</h3>
+    <p>The Astro tab provides forward (▶) and backward (◀) buttons for the following events:</p>
+    <ul>
+        <li><b>Sunrise</b> — Jump to the next or previous sunrise at your location</li>
+        <li><b>Sunset</b> — Jump to the next or previous sunset</li>
+        <li><b>Moonrise</b> — Jump to the next or previous moonrise</li>
+        <li><b>Moonset</b> — Jump to the next or previous moonset</li>
+        <li><b>Moon Phase</b> — Jump to the next or previous lunar quarter phase
+            (new moon, first quarter, full moon, or third quarter)</li>
+        <li><b>Sun Transit</b> — Jump to the next or previous solar noon
+            (when the Sun crosses the local meridian)</li>
+        <li><b>Moon Transit</b> — Jump to the next or previous lunar transit</li>
+        <li><b>Planetary events</b> — (only on Venezia) see below</li>
+    </ul>
+
+    <h3>Venezia body selection</h3>
+    <p>When viewing the Venezia watch face in single-face mode, the Moonrise, Moonset,
+    and Moon Transit rows are replaced with body-specific versions that follow the
+    currently selected planet in Venezia's planet selector. For example, if Jupiter
+    is selected, these rows become "Jupiter Rise", "Jupiter Set", and "Jupiter Xit".
+    The Moon Phase row always remains lunar, since other planets do not have the
+    same quarter-phase cycle as the Moon.</p>
+
+    <h3>How it works</h3>
+    <p>Each tap stops the clock (if running) and jumps directly to the computed event
+    time. The watch hands animate smoothly to their new positions. You can tap
+    repeatedly to step through successive events — for example, tapping ▶ on Sunrise
+    multiple times will step through successive sunrises.</p>
+    <p>If no event can be found (for example, trying to find a sunrise at an extreme
+    polar latitude during polar night), the button will flash briefly to indicate
+    that no result was found.</p>
+    <p>The Astro tab selection is preserved in the URL, so it persists when
+    navigating between watch face pages.</p>
+
+    </div>
+    </details>
 
     <!-- ================================================================ -->
     <details class="help-section" id="physics">

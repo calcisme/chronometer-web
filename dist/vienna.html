@@ -1163,6 +1163,90 @@
         }
 
         /* YYYY */
+
+        /* ============= Tab strip for lower panel ============= */
+
+        #tp-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 8px;
+        }
+
+        .tp-tab {
+            flex: 1;
+            background: #222238;
+            border: 1px solid #3a3a5e;
+            color: #667;
+            font-size: 11px;
+            padding: 5px 8px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            text-align: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .tp-tab:first-child {
+            border-radius: 6px 0 0 6px;
+            border-right: none;
+        }
+
+        .tp-tab:last-child {
+            border-radius: 0 6px 6px 0;
+        }
+
+        .tp-tab.active {
+            background: #2a2a3e;
+            border-color: #8af;
+            color: #8af;
+        }
+
+        .tp-tab:hover:not(.active) {
+            color: #99b;
+            background: #2a2a44;
+        }
+
+        .tp-tab-pane {
+            /* panes shown/hidden via JS display toggle */
+        }
+
+        /* ============= Astro stepper rows ============= */
+
+        .tp-astro-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 3px;
+        }
+
+        .tp-astro-btn {
+            flex: 0 0 auto;
+            font-size: 11px;
+            padding: 4px 8px;
+            min-width: 28px;
+        }
+
+        .tp-astro-label {
+            flex: 1;
+            font-size: 12px;
+            color: #99b;
+            text-align: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Highlighted body name on Venezia */
+        .tp-body-label {
+            color: #8af;
+        }
+
+        .tp-astro-btn.flash-fail {
+            background: #432;
+            border-color: #754;
+            color: #a86;
+            transition: none;
+        }
+
         /* ============= Vienna Noon Toggle ============= */
 
         #vienna-noon-toggle {
@@ -1495,16 +1579,75 @@ day.
                 </div>
             </div>
             <div id="tp-lower">
-                <div class="tp-label">Set Date &amp; Time</div>
-                <div class="tp-date-inputs">
-                    <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
-                    <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
-                    <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
+                <div id="tp-tabs">
+                    <button class="tp-tab active" data-tab="date">Date</button>
+                    <button class="tp-tab" data-tab="astro">Astro</button>
                 </div>
-                <div class="tp-date-inputs">
-                    <button id="tp-bce" title="Toggle BCE (Before Common Era)">CE</button>
-                    <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
-                    <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
+                <div id="tp-tab-date" class="tp-tab-pane">
+                    <div class="tp-label">Set Date &amp; Time</div>
+                    <div class="tp-date-inputs">
+                        <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
+                        <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
+                        <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
+                    </div>
+                    <div class="tp-date-inputs">
+                        <button id="tp-bce" title="Toggle BCE (Before Common Era)">CE</button>
+                        <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
+                        <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
+                    </div>
+                </div>
+                <div id="tp-tab-astro" class="tp-tab-pane" style="display:none">
+                    <div class="tp-label">Astronomical Events</div>
+                    <div class="tp-astro-row">
+                        <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Sunrise</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row">
+                        <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Sunset</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row" id="tp-astro-moonrise">
+                        <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Moonrise</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row" id="tp-astro-body-rise" style="display:none">
+                        <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="-1">◀</button>
+                        <span class="tp-astro-label tp-body-label" id="tp-body-rise-label">Moon Rise</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row" id="tp-astro-moonset">
+                        <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Moonset</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row" id="tp-astro-body-set" style="display:none">
+                        <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="-1">◀</button>
+                        <span class="tp-astro-label tp-body-label" id="tp-body-set-label">Moon Set</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row">
+                        <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Moon Phase</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row">
+                        <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Sun Transit</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row" id="tp-astro-moon-transit">
+                        <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="-1">◀</button>
+                        <span class="tp-astro-label">Moon Transit</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="1">▶</button>
+                    </div>
+                    <div class="tp-astro-row" id="tp-astro-body-transit" style="display:none">
+                        <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="-1">◀</button>
+                        <span class="tp-astro-label tp-body-label" id="tp-body-transit-label">Moon Xit</span>
+                        <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="1">▶</button>
+                    </div>
                 </div>
             </div>
         </div>

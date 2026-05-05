@@ -855,7 +855,7 @@ function stepRefineMoonAgeTarget(
  * @param targetAge - Target moon age angle (radians)
  * @returns Refined dateInterval when moon age ≈ targetAge
  */
-function refineMoonAgeTargetForDate(
+export function refineMoonAgeTargetForDate(
     dateInterval: number,
     targetAge: number,
 ): number {

@@ -46,6 +46,8 @@ import type { CityResult } from './city-search.js';
 import { renderGlobe, loadOSMTile } from './mini-map.js';
 import { resolveTimezone } from './tz-resolve.js';
 import { findNextDstTransition, findPrevDstTransition } from './dst-detect.js';
+import { computeAstroTarget } from './watch/astro-stepper.js';
+import type { AstroEventType } from './watch/astro-stepper.js';
 import {
     localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
     kECJulianGregorianSwitchoverTimeInterval,
@@ -2632,6 +2634,103 @@ async function main() {
         });
     });
 
+    // =========================================================================
+    // Tab switching: Date / Astro in lower panel
+    // =========================================================================
+    const tpTabDate = document.getElementById('tp-tab-date');
+    const tpTabAstro = document.getElementById('tp-tab-astro');
+    const tpTabs = timePopover.querySelectorAll('.tp-tab');
+
+    function switchTab(tabName: 'd' | 'a') {
+        if (tpTabDate && tpTabAstro) {
+            tpTabDate.style.display = tabName === 'd' ? '' : 'none';
+            tpTabAstro.style.display = tabName === 'a' ? '' : 'none';
+        }
+        tpTabs.forEach(btn => {
+            const el = btn as HTMLElement;
+            el.classList.toggle('active', el.dataset.tab === (tabName === 'a' ? 'astro' : 'date'));
+        });
+        writeUrlState({ tp: tabName });
+    }
+
+    // Initialize tab from URL state
+    const initialTab = urlState.tp;
+    if (initialTab === 'a') {
+        switchTab('a');
+    }
+
+    tpTabs.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = btn as HTMLElement;
+            switchTab(el.dataset.tab === 'astro' ? 'a' : 'd');
+        });
+    });
+
+    // =========================================================================
+    // Astronomical event stepper buttons
+    // =========================================================================
+    function handleAstroStep(eventType: AstroEventType, dir: 1 | -1, btnEl: HTMLElement) {
+        // Determine the body planet number for body-* events (Venezia)
+        let bodyPlanetNumber: number | undefined;
+        if (eventType === 'body-transit' || eventType === 'body-rise' || eventType === 'body-set') {
+            const bodyLabel = document.getElementById('tp-body-transit-label');
+            bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || '1', 10) : 1;
+        }
+
+        const targetDate = computeAstroTarget(
+            eventType, dir, timeController.getDisplayTime(),
+            lat * Math.PI / 180, lon * Math.PI / 180, bodyPlanetNumber,
+        );
+
+        if (!targetDate || isNaN(targetDate.getTime())) {
+            // No event found or invalid result — flash the button
+            btnEl.classList.add('flash-fail');
+            setTimeout(() => btnEl.classList.remove('flash-fail'), 300);
+            return;
+        }
+
+        // Identical to single-tap time step:
+        timeController.stop();
+        finishAllAnimations();
+        timeController.setTime(targetDate);
+        timeController.beginFrame();
+        const stepNow = performance.now();
+        for (const face of faces) {
+            if (!face.enabled || !face.cachesBuilt) continue;
+            resetHandSchedules(face.handStates);
+            resetLeafSchedules(face.terminatorLeaves);
+            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
+            tickAnimations(face.handStates, face.env, stepNow, null, 0, 1);
+            tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
+        }
+        timeController.endFrame();
+        updateTimeUI();
+        ensureSchedulerRunning();
+        writeTimeState();
+    }
+
+    timePopover.querySelectorAll('[data-astro]').forEach(btn => {
+        const el = btn as HTMLElement;
+        const eventType = el.dataset.astro as AstroEventType;
+        const dir = parseInt(el.dataset.dir || '1', 10) as 1 | -1;
+
+        // Mouse events (no hold timer — tap only)
+        el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAstroStep(eventType, dir, el);
+        });
+
+        // Touch events
+        el.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleAstroStep(eventType, dir, el);
+        });
+    });
+
+
     // --- Shared: read date inputs and apply via hybrid calendar ---
     function applyDateInputs() {
         const yr = parseInt((document.getElementById('tp-year') as HTMLInputElement).value, 10);
@@ -2853,6 +2952,38 @@ async function main() {
 
             nameLabel.textContent = planetOrder[selectedIdx].name;
 
+            // ECPlanetNumber mapping for the planetOrder array
+            // Sun=0, Moon=1, Mercury=2, Venus=3, Mars=5, Jupiter=6, Saturn=7, Uranus=8, Neptune=9
+            const planetNumberForIdx = [0, 1, 2, 3, 5, 6, 7, 8, 9];
+
+            // --- Body-transit row in astro panel ---
+            // On single-face Venezia, replace Moon rows with body-aware rows
+            const moonRiseRow = document.getElementById('tp-astro-moonrise');
+            const bodyRiseRow = document.getElementById('tp-astro-body-rise');
+            const bodyRiseLabel = document.getElementById('tp-body-rise-label');
+            const moonSetRow = document.getElementById('tp-astro-moonset');
+            const bodySetRow = document.getElementById('tp-astro-body-set');
+            const bodySetLabel = document.getElementById('tp-body-set-label');
+            const moonTransitRow = document.getElementById('tp-astro-moon-transit');
+            const bodyTransitRow = document.getElementById('tp-astro-body-transit');
+            const bodyTransitLabel = document.getElementById('tp-body-transit-label');
+
+            // Swap moon rows for body rows
+            if (moonRiseRow && bodyRiseRow) { moonRiseRow.style.display = 'none'; bodyRiseRow.style.display = ''; }
+            if (moonSetRow && bodySetRow) { moonSetRow.style.display = 'none'; bodySetRow.style.display = ''; }
+            if (moonTransitRow && bodyTransitRow) { moonTransitRow.style.display = 'none'; bodyTransitRow.style.display = ''; }
+
+            // Helper to update all body labels
+            function updateBodyLabels(name: string, planetNum: number) {
+                const numStr = String(planetNum);
+                if (bodyRiseLabel) { bodyRiseLabel.textContent = `${name} Rise`; bodyRiseLabel.dataset.planet = numStr; }
+                if (bodySetLabel) { bodySetLabel.textContent = `${name} Set`; bodySetLabel.dataset.planet = numStr; }
+                if (bodyTransitLabel) { bodyTransitLabel.textContent = `${name} Xit`; bodyTransitLabel.dataset.planet = numStr; }
+            }
+
+            // Set initial body labels
+            updateBodyLabels(planetOrder[selectedIdx].name, planetNumberForIdx[selectedIdx]);
+
             function selectPlanet(idx: number) {
                 selectedIdx = idx;
                 const p = planetOrder[idx];
@@ -2861,10 +2992,16 @@ async function main() {
                 iconBtns.forEach((b, i) => b.classList.toggle('selected', i === idx));
                 nameLabel!.textContent = p.name;
 
+                // Update body labels in astro panel
+                updateBodyLabels(p.name, planetNumberForIdx[idx]);
+
                 // Update URL parameter (without reload)
                 const url = new URL(window.location.href);
                 url.searchParams.set('body', p.param);
                 window.history.replaceState({}, '', url.toString());
+
+                // Propagate body param to navigation links (all faces, selected, index)
+                updateNavigationLinks();
 
                 // Rebuild face with new body — preserve hand states for smooth animation
                 for (const face of faces) {

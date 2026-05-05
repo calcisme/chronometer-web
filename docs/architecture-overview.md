@@ -88,7 +88,7 @@ Well within the 100 MB budget target.
 
 | Directory | Purpose |
 |-----------|---------|
-| `src/watch/` | Core rendering engine: XML parsing, expression evaluation, Canvas compositing |
+| `src/watch/` | Core rendering engine: XML parsing, expression evaluation, Canvas compositing, astronomical event stepping |
 | `src/expr/` | Expression tokenizer, parser, evaluator |
 | `src/astronomy/` | Ported astronomical routines (sun/moon/planet positions, rise/set, twilight) |
 | `src/faces/` | Per-face entry points that bundle XML and image assets |

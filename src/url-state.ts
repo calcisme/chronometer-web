@@ -15,6 +15,7 @@
  *   dir   - Time direction: 1=forward, -1=reverse, 0=stopped (absent = 1)
  *   tz    - IANA timezone for the location (e.g. "America/Los_Angeles")
  *   picks - Compact face selection: concatenated 2-letter abbreviations (e.g. "bbmktr")
+ *   tp    - Time panel lower tab: 'd' = date (default), 'a' = astro events
  */
 
 export interface UrlState {
@@ -29,6 +30,8 @@ export interface UrlState {
     tz: string | null;
     /** Compact face selection string — concatenated 2-letter abbreviations. */
     picks: string | null;
+    /** Time panel lower tab: 'd' = date (default), 'a' = astro events. */
+    tp: 'd' | 'a';
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -62,6 +65,7 @@ export function readUrlState(): UrlState {
         dir,
         tz: params.get('tz') || null,
         picks: params.get('picks') || null,
+        tp: params.get('tp') === 'a' ? 'a' : 'd',
     };
 }
 
@@ -138,6 +142,14 @@ export function writeUrlState(changes: Partial<UrlState>): void {
             params.set('tz', changes.tz);
         } else {
             params.delete('tz');
+        }
+    }
+
+    if ('tp' in changes) {
+        if (changes.tp === 'a') {
+            params.set('tp', 'a');
+        } else {
+            params.delete('tp');  // 'd' is default, omit from URL
         }
     }
 

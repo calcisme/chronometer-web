@@ -11363,9 +11363,9 @@
       val.animating = false;
       return;
     }
-    const TWO_PI5 = 2 * Math.PI;
+    const TWO_PI6 = 2 * Math.PI;
     let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
+    delta = delta - TWO_PI6 * Math.round(delta / TWO_PI6);
     val.currentValue = newTarget - delta;
     startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
   }
@@ -17137,7 +17137,8 @@
       off: offStr !== null ? parseInt(offStr, 10) : null,
       dir,
       tz: params.get("tz") || null,
-      picks: params.get("picks") || null
+      picks: params.get("picks") || null,
+      tp: params.get("tp") === "a" ? "a" : "d"
     };
   }
   function writeUrlState(changes) {
@@ -17203,6 +17204,13 @@
         params.set("tz", changes.tz);
       } else {
         params.delete("tz");
+      }
+    }
+    if ("tp" in changes) {
+      if (changes.tp === "a") {
+        params.set("tp", "a");
+      } else {
+        params.delete("tp");
       }
     }
     params.delete("long");
@@ -17696,6 +17704,136 @@
     }
     const snapped = Math.floor(hiMs / ONE_MINUTE_MS) * ONE_MINUTE_MS;
     return new Date(snapped);
+  }
+
+  // src/watch/astro-stepper.ts
+  var FUDGE_SECONDS = 5;
+  var TRANSIT_FUDGE_SECONDS = 12 * 3600;
+  var LOOKAHEAD_SECONDS = 3600 * 13.2;
+  var TWO_PI5 = 2 * Math.PI;
+  var HALF_PI = Math.PI / 2;
+  function findNextRiseSet(riseNotSet, planetNumber, displayTime, direction, lat, lon) {
+    const calculationDI = dateToDateInterval(displayTime);
+    const searchForward = direction === 1;
+    const fudge = searchForward ? FUDGE_SECONDS : -FUDGE_SECONDS;
+    const lookahead = searchForward ? LOOKAHEAD_SECONDS : -LOOKAHEAD_SECONDS;
+    const fudgeDate = calculationDI + fudge;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat, lon, !searchForward);
+    try {
+      const result = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        lat,
+        lon,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result.riseSetTime)) {
+        return null;
+      }
+      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
+      if (inRightDirection) {
+        return dateIntervalToDate(result.riseSetTime);
+      }
+      const tryDate = fudgeDate + lookahead;
+      releaseCachePool(pool);
+      initializeCachePool(pool, tryDate, lat, lon, !searchForward);
+      const result2 = planetaryRiseSetTimeRefined(
+        tryDate,
+        lat,
+        lon,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result2.riseSetTime)) {
+        return null;
+      }
+      return dateIntervalToDate(result2.riseSetTime);
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function findNextQuarterPhase(displayTime, direction) {
+    const di = dateToDateInterval(displayTime);
+    const { age } = moonAge(di, null);
+    const runningBackward = direction === -1;
+    const fudgeFactor = runningBackward ? -0.01 : 0.01;
+    const ageSinceQuarter = fmod(age + fudgeFactor, HALF_PI);
+    const ageAtLastQuarter = age + fudgeFactor - ageSinceQuarter;
+    let targetAge = runningBackward ? ageAtLastQuarter : ageAtLastQuarter + HALF_PI;
+    if (targetAge > 15 / 8 * Math.PI) {
+      targetAge -= TWO_PI5;
+    }
+    const phaseDI = refineMoonAgeTargetForDate(di, targetAge);
+    return dateIntervalToDate(phaseDI);
+  }
+  function findNextTransit(planetNumber, displayTime, direction, lat, lon) {
+    const di = dateToDateInterval(displayTime);
+    const fudgeDate = di + direction * TRANSIT_FUDGE_SECONDS;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat, lon, direction === -1);
+    try {
+      const result = planettransitTimeRefined(
+        fudgeDate,
+        lat,
+        lon,
+        true,
+        planetNumber,
+        pool
+      );
+      const delta = result - di;
+      const inRightDirection = direction === 1 ? delta > 60 : delta < -60;
+      if (inRightDirection) {
+        return dateIntervalToDate(result);
+      }
+      releaseCachePool(pool);
+      const retryDate = di + direction * 86400;
+      initializeCachePool(pool, retryDate, lat, lon, direction === -1);
+      const result2 = planettransitTimeRefined(
+        retryDate,
+        lat,
+        lon,
+        true,
+        planetNumber,
+        pool
+      );
+      return dateIntervalToDate(result2);
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function computeAstroTarget(eventType, direction, displayTime, lat, lon, bodyPlanetNumber) {
+    switch (eventType) {
+      case "sunrise":
+        return findNextRiseSet(true, 0 /* Sun */, displayTime, direction, lat, lon);
+      case "sunset":
+        return findNextRiseSet(false, 0 /* Sun */, displayTime, direction, lat, lon);
+      case "moonrise":
+        return findNextRiseSet(true, 1 /* Moon */, displayTime, direction, lat, lon);
+      case "moonset":
+        return findNextRiseSet(false, 1 /* Moon */, displayTime, direction, lat, lon);
+      case "moonphase":
+        return findNextQuarterPhase(displayTime, direction);
+      case "sun-transit":
+        return findNextTransit(0 /* Sun */, displayTime, direction, lat, lon);
+      case "moon-transit":
+        return findNextTransit(1 /* Moon */, displayTime, direction, lat, lon);
+      case "body-rise":
+        if (bodyPlanetNumber === void 0) return null;
+        return findNextRiseSet(true, bodyPlanetNumber, displayTime, direction, lat, lon);
+      case "body-set":
+        if (bodyPlanetNumber === void 0) return null;
+        return findNextRiseSet(false, bodyPlanetNumber, displayTime, direction, lat, lon);
+      case "body-transit":
+        if (bodyPlanetNumber === void 0) return null;
+        return findNextTransit(bodyPlanetNumber, displayTime, direction, lat, lon);
+      default:
+        return null;
+    }
   }
 
   // src/engine-entry.ts
@@ -19627,6 +19765,83 @@
         endHold();
       });
     });
+    const tpTabDate = document.getElementById("tp-tab-date");
+    const tpTabAstro = document.getElementById("tp-tab-astro");
+    const tpTabs = timePopover.querySelectorAll(".tp-tab");
+    function switchTab(tabName) {
+      if (tpTabDate && tpTabAstro) {
+        tpTabDate.style.display = tabName === "d" ? "" : "none";
+        tpTabAstro.style.display = tabName === "a" ? "" : "none";
+      }
+      tpTabs.forEach((btn) => {
+        const el = btn;
+        el.classList.toggle("active", el.dataset.tab === (tabName === "a" ? "astro" : "date"));
+      });
+      writeUrlState({ tp: tabName });
+    }
+    const initialTab = urlState.tp;
+    if (initialTab === "a") {
+      switchTab("a");
+    }
+    tpTabs.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const el = btn;
+        switchTab(el.dataset.tab === "astro" ? "a" : "d");
+      });
+    });
+    function handleAstroStep(eventType, dir, btnEl) {
+      let bodyPlanetNumber;
+      if (eventType === "body-transit" || eventType === "body-rise" || eventType === "body-set") {
+        const bodyLabel = document.getElementById("tp-body-transit-label");
+        bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || "1", 10) : 1;
+      }
+      const targetDate = computeAstroTarget(
+        eventType,
+        dir,
+        timeController.getDisplayTime(),
+        lat * Math.PI / 180,
+        lon * Math.PI / 180,
+        bodyPlanetNumber
+      );
+      if (!targetDate || isNaN(targetDate.getTime())) {
+        btnEl.classList.add("flash-fail");
+        setTimeout(() => btnEl.classList.remove("flash-fail"), 300);
+        return;
+      }
+      timeController.stop();
+      finishAllAnimations();
+      timeController.setTime(targetDate);
+      timeController.beginFrame();
+      const stepNow = performance.now();
+      for (const face of faces) {
+        if (!face.enabled || !face.cachesBuilt) continue;
+        resetHandSchedules(face.handStates);
+        resetLeafSchedules(face.terminatorLeaves);
+        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
+        tickAnimations(face.handStates, face.env, stepNow, null, 0, 1);
+        tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
+      }
+      timeController.endFrame();
+      updateTimeUI();
+      ensureSchedulerRunning();
+      writeTimeState();
+    }
+    timePopover.querySelectorAll("[data-astro]").forEach((btn) => {
+      const el = btn;
+      const eventType = el.dataset.astro;
+      const dir = parseInt(el.dataset.dir || "1", 10);
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAstroStep(eventType, dir, el);
+      });
+      el.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAstroStep(eventType, dir, el);
+      });
+    });
     function applyDateInputs() {
       const yr = parseInt(document.getElementById("tp-year").value, 10);
       const mo = parseInt(document.getElementById("tp-month").value, 10);
@@ -19764,14 +19979,30 @@
       const prevBtn = document.getElementById("planet-prev");
       const nextBtn = document.getElementById("planet-next");
       if (selectorEl && iconsContainer && nameLabel && prevBtn && nextBtn) {
-        let selectPlanet2 = function(idx) {
+        let updateBodyLabels2 = function(name, planetNum) {
+          const numStr = String(planetNum);
+          if (bodyRiseLabel) {
+            bodyRiseLabel.textContent = `${name} Rise`;
+            bodyRiseLabel.dataset.planet = numStr;
+          }
+          if (bodySetLabel) {
+            bodySetLabel.textContent = `${name} Set`;
+            bodySetLabel.dataset.planet = numStr;
+          }
+          if (bodyTransitLabel) {
+            bodyTransitLabel.textContent = `${name} Xit`;
+            bodyTransitLabel.dataset.planet = numStr;
+          }
+        }, selectPlanet2 = function(idx) {
           selectedIdx = idx;
           const p = planetOrder[idx];
           iconBtns.forEach((b, i) => b.classList.toggle("selected", i === idx));
           nameLabel.textContent = p.name;
+          updateBodyLabels2(p.name, planetNumberForIdx[idx]);
           const url = new URL(window.location.href);
           url.searchParams.set("body", p.param);
           window.history.replaceState({}, "", url.toString());
+          updateNavigationLinks();
           for (const face of faces) {
             if (!face.enabled) continue;
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
@@ -19790,7 +20021,7 @@
           stopScheduler();
           startScheduler();
         };
-        var selectPlanet = selectPlanet2;
+        var updateBodyLabels = updateBodyLabels2, selectPlanet = selectPlanet2;
         selectorEl.style.display = "flex";
         const planetOrder = [
           { key: "sun", name: "Sun", param: "sun" },
@@ -19828,6 +20059,29 @@
           iconBtns.push(btn);
         }
         nameLabel.textContent = planetOrder[selectedIdx].name;
+        const planetNumberForIdx = [0, 1, 2, 3, 5, 6, 7, 8, 9];
+        const moonRiseRow = document.getElementById("tp-astro-moonrise");
+        const bodyRiseRow = document.getElementById("tp-astro-body-rise");
+        const bodyRiseLabel = document.getElementById("tp-body-rise-label");
+        const moonSetRow = document.getElementById("tp-astro-moonset");
+        const bodySetRow = document.getElementById("tp-astro-body-set");
+        const bodySetLabel = document.getElementById("tp-body-set-label");
+        const moonTransitRow = document.getElementById("tp-astro-moon-transit");
+        const bodyTransitRow = document.getElementById("tp-astro-body-transit");
+        const bodyTransitLabel = document.getElementById("tp-body-transit-label");
+        if (moonRiseRow && bodyRiseRow) {
+          moonRiseRow.style.display = "none";
+          bodyRiseRow.style.display = "";
+        }
+        if (moonSetRow && bodySetRow) {
+          moonSetRow.style.display = "none";
+          bodySetRow.style.display = "";
+        }
+        if (moonTransitRow && bodyTransitRow) {
+          moonTransitRow.style.display = "none";
+          bodyTransitRow.style.display = "";
+        }
+        updateBodyLabels2(planetOrder[selectedIdx].name, planetNumberForIdx[selectedIdx]);
         prevBtn.addEventListener("click", () => {
           selectPlanet2((selectedIdx - 1 + planetOrder.length) % planetOrder.length);
         });
