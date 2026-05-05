@@ -16613,19 +16613,33 @@
     const radPerMin = Math.PI / 30;
     ctx.save();
     ctx.translate(cx, -cy);
+    const eotMaxMin = 16.5;
+    const eotMinMin = -14.2;
+    const arcDrawStart = -Math.PI / 2 + eotMinMin * radPerMin;
+    const arcDrawEnd = -Math.PI / 2 + eotMaxMin * radPerMin;
     ctx.beginPath();
-    ctx.arc(0, 0, radius, arcStart, arcEnd);
+    ctx.arc(0, 0, radius, arcDrawStart, arcDrawEnd);
     ctx.strokeStyle = color;
     ctx.lineWidth = 0.4;
     ctx.stroke();
+    const fadedArcStart = -Math.PI / 2 + -15 * radPerMin;
+    const fadedArcEnd = arcDrawStart;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, fadedArcStart, fadedArcEnd);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
-    const maxTickMin = Math.floor(halfArc / radPerMin);
+    const maxTickMinPos = 16;
+    const maxTickMinNeg = -15;
     const majorTickLen = radius * 0.15;
     const minorTickLen = radius * 0.07;
-    for (let min = -maxTickMin; min <= maxTickMin; min++) {
+    for (let min = maxTickMinNeg; min <= maxTickMinPos; min++) {
       const angle = -Math.PI / 2 + min * radPerMin;
       const isMajor = min % 5 === 0 && Math.abs(min) <= 15;
       const tickInner = isMajor ? radius - majorTickLen : radius - minorTickLen;
@@ -16636,8 +16650,10 @@
       ctx.moveTo(cosA * tickInner, sinA * tickInner);
       ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
       ctx.lineWidth = isMajor ? 0.6 : 0.3;
+      if (min === -15) ctx.globalAlpha = 0.35;
       ctx.strokeStyle = color;
       ctx.stroke();
+      if (min === -15) ctx.globalAlpha = 1;
     }
     const labelFontSize = fontSize * 1.92;
     ctx.font = `${labelFontSize}px Arial, sans-serif`;

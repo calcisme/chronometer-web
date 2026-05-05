@@ -3681,12 +3681,29 @@ function drawEotDial(
     ctx.save();
     ctx.translate(cx, -cy); // watch coords: y+ is up
 
-    // --- Arc backbone ---
+    // --- EOT extreme values (minutes) ---
+    const eotMaxMin = 16.5;   // maximum EOT
+    const eotMinMin = -14.2;  // minimum EOT
+
+    // --- Arc backbone: stop at exact EOT extremes ---
+    const arcDrawStart = -Math.PI / 2 + eotMinMin * radPerMin;  // negative side
+    const arcDrawEnd   = -Math.PI / 2 + eotMaxMin * radPerMin;  // positive side
     ctx.beginPath();
-    ctx.arc(0, 0, radius, arcStart, arcEnd);
+    ctx.arc(0, 0, radius, arcDrawStart, arcDrawEnd);
     ctx.strokeStyle = color;
     ctx.lineWidth = 0.4;
     ctx.stroke();
+
+    // --- Faded arc extension on the negative side: -14.2 to -15.0 ---
+    const fadedArcStart = -Math.PI / 2 + (-15) * radPerMin;
+    const fadedArcEnd   = arcDrawStart;  // -14.2
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, fadedArcStart, fadedArcEnd);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 0.4;
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
 
     // --- Center axle dot ---
     ctx.beginPath();
@@ -3696,11 +3713,13 @@ function drawEotDial(
 
     // --- Tick marks ---
     // Major ticks at 0, ±5, ±10, ±15 minutes; minor at every minute
-    // Extend past ±15 to the arc ends (halfArc ≈ 17.5 min at 210°)
-    const maxTickMin = Math.floor(halfArc / radPerMin);
+    // Positive side: extend to +17 (past +16.5 arc end)
+    // Negative side: stop at -15 (don't draw -16, -17, etc.)
+    const maxTickMinPos = 16;   // positive side extends to +16
+    const maxTickMinNeg = -15;  // negative side stops at -15
     const majorTickLen = radius * 0.15;
     const minorTickLen = radius * 0.07;
-    for (let min = -maxTickMin; min <= maxTickMin; min++) {
+    for (let min = maxTickMinNeg; min <= maxTickMinPos; min++) {
         const angle = -Math.PI / 2 + min * radPerMin;
         const isMajor = (min % 5 === 0) && (Math.abs(min) <= 15);
         const tickInner = isMajor ? radius - majorTickLen : radius - minorTickLen;
@@ -3713,8 +3732,11 @@ function drawEotDial(
         ctx.moveTo(cosA * tickInner, sinA * tickInner);
         ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
         ctx.lineWidth = isMajor ? 0.6 : 0.3;
+        // Fade the -15 tick mark to match the faded arc extension
+        if (min === -15) ctx.globalAlpha = 0.35;
         ctx.strokeStyle = color;
         ctx.stroke();
+        if (min === -15) ctx.globalAlpha = 1.0;
     }
 
     // --- Numeric labels at major ticks (inside the arc) ---
