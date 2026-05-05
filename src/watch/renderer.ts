@@ -3695,9 +3695,16 @@ function drawEotDial(
     ctx.stroke();
 
     // --- Faded arc extension on the negative side: -14.2 to -15.0 ---
+    // Dark strokes (Vienna) need lower opacity than light strokes (Mauna Kea)
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const luminance = rgbaMatch
+        ? (0.299 * +rgbaMatch[1] + 0.587 * +rgbaMatch[2] + 0.114 * +rgbaMatch[3]) / 255
+        : 0;
+    const fadedAlpha = luminance < 0.5 ? 0.20 : 0.35;
+
     const fadedArcStart = -Math.PI / 2 + (-15) * radPerMin;
     const fadedArcEnd   = arcDrawStart;  // -14.2
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = fadedAlpha;
     ctx.beginPath();
     ctx.arc(0, 0, radius, fadedArcStart, fadedArcEnd);
     ctx.strokeStyle = color;
@@ -3733,7 +3740,7 @@ function drawEotDial(
         ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
         ctx.lineWidth = isMajor ? 0.6 : 0.3;
         // Fade the -15 tick mark to match the faded arc extension
-        if (min === -15) ctx.globalAlpha = 0.35;
+        if (min === -15) ctx.globalAlpha = fadedAlpha;
         ctx.strokeStyle = color;
         ctx.stroke();
         if (min === -15) ctx.globalAlpha = 1.0;

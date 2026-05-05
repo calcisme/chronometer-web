@@ -16622,9 +16622,12 @@
     ctx.strokeStyle = color;
     ctx.lineWidth = 0.4;
     ctx.stroke();
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    const luminance = rgbaMatch ? (0.299 * +rgbaMatch[1] + 0.587 * +rgbaMatch[2] + 0.114 * +rgbaMatch[3]) / 255 : 0;
+    const fadedAlpha = luminance < 0.5 ? 0.2 : 0.35;
     const fadedArcStart = -Math.PI / 2 + -15 * radPerMin;
     const fadedArcEnd = arcDrawStart;
-    ctx.globalAlpha = 0.35;
+    ctx.globalAlpha = fadedAlpha;
     ctx.beginPath();
     ctx.arc(0, 0, radius, fadedArcStart, fadedArcEnd);
     ctx.strokeStyle = color;
@@ -16650,7 +16653,7 @@
       ctx.moveTo(cosA * tickInner, sinA * tickInner);
       ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
       ctx.lineWidth = isMajor ? 0.6 : 0.3;
-      if (min === -15) ctx.globalAlpha = 0.35;
+      if (min === -15) ctx.globalAlpha = fadedAlpha;
       ctx.strokeStyle = color;
       ctx.stroke();
       if (min === -15) ctx.globalAlpha = 1;
