@@ -394,6 +394,8 @@ export interface QDayNightRingPart extends PartBase {
     _cacheStart?: number;
     /** Display-time (ms since epoch) when the cached angles expire. */
     _cacheNextUpdate?: number;
+    /** Optional animation state for masterOffset (used by Vienna noon/midnight toggle). */
+    _masterOffsetAnim?: import('../watch/animation.js').AnimatingValue;
 }
 
 // ============================================================================

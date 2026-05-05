@@ -30,7 +30,7 @@ import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
 import { validSlotsForTz, formatSlotOffset, getStandardOffsetMinutes, olsonIdToCityName } from './watch/terra-slots.js';
 import { buildStaticBlockCaches, renderFrame, invalidateDayNightCaches, buildHandShadowCaches, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
-import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
+import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, makeAnimatingValue, startAnimationRaw, interpolateValue, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
 import type { Watch, QDialPart } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
@@ -797,6 +797,13 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
             tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
+            // Tick any in-flight QDayNightRing masterOffset animations
+            for (const part of face.watch.parts) {
+                if (part.type === 'QDayNightRing' && part._masterOffsetAnim && part._masterOffsetAnim.animating) {
+                    interpolateValue(part._masterOffsetAnim, now);
+                    part._cachedAngles = undefined; // force re-draw with new offset
+                }
+            }
             if (face.terminatorLeaves.length > 0) {
                 // Animate leaf angles and rotations using the same system
                 // as hands/wheels (adaptive duration, interpolation at 240fps)
@@ -935,7 +942,8 @@ async function main() {
             }
             renderMs += performance.now() - renderStart;
 
-            const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves);
+            const ringAnimating = face.watch.parts.some(p => p.type === 'QDayNightRing' && p._masterOffsetAnim?.animating);
+            const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
             if (faceAnimating) {
                 stillAnimating = true;
                 animatingFaceCount++;
@@ -2930,31 +2938,60 @@ async function main() {
 
             function setNoonOnTop(noonOnTop: boolean) {
                 const val = noonOnTop ? 1 : 0;
-                // 1. Update env variables
-                viennaFace!.env.variables.set('noonOnTop', val);
-                viennaFace!.env.variables.set('dialFlip', noonOnTop ? Math.PI : 0);
+                const targetFlip = noonOnTop ? Math.PI : 0;
+                const now = performance.now();
 
-                // 2. Swap dial text
+                // 1. Update discrete state immediately
+                viennaFace!.env.variables.set('noonOnTop', val);
+                viennaFace!.env.variables.set('dialFlip', targetFlip);
+
+                // 2. Swap dial text immediately
                 if (numDial) {
                     numDial.text = noonOnTop ? NOON_TEXT : MIDNIGHT_TEXT;
                 }
 
-                // 3. Rebuild static cache
-                viennaFace!.cachesBuilt = false;
-                buildAllCachesSequentially([viennaFace!], () => {
-                    startScheduler();
-                });
+                // 3. Rebuild static cache (dial numbers change immediately)
+                invalidateDayNightCaches(viennaFace!.watch);
+                const { canvas, watch, env, images, scale } = viennaFace!;
+                buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, viennaFace!.terminatorLeaves);
 
-                // 4. Reset hand schedules so they snap to new angles
-                finishAllAnimations();
-                resetAllSchedules();
+                // 4. Reset hand schedules for animation interpolation
+                for (const hs of viennaFace!.handStates) {
+                    hs.nextUpdateTime = 0;
+                }
 
-                // 5. Reset analemma schedule
+                // 5. Start masterOffset animation on each QDayNightRing part
+                // previousFlip is the value before the toggle (opposite of targetFlip)
+                const previousFlip = noonOnTop ? 0 : Math.PI;
+                for (const part of viennaFace!.watch.parts) {
+                    if (part.type === 'QDayNightRing') {
+                        if (!part._masterOffsetAnim) {
+                            part._masterOffsetAnim = makeAnimatingValue(previousFlip, now);
+                        }
+                        // Invalidate wedge angle cache so ring re-draws each frame
+                        part._cachedAngles = undefined;
+                        // Start animation from current position to target
+                        startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1.0);
+                    }
+                }
+
+                // 6. Reset terminator leaves for the new dialFlip
+                if (viennaFace!.terminatorLeaves.length > 0) {
+                    updateLeafAngles(viennaFace!.terminatorLeaves, viennaFace!.env);
+                    resetLeafSchedules(viennaFace!.terminatorLeaves);
+                    viennaFace!.lastTerminatorRebuild = 0;
+                }
+
+                // 6. Reset analemma schedule
                 if (viennaFace!.analemmaState) {
                     viennaFace!.analemmaState.lastUpdateTime = 0;
                 }
 
-                // 6. Update URL
+                // 7. Kick the scheduler so animations start immediately
+                stopScheduler();
+                startScheduler();
+
+                // 8. Update URL
                 const params = new URLSearchParams(window.location.search);
                 if (noonOnTop) {
                     params.set('vnoon', '1');
@@ -2965,7 +3002,7 @@ async function main() {
                 history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
                 updateNavigationLinks();
 
-                // 7. Update pill highlight
+                // 9. Update pill highlight
                 updatePillHighlight();
             }
 

@@ -2636,7 +2636,9 @@ function drawQDayNightRing(
     const innerR = evalAttr(part.innerRadius, env);
     const numWedges = evalAttr(part.numWedges, env) || 24;
     const planetNumber = evalAttr(part.planetNumber, env);
-    const masterOffset = evalAttr(part.masterOffset, env);
+    const masterOffset = (part._masterOffsetAnim && part._masterOffsetAnim.animating)
+        ? part._masterOffsetAnim.currentValue
+        : evalAttr(part.masterOffset, env);
     if (outerR <= 0 || innerR <= 0) return;
 
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : 'black';

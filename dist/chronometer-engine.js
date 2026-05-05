@@ -15949,7 +15949,7 @@
     const innerR = evalAttr(part.innerRadius, env);
     const numWedges = evalAttr(part.numWedges, env) || 24;
     const planetNumber = evalAttr(part.planetNumber, env);
-    const masterOffset = evalAttr(part.masterOffset, env);
+    const masterOffset = part._masterOffsetAnim && part._masterOffsetAnim.animating ? part._masterOffsetAnim.currentValue : evalAttr(part.masterOffset, env);
     if (outerR <= 0 || innerR <= 0) return;
     const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
     const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "white";
@@ -18212,6 +18212,12 @@
       for (const face of faces) {
         if (!face.enabled || !face.cachesBuilt) continue;
         tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
+        for (const part of face.watch.parts) {
+          if (part.type === "QDayNightRing" && part._masterOffsetAnim && part._masterOffsetAnim.animating) {
+            interpolateValue(part._masterOffsetAnim, now);
+            part._cachedAngles = void 0;
+          }
+        }
         if (face.terminatorLeaves.length > 0) {
           tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
           const cacheIntervalMs = tickMs !== null ? tickMs : Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
@@ -18315,7 +18321,8 @@
           ctx2d.restore();
         }
         renderMs += performance.now() - renderStart;
-        const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves);
+        const ringAnimating = face.watch.parts.some((p) => p.type === "QDayNightRing" && p._masterOffsetAnim?.animating);
+        const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
         if (faceAnimating) {
           stillAnimating = true;
           animatingFaceCount++;
@@ -19812,20 +19819,39 @@
           noonPill.classList.toggle("active", noon);
         }, setNoonOnTop2 = function(noonOnTop) {
           const val = noonOnTop ? 1 : 0;
+          const targetFlip = noonOnTop ? Math.PI : 0;
+          const now = performance.now();
           viennaFace.env.variables.set("noonOnTop", val);
-          viennaFace.env.variables.set("dialFlip", noonOnTop ? Math.PI : 0);
+          viennaFace.env.variables.set("dialFlip", targetFlip);
           if (numDial) {
             numDial.text = noonOnTop ? NOON_TEXT : MIDNIGHT_TEXT;
           }
-          viennaFace.cachesBuilt = false;
-          buildAllCachesSequentially([viennaFace], () => {
-            startScheduler();
-          });
-          finishAllAnimations();
-          resetAllSchedules();
+          invalidateDayNightCaches(viennaFace.watch);
+          const { canvas, watch, env, images, scale } = viennaFace;
+          buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, viennaFace.terminatorLeaves);
+          for (const hs of viennaFace.handStates) {
+            hs.nextUpdateTime = 0;
+          }
+          const previousFlip = noonOnTop ? 0 : Math.PI;
+          for (const part of viennaFace.watch.parts) {
+            if (part.type === "QDayNightRing") {
+              if (!part._masterOffsetAnim) {
+                part._masterOffsetAnim = makeAnimatingValue(previousFlip, now);
+              }
+              part._cachedAngles = void 0;
+              startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1);
+            }
+          }
+          if (viennaFace.terminatorLeaves.length > 0) {
+            updateLeafAngles(viennaFace.terminatorLeaves, viennaFace.env);
+            resetLeafSchedules(viennaFace.terminatorLeaves);
+            viennaFace.lastTerminatorRebuild = 0;
+          }
           if (viennaFace.analemmaState) {
             viennaFace.analemmaState.lastUpdateTime = 0;
           }
+          stopScheduler();
+          startScheduler();
           const params = new URLSearchParams(window.location.search);
           if (noonOnTop) {
             params.set("vnoon", "1");
