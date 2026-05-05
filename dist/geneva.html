@@ -1207,14 +1207,18 @@
         }
 
         .tp-tab-pane {
-            overflow: hidden;
-            transition: max-height 0.3s ease, opacity 0.2s ease;
-            max-height: 500px;  /* generous upper bound for visible state */
+            display: grid;
+            grid-template-rows: 1fr;
+            transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
             opacity: 1;
         }
 
+        .tp-tab-pane > * {
+            overflow: hidden;  /* children clip during collapse */
+        }
+
         .tp-tab-pane.tp-pane-hidden {
-            max-height: 0;
+            grid-template-rows: 0fr;
             opacity: 0;
             pointer-events: none;
         }
@@ -1629,6 +1633,7 @@
                     <button class="tp-tab" data-tab="astro">Astro</button>
                 </div>
                 <div id="tp-tab-date" class="tp-tab-pane">
+                  <div>
                     <div class="tp-label">Set Date &amp; Time</div>
                     <div class="tp-date-inputs">
                         <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
@@ -1640,8 +1645,10 @@
                         <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
                         <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
                     </div>
+                  </div>
                 </div>
                 <div id="tp-tab-astro" class="tp-tab-pane tp-pane-hidden">
+                  <div>
                     <div class="tp-label">Astronomical Events</div>
                     <div class="tp-astro-row">
                         <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
@@ -1693,6 +1700,7 @@
                         <span class="tp-astro-label tp-body-label" id="tp-body-transit-label">Moon Xit</span>
                         <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="1">▶</button>
                     </div>
+                  </div>
                 </div>
             </div>
         </div>

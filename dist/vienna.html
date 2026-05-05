@@ -1207,14 +1207,18 @@
         }
 
         .tp-tab-pane {
-            overflow: hidden;
-            transition: max-height 0.3s ease, opacity 0.2s ease;
-            max-height: 500px;  /* generous upper bound for visible state */
+            display: grid;
+            grid-template-rows: 1fr;
+            transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
             opacity: 1;
         }
 
+        .tp-tab-pane > * {
+            overflow: hidden;  /* children clip during collapse */
+        }
+
         .tp-tab-pane.tp-pane-hidden {
-            max-height: 0;
+            grid-template-rows: 0fr;
             opacity: 0;
             pointer-events: none;
         }
@@ -1443,9 +1447,10 @@ day.
   <a href="http://en.m.wikipedia.org/wiki/Equation_of_time"
     >Equation of Time<img src="help/images/extlink.png"
   /></a>
-  dial, showing the difference between solar time and mean time. The scale runs
-  from −15 to +15 minutes, with a hand indicating the current value. This is the
-  correction you would apply to a
+  dial, showing the difference between solar time and mean time. The arc spans
+  the actual range of the Equation of Time, from −14.2 to +16.5 minutes, with
+  tick marks at each whole minute up to ±15 and a hand indicating the current
+  value. This is the correction you would apply to a
   <a href="http://en.m.wikipedia.org/wiki/Sundial"
     >sundial<img src="help/images/extlink.png"
   /></a>
@@ -1593,6 +1598,7 @@ day.
                     <button class="tp-tab" data-tab="astro">Astro</button>
                 </div>
                 <div id="tp-tab-date" class="tp-tab-pane">
+                  <div>
                     <div class="tp-label">Set Date &amp; Time</div>
                     <div class="tp-date-inputs">
                         <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
@@ -1604,8 +1610,10 @@ day.
                         <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
                         <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
                     </div>
+                  </div>
                 </div>
                 <div id="tp-tab-astro" class="tp-tab-pane tp-pane-hidden">
+                  <div>
                     <div class="tp-label">Astronomical Events</div>
                     <div class="tp-astro-row">
                         <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
@@ -1657,6 +1665,7 @@ day.
                         <span class="tp-astro-label tp-body-label" id="tp-body-transit-label">Moon Xit</span>
                         <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="1">▶</button>
                     </div>
+                  </div>
                 </div>
             </div>
         </div>
