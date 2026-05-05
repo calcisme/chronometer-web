@@ -603,7 +603,8 @@
       updateOffset: attrExpr(el, "updateOffset"),
       kind: attr(el, "kind"),
       z: attrExpr(el, "z"),
-      thick: attrExpr(el, "thick")
+      thick: attrExpr(el, "thick"),
+      animSpeed: attrExpr(el, "animSpeed")
     };
   }
   function parseQHand(el) {
@@ -11029,6 +11030,8 @@
     for (const part of parts) {
       if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
         out.push(createHandState(part, env, now, getNow, rawGetNow));
+      } else if (part.type === "QDial" && part.animSpeed) {
+        out.push(createHandState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "CalendarRowCover") {
         out.push(createCalendarCoverState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "Static") {
@@ -15068,8 +15071,10 @@
     const marks = parseMarksType(part.marks);
     ctx.save();
     ctx.translate(x, y);
-    if (part._orientationAnim) {
-      ctx.rotate(part._orientationAnim.currentValue);
+    if (part.dynamicState) {
+      ctx.rotate(part.dynamicState.currentAngle);
+    } else if (part.angle) {
+      ctx.rotate(evalAttr(part.angle, env));
     }
     if (bgColor !== "rgba(0,0,0,0)") {
       ctx.fillStyle = bgColor;
@@ -20142,9 +20147,6 @@
           const now = performance.now();
           viennaFace.env.variables.set("noonOnTop", val);
           viennaFace.env.variables.set("dialFlip", targetFlip);
-          if (numDial) {
-            numDial.text = noonOnTop ? NOON_TEXT : MIDNIGHT_TEXT;
-          }
           invalidateDayNightCaches(viennaFace.watch);
           const { canvas, watch, env, images, scale } = viennaFace;
           buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, viennaFace.terminatorLeaves);
@@ -20159,12 +20161,6 @@
               }
               part._cachedAngles = void 0;
               startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1);
-            }
-            if (part.type === "QDial" && part.name === "24 nums") {
-              if (!part._orientationAnim) {
-                part._orientationAnim = makeAnimatingValue(previousFlip, now);
-              }
-              startAnimationRaw(part._orientationAnim, targetFlip, now, 1);
             }
           }
           if (viennaFace.terminatorLeaves.length > 0) {
@@ -20192,24 +20188,6 @@
         toggleContainer.style.display = "flex";
         const midnightPill = toggleContainer.querySelector('[data-mode="midnight"]');
         const noonPill = toggleContainer.querySelector('[data-mode="noon"]');
-        const MIDNIGHT_TEXT = "24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23";
-        const NOON_TEXT = "12,13,14,15,16,17,18,19,20,21,22,23,24,1,2,3,4,5,6,7,8,9,10,11";
-        let numDial;
-        for (const p of viennaFace.watch.parts) {
-          if (p.type === "Static") {
-            const found = p.children.find(
-              (c) => c.type === "QDial" && c.name.trim() === "24 nums"
-            );
-            if (found) {
-              numDial = found;
-              break;
-            }
-          }
-          if (p.type === "QDial" && p.name.trim() === "24 nums") {
-            numDial = p;
-            break;
-          }
-        }
         if (isNoonOnTop2() && numDial) {
           numDial.text = NOON_TEXT;
         }

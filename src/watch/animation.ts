@@ -18,7 +18,7 @@
  * - Otherwise, use the normal speed-based duration (slow parts).
  */
 
-import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, CalendarRowCoverPart } from './types.js';
+import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, QDialPart, CalendarRowCoverPart } from './types.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './watch-env.js';
 import {
@@ -148,6 +148,10 @@ function collectDynamicParts(
     for (const part of parts) {
         if (part.type === 'QHand' || part.type === 'Wheel' || part.type === 'QWedge') {
             out.push(createHandState(part, env, now, getNow, rawGetNow));
+        } else if (part.type === 'QDial' && part.animSpeed) {
+            // QDials with animSpeed participate in the animation system
+            // (e.g. Vienna 24-hour number dial with angle='dialFlip')
+            out.push(createHandState(part, env, now, getNow, rawGetNow));
         } else if (part.type === 'CalendarRowCover') {
             out.push(createCalendarCoverState(part as CalendarRowCoverPart, env, now, getNow, rawGetNow));
         } else if (part.type === 'Static') {
@@ -157,7 +161,7 @@ function collectDynamicParts(
 }
 
 function createHandState(
-    part: QHandPart | WheelPart | QWedgePart,
+    part: QHandPart | WheelPart | QWedgePart | QDialPart,
     env: Environment,
     now: number,
     getNow: () => Date,

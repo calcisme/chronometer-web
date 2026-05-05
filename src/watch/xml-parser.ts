@@ -287,6 +287,7 @@ function parseQDial(el: Element): QDialPart {
         kind: attr(el, 'kind'),
         z: attrExpr(el, 'z'),
         thick: attrExpr(el, 'thick'),
+        animSpeed: attrExpr(el, 'animSpeed'),
     };
 }
 

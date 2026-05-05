@@ -1256,9 +1256,12 @@ function drawQDial(
     ctx.save();
     ctx.translate(x, y);
 
-    // Apply animated orientation rotation (e.g. Vienna noon/midnight toggle)
-    if (part._orientationAnim) {
-        ctx.rotate(part._orientationAnim.currentValue);
+    // Apply animated angle if this QDial participates in the animation system
+    // (i.e. has animSpeed set). Uses the same dynamicState.currentAngle pattern as QHands.
+    if (part.dynamicState) {
+        ctx.rotate(part.dynamicState.currentAngle);
+    } else if (part.angle) {
+        ctx.rotate(evalAttr(part.angle, env));
     }
 
     // Background fill

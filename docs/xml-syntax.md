@@ -143,6 +143,7 @@ Combinable: `'outer|tickOut'`, `'tickOut|no5s'` (skip every 5th mark).
 | `update` | expr | Update interval in seconds, or a sentinel function name |
 | `updateOffset` | expr | Offset from update boundary |
 | `kind` | string | Animation kind (see [Kinds](#animation-kinds)) |
+| `animSpeed` | expr | Animation speed multiplier. When set, the QDial participates in the `HandState` animation system, enabling smooth interpolation of its `angle` attribute (e.g. `angle='dialFlip' animSpeed='1'` for Vienna's noon/midnight toggle) |
 
 ### Shadows
 
@@ -600,9 +601,14 @@ Vienna is a 24-hour watch face that supports switching between **midnight on top
 
 ### 24-hour number dial
 
-The 24-hour number dial (`QDial '24 nums'`) is placed **outside** the `<static>` block so it can animate smoothly during noon/midnight toggles. It uses `orientation='radial'` so that all labels have their tops pointing outward, keeping them readable in both dial orientations. The `QDialPart._orientationAnim` (`AnimatingValue`) drives the smooth rotation when toggling.
+The 24-hour number dial (`QDial '24 nums'`) is placed **outside** the `<static>` block so the renderer can animate it per-frame. It uses:
+- `orientation='radial'` — all labels have their tops pointing outward, keeping them readable in both dial orientations
+- `angle='dialFlip'` — rotation is driven by the `dialFlip` env variable
+- `animSpeed='1'` — enables smooth animation via the standard `HandState` system (same as QHands and Wheels)
 
 Because `radial` positions text tops at `radius × 0.92`, the radius is set to `(hrDialR+0.5)/0.92-1.5` to match the visual position of the original `demi` layout.
+
+No text swapping is needed: when `dialFlip=π`, the 180° rotation moves "12" from the bottom (where it's unreadable in radial) to the top (where it's readable).
 
 ### URL persistence
 
@@ -612,10 +618,9 @@ The `vnoon=1` URL parameter overrides `noonOnTop` after init block evaluation (i
 
 A pill toggle ("Midnight ↑ | Noon ↑") in `#vienna-noon-toggle` is shown below the face in single-face mode. On toggle, the engine:
 1. Updates `noonOnTop` and `dialFlip` in `env.variables`
-2. Swaps the 24-hour dial text array
-3. Starts an `AnimatingValue` rotation on the `QDialPart._orientationAnim` for the 24-hour number dial
-4. Rebuilds the static cache and resets hand/analemma schedules
-5. Writes `vnoon=1` to the URL (or removes it)
+2. Rebuilds the static cache and resets hand/dial schedules
+3. The 24-hour number dial animates automatically via its `HandState` (driven by `angle='dialFlip'`)
+4. Writes `vnoon=1` to the URL (or removes it)
 
 ---
 

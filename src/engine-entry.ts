@@ -32,7 +32,7 @@ import { buildStaticBlockCaches, renderFrame, invalidateDayNightCaches, buildHan
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, makeAnimatingValue, startAnimationRaw, interpolateValue, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
-import type { Watch, QDialPart } from './watch/types.js';
+import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
@@ -3108,25 +3108,7 @@ async function main() {
             const midnightPill = toggleContainer.querySelector('[data-mode="midnight"]') as HTMLButtonElement;
             const noonPill = toggleContainer.querySelector('[data-mode="noon"]') as HTMLButtonElement;
 
-            // Midnight-on-top dial: '24,1,...,23' (24 at top, hand gets no offset)
-            const MIDNIGHT_TEXT = '24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23';
-            // Noon-on-top dial: '12,13,...,11' (12 at top, hand gets +pi)
-            const NOON_TEXT = '12,13,14,15,16,17,18,19,20,21,22,23,24,1,2,3,4,5,6,7,8,9,10,11';
 
-            // Find the 24-hour number dial part to swap its text
-            // It's inside a <static> block, so search children
-            let numDial: QDialPart | undefined;
-            for (const p of viennaFace.watch.parts) {
-                if (p.type === 'Static') {
-                    const found = p.children.find(
-                        c => c.type === 'QDial' && c.name.trim() === '24 nums'
-                    );
-                    if (found) { numDial = found as QDialPart; break; }
-                }
-                if (p.type === 'QDial' && p.name.trim() === '24 nums') {
-                    numDial = p; break;
-                }
-            }
 
             function isNoonOnTop(): boolean {
                 return (viennaFace!.env.variables.get('noonOnTop') ?? 0) !== 0;
@@ -3147,23 +3129,18 @@ async function main() {
                 viennaFace!.env.variables.set('noonOnTop', val);
                 viennaFace!.env.variables.set('dialFlip', targetFlip);
 
-                // 2. Swap dial text immediately
-                if (numDial) {
-                    numDial.text = noonOnTop ? NOON_TEXT : MIDNIGHT_TEXT;
-                }
-
-                // 3. Rebuild static cache (dial numbers change immediately)
+                // 2. Rebuild static cache
                 invalidateDayNightCaches(viennaFace!.watch);
                 const { canvas, watch, env, images, scale } = viennaFace!;
                 buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, viennaFace!.terminatorLeaves);
 
-                // 4. Reset hand schedules for animation interpolation
+                // 3. Reset hand/dial schedules so the animation system re-evaluates
+                //    angle expressions (including dialFlip) and smoothly interpolates
                 for (const hs of viennaFace!.handStates) {
                     hs.nextUpdateTime = 0;
                 }
 
-                // 5. Start masterOffset / orientation animations on ring and dial parts
-                // previousFlip is the value before the toggle (opposite of targetFlip)
+                // 4. Start masterOffset animation on day/night ring
                 const previousFlip = noonOnTop ? 0 : Math.PI;
                 for (const part of viennaFace!.watch.parts) {
                     if (part.type === 'QDayNightRing') {
@@ -3173,13 +3150,6 @@ async function main() {
                         // Invalidate wedge angle cache so ring re-draws each frame
                         part._cachedAngles = undefined;
                         startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1.0);
-                    }
-                    // Animate the 24-hour number dial rotation
-                    if (part.type === 'QDial' && part.name === '24 nums') {
-                        if (!part._orientationAnim) {
-                            part._orientationAnim = makeAnimatingValue(previousFlip, now);
-                        }
-                        startAnimationRaw(part._orientationAnim, targetFlip, now, 1.0);
                     }
                 }
 
