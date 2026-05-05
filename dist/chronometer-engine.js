@@ -20188,9 +20188,6 @@
         toggleContainer.style.display = "flex";
         const midnightPill = toggleContainer.querySelector('[data-mode="midnight"]');
         const noonPill = toggleContainer.querySelector('[data-mode="noon"]');
-        if (isNoonOnTop2() && numDial) {
-          numDial.text = NOON_TEXT;
-        }
         updatePillHighlight2();
         midnightPill.addEventListener("click", () => {
           if (!isNoonOnTop2()) return;

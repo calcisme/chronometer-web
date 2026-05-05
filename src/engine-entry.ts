@@ -3184,11 +3184,7 @@ async function main() {
                 updatePillHighlight();
             }
 
-            // Apply initial state from URL (env already has the right value from watch-env.ts)
-            if (isNoonOnTop() && numDial) {
-                numDial.text = NOON_TEXT;
-                // Static cache hasn't been built yet, so no rebuild needed here
-            }
+            // Apply initial pill highlight from URL state (env already has the right value from watch-env.ts)
             updatePillHighlight();
 
             midnightPill.addEventListener('click', () => {
