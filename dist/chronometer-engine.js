@@ -16663,7 +16663,7 @@
     ctx.fillStyle = color;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55;
+    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55 - 1;
     const zeroAngle = -Math.PI / 2;
     ctx.fillText("0", Math.cos(zeroAngle) * numLabelRadius, Math.sin(zeroAngle) * numLabelRadius);
     for (const min of [5, 10, 15]) {
@@ -16678,7 +16678,7 @@
     ctx.fillStyle = color;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const symbolRadius = numLabelRadius - labelFontSize * 1 - 1;
+    const symbolRadius = numLabelRadius - labelFontSize * 1 - 2;
     const negSymAngle = -Math.PI / 2 - 15 * radPerMin;
     ctx.fillText("\u2212", Math.cos(negSymAngle) * symbolRadius, Math.sin(negSymAngle) * symbolRadius);
     const posSymAngle = -Math.PI / 2 + 15 * radPerMin;

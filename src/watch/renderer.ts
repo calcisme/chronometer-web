@@ -3752,7 +3752,7 @@ function drawEotDial(
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55;
+    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55 - 1;
 
     // "0" at the top
     const zeroAngle = -Math.PI / 2;
@@ -3776,7 +3776,7 @@ function drawEotDial(
     ctx.textBaseline = 'middle';
 
     // Same angle as 15 labels but further inward
-    const symbolRadius = numLabelRadius - labelFontSize * 1.0 - 1;
+    const symbolRadius = numLabelRadius - labelFontSize * 1.0 - 2;
 
     // "−" on the left (negative EOT side, at -15 min angle)
     const negSymAngle = -Math.PI / 2 - 15 * radPerMin;
