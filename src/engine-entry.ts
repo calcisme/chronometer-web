@@ -1176,6 +1176,7 @@ async function main() {
     let lastContainerW = 0;
     let lastContainerH = 0;
     let wasShifted = false;  // tracks if face is currently in a popover-dodged position
+    let wasAstroTab = false;  // tracks if the Astro tab was active during last layout
 
     /**
      * Compute face center positions (relative to the grid container)
@@ -1286,6 +1287,42 @@ async function main() {
             const pRight = upperRect.right - gridRect.left;
             const pBottom = popRect.bottom - gridRect.top;
 
+            // Build exclusion rects: always include tp-upper region.
+            // When the Astro tab is active, tp-lower is taller and can
+            // overlap faces, so add it as a second exclusion zone.
+            type Rect = { left: number; top: number; right: number; bottom: number };
+            const exclusionRects: Rect[] = [
+                { left: pLeft, top: pTop, right: pRight, bottom: pBottom },
+            ];
+            const lowerEl = document.getElementById('tp-lower');
+            const astroActive = lowerEl &&
+                !document.getElementById('tp-tab-astro')?.classList.contains('tp-pane-hidden');
+            if (astroActive && lowerEl) {
+                const lowerRect = lowerEl.getBoundingClientRect();
+                exclusionRects.push({
+                    left: lowerRect.left - gridRect.left,
+                    top: lowerRect.top - gridRect.top,
+                    right: lowerRect.right - gridRect.left,
+                    bottom: lowerRect.bottom - gridRect.top,
+                });
+            }
+
+            /** Check if a circle overlaps any exclusion rect. */
+            const circleOverlapsExclusion = (
+                cx: number, cy: number, r: number,
+            ): boolean => {
+                for (const rect of exclusionRects) {
+                    const nearX = Math.max(rect.left, Math.min(cx, rect.right));
+                    const nearY = Math.max(rect.top, Math.min(cy, rect.bottom));
+                    const dx = cx - nearX;
+                    const dy = cy - nearY;
+                    if (dx * dx + dy * dy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
             // Check whether a grid with `cols` columns at face `size`
             // fits without any face overlapping the popover.
             // The grid is pinned to top-left (PADDING offset).
@@ -1303,7 +1340,7 @@ async function main() {
                 const gridH = (rows - 1) * cellStep + s + 2 * PADDING_PX;
                 if (gridW > W || gridH > H) return false;
 
-                // Check ALL faces for overlap with popover
+                // Check ALL faces for overlap with exclusion zones
                 for (let i = 0; i < faces.length; i++) {
                     const row = Math.floor(i / cols);
                     const col = i % cols;
@@ -1312,11 +1349,7 @@ async function main() {
                     const cx = PADDING_PX + hexColX(col, remainder, cols, cellStep, hasNestle) + r;
                     const cy = PADDING_PX + row * cellStep + ny + r;
 
-                    const nearX = Math.max(pLeft, Math.min(cx, pRight));
-                    const nearY = Math.max(pTop, Math.min(cy, pBottom));
-                    const dx = cx - nearX;
-                    const dy = cy - nearY;
-                    if (dx * dx + dy * dy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+                    if (circleOverlapsExclusion(cx, cy, r)) {
                         return false;
                     }
                 }
@@ -1326,7 +1359,14 @@ async function main() {
             // Check if the current full-size layout has overlap
             const centers = computeFaceCenters(
                 faces.length, result.cols, result.rows, size, W, H);
-            if (anyFaceOverlapsRect(centers, size / 2, pLeft, pTop, pRight, pBottom)) {
+            let hasOverlap = false;
+            for (const { cx, cy } of centers) {
+                if (circleOverlapsExclusion(cx, cy, size / 2)) {
+                    hasOverlap = true;
+                    break;
+                }
+            }
+            if (hasOverlap) {
 
                 // Binary search for the largest face size that works
                 // with some grid configuration, pinned top-left.
@@ -1388,11 +1428,7 @@ async function main() {
                         const isShort = col >= remainder;
                         const cx = PADDING_PX + dx + hexColX(col, remainder, bestConfig, cellStep, hasNestle) + r;
                         const cy = PADDING_PX + dy + row * cellStep + (isShort && hasNestle ? cellStep / 2 : 0) + r;
-                        const nearX = Math.max(pLeft, Math.min(cx, pRight));
-                        const nearY = Math.max(pTop, Math.min(cy, pBottom));
-                        const ddx = cx - nearX;
-                        const ddy = cy - nearY;
-                        if (ddx * ddx + ddy * ddy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+                        if (circleOverlapsExclusion(cx, cy, r)) {
                             return false;
                         }
                     }
@@ -1428,9 +1464,12 @@ async function main() {
         const dpr = window.devicePixelRatio || 1;
         const newPhys = Math.round(size * dpr);
         // Skip if size hasn't changed AND layout position hasn't changed
-        const positionChanged = useTopLeftAlign !== wasShifted;
+        const isAstroTab = popoverOpen &&
+            !document.getElementById('tp-tab-astro')?.classList.contains('tp-pane-hidden');
+        const positionChanged = useTopLeftAlign !== wasShifted || isAstroTab !== wasAstroTab;
         if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
         wasShifted = useTopLeftAlign;
+        wasAstroTab = isAstroTab;
 
         stopScheduler();
 
@@ -2643,14 +2682,34 @@ async function main() {
 
     function switchTab(tabName: 'd' | 'a') {
         if (tpTabDate && tpTabAstro) {
-            tpTabDate.style.display = tabName === 'd' ? '' : 'none';
-            tpTabAstro.style.display = tabName === 'a' ? '' : 'none';
+            const hiding = tabName === 'a' ? tpTabDate : tpTabAstro;
+            const showing = tabName === 'a' ? tpTabAstro : tpTabDate;
+
+            // Collapse the outgoing pane instantly (no transition)
+            hiding.style.transition = 'none';
+            hiding.classList.add('tp-pane-hidden');
+            // Force reflow so the instant collapse takes effect before
+            // the incoming pane starts animating
+            void hiding.offsetHeight;
+            hiding.style.transition = '';
+
+            // Animate the incoming pane open
+            showing.classList.remove('tp-pane-hidden');
         }
         tpTabs.forEach(btn => {
             const el = btn as HTMLElement;
             el.classList.toggle('active', el.dataset.tab === (tabName === 'a' ? 'astro' : 'date'));
         });
         writeUrlState({ tp: tabName });
+        // Re-layout grid after the CSS transition completes (300ms)
+        // so the exclusion zone matches the final panel height.
+        if (popoverOpen && lastContainerW > 0) {
+            setTimeout(() => {
+                requestAnimationFrame(() => {
+                    onGridResize(lastContainerW, lastContainerH);
+                });
+            }, 320);
+        }
     }
 
     // Initialize tab from URL state

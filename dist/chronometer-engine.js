@@ -18627,6 +18627,7 @@
     let lastContainerW = 0;
     let lastContainerH = 0;
     let wasShifted = false;
+    let wasAstroTab = false;
     function computeFaceCenters(nFaces, gridCols, gridRows, size, containerW, containerH, offsetAdjustX = 0, offsetAdjustY = 0) {
       const cellStep = size + GAP_PX;
       const remainder = nFaces - gridCols * (gridRows - 1);
@@ -18695,6 +18696,32 @@
         const pTop = popRect.top - gridRect.top;
         const pRight = upperRect.right - gridRect.left;
         const pBottom = popRect.bottom - gridRect.top;
+        const exclusionRects = [
+          { left: pLeft, top: pTop, right: pRight, bottom: pBottom }
+        ];
+        const lowerEl = document.getElementById("tp-lower");
+        const astroActive = lowerEl && !document.getElementById("tp-tab-astro")?.classList.contains("tp-pane-hidden");
+        if (astroActive && lowerEl) {
+          const lowerRect = lowerEl.getBoundingClientRect();
+          exclusionRects.push({
+            left: lowerRect.left - gridRect.left,
+            top: lowerRect.top - gridRect.top,
+            right: lowerRect.right - gridRect.left,
+            bottom: lowerRect.bottom - gridRect.top
+          });
+        }
+        const circleOverlapsExclusion = (cx, cy, r) => {
+          for (const rect of exclusionRects) {
+            const nearX = Math.max(rect.left, Math.min(cx, rect.right));
+            const nearY = Math.max(rect.top, Math.min(cy, rect.bottom));
+            const dx = cx - nearX;
+            const dy = cy - nearY;
+            if (dx * dx + dy * dy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+              return true;
+            }
+          }
+          return false;
+        };
         const configFits = (cols2, s) => {
           const rows2 = Math.ceil(faces.length / cols2);
           const cellStep = s + GAP_PX;
@@ -18712,11 +18739,7 @@
             const ny = isShortCol && hasNestle ? cellStep / 2 : 0;
             const cx = PADDING_PX + hexColX(col, remainder, cols2, cellStep, hasNestle) + r;
             const cy = PADDING_PX + row * cellStep + ny + r;
-            const nearX = Math.max(pLeft, Math.min(cx, pRight));
-            const nearY = Math.max(pTop, Math.min(cy, pBottom));
-            const dx = cx - nearX;
-            const dy = cy - nearY;
-            if (dx * dx + dy * dy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+            if (circleOverlapsExclusion(cx, cy, r)) {
               return false;
             }
           }
@@ -18730,7 +18753,14 @@
           W,
           H
         );
-        if (anyFaceOverlapsRect(centers, size / 2, pLeft, pTop, pRight, pBottom)) {
+        let hasOverlap = false;
+        for (const { cx, cy } of centers) {
+          if (circleOverlapsExclusion(cx, cy, size / 2)) {
+            hasOverlap = true;
+            break;
+          }
+        }
+        if (hasOverlap) {
           let lo = 0, hi = Math.max(W, H);
           for (let iter = 0; iter < 25; iter++) {
             const mid = Math.floor((lo + hi) / 2);
@@ -18776,11 +18806,7 @@
               const isShort = col >= remainder;
               const cx = PADDING_PX + dx + hexColX(col, remainder, bestConfig, cellStep, hasNestle) + r;
               const cy = PADDING_PX + dy + row * cellStep + (isShort && hasNestle ? cellStep / 2 : 0) + r;
-              const nearX = Math.max(pLeft, Math.min(cx, pRight));
-              const nearY = Math.max(pTop, Math.min(cy, pBottom));
-              const ddx = cx - nearX;
-              const ddy = cy - nearY;
-              if (ddx * ddx + ddy * ddy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
+              if (circleOverlapsExclusion(cx, cy, r)) {
                 return false;
               }
             }
@@ -18810,9 +18836,11 @@
       }
       const dpr = window.devicePixelRatio || 1;
       const newPhys = Math.round(size * dpr);
-      const positionChanged = useTopLeftAlign !== wasShifted;
+      const isAstroTab = popoverOpen && !document.getElementById("tp-tab-astro")?.classList.contains("tp-pane-hidden");
+      const positionChanged = useTopLeftAlign !== wasShifted || isAstroTab !== wasAstroTab;
       if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
       wasShifted = useTopLeftAlign;
+      wasAstroTab = isAstroTab;
       stopScheduler();
       cols = result.cols;
       rows = result.rows;
@@ -19770,14 +19798,26 @@
     const tpTabs = timePopover.querySelectorAll(".tp-tab");
     function switchTab(tabName) {
       if (tpTabDate && tpTabAstro) {
-        tpTabDate.style.display = tabName === "d" ? "" : "none";
-        tpTabAstro.style.display = tabName === "a" ? "" : "none";
+        const hiding = tabName === "a" ? tpTabDate : tpTabAstro;
+        const showing = tabName === "a" ? tpTabAstro : tpTabDate;
+        hiding.style.transition = "none";
+        hiding.classList.add("tp-pane-hidden");
+        void hiding.offsetHeight;
+        hiding.style.transition = "";
+        showing.classList.remove("tp-pane-hidden");
       }
       tpTabs.forEach((btn) => {
         const el = btn;
         el.classList.toggle("active", el.dataset.tab === (tabName === "a" ? "astro" : "date"));
       });
       writeUrlState({ tp: tabName });
+      if (popoverOpen && lastContainerW > 0) {
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            onGridResize(lastContainerW, lastContainerH);
+          });
+        }, 320);
+      }
     }
     const initialTab = urlState.tp;
     if (initialTab === "a") {

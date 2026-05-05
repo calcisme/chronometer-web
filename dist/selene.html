@@ -1207,7 +1207,16 @@
         }
 
         .tp-tab-pane {
-            /* panes shown/hidden via JS display toggle */
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.2s ease;
+            max-height: 500px;  /* generous upper bound for visible state */
+            opacity: 1;
+        }
+
+        .tp-tab-pane.tp-pane-hidden {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
         }
 
         /* ============= Astro stepper rows ============= */
@@ -1652,7 +1661,7 @@
                         <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
                     </div>
                 </div>
-                <div id="tp-tab-astro" class="tp-tab-pane" style="display:none">
+                <div id="tp-tab-astro" class="tp-tab-pane tp-pane-hidden">
                     <div class="tp-label">Astronomical Events</div>
                     <div class="tp-astro-row">
                         <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
