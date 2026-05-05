@@ -15239,11 +15239,11 @@
         }
       } else {
         ctx.save();
-        ctx.textBaseline = "top";
         for (let i = 0; i < n; i++) {
           const label = labels[i].trim();
           if (label) {
-            ctx.fillText(label, 0, -(radius * EC_DIAL_RADIUS_FACTOR));
+            const centerY = -(radius * EC_DIAL_RADIUS_FACTOR - fontSize / 2);
+            ctx.fillText(label, 0, centerY + textVisualCenterY(ctx, label));
           }
           ctx.rotate(2 * Math.PI / n);
         }

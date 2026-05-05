@@ -1492,15 +1492,19 @@ function drawQDial(
         } else {
             // Default: radial text
             // iOS drawDialRadial(rotated: false):
+            //   s = [label sizeWithAttributes:...];
             //   rect = (-s.width/2, radius*0.92 - s.height, s.width, s.height)
-            //   In iOS Y-up, top of text is at radius*0.92 (outward).
-            //   In Canvas Y-down, top of text is at -(radius*0.92).
+            //   Text center is at radius*0.92 - s.height/2 from dial center.
+            //   In Canvas Y-down, center is at -(radius*0.92 - fontSize/2).
+            // Use textVisualCenterY (same as all other orientations) for
+            // cross-browser consistency — avoids textBaseline='top' which
+            // renders differently in Safari.
             ctx.save();
-            ctx.textBaseline = 'top';
             for (let i = 0; i < n; i++) {
                 const label = labels[i].trim();
                 if (label) {
-                    ctx.fillText(label, 0, -(radius * EC_DIAL_RADIUS_FACTOR));
+                    const centerY = -(radius * EC_DIAL_RADIUS_FACTOR - fontSize / 2);
+                    ctx.fillText(label, 0, centerY + textVisualCenterY(ctx, label));
                 }
                 ctx.rotate(2 * Math.PI / n);
             }
