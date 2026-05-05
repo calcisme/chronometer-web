@@ -606,7 +606,7 @@ The 24-hour number dial (`QDial '24 nums'`) is placed **outside** the `<static>`
 - `angle='dialFlip'` — rotation is driven by the `dialFlip` env variable
 - `animSpeed='1'` — enables smooth animation via the standard `HandState` system (same as QHands and Wheels)
 
-Because `radial` positions text tops at `radius × 0.92`, the radius is set to `(hrDialR+0.5)/0.92-1.5` to match the visual position of the original `demi` layout.
+Because `radial` positions text tops at `radius × 0.92`, the radius is set to `(hrDialR+0.5)/0.92-0.5` to match the visual position of the original `demi` layout.
 
 No text swapping is needed: when `dialFlip=π`, the 180° rotation moves "12" from the bottom (where it's unreadable in radial) to the top (where it's readable).
 

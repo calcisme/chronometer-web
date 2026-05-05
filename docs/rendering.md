@@ -122,6 +122,19 @@ The `drawWheel` function computes label Y-position as `-(tradius - maxH/2)` with
 
 For compact glyphs like `●`, the difference `(fontSize - measuredHeight) / 2` is significant (3px on Selene's AM/PM wheel). The current fix is a per-watch XML Y-offset adjustment rather than a renderer-level change, because switching to measured height would break other wheels whose window positions were authored around the `fontSize`-based formula.
 
+## Cross-Browser Text Positioning
+
+**Always** use `textBaseline = 'alphabetic'` (the default) with `textVisualCenterY(ctx, label)` for vertical text positioning. **Never** use `textBaseline = 'top'` — Safari positions the "top" baseline differently from Chrome, causing text to render at the wrong vertical position.
+
+The standard pattern for all dial/wheel text:
+```typescript
+ctx.textBaseline = 'alphabetic';  // set once at the top of the text section
+ctx.textAlign = 'center';
+ctx.fillText(label, x, centerY + textVisualCenterY(ctx, label));
+```
+
+`textVisualCenterY` caches `(fontBoundingBoxAscent - fontBoundingBoxDescent) / 2` per font, providing a consistent cross-browser Y-offset that visually centers text at the target point.
+
 ## Key Source Files
 
 | File | Purpose |

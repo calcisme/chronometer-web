@@ -103,11 +103,15 @@ The 24-hour number dial uses `orientation='radial'` so labels remain readable in
 
 This follows the same post-init-override pattern as `body=` (applied after init blocks in `watch-env.ts`).
 
-## 9. If Blocked, Ask
+## 9. Cross-Browser Text Positioning
+
+**Never** use `textBaseline = 'top'` — Safari positions it differently from Chrome. Always use `textBaseline = 'alphabetic'` with `textVisualCenterY(ctx, label)` as the Y-offset. This applies to all dial, wheel, and calendar text rendering. See [Rendering — Cross-Browser Text Positioning](rendering.md#cross-browser-text-positioning) for details.
+
+## 10. If Blocked, Ask
 
 If you cannot implement the iOS algorithm directly, cannot find the source of a rendering bug, or believe a fundamental architectural constraint needs to be violated — **stop and ask the user** how to proceed. Do not attempt speculative workarounds.
 
-## 10. Date Range Constraint: 4000 BCE – 2800 CE
+## 11. Date Range Constraint: 4000 BCE – 2800 CE
 
 The astronomical series approximations (Willmann-Bell planetary/sun tables) are only valid for the range **4000 BCE to 2800 CE**. All time-mutation paths must enforce this invariant:
 
