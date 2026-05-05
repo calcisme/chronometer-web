@@ -822,7 +822,8 @@
       strokeColor: attrExpr(el, "strokeColor"),
       fontSize: attrExpr(el, "fontSize"),
       titleFontSize: attrExpr(el, "titleFontSize"),
-      labelText: attr(el, "labelText")
+      labelText: attr(el, "labelText"),
+      titleYOffset: attrExpr(el, "titleYOffset")
     };
   }
   function parseQWedge(el) {
@@ -16688,7 +16689,8 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillStyle = color;
-    const arcBottomY = Math.sin(arcEnd) * radius + 2;
+    const titleYOff = part.titleYOffset ? evalAttr(part.titleYOffset, env) : 0;
+    const arcBottomY = Math.sin(arcDrawEnd) * radius + 2 - titleYOff;
     ctx.fillText(labelText, 0, arcBottomY);
     ctx.restore();
   }

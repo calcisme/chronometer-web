@@ -480,4 +480,6 @@ export interface EotDialPart extends PartBase {
     titleFontSize?: ASTNode;
     /** Title label text (default "Equation of Time"). */
     labelText?: string;
+    /** Y offset for the title label in XML units (positive = up). */
+    titleYOffset?: ASTNode;
 }

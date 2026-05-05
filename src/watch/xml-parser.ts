@@ -516,6 +516,7 @@ function parseEotDial(el: Element): EotDialPart {
         fontSize: attrExpr(el, 'fontSize'),
         titleFontSize: attrExpr(el, 'titleFontSize'),
         labelText: attr(el, 'labelText'),
+        titleYOffset: attrExpr(el, 'titleYOffset'),
     };
 }
 

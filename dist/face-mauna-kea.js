@@ -41,14 +41,14 @@
     <QRect      name='maskRect'     x='-backerWidth/2' y='-backerWidth/2'  modes='front'  w='backerWidth' h='backerWidth' bgColor='black'/>
     <Image	name='face'	    x=' 0'  y='0'   modes='front' src='astro-face.png' alpha='1' />
     <QDial	name='case Ext'	    x='0' y='0'	    modes='front' radius='140' bgColor='clear' strokeColor='black' marks='tickOut' nMarks='500' mSize='9' markWidth='3' />
-    <eotDial    name='eot dial'     x='0'    y='27'   modes='front' radius='30' strokeColor='white' fontSize='3.5' />
+    <eotDial    name='eot dial'     x='0'    y='25'   modes='front' radius='30' strokeColor='white' fontSize='3.5' />
     <QDial	name='dial 12'	    x='0'   y='0'   modes='front'  radius='hr12Rn'  orientation='demi'  demiTweak='0'  fontSize='11' fontName='Arial' bgColor='clear' strokeColor='fgclr' text='12,1,2,3,,5,6,7,,9,10,11' />
     <QDial	name='12 dial1'	    x='0'   y='0'   modes='front'  radius='hr12R' bgColor='clear' strokeColor='fgclr' marks='tickOut' nMarks='240' markWidth='0.4' mSize='hr12sz*.5'  />
     <QDial	name='12 dial2'	    x='0'   y='0'   modes='front'  radius='hr12R' bgColor='clear' strokeColor='fgclr' marks='tickOut' nMarks=' 60' markWidth='0.3' mSize='hr12sz*.75' />
     <QDial	name='12 dial3'	    x='0'   y='0'   modes='front'  radius='hr12R' bgColor='clear' strokeColor='fgclr' marks='tickOut' nMarks=' 12' markWidth='0.7' mSize='hr12sz'     />
   </static>
 
-  <Qhand	name='EOT'	    x=' 0'  y='27' modes='front'  length='30' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgclr' fillColor='fgclr' />
+  <Qhand	name='EOT'	    x=' 0'  y='25' modes='front'  length='30' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgclr' fillColor='fgclr' />
 
   <QdayNightRing name='daytime' x='0' y='0' modes='front' outerRadius='r-10' innerRadius='108' update='3600' strokeColor='leafBorder'  fillColor='leafFill' input='0' numWedges='24'
 						    planetNumber='planetSun' masterOffset='pi + longitude()-tzOffsetAngle()+EOTAngle()' />
