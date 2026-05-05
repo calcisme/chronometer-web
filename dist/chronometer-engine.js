@@ -14108,7 +14108,7 @@
     ctx.translate(radius, radius);
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.13)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.09)";
     ctx.fill();
     const channelPath = buildChannelPath2D(pathScaled);
     ctx.strokeStyle = channelColor;
