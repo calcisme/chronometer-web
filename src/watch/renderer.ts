@@ -3653,7 +3653,7 @@ function drawCalendarHeader(
 // ============================================================================
 
 function drawEotDial(
-    ctx: CanvasRenderingContext2D,
+    ctx: RenderContext,
     part: EotDialPart,
     env: Environment,
 ): void {

@@ -26,6 +26,10 @@ if [ -n "$DUPES" ]; then
 fi
 echo "  ✓ All urlAbbrev values are unique ($(echo "$ABBREVS" | wc -l | tr -d ' ') faces)"
 
+echo "=== Type-checking with tsc ==="
+npx tsc --noEmit
+echo "  ✓ No type errors"
+
 echo "=== Building engine ==="
 $ESBUILD "$SRC/engine-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/chronometer-engine.js"

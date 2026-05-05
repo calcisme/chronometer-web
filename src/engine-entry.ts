@@ -799,14 +799,11 @@ async function main() {
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
             tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
-            // Tick any in-flight QDayNightRing / QDial toggle animations
+            // Tick any in-flight QDayNightRing toggle animations
             for (const part of face.watch.parts) {
                 if (part.type === 'QDayNightRing' && part._masterOffsetAnim && part._masterOffsetAnim.animating) {
                     interpolateValue(part._masterOffsetAnim, now);
                     part._cachedAngles = undefined; // force re-draw with new offset
-                }
-                if (part.type === 'QDial' && part._orientationAnim && part._orientationAnim.animating) {
-                    interpolateValue(part._orientationAnim, now);
                 }
             }
             if (face.terminatorLeaves.length > 0) {
@@ -948,8 +945,7 @@ async function main() {
             renderMs += performance.now() - renderStart;
 
             const ringAnimating = face.watch.parts.some(p =>
-                (p.type === 'QDayNightRing' && p._masterOffsetAnim?.animating) ||
-                (p.type === 'QDial' && p._orientationAnim?.animating)
+                (p.type === 'QDayNightRing' && p._masterOffsetAnim?.animating)
             );
             const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
             if (faceAnimating) {
@@ -3160,10 +3156,6 @@ async function main() {
                     viennaFace!.lastTerminatorRebuild = 0;
                 }
 
-                // 6. Reset analemma schedule
-                if (viennaFace!.analemmaState) {
-                    viennaFace!.analemmaState.lastUpdateTime = 0;
-                }
 
                 // 7. Kick the scheduler so animations start immediately
                 stopScheduler();

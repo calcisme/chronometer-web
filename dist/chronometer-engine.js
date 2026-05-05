@@ -18380,9 +18380,6 @@
             interpolateValue(part._masterOffsetAnim, now);
             part._cachedAngles = void 0;
           }
-          if (part.type === "QDial" && part._orientationAnim && part._orientationAnim.animating) {
-            interpolateValue(part._orientationAnim, now);
-          }
         }
         if (face.terminatorLeaves.length > 0) {
           tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
@@ -18488,7 +18485,7 @@
         }
         renderMs += performance.now() - renderStart;
         const ringAnimating = face.watch.parts.some(
-          (p) => p.type === "QDayNightRing" && p._masterOffsetAnim?.animating || p.type === "QDial" && p._orientationAnim?.animating
+          (p) => p.type === "QDayNightRing" && p._masterOffsetAnim?.animating
         );
         const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
         if (faceAnimating) {
@@ -20167,9 +20164,6 @@
             updateLeafAngles(viennaFace.terminatorLeaves, viennaFace.env);
             resetLeafSchedules(viennaFace.terminatorLeaves);
             viennaFace.lastTerminatorRebuild = 0;
-          }
-          if (viennaFace.analemmaState) {
-            viennaFace.analemmaState.lastUpdateTime = 0;
           }
           stopScheduler();
           startScheduler();

@@ -87,7 +87,7 @@ export function makeAnimatingValue(initial: number, now: number): AnimatingValue
 /** Per-part state tracked by the animation system. */
 export interface HandState {
     /** Reference to the XML part definition. */
-    part: QHandPart | WheelPart | QWedgePart | CalendarRowCoverPart;
+    part: QHandPart | WheelPart | QWedgePart | QDialPart | CalendarRowCoverPart;
     /** The angle being animated. */
     angle: AnimatingValue;
     /** The offsetAngle being animated (only for offset-orbit hands like Moon). */
