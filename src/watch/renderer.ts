@@ -1487,23 +1487,21 @@ function drawQDial(
                 ctx.restore();
             }
         } else {
-            // Default: radial text (tangent to circle)
-            // Original iOS: drawDialRadial(rotated: false)
-            // rect at y = radius * 0.92 - s.height → center at radius * 0.92 - textH/2
+            // Default: radial text
+            // iOS drawDialRadial(rotated: false):
+            //   rect = (-s.width/2, radius*0.92 - s.height, s.width, s.height)
+            //   In iOS Y-up, top of text is at radius*0.92 (outward).
+            //   In Canvas Y-down, top of text is at -(radius*0.92).
+            ctx.save();
+            ctx.textBaseline = 'top';
             for (let i = 0; i < n; i++) {
                 const label = labels[i].trim();
-                if (!label) continue;
-                const th = (i / n) * 2 * Math.PI - Math.PI / 2;
-                const textH = fontSize;
-                const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
-                const tx = textR * Math.cos(th);
-                const ty = textR * Math.sin(th);
-                ctx.save();
-                ctx.translate(tx, ty);
-                ctx.rotate(th + Math.PI / 2);
-                ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-                ctx.restore();
+                if (label) {
+                    ctx.fillText(label, 0, -(radius * EC_DIAL_RADIUS_FACTOR));
+                }
+                ctx.rotate(2 * Math.PI / n);
             }
+            ctx.restore();
         }
     }
 

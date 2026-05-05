@@ -598,6 +598,12 @@ Vienna is a 24-hour watch face that supports switching between **midnight on top
 
 `dialFlip` is used in the hour hand (`+dialFlip`), UT hand (`+dialFlip`), and day/night ring (`masterOffset='dialFlip'`) angle expressions to rotate all 24-hour elements by 180°.
 
+### 24-hour number dial
+
+The 24-hour number dial (`QDial '24 nums'`) is placed **outside** the `<static>` block so it can animate smoothly during noon/midnight toggles. It uses `orientation='radial'` so that all labels have their tops pointing outward, keeping them readable in both dial orientations. The `QDialPart._orientationAnim` (`AnimatingValue`) drives the smooth rotation when toggling.
+
+Because `radial` positions text tops at `radius × 0.92`, the radius is set to `(hrDialR+0.5)/0.92-1.5` to match the visual position of the original `demi` layout.
+
 ### URL persistence
 
 The `vnoon=1` URL parameter overrides `noonOnTop` after init block evaluation (in `watch-env.ts`), following the same pattern as `body=` for Venezia. Absent or `vnoon=0` = midnight on top.
@@ -607,8 +613,8 @@ The `vnoon=1` URL parameter overrides `noonOnTop` after init block evaluation (i
 A pill toggle ("Midnight ↑ | Noon ↑") in `#vienna-noon-toggle` is shown below the face in single-face mode. On toggle, the engine:
 1. Updates `noonOnTop` and `dialFlip` in `env.variables`
 2. Swaps the 24-hour dial text array
-3. Rebuilds the static cache
-4. Resets hand and analemma schedules
+3. Starts an `AnimatingValue` rotation on the `QDialPart._orientationAnim` for the 24-hour number dial
+4. Rebuilds the static cache and resets hand/analemma schedules
 5. Writes `vnoon=1` to the URL (or removes it)
 
 ---
@@ -700,10 +706,10 @@ The `modes` attribute filters which parts appear in which view:
 
 | Value | Description |
 |-------|-------------|
-| `upright` | Text stays horizontal (readable) regardless of position |
-| `radial` | Text radiates outward from center |
-| `demi` | Text follows the curve, tops pointing inward |
-| `rotated` | Text rotated 90° from radial |
+| `upright` | Text stays horizontal (readable) regardless of position (default) |
+| `radial` | Each label is rotated so its top points outward from center. Text top edge is placed at `radius × 0.92`. When switching from `demi` to `radial`, increase `radius` by dividing by `0.92` to maintain the same visual position |
+| `demi` | Top half radial (tops outward), bottom half anti-radial (tops outward). All labels are readable. `demiTweak` adjusts the anti-radial half's radius |
+| `rotated` | Each label's right side points outward (text reads tangentially clockwise) |
 | `three` | Text reads normally at the 3 o'clock position |
 | `six` | Text reads normally at 6 o'clock |
 | `nine` | Text reads normally at 9 o'clock |

@@ -15233,20 +15233,16 @@
           ctx.restore();
         }
       } else {
+        ctx.save();
+        ctx.textBaseline = "top";
         for (let i = 0; i < n; i++) {
           const label = labels[i].trim();
-          if (!label) continue;
-          const th = i / n * 2 * Math.PI - Math.PI / 2;
-          const textH = fontSize;
-          const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
-          const tx = textR * Math.cos(th);
-          const ty = textR * Math.sin(th);
-          ctx.save();
-          ctx.translate(tx, ty);
-          ctx.rotate(th + Math.PI / 2);
-          ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-          ctx.restore();
+          if (label) {
+            ctx.fillText(label, 0, -(radius * EC_DIAL_RADIUS_FACTOR));
+          }
+          ctx.rotate(2 * Math.PI / n);
         }
+        ctx.restore();
       }
     }
     if (marks & MARKS_CENTER) {

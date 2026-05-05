@@ -97,7 +97,10 @@ When switching bodies, preserve existing `HandState` objects rather than recreat
 Vienna's 24-hour dial supports switching between midnight-on-top (default) and noon-on-top via a `vnoon=1` URL parameter and a pill toggle in `#vienna-noon-toggle`. The toggle:
 1. Sets `noonOnTop` and `dialFlip` env variables (the XML uses `dialFlip` in hand angles and day/night ring `masterOffset`)
 2. Swaps the 24-hour dial number text on the parsed `QDialPart`
-3. Rebuilds the static cache and resets hand/analemma schedules
+3. Starts an `AnimatingValue` rotation on `QDialPart._orientationAnim` for smooth 180° dial animation
+4. Rebuilds the static cache and resets hand/analemma schedules
+
+The 24-hour number dial uses `orientation='radial'` (not `demi`) so labels remain readable in both orientations — `radial` always points text tops outward. It is placed outside the `<static>` block so the renderer can animate it per-frame during the toggle.
 
 This follows the same post-init-override pattern as `body=` (applied after init blocks in `watch-env.ts`).
 
