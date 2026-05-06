@@ -8,7 +8,9 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:capture": "CAPTURE=1 vitest run src/__tests__/regression/",
+    "test:regression": "vitest run src/__tests__/regression/"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.1",
