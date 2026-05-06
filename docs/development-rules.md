@@ -103,6 +103,11 @@ The 24-hour number dial uses `orientation='radial'` so labels remain readable in
 
 This follows the same post-init-override pattern as `body=` (applied after init blocks in `watch-env.ts`).
 
+### Terra embed mode
+
+Terra supports an `embed=1` URL parameter for iframe embedding.
+See [Embedding](embedding.md) for full details.
+
 ## 9. Cross-Browser Text Positioning
 
 **Never** use `textBaseline = 'top'` — Safari positions it differently from Chrome. Always use `textBaseline = 'alphabetic'` with `textVisualCenterY(ctx, label)` as the Y-offset. This applies to all dial, wheel, and calendar text rendering. See [Rendering — Cross-Browser Text Positioning](rendering.md#cross-browser-text-positioning) for details.

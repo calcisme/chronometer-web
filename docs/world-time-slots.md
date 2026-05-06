@@ -96,6 +96,10 @@ City name resolution priority:
 3. `olsonIdToCityName()` (e.g., "Los Angeles" from "America/Los_Angeles")
 4. Fallback: "Local"
 
+**Embed mode**: When `embed=1`, lat/lon is (0, 0) and the timezone comes from
+the browser or `tz` URL parameter. The global location slot is still assigned
+based on timezone matching. See [Embedding](embedding.md).
+
 ## City Customization Dialog
 
 Both Terra and Gaia reuse `terra-city-dialog.html`, wired differently per feature:

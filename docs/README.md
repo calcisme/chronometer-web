@@ -30,6 +30,7 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 - [**Timezone & DST**](timezone-and-dst.md) — Timezone offset model, DST transition detection, environment rebuilds
 - [**Help System**](help-system.md) — Per-face help content, Android source extraction, lazy-loading architecture
 - [**Face Picker**](face-picker.md) — Face selection/reordering, `picks` URL parameter, selected faces page
+- [**Embedding**](embedding.md) — Embedding Terra in other websites via iframe
 
 ### Development
 - [**Face Porting Guide**](face-porting-guide.md) — Step-by-step procedure for porting a new watch face

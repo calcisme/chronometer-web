@@ -1387,6 +1387,33 @@
             text-align: center;
             font-family: system-ui, sans-serif;
         }
+
+        /* ============= Embed mode: transparent, no chrome ============= */
+
+        body.embed-mode {
+            background: transparent !important;
+        }
+
+        /* Also clear html background (base rule sets it on html,body) */
+        html:has(body.embed-mode) {
+            background: transparent !important;
+        }
+
+        body.embed-mode .face-cell canvas {
+            border-radius: 50%;
+            box-shadow: none;
+        }
+
+        body.embed-mode #watch-grid {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        body.embed-mode #app {
+            margin: 0;
+            padding: 0;
+        }
     </style>
 </head>
 

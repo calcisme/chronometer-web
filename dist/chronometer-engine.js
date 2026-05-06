@@ -17139,7 +17139,8 @@
       dir,
       tz: params.get("tz") || null,
       picks: params.get("picks") || null,
-      tp: params.get("tp") === "a" ? "a" : "d"
+      tp: params.get("tp") === "a" ? "a" : "d",
+      embed: params.get("embed") === "1"
     };
   }
   function writeUrlState(changes) {
@@ -17945,28 +17946,34 @@
     const lpDoneBtn = document.getElementById("lp-done");
     const lpDialogFooter = lpDoneBtn.parentElement;
     initNavigationLinks();
-    loadCityData().then(() => {
-      updateLocationDisplay();
-      for (const face of faces) {
-        if (face.watch.worldTimeSubdials && face.terraSlotOverrides?.[1]?.cityName === "Observer") {
-          const closest = findClosestCity(lat, lon);
-          if (closest) {
-            face.terraSlotOverrides[1].cityName = closest.shortLabel;
-          }
-        }
-        if (face.watch.worldTimeRing && face.globalLocationSlot !== void 0) {
-          const glSlot = face.terraSlotOverrides?.[face.globalLocationSlot];
-          if (glSlot && !locationSource && (lat !== 0 || lon !== 0)) {
+    const urlState = readUrlState();
+    const isEmbedMode = urlState.embed;
+    if (isEmbedMode) {
+      document.body.classList.add("embed-mode");
+    }
+    if (!isEmbedMode) {
+      loadCityData().then(() => {
+        updateLocationDisplay();
+        for (const face of faces) {
+          if (face.watch.worldTimeSubdials && face.terraSlotOverrides?.[1]?.cityName === "Observer") {
             const closest = findClosestCity(lat, lon);
             if (closest) {
-              glSlot.cityName = closest.shortLabel;
+              face.terraSlotOverrides[1].cityName = closest.shortLabel;
+            }
+          }
+          if (face.watch.worldTimeRing && face.globalLocationSlot !== void 0) {
+            const glSlot = face.terraSlotOverrides?.[face.globalLocationSlot];
+            if (glSlot && !locationSource && (lat !== 0 || lon !== 0)) {
+              const closest = findClosestCity(lat, lon);
+              if (closest) {
+                glSlot.cityName = closest.shortLabel;
+              }
             }
           }
         }
-      }
-    }).catch(() => {
-    });
-    const urlState = readUrlState();
+      }).catch(() => {
+      });
+    }
     let lat, lon;
     let locationSource = "";
     let locationFullLabel = "";
@@ -17975,7 +17982,14 @@
     let locationTimezone = urlState.tz || void 0;
     let tzDeltaMs = computeTzDeltaMs(locationTimezone);
     let geoPermission = "unknown";
-    if (urlState.lat !== null && urlState.lon !== null) {
+    if (isEmbedMode) {
+      lat = 0;
+      lon = 0;
+      locationSource = "";
+      locationTimezone = urlState.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      tzDeltaMs = computeTzDeltaMs(locationTimezone);
+      needsPrompt = false;
+    } else if (urlState.lat !== null && urlState.lon !== null) {
       lat = urlState.lat;
       lon = urlState.lon;
       locationSource = urlState.city || "";
@@ -18918,22 +18932,30 @@
       const entry = entries[0];
       if (!entry) return;
       const { width } = entry.contentRect;
-      const locationPanel = document.getElementById("location-panel");
-      const timeBarEl = document.getElementById("time-bar");
-      const planetSelectorEl = document.getElementById("planet-selector");
-      const changeCitiesBtnEl = document.getElementById("change-cities-btn");
-      const viennaToggleEl = document.getElementById("vienna-noon-toggle");
-      const panelH = locationPanel ? locationPanel.offsetHeight : 0;
-      const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
-      const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
-      const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
-      const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
-      const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH;
-      if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
-      resizeDebounceTimer = setTimeout(() => {
-        resizeDebounceTimer = null;
-        onGridResize(width, height);
-      }, 150);
+      if (isEmbedMode) {
+        if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = setTimeout(() => {
+          resizeDebounceTimer = null;
+          onGridResize(width, entry.contentRect.height);
+        }, 150);
+      } else {
+        const locationPanel = document.getElementById("location-panel");
+        const timeBarEl = document.getElementById("time-bar");
+        const planetSelectorEl = document.getElementById("planet-selector");
+        const changeCitiesBtnEl = document.getElementById("change-cities-btn");
+        const viennaToggleEl = document.getElementById("vienna-noon-toggle");
+        const panelH = locationPanel ? locationPanel.offsetHeight : 0;
+        const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
+        const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
+        const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
+        const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
+        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH;
+        if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = setTimeout(() => {
+          resizeDebounceTimer = null;
+          onGridResize(width, height);
+        }, 150);
+      }
     });
     resizeObserver.observe(grid.parentElement);
     function rebuildAllForLocation(newLat, newLon) {
@@ -20713,11 +20735,34 @@
     if (initialRect.width > 0 && initialRect.height > 0) {
       onGridResize(initialRect.width, initialRect.height);
     }
-    updateTimeUI();
-    if (urlState.tc) {
+    if (isEmbedMode) {
+      const removeIds = [
+        "location-panel",
+        "time-bar",
+        "back-link",
+        "all-faces-link",
+        "selected-faces-link",
+        "info-btn",
+        "face-name",
+        "time-popover",
+        "location-prompt",
+        "planet-selector",
+        "vienna-noon-toggle",
+        "change-cities-btn",
+        "edit-picks-link",
+        "info-overlay"
+      ];
+      for (const id of removeIds) {
+        document.getElementById(id)?.remove();
+      }
+    }
+    if (!isEmbedMode) {
+      updateTimeUI();
+    }
+    if (!isEmbedMode && urlState.tc) {
       showPopover();
     }
-    if (needsPrompt) {
+    if (!isEmbedMode && needsPrompt) {
       showLocationPrompt(true);
     }
   }

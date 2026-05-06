@@ -16,6 +16,7 @@
  *   tz    - IANA timezone for the location (e.g. "America/Los_Angeles")
  *   picks - Compact face selection: concatenated 2-letter abbreviations (e.g. "bbmktr")
  *   tp    - Time panel lower tab: 'd' = date (default), 'a' = astro events
+ *   embed - Embed mode: 1 = Terra-only minimal embed (no chrome, transparent bg)
  */
 
 export interface UrlState {
@@ -32,6 +33,8 @@ export interface UrlState {
     picks: string | null;
     /** Time panel lower tab: 'd' = date (default), 'a' = astro events. */
     tp: 'd' | 'a';
+    /** Embed mode: minimal UI, transparent background (Terra only). */
+    embed: boolean;
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -66,6 +69,7 @@ export function readUrlState(): UrlState {
         tz: params.get('tz') || null,
         picks: params.get('picks') || null,
         tp: params.get('tp') === 'a' ? 'a' : 'd',
+        embed: params.get('embed') === '1',
     };
 }
 

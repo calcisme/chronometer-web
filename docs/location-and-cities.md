@@ -12,6 +12,10 @@ When determining the observer's location, the system checks in this order:
 4. **Manual coordinates** — user enters lat/lon directly
 5. **Location prompt** — if none of the above, the location panel opens
 
+**Embed mode** (`embed=1`): Location is hardcoded to (0, 0) and timezone is
+detected from the browser's `Intl.DateTimeFormat` API. No geolocation prompt
+is shown and the city database is not loaded. See [Embedding](embedding.md).
+
 The resolved city name follows this priority:
 1. `locationSource` (from city-picker or URL `city=` param)
 2. `findClosestCity()` (once the city database loads)
