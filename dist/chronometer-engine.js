@@ -20050,7 +20050,7 @@
             bodySetLabel.dataset.planet = numStr;
           }
           if (bodyTransitLabel) {
-            bodyTransitLabel.textContent = `${name} Xit`;
+            bodyTransitLabel.textContent = `${name} Trans`;
             bodyTransitLabel.dataset.planet = numStr;
           }
         }, selectPlanet2 = function(idx) {

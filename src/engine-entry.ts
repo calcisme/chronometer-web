@@ -3059,7 +3059,7 @@ async function main() {
                 const numStr = String(planetNum);
                 if (bodyRiseLabel) { bodyRiseLabel.textContent = `${name} Rise`; bodyRiseLabel.dataset.planet = numStr; }
                 if (bodySetLabel) { bodySetLabel.textContent = `${name} Set`; bodySetLabel.dataset.planet = numStr; }
-                if (bodyTransitLabel) { bodyTransitLabel.textContent = `${name} Xit`; bodyTransitLabel.dataset.planet = numStr; }
+                if (bodyTransitLabel) { bodyTransitLabel.textContent = `${name} Trans`; bodyTransitLabel.dataset.planet = numStr; }
             }
 
             // Set initial body labels
