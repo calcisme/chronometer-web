@@ -35,5 +35,6 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 ### Development
 - [**Face Porting Guide**](face-porting-guide.md) — Step-by-step procedure for porting a new watch face
 - [**Build System**](build-system.md) — Build pipeline, face registration, deployment
+- [**Testing**](testing.md) — Test framework: unit tests, regression snapshots, astronomical boundary tests
 - [**iOS Reference**](ios-reference.md) — Guide to the iOS/Android reference repositories
 - [**Development Rules**](development-rules.md) — Rules to follow when making changes to this project
