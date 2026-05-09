@@ -31,9 +31,10 @@
 
   </static>
 
+<!--
   <QdayNightRing name='daytime' x='0' y='0' modes='front' outerRadius='outrRad' innerRadius='innRad' update='updateAtNextSunriseOrSunset' strokeColor='kyMode==0 ? 0x70000000 : clear' fillColor='kyMode==0 ? 0x70000000 : clear' input='0' numWedges='12' planetNumber='planetMidnightSun' masterOffset='pi - solarNoonAngle()' />
   <QWedge name='nightMaskFixed' x='0' y='0' modes='front' outerRadius='outrRad' innerRadius='innRad' angleSpan='pi' angle='pi' strokeColor='kyMode==1 ? 0x70000000 : clear' fillColor='kyMode==1 ? 0x70000000 : clear' />
-
+-->
   <Qhand name='jh00' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='jhrRad' fillColor='black' strokeColor='black' text='\u5348' fontSize='21' fontName='Helvetica-Bold' oFillColor='clear' angle='0' offsetAngle='kyMode==0 ? angleForJapanHour(0, topAnchorSolarNoon) : 0*pi/6' update='updateAtNextSunriseOrSunset' />
   <Qhand name='jh01' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='jhrRad' fillColor='black' strokeColor='black' text='\u672A' fontSize='21' fontName='Helvetica-Bold' oFillColor='clear' angle='0' offsetAngle='kyMode==0 ? angleForJapanHour(1, topAnchorSolarNoon) : 1*pi/6' update='updateAtNextSunriseOrSunset' />
   <Qhand name='jh02' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='jhrRad' fillColor='black' strokeColor='black' text='\u7533' fontSize='21' fontName='Helvetica-Bold' oFillColor='clear' angle='0' offsetAngle='kyMode==0 ? angleForJapanHour(2, topAnchorSolarNoon) : 2*pi/6' update='updateAtNextSunriseOrSunset' />
