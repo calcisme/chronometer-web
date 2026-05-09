@@ -1589,7 +1589,8 @@ async function main() {
         const psH = document.getElementById('planet-selector')?.offsetHeight ?? 0;
         const ccH = document.getElementById('change-cities-btn')?.offsetHeight ?? 0;
         const vtH = document.getElementById('vienna-noon-toggle')?.offsetHeight ?? 0;
-        onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH);
+        const ktH = document.getElementById('kyoto-mode-toggle')?.offsetHeight ?? 0;
+        onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH - ktH);
     }
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1615,7 +1616,9 @@ async function main() {
             const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
             const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
             const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
-            const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH;
+            const kyotoToggleEl = document.getElementById('kyoto-mode-toggle');
+            const kyotoToggleH = kyotoToggleEl ? kyotoToggleEl.offsetHeight : 0;
+            const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH - kyotoToggleH;
             if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
             resizeDebounceTimer = setTimeout(() => {
                 resizeDebounceTimer = null;
@@ -3217,6 +3220,83 @@ async function main() {
     }
 
     // =========================================================================
+    // Kyoto mode toggle (single-face mode only)
+    // =========================================================================
+    const kyotoFace = faces.find(f => f.watch.urlAbbrev === 'ky');
+    if (kyotoFace && isSingleFace) {
+        const toggleContainer = document.getElementById('kyoto-mode-toggle');
+        if (toggleContainer) {
+            toggleContainer.style.display = 'flex';
+            const variablePill = toggleContainer.querySelector('[data-mode="variable"]') as HTMLButtonElement;
+            const constantPill = toggleContainer.querySelector('[data-mode="constant"]') as HTMLButtonElement;
+
+            function isConstantMode(): boolean {
+                return (kyotoFace!.env.variables.get('kyMode') ?? 0) !== 0;
+            }
+
+            function updateKyotoPillHighlight() {
+                const constant = isConstantMode();
+                variablePill.classList.toggle('active', !constant);
+                constantPill.classList.toggle('active', constant);
+            }
+
+            function setKyotoMode(constant: boolean) {
+                const val = constant ? 1 : 0;
+
+                // 1. Update env variable
+                kyotoFace!.env.variables.set('kyMode', val);
+
+                // 2. Rebuild static cache
+                invalidateDayNightCaches(kyotoFace!.watch);
+                const { canvas, watch, env, images, scale } = kyotoFace!;
+                buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, kyotoFace!.terminatorLeaves);
+
+                // 3. Reset hand/dial schedules so expressions re-evaluate
+                for (const hs of kyotoFace!.handStates) {
+                    hs.nextUpdateTime = 0;
+                }
+
+                // 4. Reset terminator leaves
+                if (kyotoFace!.terminatorLeaves.length > 0) {
+                    updateLeafAngles(kyotoFace!.terminatorLeaves, kyotoFace!.env);
+                    resetLeafSchedules(kyotoFace!.terminatorLeaves);
+                    kyotoFace!.lastTerminatorRebuild = 0;
+                }
+
+                // 5. Kick the scheduler
+                stopScheduler();
+                startScheduler();
+
+                // 6. Update URL
+                const params = new URLSearchParams(window.location.search);
+                if (constant) {
+                    params.set('kmode', '1');
+                } else {
+                    params.delete('kmode');
+                }
+                const qs = params.toString();
+                history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+                updateNavigationLinks();
+
+                // 7. Update pill highlight
+                updateKyotoPillHighlight();
+            }
+
+            // Apply initial pill highlight from URL state
+            updateKyotoPillHighlight();
+
+            variablePill.addEventListener('click', () => {
+                if (!isConstantMode()) return;
+                setKyotoMode(false);
+            });
+            constantPill.addEventListener('click', () => {
+                if (isConstantMode()) return;
+                setKyotoMode(true);
+            });
+        }
+    }
+
+    // =========================================================================
     // Terra city customization (for faces with worldTimeRing flag, single-face mode)
     // =========================================================================
     const terraFace = faces.find(f => f.watch.worldTimeRing);
@@ -3852,6 +3932,7 @@ async function main() {
             'location-panel', 'time-bar', 'back-link', 'all-faces-link',
             'selected-faces-link', 'info-btn', 'face-name', 'time-popover',
             'location-prompt', 'planet-selector', 'vienna-noon-toggle',
+            'kyoto-mode-toggle',
             'change-cities-btn', 'edit-picks-link', 'info-overlay',
         ];
         for (const id of removeIds) {

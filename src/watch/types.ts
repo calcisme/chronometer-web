@@ -183,6 +183,8 @@ export interface QHandPart extends PartBase {
     yMotion?: ASTNode;
     /** Alpha/opacity expression (0 = invisible, 1 = fully opaque). */
     alpha?: ASTNode;
+    /** Text orientation (e.g. 'radial' for bottom-facing-center text). */
+    orientation?: string;
     // --- Pre-rendered shadow cache (not from XML) ---
     /** Pre-rendered hand + shadow bitmap. Created at init/resize. */
     _shadowBitmap?: OffscreenCanvas;

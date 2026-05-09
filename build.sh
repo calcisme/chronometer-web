@@ -35,7 +35,7 @@ $ESBUILD "$SRC/engine-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/chronometer-engine.js"
 
 echo "=== Building face data modules ==="
-FACES="haleakala hana chandra selene mauna-kea geneva basel firenze venezia terra miami gaia babylon vienna"
+FACES="haleakala hana chandra selene mauna-kea geneva basel firenze venezia terra miami gaia babylon vienna kyoto"
 for face in $FACES; do
   echo "  → face-$face.js"
   $ESBUILD "$SRC/faces/face-$face.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
@@ -104,6 +104,7 @@ get_title() {
     gaia)       echo "Gaia" ;;
     babylon)    echo "Babylon" ;;
     vienna)     echo "Vienna" ;;
+    kyoto)      echo "Kyoto" ;;
   esac
 }
 
@@ -150,7 +151,8 @@ ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-miami.js"><\/script>\
     <script src="face-gaia.js"><\/script>\
     <script src="face-babylon.js"><\/script>\
-    <script src="face-vienna.js"><\/script>'
+    <script src="face-vienna.js"><\/script>\
+    <script src="face-kyoto.js"><\/script>'
 
 # Generate combined help file for multi-face pages
 COMBINED_HELP="$DIST/.combined-help.html"

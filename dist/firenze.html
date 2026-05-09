@@ -1306,6 +1306,52 @@
             color: #8af;
         }
 
+        /* ============= Kyoto Mode Toggle ============= */
+
+        #kyoto-mode-toggle {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            padding: 6px 16px 4px;
+            border-top: 1px solid #2a2a3e;
+            background: rgba(25, 25, 42, 0.9);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .kyoto-pill {
+            background: #2a2a3e;
+            border: 1px solid #3a3a5e;
+            color: #99b;
+            font-size: 12px;
+            padding: 5px 14px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+            white-space: nowrap;
+        }
+
+        .kyoto-pill:first-child {
+            border-radius: 12px 0 0 12px;
+            border-right: none;
+        }
+
+        .kyoto-pill:last-child {
+            border-radius: 0 12px 12px 0;
+        }
+
+        .kyoto-pill:hover {
+            background: #3a3a5e;
+            color: #ccf;
+        }
+
+        .kyoto-pill.active {
+            background: #445;
+            border-color: #8af;
+            color: #8af;
+        }
+
         /* ============= Planet Selector (Venezia) ============= */
 
         #planet-selector {
@@ -1488,6 +1534,10 @@
         <div id="vienna-noon-toggle" style="display:none">
             <button class="noon-pill" data-mode="midnight">Midnight on top</button>
             <button class="noon-pill" data-mode="noon">Noon on top</button>
+        </div>
+        <div id="kyoto-mode-toggle" style="display:none">
+            <button class="kyoto-pill" data-mode="variable">Variable hour widths</button>
+            <button class="kyoto-pill" data-mode="constant">Constant hour widths</button>
         </div>
         <div id="time-bar">
             <button id="time-bar-label">⏱ Show time controller</button>

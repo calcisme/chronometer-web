@@ -1619,8 +1619,14 @@ function drawQHand(
         ctx.translate(x, y);
         ctx.rotate(angle + offsetAngle);
         ctx.translate(0, -offsetRadius);
-        // Counter-rotate text so it stays upright
-        ctx.rotate(-(angle + offsetAngle));
+        // Counter-rotate text so it stays upright unless orientation is 'radial'
+        if (part.orientation !== 'radial') {
+            ctx.rotate(-(angle + offsetAngle));
+        } else {
+            // For radial orientation, text reads bottom-towards-center. 
+            // In Canvas (Y-down), local Y axis points inward.
+            // Since we draw text horizontally (along local X), it will be naturally radial.
+        }
         // Small correction: iOS spoke text baseline sits ~1 unit lower
         ctx.translate(0, 1);
 

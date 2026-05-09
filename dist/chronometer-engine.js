@@ -652,7 +652,8 @@
       fontName: attr(el, "fontName"),
       xMotion: attrExpr(el, "xMotion"),
       yMotion: attrExpr(el, "yMotion"),
-      alpha: attrExpr(el, "alpha")
+      alpha: attrExpr(el, "alpha"),
+      orientation: attr(el, "orientation")
     };
   }
   function parseWheel(el, variant) {
@@ -12473,6 +12474,7 @@
     env.variables.set("planetSaturn", 7 /* Saturn */);
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
+    env.variables.set("planetMidnightSun", 11 /* MidnightSun */);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides, globalLocationSlot);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
@@ -12506,6 +12508,10 @@
         const noonOnTop = parseInt(vnoonParam, 10);
         env.variables.set("noonOnTop", noonOnTop);
         env.variables.set("dialFlip", noonOnTop ? Math.PI : 0);
+      }
+      const kmodeParam = params.get("kmode");
+      if (kmodeParam === "1" || kmodeParam === "0") {
+        env.variables.set("kyMode", parseInt(kmodeParam, 10));
       }
     }
     return env;
@@ -13162,6 +13168,94 @@
       const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
       return alt > 0 ? 1 : 0;
     });
+    function sunriseHour24ForDay() {
+      const sr = riseSetForDay(true, 0 /* Sun */);
+      if (isNaN(sr)) {
+        return 6;
+      }
+      const d = new Date((sr + 978307200) * 1e3 + tzDeltaMs);
+      return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    }
+    function sunsetHour24ForDay() {
+      const ss = riseSetForDay(false, 0 /* Sun */);
+      if (isNaN(ss)) {
+        return 18;
+      }
+      const d = new Date((ss + 978307200) * 1e3 + tzDeltaMs);
+      return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    }
+    functions.set("japanHourValueAngle", () => {
+      let now2 = functions.get("hour24Value")();
+      const dayTime = functions.get("planetIsUp")(0 /* Sun */) !== 0;
+      const sunrise = sunriseHour24ForDay();
+      const sunset = sunsetHour24ForDay();
+      let dayLen = sunset - sunrise;
+      if (sunrise >= sunset) {
+        dayLen += 24;
+      }
+      if (dayTime) {
+        if (now2 < sunrise) {
+          now2 += 24;
+        }
+        const dayFraction = (now2 - sunrise) / dayLen;
+        return (dayFraction + 3 / 2) * Math.PI;
+      } else {
+        let nightLen = 24 - dayLen;
+        if (nightLen === 0) {
+          nightLen = 24;
+        }
+        if (now2 < sunset) {
+          now2 += 24;
+        }
+        const nightFraction = (now2 - sunset) / nightLen;
+        return (nightFraction + 1 / 2) * Math.PI;
+      }
+    });
+    functions.set("angleForJapanHour", (japanHourNumber) => {
+      const sunrise = sunriseHour24ForDay();
+      const sunset = sunsetHour24ForDay();
+      const dayLen = sunrise < sunset ? sunset - sunrise : sunset + 24 - sunrise;
+      const nightLen = 24 - dayLen;
+      if (japanHourNumber >= 9) {
+        return (sunrise + (japanHourNumber - 9) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+      } else if (japanHourNumber >= 6) {
+        return (sunrise - (9 - japanHourNumber) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+      } else if (japanHourNumber >= 3) {
+        return (sunset + (japanHourNumber - 3) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+      } else {
+        return (sunset - (3 - japanHourNumber) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+      }
+    });
+    functions.set("temporalAngleFor24Hour", (h) => {
+      const sunrise = sunriseHour24ForDay();
+      const sunset = sunsetHour24ForDay();
+      let dayLen = sunset - sunrise;
+      if (sunrise >= sunset) {
+        dayLen += 24;
+      }
+      let nightLen = 24 - dayLen;
+      if (nightLen === 0) nightLen = 24;
+      const sunriseAngle = 9 * Math.PI / 6;
+      const sunsetAngle = 3 * Math.PI / 6;
+      let hNorm = h;
+      let inDaytime;
+      if (sunrise < sunset) {
+        inDaytime = h >= sunrise && h < sunset;
+      } else {
+        inDaytime = h >= sunrise || h < sunset;
+      }
+      if (inDaytime) {
+        let hFromSunrise = h - sunrise;
+        if (hFromSunrise < 0) hFromSunrise += 24;
+        const dayFrac = hFromSunrise / dayLen;
+        return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
+      } else {
+        let hFromSunset = h - sunset;
+        if (hFromSunset < 0) hFromSunset += 24;
+        const nightFrac = hFromSunset / nightLen;
+        return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
+      }
+    });
     functions.set("timeIndicatorColor", () => 0);
     functions.set("locationIndicatorColor", () => 0);
     functions.set("skew", () => 0);
@@ -13620,6 +13714,10 @@
     const calcDate = dateToDateInterval(getNow());
     const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
+    const nightTime = planetNumber === 11 /* MidnightSun */;
+    if (nightTime) {
+      planetNumber = 0 /* Sun */;
+    }
     const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
     const riseResult = nextPrevRiseSetInternal(
       calcDate,
@@ -13716,7 +13814,6 @@
     if (setTimeAngle <= riseTimeAngle + 1e-4) {
       setTimeAngle += 2 * Math.PI;
     }
-    const nightTime = planetNumber === 11 /* MidnightSun */;
     if (nightTime) {
       setTimeAngle += leafWidth / 2;
       riseTimeAngle -= leafWidth / 2;
@@ -15294,7 +15391,10 @@
       ctx.translate(x, y);
       ctx.rotate(angle + offsetAngle);
       ctx.translate(0, -offsetRadius);
-      ctx.rotate(-(angle + offsetAngle));
+      if (part.orientation !== "radial") {
+        ctx.rotate(-(angle + offsetAngle));
+      } else {
+      }
       ctx.translate(0, 1);
       ctx.font = `${fontSize}px ${fontName}`;
       ctx.fillStyle = strokeColor2;
@@ -18926,7 +19026,8 @@
       const psH = document.getElementById("planet-selector")?.offsetHeight ?? 0;
       const ccH = document.getElementById("change-cities-btn")?.offsetHeight ?? 0;
       const vtH = document.getElementById("vienna-noon-toggle")?.offsetHeight ?? 0;
-      onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH);
+      const ktH = document.getElementById("kyoto-mode-toggle")?.offsetHeight ?? 0;
+      onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH - ktH);
     }
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -18949,7 +19050,9 @@
         const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
         const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
         const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
-        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH;
+        const kyotoToggleEl = document.getElementById("kyoto-mode-toggle");
+        const kyotoToggleH = kyotoToggleEl ? kyotoToggleEl.offsetHeight : 0;
+        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH - kyotoToggleH;
         if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = setTimeout(() => {
           resizeDebounceTimer = null;
@@ -20215,6 +20318,58 @@
         });
       }
     }
+    const kyotoFace = faces.find((f) => f.watch.urlAbbrev === "ky");
+    if (kyotoFace && isSingleFace) {
+      const toggleContainer = document.getElementById("kyoto-mode-toggle");
+      if (toggleContainer) {
+        let isConstantMode2 = function() {
+          return (kyotoFace.env.variables.get("kyMode") ?? 0) !== 0;
+        }, updateKyotoPillHighlight2 = function() {
+          const constant = isConstantMode2();
+          variablePill.classList.toggle("active", !constant);
+          constantPill.classList.toggle("active", constant);
+        }, setKyotoMode2 = function(constant) {
+          const val = constant ? 1 : 0;
+          kyotoFace.env.variables.set("kyMode", val);
+          invalidateDayNightCaches(kyotoFace.watch);
+          const { canvas, watch, env, images, scale } = kyotoFace;
+          buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, kyotoFace.terminatorLeaves);
+          for (const hs of kyotoFace.handStates) {
+            hs.nextUpdateTime = 0;
+          }
+          if (kyotoFace.terminatorLeaves.length > 0) {
+            updateLeafAngles(kyotoFace.terminatorLeaves, kyotoFace.env);
+            resetLeafSchedules(kyotoFace.terminatorLeaves);
+            kyotoFace.lastTerminatorRebuild = 0;
+          }
+          stopScheduler();
+          startScheduler();
+          const params = new URLSearchParams(window.location.search);
+          if (constant) {
+            params.set("kmode", "1");
+          } else {
+            params.delete("kmode");
+          }
+          const qs = params.toString();
+          history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+          updateNavigationLinks();
+          updateKyotoPillHighlight2();
+        };
+        var isConstantMode = isConstantMode2, updateKyotoPillHighlight = updateKyotoPillHighlight2, setKyotoMode = setKyotoMode2;
+        toggleContainer.style.display = "flex";
+        const variablePill = toggleContainer.querySelector('[data-mode="variable"]');
+        const constantPill = toggleContainer.querySelector('[data-mode="constant"]');
+        updateKyotoPillHighlight2();
+        variablePill.addEventListener("click", () => {
+          if (!isConstantMode2()) return;
+          setKyotoMode2(false);
+        });
+        constantPill.addEventListener("click", () => {
+          if (isConstantMode2()) return;
+          setKyotoMode2(true);
+        });
+      }
+    }
     const terraFace = faces.find((f) => f.watch.worldTimeRing);
     if (terraFace && isSingleFace) {
       const tcDialog = document.getElementById("terra-city-dialog");
@@ -20748,6 +20903,7 @@
         "location-prompt",
         "planet-selector",
         "vienna-noon-toggle",
+        "kyoto-mode-toggle",
         "change-cities-btn",
         "edit-picks-link",
         "info-overlay"

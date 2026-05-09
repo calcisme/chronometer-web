@@ -201,6 +201,7 @@ export function createWatchEnvironment(
     env.variables.set('planetSaturn', ECPlanetNumber.Saturn);
     env.variables.set('planetUranus', ECPlanetNumber.Uranus);
     env.variables.set('planetNeptune', ECPlanetNumber.Neptune);
+    env.variables.set('planetMidnightSun', ECPlanetNumber.MidnightSun);
 
     // Register time functions (uses the provided getNow source)
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides, globalLocationSlot);
@@ -249,6 +250,13 @@ export function createWatchEnvironment(
             const noonOnTop = parseInt(vnoonParam, 10);
             env.variables.set('noonOnTop', noonOnTop);
             env.variables.set('dialFlip', noonOnTop ? Math.PI : 0);
+        }
+
+        // URL param override for 'kyMode' (Kyoto constant/variable hour widths toggle via ?kmode=1)
+        // Must run AFTER init blocks so it overrides the XML's default kyMode=0.
+        const kmodeParam = params.get('kmode');
+        if (kmodeParam === '1' || kmodeParam === '0') {
+            env.variables.set('kyMode', parseInt(kmodeParam, 10));
         }
     }
 
@@ -1152,6 +1160,145 @@ function registerTimeFunctions(
         return alt > 0 ? 1 : 0;
     });
 
+    // =========================================================================
+    // Japanese wadokei (temporal hour) functions — Kyoto face
+    // =========================================================================
+
+    /**
+     * Get sunrise and sunset as fractional hour24Value (0–24) for today.
+     * Falls back to local noon ± 6h if no rise/set (polar regions).
+     * iOS: getValueFromMainAstroWatchTime:@selector(watchTimeWithSunriseForDay)
+     *      watchTimeSelector:@selector(hour24ValueUsingEnv:)
+     */
+    function sunriseHour24ForDay(): number {
+        const sr = riseSetForDay(true, ECPlanetNumber.Sun);
+        if (isNaN(sr)) {
+            // Polar fallback: use noon (12.0) as midpoint, sunrise at 6.0
+            return 6.0;
+        }
+        const d = new Date((sr + 978307200) * 1000 + tzDeltaMs);
+        return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    }
+
+    function sunsetHour24ForDay(): number {
+        const ss = riseSetForDay(false, ECPlanetNumber.Sun);
+        if (isNaN(ss)) {
+            // Polar fallback: use noon (12.0) as midpoint, sunset at 18.0
+            return 18.0;
+        }
+        const d = new Date((ss + 978307200) * 1000 + tzDeltaMs);
+        return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+    }
+
+    // japanHourValueAngle(): angle of hand on traditional Japanese wadokei clock
+    // with fixed dial. Noon on top. Variable-speed hand.
+    // iOS: ECVirtualMachineOps.m lines 355–382
+    functions.set('japanHourValueAngle', () => {
+        let now = functions.get('hour24Value')!();
+        const dayTime = functions.get('planetIsUp')!(ECPlanetNumber.Sun) !== 0;
+        const sunrise = sunriseHour24ForDay();
+        const sunset = sunsetHour24ForDay();
+        let dayLen = sunset - sunrise;
+        if (sunrise >= sunset) {
+            dayLen += 24;
+        }
+        if (dayTime) {
+            if (now < sunrise) {
+                now += 24;
+            }
+            const dayFraction = (now - sunrise) / dayLen;
+            return (dayFraction + 3.0 / 2) * Math.PI;
+        } else {
+            let nightLen = 24 - dayLen;
+            if (nightLen === 0) {
+                nightLen = 24;
+            }
+            if (now < sunset) {
+                now += 24;
+            }
+            const nightFraction = (now - sunset) / nightLen;
+            return (nightFraction + 1.0 / 2) * Math.PI;
+        }
+    });
+
+    // angleForJapanHour(n): angle of center of temporal hour N on a
+    // constant-rate-hand wadokei. Supports fractional n for sub-hour ticks.
+    // 12 japanese hourNumbers per day; zero for noon hour ("午").
+    // Results match a 24-hour watch with local noon on top.
+    // iOS: ECVirtualMachineOps.m lines 388–407
+    functions.set('angleForJapanHour', (japanHourNumber: number) => {
+        const sunrise = sunriseHour24ForDay();
+        const sunset = sunsetHour24ForDay();
+        const dayLen = sunrise < sunset ? sunset - sunrise : sunset + 24 - sunrise;
+        const nightLen = 24 - dayLen;
+        if (japanHourNumber >= 9) {
+            // sunrise → noon
+            return (sunrise + (japanHourNumber - 9) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+        } else if (japanHourNumber >= 6) {
+            // midnight → sunrise
+            return (sunrise - (9 - japanHourNumber) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+        } else if (japanHourNumber >= 3) {
+            // sunset → midnight
+            return (sunset + (japanHourNumber - 3) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+        } else {
+            // noon → sunset
+            return (sunset - (3 - japanHourNumber) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+        }
+    });
+
+    // temporalAngleFor24Hour(h): position of clock hour h (0–23) on the
+    // constant-width temporal dial (where each temporal hour gets 30°).
+    // No iOS equivalent — derived from the same sunrise/sunset data.
+    // Maps daytime clock hours into the 180° daytime arc (sunrise→sunset)
+    // and nighttime clock hours into the 180° nighttime arc.
+    functions.set('temporalAngleFor24Hour', (h: number) => {
+        const sunrise = sunriseHour24ForDay();
+        const sunset = sunsetHour24ForDay();
+        let dayLen = sunset - sunrise;
+        if (sunrise >= sunset) {
+            dayLen += 24;
+        }
+        let nightLen = 24 - dayLen;
+        if (nightLen === 0) nightLen = 24;
+
+        // Fixed angular positions of sunrise (temporal hour 9) and sunset (temporal hour 3)
+        // on the constant-width dial: each temporal hour = 30° = π/6
+        // Hour 0 (noon/午) is at top (angle = 0 in display, π in our system where 0=midnight)
+        // Sunrise (hour 9): 9 * π/6 = 3π/2  from noon reference
+        // Sunset  (hour 3): 3 * π/6 = π/2   from noon reference
+        const sunriseAngle = 9 * Math.PI / 6;  // 270° = 3π/2
+        const sunsetAngle = 3 * Math.PI / 6;   // 90° = π/2
+
+        // Normalize h relative to sunrise/sunset
+        let hNorm = h;
+
+        // Check if h is in daytime (between sunrise and sunset)
+        let inDaytime: boolean;
+        if (sunrise < sunset) {
+            inDaytime = h >= sunrise && h < sunset;
+        } else {
+            // Day wraps midnight
+            inDaytime = h >= sunrise || h < sunset;
+        }
+
+        if (inDaytime) {
+            // Daytime: map clock hour to position in the 180° day arc
+            let hFromSunrise = h - sunrise;
+            if (hFromSunrise < 0) hFromSunrise += 24;
+            const dayFrac = hFromSunrise / dayLen;
+            // Day arc goes from sunriseAngle (3π/2) clockwise to sunsetAngle (π/2)
+            // That's sunriseAngle + dayFrac * π (wrapping through 2π and back to π/2)
+            return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
+        } else {
+            // Nighttime: map clock hour to position in the 180° night arc
+            let hFromSunset = h - sunset;
+            if (hFromSunset < 0) hFromSunset += 24;
+            const nightFrac = hFromSunset / nightLen;
+            // Night arc goes from sunsetAngle (π/2) clockwise to sunriseAngle (3π/2)
+            return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
+        }
+    });
+
     // --- Time/location indicator stubs ---
     functions.set('timeIndicatorColor', () => 0);  // stub
     functions.set('locationIndicatorColor', () => 0);  // stub
@@ -1771,6 +1918,14 @@ function computeDayNightLeafAngle(
     const fudgeFactorSeconds = 5;  // iOS: fudgeFactorSeconds = 5
     const lookahead = 3600 * 13.2;
 
+    // iOS ECAstronomy.m line 4567-4570: planetMidnightSun is a special flag
+    // that inverts the day/night ring (shows night leaves instead of day).
+    // Substitute Sun for the actual rise/set calculations.
+    const nightTime = planetNumber === ECPlanetNumber.MidnightSun;
+    if (nightTime) {
+        planetNumber = ECPlanetNumber.Sun;
+    }
+
     // iOS: [self planetIsUp:planetNumber] — compares against altitudeAtRiseSet, not zero
     const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
 
@@ -1886,7 +2041,7 @@ function computeDayNightLeafAngle(
     }
 
     // iOS lines 4733-4743: adjust for nighttime vs daytime
-    const nightTime = planetNumber === ECPlanetNumber.MidnightSun;
+    // (nightTime was computed at the top of this function, before planet substitution)
     if (nightTime) {
         setTimeAngle += leafWidth / 2;
         riseTimeAngle -= leafWidth / 2;

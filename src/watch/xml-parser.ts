@@ -337,6 +337,7 @@ function parseQHand(el: Element): QHandPart {
         xMotion: attrExpr(el, 'xMotion'),
         yMotion: attrExpr(el, 'yMotion'),
         alpha: attrExpr(el, 'alpha'),
+        orientation: attr(el, 'orientation'),
     };
 }
 
