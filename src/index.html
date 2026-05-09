@@ -384,6 +384,12 @@
             <p class="desc">Analemma, equation of time, and day/night rings</p>
         </a>
 
+        <a class="face-card" href="kyoto.html">
+            <img class="thumb" src="thumb-kyoto.png" alt="Kyoto">
+            <h2>Kyoto</h2>
+            <p class="desc">Traditional Japanese Wadokei clock</p>
+        </a>
+
     </div>
 
     <!-- {{LOCATION_DIALOG}} -->
@@ -425,7 +431,7 @@
                         a.setAttribute('rel', 'noopener');
                     });
                     // Reorder to match index page face card order
-                    const indexOrder = ['babylon','mauna-kea','haleakala','hana','chandra','selene','geneva','basel','firenze','venezia','terra','miami','gaia','vienna'];
+                    const indexOrder = ['babylon','mauna-kea','haleakala','hana','chandra','selene','geneva','basel','firenze','venezia','terra','miami','gaia','vienna','kyoto'];
                     const byFace = new Map();
                     helpDiv.querySelectorAll('.face-help-section[data-face]').forEach(el => byFace.set(el.dataset.face, el));
                     for (const slug of indexOrder) {

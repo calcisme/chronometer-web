@@ -15,7 +15,8 @@
     { slug: "terra", name: "Terra", thumb: "thumb-terra.png", abbrev: "tr" },
     { slug: "miami", name: "Miami", thumb: "thumb-miami.png", abbrev: "mi" },
     { slug: "gaia", name: "Gaia", thumb: "thumb-gaia.png", abbrev: "ga" },
-    { slug: "vienna", name: "Vienna", thumb: "thumb-vienna.png", abbrev: "vi" }
+    { slug: "vienna", name: "Vienna", thumb: "thumb-vienna.png", abbrev: "vi" },
+    { slug: "kyoto", name: "Kyoto", thumb: "thumb-kyoto.png", abbrev: "ky" }
   ];
   var faceByAbbrev = new Map(FACES.map((f) => [f.abbrev, f]));
   var selectedOrder = [];
