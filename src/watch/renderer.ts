@@ -1632,10 +1632,12 @@ function drawQHand(
 
         ctx.font = `${fontSize}px ${fontName}`;
         ctx.fillStyle = strokeColor;
-        ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
         if (part.text) {
-            ctx.fillText(part.text, 0, textVisualCenterY(ctx, part.text));
+            ctx.textAlign = 'left';
+            const metrics = ctx.measureText(part.text);
+            const inkCenterX = (metrics.actualBoundingBoxLeft - metrics.actualBoundingBoxRight) / 2;
+            ctx.fillText(part.text, inkCenterX, textVisualCenterY(ctx, part.text));
         }
 
         ctx.restore();

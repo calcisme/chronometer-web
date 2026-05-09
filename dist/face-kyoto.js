@@ -28,7 +28,7 @@
     <QDial name='inn3'        x='0' y='0' modes='front' radius='hrRad-5'  markWidth='mWidth' marks='outer' bgColor='0x20000000' />
     <Image name='berry shadow' x='0.7' y='33.7' modes='front' src='../partsBin/berry-shadow.png'/>
     <Image name='berry'        x='0' y='35' modes='front' src='../partsBin/berry.png'/>
-    <Image name='decoration'   x='0' y='0' modes='front' src='rose.png' />
+
   </static>
 
   <QdayNightRing name='daytime' x='0' y='0' modes='front' outerRadius='midoRad+1.5' innerRadius='midoRad-1.5' update='updateAtNextSunriseOrSunset' strokeColor='black' fillColor='black' input='0' numWedges='12' planetNumber='planetMidnightSun' masterOffset='pi' />
