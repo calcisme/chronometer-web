@@ -12475,6 +12475,10 @@
     env.variables.set("planetUranus", 8 /* Uranus */);
     env.variables.set("planetNeptune", 9 /* Neptune */);
     env.variables.set("planetMidnightSun", 11 /* MidnightSun */);
+    env.variables.set("topAnchorClockNoon", 0);
+    env.variables.set("topAnchorClockMidnight", 1);
+    env.variables.set("topAnchorSolarNoon", 2);
+    env.variables.set("topAnchorSolarMidnight", 3);
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides, globalLocationSlot);
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
@@ -13211,50 +13215,78 @@
         return (nightFraction + 1 / 2) * Math.PI;
       }
     });
-    functions.set("angleForJapanHour", (japanHourNumber) => {
+    functions.set("solarNoonAngle", () => {
+      let sunrise = sunriseHour24ForDay();
+      let sunset = sunsetHour24ForDay();
+      if (sunrise > sunset) sunset += 24;
+      const solarNoon = (sunrise + sunset) / 2;
+      return solarNoon * Math.PI / 12 + Math.PI;
+    });
+    functions.set("angleForJapanHour", (japanHourNumber, topAnchor = 0) => {
       const sunrise = sunriseHour24ForDay();
       const sunset = sunsetHour24ForDay();
       const dayLen = sunrise < sunset ? sunset - sunrise : sunset + 24 - sunrise;
       const nightLen = 24 - dayLen;
+      let absoluteAngle = 0;
       if (japanHourNumber >= 9) {
-        return (sunrise + (japanHourNumber - 9) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+        absoluteAngle = (sunrise + (japanHourNumber - 9) / 6 * dayLen) * Math.PI / 12 + Math.PI;
       } else if (japanHourNumber >= 6) {
-        return (sunrise - (9 - japanHourNumber) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+        absoluteAngle = (sunrise - (9 - japanHourNumber) / 6 * nightLen) * Math.PI / 12 + Math.PI;
       } else if (japanHourNumber >= 3) {
-        return (sunset + (japanHourNumber - 3) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+        absoluteAngle = (sunset + (japanHourNumber - 3) / 6 * nightLen) * Math.PI / 12 + Math.PI;
       } else {
-        return (sunset - (3 - japanHourNumber) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+        absoluteAngle = (sunset - (3 - japanHourNumber) / 6 * dayLen) * Math.PI / 12 + Math.PI;
       }
+      let offset = 0;
+      if (topAnchor === 1) {
+        offset = Math.PI;
+      } else if (topAnchor === 2) {
+        offset = functions.get("solarNoonAngle")();
+      } else if (topAnchor === 3) {
+        offset = functions.get("solarNoonAngle")() + Math.PI;
+      }
+      return absoluteAngle - offset;
     });
-    functions.set("temporalAngleFor24Hour", (h) => {
-      const sunrise = sunriseHour24ForDay();
-      const sunset = sunsetHour24ForDay();
-      let dayLen = sunset - sunrise;
-      if (sunrise >= sunset) {
-        dayLen += 24;
+    functions.set("temporalAngleFor24Hour", (h, topAnchor = 2) => {
+      const calculateAngle = (hour) => {
+        const sunrise = sunriseHour24ForDay();
+        const sunset = sunsetHour24ForDay();
+        let dayLen = sunset - sunrise;
+        if (sunrise >= sunset) {
+          dayLen += 24;
+        }
+        let nightLen = 24 - dayLen;
+        if (nightLen === 0) nightLen = 24;
+        const sunriseAngle = 9 * Math.PI / 6;
+        const sunsetAngle = 3 * Math.PI / 6;
+        let inDaytime;
+        if (sunrise < sunset) {
+          inDaytime = hour >= sunrise && hour < sunset;
+        } else {
+          inDaytime = hour >= sunrise || hour < sunset;
+        }
+        if (inDaytime) {
+          let hFromSunrise = hour - sunrise;
+          if (hFromSunrise < 0) hFromSunrise += 24;
+          const dayFrac = hFromSunrise / dayLen;
+          return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
+        } else {
+          let hFromSunset = hour - sunset;
+          if (hFromSunset < 0) hFromSunset += 24;
+          const nightFrac = hFromSunset / nightLen;
+          return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
+        }
+      };
+      const absoluteAngle = calculateAngle(h);
+      let offset = 0;
+      if (topAnchor === 0) {
+        offset = calculateAngle(12);
+      } else if (topAnchor === 1) {
+        offset = calculateAngle(0);
+      } else if (topAnchor === 3) {
+        offset = Math.PI;
       }
-      let nightLen = 24 - dayLen;
-      if (nightLen === 0) nightLen = 24;
-      const sunriseAngle = 9 * Math.PI / 6;
-      const sunsetAngle = 3 * Math.PI / 6;
-      let hNorm = h;
-      let inDaytime;
-      if (sunrise < sunset) {
-        inDaytime = h >= sunrise && h < sunset;
-      } else {
-        inDaytime = h >= sunrise || h < sunset;
-      }
-      if (inDaytime) {
-        let hFromSunrise = h - sunrise;
-        if (hFromSunrise < 0) hFromSunrise += 24;
-        const dayFrac = hFromSunrise / dayLen;
-        return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
-      } else {
-        let hFromSunset = h - sunset;
-        if (hFromSunset < 0) hFromSunset += 24;
-        const nightFrac = hFromSunset / nightLen;
-        return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
-      }
+      return fmod(absoluteAngle - offset, 2 * Math.PI);
     });
     functions.set("timeIndicatorColor", () => 0);
     functions.set("locationIndicatorColor", () => 0);

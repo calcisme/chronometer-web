@@ -203,6 +203,11 @@ export function createWatchEnvironment(
     env.variables.set('planetNeptune', ECPlanetNumber.Neptune);
     env.variables.set('planetMidnightSun', ECPlanetNumber.MidnightSun);
 
+    env.variables.set('topAnchorClockNoon', 0);
+    env.variables.set('topAnchorClockMidnight', 1);
+    env.variables.set('topAnchorSolarNoon', 2);
+    env.variables.set('topAnchorSolarMidnight', 3);
+
     // Register time functions (uses the provided getNow source)
     registerTimeFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, olsonTimezone, slotOverrides, globalLocationSlot);
 
@@ -1221,82 +1226,101 @@ function registerTimeFunctions(
         }
     });
 
-    // angleForJapanHour(n): angle of center of temporal hour N on a
+    functions.set('solarNoonAngle', () => {
+        let sunrise = sunriseHour24ForDay();
+        let sunset = sunsetHour24ForDay();
+        if (sunrise > sunset) sunset += 24;
+        const solarNoon = (sunrise + sunset) / 2;
+        return (solarNoon * Math.PI / 12) + Math.PI;
+    });
+
+    // angleForJapanHour(n, topAnchor): angle of center of temporal hour N on a
     // constant-rate-hand wadokei. Supports fractional n for sub-hour ticks.
     // 12 japanese hourNumbers per day; zero for noon hour ("午").
-    // Results match a 24-hour watch with local noon on top.
+    // topAnchor allows aligning the dial to a specific standard.
     // iOS: ECVirtualMachineOps.m lines 388–407
-    functions.set('angleForJapanHour', (japanHourNumber: number) => {
+    functions.set('angleForJapanHour', (japanHourNumber: number, topAnchor: number = 0) => {
         const sunrise = sunriseHour24ForDay();
         const sunset = sunsetHour24ForDay();
         const dayLen = sunrise < sunset ? sunset - sunrise : sunset + 24 - sunrise;
         const nightLen = 24 - dayLen;
+        
+        let absoluteAngle = 0;
         if (japanHourNumber >= 9) {
             // sunrise → noon
-            return (sunrise + (japanHourNumber - 9) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+            absoluteAngle = (sunrise + (japanHourNumber - 9) / 6 * dayLen) * Math.PI / 12 + Math.PI;
         } else if (japanHourNumber >= 6) {
             // midnight → sunrise
-            return (sunrise - (9 - japanHourNumber) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+            absoluteAngle = (sunrise - (9 - japanHourNumber) / 6 * nightLen) * Math.PI / 12 + Math.PI;
         } else if (japanHourNumber >= 3) {
             // sunset → midnight
-            return (sunset + (japanHourNumber - 3) / 6 * nightLen) * Math.PI / 12 + Math.PI;
+            absoluteAngle = (sunset + (japanHourNumber - 3) / 6 * nightLen) * Math.PI / 12 + Math.PI;
         } else {
             // noon → sunset
-            return (sunset - (3 - japanHourNumber) / 6 * dayLen) * Math.PI / 12 + Math.PI;
+            absoluteAngle = (sunset - (3 - japanHourNumber) / 6 * dayLen) * Math.PI / 12 + Math.PI;
         }
+
+        let offset = 0;
+        if (topAnchor === 1) { // topAnchorClockMidnight
+            offset = Math.PI;
+        } else if (topAnchor === 2) { // topAnchorSolarNoon
+            offset = functions.get('solarNoonAngle')!();
+        } else if (topAnchor === 3) { // topAnchorSolarMidnight
+            offset = functions.get('solarNoonAngle')!() + Math.PI;
+        }
+        return absoluteAngle - offset;
     });
 
-    // temporalAngleFor24Hour(h): position of clock hour h (0–23) on the
+    // temporalAngleFor24Hour(h, topAnchor): position of clock hour h (0–23) on the
     // constant-width temporal dial (where each temporal hour gets 30°).
     // No iOS equivalent — derived from the same sunrise/sunset data.
     // Maps daytime clock hours into the 180° daytime arc (sunrise→sunset)
     // and nighttime clock hours into the 180° nighttime arc.
-    functions.set('temporalAngleFor24Hour', (h: number) => {
-        const sunrise = sunriseHour24ForDay();
-        const sunset = sunsetHour24ForDay();
-        let dayLen = sunset - sunrise;
-        if (sunrise >= sunset) {
-            dayLen += 24;
+    functions.set('temporalAngleFor24Hour', (h: number, topAnchor: number = 2) => {
+        const calculateAngle = (hour: number) => {
+            const sunrise = sunriseHour24ForDay();
+            const sunset = sunsetHour24ForDay();
+            let dayLen = sunset - sunrise;
+            if (sunrise >= sunset) {
+                dayLen += 24;
+            }
+            let nightLen = 24 - dayLen;
+            if (nightLen === 0) nightLen = 24;
+
+            const sunriseAngle = 9 * Math.PI / 6;  // 270° = 3π/2
+            const sunsetAngle = 3 * Math.PI / 6;   // 90° = π/2
+
+            let inDaytime: boolean;
+            if (sunrise < sunset) {
+                inDaytime = hour >= sunrise && hour < sunset;
+            } else {
+                inDaytime = hour >= sunrise || hour < sunset;
+            }
+
+            if (inDaytime) {
+                let hFromSunrise = hour - sunrise;
+                if (hFromSunrise < 0) hFromSunrise += 24;
+                const dayFrac = hFromSunrise / dayLen;
+                return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
+            } else {
+                let hFromSunset = hour - sunset;
+                if (hFromSunset < 0) hFromSunset += 24;
+                const nightFrac = hFromSunset / nightLen;
+                return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
+            }
+        };
+
+        const absoluteAngle = calculateAngle(h);
+
+        let offset = 0;
+        if (topAnchor === 0) { // topAnchorClockNoon
+            offset = calculateAngle(12);
+        } else if (topAnchor === 1) { // topAnchorClockMidnight
+            offset = calculateAngle(0);
+        } else if (topAnchor === 3) { // topAnchorSolarMidnight
+            offset = Math.PI;
         }
-        let nightLen = 24 - dayLen;
-        if (nightLen === 0) nightLen = 24;
-
-        // Fixed angular positions of sunrise (temporal hour 9) and sunset (temporal hour 3)
-        // on the constant-width dial: each temporal hour = 30° = π/6
-        // Hour 0 (noon/午) is at top (angle = 0 in display, π in our system where 0=midnight)
-        // Sunrise (hour 9): 9 * π/6 = 3π/2  from noon reference
-        // Sunset  (hour 3): 3 * π/6 = π/2   from noon reference
-        const sunriseAngle = 9 * Math.PI / 6;  // 270° = 3π/2
-        const sunsetAngle = 3 * Math.PI / 6;   // 90° = π/2
-
-        // Normalize h relative to sunrise/sunset
-        let hNorm = h;
-
-        // Check if h is in daytime (between sunrise and sunset)
-        let inDaytime: boolean;
-        if (sunrise < sunset) {
-            inDaytime = h >= sunrise && h < sunset;
-        } else {
-            // Day wraps midnight
-            inDaytime = h >= sunrise || h < sunset;
-        }
-
-        if (inDaytime) {
-            // Daytime: map clock hour to position in the 180° day arc
-            let hFromSunrise = h - sunrise;
-            if (hFromSunrise < 0) hFromSunrise += 24;
-            const dayFrac = hFromSunrise / dayLen;
-            // Day arc goes from sunriseAngle (3π/2) clockwise to sunsetAngle (π/2)
-            // That's sunriseAngle + dayFrac * π (wrapping through 2π and back to π/2)
-            return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
-        } else {
-            // Nighttime: map clock hour to position in the 180° night arc
-            let hFromSunset = h - sunset;
-            if (hFromSunset < 0) hFromSunset += 24;
-            const nightFrac = hFromSunset / nightLen;
-            // Night arc goes from sunsetAngle (π/2) clockwise to sunriseAngle (3π/2)
-            return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
-        }
+        return fmod(absoluteAngle - offset, 2 * Math.PI);
     });
 
     // --- Time/location indicator stubs ---
