@@ -15399,9 +15399,9 @@
       ctx.font = `${fontSize}px ${fontName}`;
       ctx.fillStyle = strokeColor2;
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+      ctx.textBaseline = "alphabetic";
       if (part.text) {
-        ctx.fillText(part.text, 0, 0);
+        ctx.fillText(part.text, 0, textVisualCenterY(ctx, part.text));
       }
       ctx.restore();
       return;
