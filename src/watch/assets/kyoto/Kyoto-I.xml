@@ -178,5 +178,5 @@
   <Qhand name='t24_23_0' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='hrRad' length2='hrRad-5' angle='kyMode==0 ? 23.0*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(23.0)' update='updateAtNextSunriseOrSunset' />
   <Qhand name='t24_23_1' x='0' y='0' modes='front' type='wire' width='1' lineWidth='.75' length='hrRad' length2='hrRad-5' angle='kyMode==0 ? 23.5*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(23.5)' update='updateAtNextSunriseOrSunset' />
 
-  <hand name='jhr' x='0' y='0' z='3' thick='2' modes='front' xAnchor='70' yAnchor='70' src='hand.png' update='1' angle='kyMode==0 ? hour24ValueAngle()+pi - solarNoonAngle() : japanHourValueAngle()' />
+  <hand name='jhr' x='0' y='0' z='3' thick='2' modes='front' xAnchor='42.6' yAnchor='67' src='hand.png' update='1' angle='kyMode==0 ? hour24ValueAngle()+pi - solarNoonAngle() : japanHourValueAngle()' />
 </watch>
