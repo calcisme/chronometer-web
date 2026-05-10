@@ -560,7 +560,7 @@
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.08);
             color: #889;
             text-decoration: none;
             z-index: 10;
@@ -620,7 +620,7 @@
         #all-faces-link:hover,
         #selected-faces-link:hover,
         #info-btn:hover {
-            background: rgba(255,255,255,0.15);
+            background: rgba(255, 255, 255, 0.15);
             color: #bbd;
         }
 
@@ -652,7 +652,7 @@
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.08);
             align-items: center;
             justify-content: center;
             z-index: 10;
@@ -668,7 +668,7 @@
         }
 
         #edit-picks-link:hover {
-            background: rgba(255,255,255,0.15);
+            background: rgba(255, 255, 255, 0.15);
             color: #7dc0ef;
         }
 
@@ -963,8 +963,10 @@
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            background: none;   /* sections carry their own bg */
-            overflow: visible;  /* close btn floats above */
+            background: none;
+            /* sections carry their own bg */
+            overflow: visible;
+            /* close btn floats above */
             padding: 0;
         }
 
@@ -1126,6 +1128,7 @@
             text-align: center;
             -moz-appearance: textfield;
         }
+
         .tp-date-inputs input::-webkit-outer-spin-button,
         .tp-date-inputs input::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -1213,8 +1216,9 @@
             opacity: 1;
         }
 
-        .tp-tab-pane > * {
-            overflow: hidden;  /* children clip during collapse */
+        .tp-tab-pane>* {
+            overflow: hidden;
+            /* children clip during collapse */
         }
 
         .tp-tab-pane.tp-pane-hidden {
@@ -1355,7 +1359,8 @@
         /* ============= Planet Selector (Venezia) ============= */
 
         #planet-selector {
-            display: none;  /* shown dynamically for Venezia */
+            display: none;
+            /* shown dynamically for Venezia */
             flex: 0 0 auto;
             flex-direction: column;
             align-items: center;
@@ -1465,18 +1470,47 @@
 
 <body>
     <div id="app">
-        <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
-        <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg></a>
-        <a id="selected-faces-link" href="selected.html" title="Selected Faces"><svg viewBox="0 0 24 24"><circle class="accent-dot" cx="7" cy="7" r="2.5"/><circle class="accent-dot" cx="17" cy="7" r="2.5"/><circle class="accent-dot" cx="7" cy="17" r="2.5"/><circle class="accent-dot" cx="17" cy="17" r="2.5"/></svg></a>
-        <a id="edit-picks-link" href="pick.html" title="Edit face selection"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></a>
+        <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24">
+                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+            </svg></a>
+        <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24">
+                <circle cx="5" cy="5" r="2" />
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="19" cy="5" r="2" />
+                <circle cx="5" cy="12" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="19" cy="12" r="2" />
+                <circle cx="5" cy="19" r="2" />
+                <circle cx="12" cy="19" r="2" />
+                <circle cx="19" cy="19" r="2" />
+            </svg></a>
+        <a id="selected-faces-link" href="selected.html" title="Selected Faces"><svg viewBox="0 0 24 24">
+                <circle class="accent-dot" cx="7" cy="7" r="2.5" />
+                <circle class="accent-dot" cx="17" cy="7" r="2.5" />
+                <circle class="accent-dot" cx="7" cy="17" r="2.5" />
+                <circle class="accent-dot" cx="17" cy="17" r="2.5" />
+            </svg></a>
+        <a id="edit-picks-link" href="pick.html" title="Edit face selection"><svg viewBox="0 0 24 24">
+                <path
+                    d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+            </svg></a>
         <span id="face-name">Firenze</span>
         <button id="info-btn" title="About this face">ℹ&#xFE0E;</button>
         <div id="info-overlay">
             <div id="info-popup">
                 <button id="info-close">&times;</button>
                 <h2>Chronometer for the Web</h2>
-                <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for iPhone and iPad.</p>
-                <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a> · <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+                <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank"
+                        rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for
+                    iPhone and iPad.</p>
+                <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
+                        target="_blank" rel="noopener">GitHub</a> · <a
+                        href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
+                        target="_blank" rel="noopener">Credits</a> · <a href="privacy.html" target="_blank"
+                        rel="noopener">Privacy</a></p>
+                <hr class="help-separator">
+                <p>Session state is persisted via URL only -- bookmark or share the URL to save your session. No cookies
+                    or local storage are used. See <a href="privacy.html">Privacy</a> for more information.</p>
                 <hr class="help-separator">
                 <details id="general-help-section">
                     <summary>General Help Topics</summary>
@@ -1651,74 +1685,74 @@
                     <button class="tp-tab" data-tab="astro">Astro</button>
                 </div>
                 <div id="tp-tab-date" class="tp-tab-pane">
-                  <div>
-                    <div class="tp-label">Set Date &amp; Time</div>
-                    <div class="tp-date-inputs">
-                        <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
-                        <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
-                        <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
+                    <div>
+                        <div class="tp-label">Set Date &amp; Time</div>
+                        <div class="tp-date-inputs">
+                            <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
+                            <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
+                            <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
+                        </div>
+                        <div class="tp-date-inputs">
+                            <button id="tp-bce" title="Toggle BCE (Before Common Era)">CE</button>
+                            <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
+                            <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
+                        </div>
                     </div>
-                    <div class="tp-date-inputs">
-                        <button id="tp-bce" title="Toggle BCE (Before Common Era)">CE</button>
-                        <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
-                        <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
-                    </div>
-                  </div>
                 </div>
                 <div id="tp-tab-astro" class="tp-tab-pane tp-pane-hidden">
-                  <div>
-                    <div class="tp-label">Astronomical Events</div>
-                    <div class="tp-astro-row">
-                        <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Sunrise</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="1">▶</button>
+                    <div>
+                        <div class="tp-label">Astronomical Events</div>
+                        <div class="tp-astro-row">
+                            <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Sunrise</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row">
+                            <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Sunset</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row" id="tp-astro-moonrise">
+                            <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Moonrise</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row" id="tp-astro-body-rise" style="display:none">
+                            <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="-1">◀</button>
+                            <span class="tp-astro-label tp-body-label" id="tp-body-rise-label">Moon Rise</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row" id="tp-astro-moonset">
+                            <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Moonset</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row" id="tp-astro-body-set" style="display:none">
+                            <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="-1">◀</button>
+                            <span class="tp-astro-label tp-body-label" id="tp-body-set-label">Moon Set</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row">
+                            <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Moon Phase</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row">
+                            <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Sun Transit</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row" id="tp-astro-moon-transit">
+                            <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="-1">◀</button>
+                            <span class="tp-astro-label">Moon Transit</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="1">▶</button>
+                        </div>
+                        <div class="tp-astro-row" id="tp-astro-body-transit" style="display:none">
+                            <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="-1">◀</button>
+                            <span class="tp-astro-label tp-body-label" id="tp-body-transit-label">Moon Trans</span>
+                            <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="1">▶</button>
+                        </div>
                     </div>
-                    <div class="tp-astro-row">
-                        <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Sunset</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row" id="tp-astro-moonrise">
-                        <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Moonrise</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row" id="tp-astro-body-rise" style="display:none">
-                        <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="-1">◀</button>
-                        <span class="tp-astro-label tp-body-label" id="tp-body-rise-label">Moon Rise</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row" id="tp-astro-moonset">
-                        <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Moonset</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row" id="tp-astro-body-set" style="display:none">
-                        <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="-1">◀</button>
-                        <span class="tp-astro-label tp-body-label" id="tp-body-set-label">Moon Set</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row">
-                        <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Moon Phase</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row">
-                        <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Sun Transit</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row" id="tp-astro-moon-transit">
-                        <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="-1">◀</button>
-                        <span class="tp-astro-label">Moon Transit</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="1">▶</button>
-                    </div>
-                    <div class="tp-astro-row" id="tp-astro-body-transit" style="display:none">
-                        <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="-1">◀</button>
-                        <span class="tp-astro-label tp-body-label" id="tp-body-transit-label">Moon Trans</span>
-                        <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="1">▶</button>
-                    </div>
-                  </div>
                 </div>
             </div>
         </div>
