@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Kyoto: unified wadokei face (Kyoto I + Kyoto II merged)
-     kyMode=0: Variable hour widths (moving dial, constant-speed hand)
-     kyMode=1: Constant hour widths (fixed dial, variable-speed hand)
+     kyMode=0: Constant hand rate (moving dial, constant-speed hand)
+     kyMode=1: Variable hand rate (fixed dial, variable-speed hand)
 -->
 <watch name='Kyoto' landscapeZoomFactor='0.9' beatsPerSecond='5' bezelColor='rgb(160,160,160)' urlAbbrev='ky'>
 
@@ -104,6 +104,18 @@
   <Qhand name='ticb1' x='0' y='0' modes='front' type='wire' width='1' lineWidth='.75' length='midiRad' length2='midiRad-5' angle='kyMode==0 ? angleForJapanHour(11.25, topAnchorSolarNoon) : 11.25*pi/6' update='updateAtNextSunriseOrSunset' />
   <Qhand name='ticb2' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='outrRad' length2='midiRad-5' angle='kyMode==0 ? angleForJapanHour(11.50, topAnchorSolarNoon) : 11.50*pi/6' update='updateAtNextSunriseOrSunset' />
   <Qhand name='ticb3' x='0' y='0' modes='front' type='wire' width='1' lineWidth='.75' length='midiRad' length2='midiRad-5' angle='kyMode==0 ? angleForJapanHour(11.75, topAnchorSolarNoon) : 11.75*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn02' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(0.50, topAnchorSolarNoon) : 0.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn12' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(1.50, topAnchorSolarNoon) : 1.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn22' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(2.50, topAnchorSolarNoon) : 2.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn32' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(3.50, topAnchorSolarNoon) : 3.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn42' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(4.50, topAnchorSolarNoon) : 4.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn52' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(5.50, topAnchorSolarNoon) : 5.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn62' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(6.50, topAnchorSolarNoon) : 6.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn72' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(7.50, topAnchorSolarNoon) : 7.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn82' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(8.50, topAnchorSolarNoon) : 8.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIn92' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(9.50, topAnchorSolarNoon) : 9.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticIna2' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(10.50, topAnchorSolarNoon) : 10.50*pi/6' update='updateAtNextSunriseOrSunset' />
+  <Qhand name='ticInb2' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='midiRad-5' length2='hrRad' strokeColor='0x33000000' angle='kyMode==0 ? angleForJapanHour(11.50, topAnchorSolarNoon) : 11.50*pi/6' update='updateAtNextSunriseOrSunset' />
   <Qhand name='n24_00' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='innRad-8' fillColor='black' strokeColor='black' text='24' fontSize='11' fontName='Times New Roman' oFillColor='clear' angle='0' offsetAngle='kyMode==0 ? 0*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(0)' update='updateAtNextSunriseOrSunset' />
   <Qhand name='n24_01' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='innRad-8' fillColor='black' strokeColor='black' text='1' fontSize='11' fontName='Times New Roman' oFillColor='clear' angle='0' offsetAngle='kyMode==0 ? 1*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(1)' update='updateAtNextSunriseOrSunset' />
   <Qhand name='n24_02' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='innRad-8' fillColor='black' strokeColor='black' text='2' fontSize='11' fontName='Times New Roman' oFillColor='clear' angle='0' offsetAngle='kyMode==0 ? 2*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(2)' update='updateAtNextSunriseOrSunset' />

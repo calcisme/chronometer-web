@@ -257,7 +257,7 @@ export function createWatchEnvironment(
             env.variables.set('dialFlip', noonOnTop ? Math.PI : 0);
         }
 
-        // URL param override for 'kyMode' (Kyoto constant/variable hour widths toggle via ?kmode=1)
+        // URL param override for 'kyMode' (Kyoto constant/variable hand rate toggle via ?kmode=1)
         // Must run AFTER init blocks so it overrides the XML's default kyMode=0.
         const kmodeParam = params.get('kmode');
         if (kmodeParam === '1' || kmodeParam === '0') {
