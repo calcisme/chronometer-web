@@ -640,11 +640,12 @@ async function main() {
 
     // On multi-face pages (all.html, selected.html), make each face clickable → navigate to its page
     const isMultiFace = faceDataArray.length > 1;
-    if (isMultiFace) {
+    const isAllFacesPage = window.location.pathname.endsWith('all.html');
+    if (isMultiFace || isSelectedPage || isAllFacesPage) {
         // Hide the appropriate nav icon depending on which multi-face page we're on
         if (isSelectedPage) {
             document.body.classList.add('is-selected-faces');
-        } else {
+        } else if (isAllFacesPage) {
             document.body.classList.add('is-all-faces');
         }
         /** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */

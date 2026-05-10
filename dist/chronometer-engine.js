@@ -18402,14 +18402,15 @@
       faces.push(face);
     }
     const isMultiFace = faceDataArray.length > 1;
-    if (isMultiFace) {
+    const isAllFacesPage = window.location.pathname.endsWith("all.html");
+    if (isMultiFace || isSelectedPage || isAllFacesPage) {
       let faceNameToSlug2 = function(name) {
         return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
       };
       var faceNameToSlug = faceNameToSlug2;
       if (isSelectedPage) {
         document.body.classList.add("is-selected-faces");
-      } else {
+      } else if (isAllFacesPage) {
         document.body.classList.add("is-all-faces");
       }
       for (let i = 0; i < faces.length; i++) {
