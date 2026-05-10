@@ -94,7 +94,7 @@ The app is structured as a pure client-side renderer:
 
 ## Credits
 
-**Emerald Chronometer** was created by **Steve Pucci** and **Bill Arnett** of [Emerald Sequoia LLC](https://emeraldsequoia.com).
+**Emerald Chronometer** (the iOS app)was created by **Steve Pucci** and **Bill Arnett** of [Emerald Sequoia LLC](https://emeraldsequoia.com). This web version was ported to TypeScript from the [web app source](https://github.com/EmeraldSequoia/Chronometer) by [Steve Pucci](https://github.com/slpucci) with AI assistance, mostly from Claude, and much invaluable advice from Bill Arnett.
 
 ### Astronomical algorithms
 
