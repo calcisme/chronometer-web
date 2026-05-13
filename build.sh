@@ -68,6 +68,10 @@ inject_partials() {
     /\{\{TERRA_CITY_CSS\}\}/ { next }
     /\{\{TERRA_CITY_DIALOG\}\}/ { next }
     /\{\{HELP_CONTENT\}\}/ { if (H != "") { while ((getline line < H) > 0) print line; close(H) }; next }
+    /\{\{PRIVACY_CONTENT\}\}/ { while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html"); next }
+    /\{\{SUPPORT_CONTENT\}\}/ { while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html"); next }
+    /\{\{DISCLAIMER_CONTENT\}\}/ { while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html"); next }
+    /\{\{HELP_SUBVIEW_CSS\}\}/ { while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css"); next }
     { print }
     '
 }
@@ -83,6 +87,10 @@ inject_partials_terra() {
     /\{\{TERRA_CITY_CSS\}\}/ { while ((getline line < (P"/terra-city-dialog.css")) > 0) print line; close(P"/terra-city-dialog.css"); next }
     /\{\{TERRA_CITY_DIALOG\}\}/ { while ((getline line < (P"/terra-city-dialog.html")) > 0) print line; close(P"/terra-city-dialog.html"); next }
     /\{\{HELP_CONTENT\}\}/ { if (H != "") { while ((getline line < H) > 0) print line; close(H) }; next }
+    /\{\{PRIVACY_CONTENT\}\}/ { while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html"); next }
+    /\{\{SUPPORT_CONTENT\}\}/ { while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html"); next }
+    /\{\{DISCLAIMER_CONTENT\}\}/ { while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html"); next }
+    /\{\{HELP_SUBVIEW_CSS\}\}/ { while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css"); next }
     { print }
     '
 }
@@ -193,9 +201,17 @@ echo "  → pick.html"
 cp "$SRC/help.html" "$DIST/help.html"
 echo "  → help.html"
 
-# privacy.html — privacy policy (simple copy)
-cp "$SRC/privacy.html" "$DIST/privacy.html"
+# privacy.html — privacy policy
+inject_partials < "$SRC/privacy.html" > "$DIST/privacy.html"
 echo "  → privacy.html"
+
+# support.html — support info
+inject_partials < "$SRC/support.html" > "$DIST/support.html"
+echo "  → support.html"
+
+# disclaimer.html — legal disclaimer
+inject_partials < "$SRC/disclaimer.html" > "$DIST/disclaimer.html"
+echo "  → disclaimer.html"
 
 # cities-data.js — city database for location picker (if generated)
 if [ -f "$SRC/cities-data.js" ]; then

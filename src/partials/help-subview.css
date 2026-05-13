@@ -1,0 +1,67 @@
+/* Styles for privacy/support content when shown inside the info popup */
+
+#info-sub-view {
+    padding-top: 14px;
+}
+
+#info-back-btn {
+    background: none;
+    border: none;
+    color: #8af;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+}
+
+#info-back-btn:hover {
+    color: #ccf;
+    text-decoration: underline;
+}
+
+#info-sub-content h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    color: #dde;
+}
+
+#info-sub-content .subtitle {
+    font-size: 12px;
+    color: #776;
+    font-style: italic;
+    margin: 0 0 20px;
+}
+
+#info-sub-content h2 {
+    font-size: 15px;
+    color: #dde;
+    margin: 20px 0 8px;
+    font-weight: 600;
+}
+
+#info-sub-content p, 
+#info-sub-content li {
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 8px 0;
+    color: #bbc;
+}
+
+#info-sub-content ul {
+    padding-left: 20px;
+}
+
+#info-sub-content hr {
+    border: none;
+    border-top: 1px solid #3a3a5e;
+    margin: 20px 0;
+}
+
+#info-sub-content .last-updated {
+    font-size: 11px;
+    color: #556;
+}

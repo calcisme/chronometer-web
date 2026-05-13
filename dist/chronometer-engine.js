@@ -20091,7 +20091,19 @@
     const helpTemplate = document.getElementById("help-template");
     let helpLoaded = false;
     if (infoBtn && infoOverlay && infoClose) {
+      let updatePopupHeight2 = function(targetView) {
+        if (!popup || !targetView) return;
+        const currentHeight = popup.offsetHeight;
+        popup.style.height = currentHeight + "px";
+        const targetHeight = targetView.scrollHeight;
+        popup.style.height = targetHeight + "px";
+      };
+      var updatePopupHeight = updatePopupHeight2;
       infoBtn.addEventListener("click", () => {
+        const slider2 = document.getElementById("info-slider");
+        const popup2 = document.getElementById("info-popup");
+        if (slider2) slider2.style.transform = "translateX(0)";
+        if (popup2) popup2.style.height = "auto";
         infoOverlay.classList.add("visible");
         if (!helpLoaded && helpContent && helpTemplate?.content) {
           helpLoaded = true;
@@ -20140,6 +20152,35 @@
           infoOverlay.classList.remove("visible");
         }
       });
+      const mainView = document.getElementById("info-main-view");
+      const subView = document.getElementById("info-sub-view");
+      const subContent = document.getElementById("info-sub-content");
+      const backBtn = document.getElementById("info-back-btn");
+      const popup = document.getElementById("info-popup");
+      const slider = document.getElementById("info-slider");
+      document.querySelectorAll(".help-subpage-link").forEach((link) => {
+        const el = link;
+        el.addEventListener("click", (e) => {
+          e.preventDefault();
+          const templateId = el.dataset.template;
+          const template = document.getElementById(templateId);
+          if (template && mainView && subView && subContent && slider) {
+            subContent.innerHTML = template.innerHTML;
+            slider.style.transform = "translateX(-50%)";
+            updatePopupHeight2(subView);
+            if (helpContent) helpContent.scrollTop = 0;
+          }
+        });
+      });
+      if (backBtn) {
+        backBtn.addEventListener("click", () => {
+          if (mainView && subView && slider) {
+            slider.style.transform = "translateX(0)";
+            updatePopupHeight2(mainView);
+            if (helpContent) helpContent.scrollTop = 0;
+          }
+        });
+      }
     }
     const generalHelpSection = document.getElementById("general-help-section");
     const generalHelpIframe = document.getElementById("general-help-iframe");

@@ -697,16 +697,34 @@
             background: rgba(30, 30, 50, 0.98);
             border: 1px solid #3a3a5e;
             border-radius: 16px;
-            padding: 28px 32px;
+            padding: 0;
             max-width: 600px;
             width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
+            max-height: 90vh;
+            overflow: hidden;
             color: #bbc;
             box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
             position: relative;
             font-size: 14px;
             line-height: 1.6;
+            transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #info-slider {
+            display: flex;
+            width: 200%;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            align-items: flex-start;
+        }
+
+        #info-main-view,
+        #info-sub-view {
+            padding: 28px 32px;
+            width: 50%;
+            flex-shrink: 0;
+            box-sizing: border-box;
         }
 
         #info-popup h2 {
@@ -1465,6 +1483,74 @@
             margin: 0;
             padding: 0;
         }
+
+/* Styles for privacy/support content when shown inside the info popup */
+
+#info-sub-view {
+    padding-top: 14px;
+}
+
+#info-back-btn {
+    background: none;
+    border: none;
+    color: #8af;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+}
+
+#info-back-btn:hover {
+    color: #ccf;
+    text-decoration: underline;
+}
+
+#info-sub-content h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    color: #dde;
+}
+
+#info-sub-content .subtitle {
+    font-size: 12px;
+    color: #776;
+    font-style: italic;
+    margin: 0 0 20px;
+}
+
+#info-sub-content h2 {
+    font-size: 15px;
+    color: #dde;
+    margin: 20px 0 8px;
+    font-weight: 600;
+}
+
+#info-sub-content p, 
+#info-sub-content li {
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 8px 0;
+    color: #bbc;
+}
+
+#info-sub-content ul {
+    padding-left: 20px;
+}
+
+#info-sub-content hr {
+    border: none;
+    border-top: 1px solid #3a3a5e;
+    margin: 20px 0;
+}
+
+#info-sub-content .last-updated {
+    font-size: 11px;
+    color: #556;
+}
     </style>
 </head>
 
@@ -1499,29 +1585,100 @@
         <div id="info-overlay">
             <div id="info-popup">
                 <button id="info-close">&times;</button>
-                <h2>Chronometer for the Web</h2>
-                <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank"
-                        rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for
-                    iPhone and iPad.</p>
-                <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
-                        target="_blank" rel="noopener">GitHub</a> · <a
-                        href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
-                        target="_blank" rel="noopener">Credits</a> · <a href="privacy.html" target="_blank"
-                        rel="noopener">Privacy</a></p>
-                <hr class="help-separator">
-                <p>Session state is persisted via URL only -- bookmark or share the URL to save your session. No cookies
-                    or local storage are used. See <a href="privacy.html">Privacy</a> for more information.</p>
-                <hr class="help-separator">
-                <details id="general-help-section">
-                    <summary>General Help Topics</summary>
-                    <iframe id="general-help-iframe"></iframe>
-                </details>
-                <hr class="help-separator">
-                <div id="help-content">
-                    <!-- Populated from help-template on first info click -->
+                <div id="info-slider">
+                    <div id="info-main-view">
+                        <h2>Chronometer for the Web</h2>
+                        <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank"
+                                rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for
+                            iPhone and iPad.</p>
+                        <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
+                                target="_blank" rel="noopener">GitHub</a> · <a
+                                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
+                                target="_blank" rel="noopener">Credits</a> · <a href="privacy.html" class="help-subpage-link" data-template="privacy-template">Privacy</a> · <a href="support.html" class="help-subpage-link" data-template="support-template">Support</a> · <a href="disclaimer.html" class="help-subpage-link" data-template="disclaimer-template">Disclaimer</a></p>
+                        <hr class="help-separator">
+                        <p>Session state is persisted via URL only -- bookmark or share the URL to save your session. No cookies
+                            or local storage are used. See <a href="privacy.html" class="help-subpage-link" data-template="privacy-template">Privacy</a> for more information.</p>
+                        <hr class="help-separator">
+                        <details id="general-help-section">
+                            <summary>General Help Topics</summary>
+                            <iframe id="general-help-iframe"></iframe>
+                        </details>
+                        <hr class="help-separator">
+                        <div id="help-content">
+                            <!-- Populated from help-template on first info click -->
+                        </div>
+                    </div>
+
+                    <div id="info-sub-view">
+                        <button id="info-back-btn">← Help</button>
+                        <div id="info-sub-content"></div>
+                    </div>
                 </div>
             </div>
         </div>
+        <template id="privacy-template">
+<h1>Privacy</h1>
+<p class="subtitle">Emerald Chronometer for the Web</p>
+
+<h2>Overview</h2>
+<p>Emerald Chronometer for the Web is a fully client-side application. It runs entirely in your browser and does not communicate with any application server for its core functionality.</p>
+
+<h2>Data Collection</h2>
+<p>The app itself does not collect, store, or transmit any personal data to any application server. There are no app-level analytics, tracking pixels, cookies, or telemetry of any kind.</p>
+
+<h2>Web Server Logs</h2>
+<p>When the app is served over HTTP or HTTPS, the hosting provider (SiteGround) records standard web server access logs for each page and resource request. These logs include:</p>
+<ul>
+    <li>Your <strong>IP address</strong></li>
+    <li>The <strong>URL requested</strong>, including query-string parameters such as latitude, longitude, city name, and timezone</li>
+    <li><strong>Timestamp</strong>, HTTP status code, referrer, and browser user-agent string</li>
+</ul>
+<p>These logs are retained by SiteGround for up to 30 days and are used solely for security monitoring and troubleshooting. They are not analyzed for user tracking purposes.</p>
+<p>When running from <code>file://</code> URLs (a local copy of the app), no server is involved and no logs are generated.</p>
+
+<h2>Map Tile Requests</h2>
+<p>When you use the location dialog (on pages served via <code>http://</code> or <code>https://</code>), the app fetches map tile images from <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a> to display a preview of the selected location.</p>
+<p>These requests are standard image fetches and <strong>do not include any metadata identifying the tile coordinates as your location</strong> — OpenStreetMap sees only which map tile was requested, the same as any map browsing.</p>
+
+<h2>Browser Location (Geolocation API)</h2>
+<p>If you tap "Use device location via browser", the app uses the browser's Geolocation API to obtain your coordinates. This data is processed entirely within the browser — the app never sends it to any application server.</p>
+<p>The resolved coordinates are matched against a bundled database of approximately 47,000 cities to display a human-readable location name. This reverse-geolocation lookup happens entirely in the browser — no external geocoding service is contacted.</p>
+
+<h2>URL Parameters</h2>
+<p>The app stores your location settings (latitude, longitude, city name, timezone) as URL query parameters. This is the only persistence mechanism — no cookies or local storage are used.</p>
+<p><strong>Note:</strong> Because these parameters are part of the URL, they are visible in your browser history and, when served over HTTP or HTTPS, in the hosting provider's access logs.</p>
+
+<h2>Third-Party Services</h2>
+<ul>
+    <li><strong>OpenStreetMap</strong> (map tiles only, HTTP/HTTPS only) — governed by <a href="https://wiki.osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener">OSM's privacy policy</a>.</li>
+</ul>
+
+<h2>Contact</h2>
+<p>For questions about this privacy policy, please visit the <a href="https://github.com/EmeraldSequoia/chronometer-web" target="_blank" rel="noopener">project on GitHub</a>.</p>
+
+<hr>
+<p class="last-updated">Last updated: May 2026</p>
+        </template>
+        <template id="support-template">
+<h1>Support</h1>
+<p class="subtitle">Emerald Chronometer for the Web</p>
+
+<p>This free web app is served by a site run by volunteers and provides no support. All the website does is serve, as a convenience, files available from the <a href="https://github.com/EmeraldSequoia/chronometer-web/releases" target="_blank" rel="noopener">GitHub releases page</a> (see instructions for running the app <a href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server" target="_blank" rel="noopener">here</a>).</p>
+
+<p>You are encouraged to report issues to the developers at the GitHub issues page <a href="https://github.com/EmeraldSequoia/chronometer-web/issues" target="_blank" rel="noopener">here</a>, but as the developers are also volunteers you may not get a response in a timely fashion.</p>
+
+<hr>
+        </template>
+        <template id="disclaimer-template">
+<h1>Disclaimer</h1>
+<p class="subtitle">Emerald Chronometer for the Web</p>
+
+<p>THIS FREE WEB APP IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+
+<p>The pages served to your browser are available at the <a href="https://github.com/EmeraldSequoia/chronometer-web/releases" target="_blank" rel="noopener">GitHub releases page</a> (see instructions for running the app <a href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server" target="_blank" rel="noopener">here</a>).</p>
+
+<hr>
+        </template>
         <template id="help-template">
 <b>Hana</b>'s two sub-dials show the time of the moonrise and moonset for the
 current day. If there is no moonrise or moonset for the day shown then the

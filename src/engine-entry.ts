@@ -2882,6 +2882,10 @@ async function main() {
     let helpLoaded = false;
     if (infoBtn && infoOverlay && infoClose) {
         infoBtn.addEventListener('click', () => {
+            const slider = document.getElementById('info-slider');
+            const popup = document.getElementById('info-popup');
+            if (slider) slider.style.transform = 'translateX(0)';
+            if (popup) popup.style.height = 'auto';
             infoOverlay.classList.add('visible');
             // Clone help template into DOM on first open
             // (images only start loading once cloned into the live DOM)
@@ -2937,6 +2941,50 @@ async function main() {
                 infoOverlay.classList.remove('visible');
             }
         });
+
+        // Sub-view navigation (Privacy/Support)
+        const mainView = document.getElementById('info-main-view');
+        const subView = document.getElementById('info-sub-view');
+        const subContent = document.getElementById('info-sub-content');
+        const backBtn = document.getElementById('info-back-btn');
+        const popup = document.getElementById('info-popup');
+        const slider = document.getElementById('info-slider');
+
+        function updatePopupHeight(targetView: HTMLElement | null) {
+            if (!popup || !targetView) return;
+            // Measure current
+            const currentHeight = popup.offsetHeight;
+            popup.style.height = currentHeight + 'px';
+            
+            // Measure target (padding is now inside targetView)
+            const targetHeight = targetView.scrollHeight;
+            popup.style.height = targetHeight + 'px';
+        }
+
+        document.querySelectorAll('.help-subpage-link').forEach(link => {
+            const el = link as HTMLElement;
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                const templateId = el.dataset.template;
+                const template = document.getElementById(templateId!) as HTMLTemplateElement | null;
+                if (template && mainView && subView && subContent && slider) {
+                    subContent.innerHTML = template.innerHTML;
+                    slider.style.transform = 'translateX(-50%)';
+                    updatePopupHeight(subView);
+                    if (helpContent) helpContent.scrollTop = 0;
+                }
+            });
+        });
+
+        if (backBtn) {
+            backBtn.addEventListener('click', () => {
+                if (mainView && subView && slider) {
+                    slider.style.transform = 'translateX(0)';
+                    updatePopupHeight(mainView);
+                    if (helpContent) helpContent.scrollTop = 0;
+                }
+            });
+        }
     }
 
     // --- General Help iframe lazy-loading ---
