@@ -1,562 +1,660 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" href="apple-touch-icon.png">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="apple-touch-icon.png" />
     <title>Emerald Chronometer</title>
     <style>
-        *,
-        *::before,
-        *::after {
-            box-sizing: border-box;
-        }
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+      }
 
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            min-height: 100%;
-            background: #1a1a2e;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            color: #ccc;
-        }
+      html,
+      body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          min-height: 100%;
+          background: #1a1a2e;
+          font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+          color: #ccc;
+      }
 
-        header {
-            text-align: center;
-            padding: 48px 24px 16px;
-        }
+      header {
+          text-align: center;
+          padding: 48px 24px 16px;
+      }
 
-        header h1 {
-            font-size: 28px;
-            font-weight: 300;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-            color: #e0d8c8;
-            margin: 0 0 8px;
-        }
+      header h1 {
+          font-size: 28px;
+          font-weight: 300;
+          letter-spacing: 4px;
+          text-transform: uppercase;
+          color: #e0d8c8;
+          margin: 0 0 8px;
+      }
 
-        header p {
-            font-size: 14px;
-            color: #776;
-            margin: 0;
-            font-style: italic;
-        }
+      header p {
+          font-size: 14px;
+          color: #776;
+          margin: 0;
+          font-style: italic;
+      }
 
-        .face-grid {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 24px;
-            padding: 32px 48px 48px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+      .face-grid {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 24px;
+          padding: 32px 48px 48px;
+          max-width: 1200px;
+          margin: 0 auto;
+      }
 
-        .face-card {
-            width: 300px;
-            background: linear-gradient(145deg, #22223a 0%, #1a1a2e 100%);
-            border: 1px solid #2a2a44;
-            border-radius: 16px;
-            padding: 28px 24px 24px;
-            text-align: center;
-            text-decoration: none;
-            color: inherit;
-            transition: transform 0.2s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-            display: block;
-        }
+      .face-card {
+          width: 300px;
+          background: linear-gradient(145deg, #22223a 0%, #1a1a2e 100%);
+          border: 1px solid #2a2a44;
+          border-radius: 16px;
+          padding: 28px 24px 24px;
+          text-align: center;
+          text-decoration: none;
+          color: inherit;
+          transition: transform 0.2s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+          display: block;
+      }
 
-        .face-card:hover {
-            transform: translateY(-4px);
-            border-color: #44447a;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-        }
+      .face-card:hover {
+          transform: translateY(-4px);
+          border-color: #44447a;
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+      }
 
-        .face-card .thumb {
-            width: 180px;
-            height: 180px;
-            border-radius: 50%;
-            margin: 0 auto 20px;
-            box-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
-            object-fit: cover;
-        }
+      .face-card .thumb {
+          width: 180px;
+          height: 180px;
+          border-radius: 50%;
+          margin: 0 auto 20px;
+          box-shadow: 0 0 24px rgba(0, 0, 0, 0.5);
+          object-fit: cover;
+      }
 
-        .face-card h2 {
-            font-size: 20px;
-            font-weight: 400;
-            letter-spacing: 2px;
-            color: #e0d8c8;
-            margin: 0 0 8px;
-        }
+      .face-card h2 {
+          font-size: 20px;
+          font-weight: 400;
+          letter-spacing: 2px;
+          color: #e0d8c8;
+          margin: 0 0 8px;
+      }
 
-        .face-card .desc {
-            font-size: 13px;
-            color: #887;
-            line-height: 1.5;
-            margin: 0;
-        }
+      .face-card .desc {
+          font-size: 13px;
+          color: #887;
+          line-height: 1.5;
+          margin: 0;
+      }
 
-        .face-card .thumb.thumb-square {
-            border-radius: 12px;
-        }
+      .face-card .thumb.thumb-square {
+          border-radius: 12px;
+      }
 
-        #info-btn {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.08);
-            color: #889;
-            text-decoration: none;
-            z-index: 10;
-            transition: background 0.2s, color 0.2s;
-            cursor: pointer;
-            border: none;
-            font-size: 18px;
-            font-family: serif;
-            font-style: italic;
-            font-weight: 700;
-            padding: 0;
-        }
+      #info-btn {
+          position: fixed;
+          top: 16px;
+          right: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.08);
+          color: #889;
+          text-decoration: none;
+          z-index: 10;
+          transition: background 0.2s, color 0.2s;
+          cursor: pointer;
+          border: none;
+          font-size: 18px;
+          font-family: serif;
+          font-style: italic;
+          font-weight: 700;
+          padding: 0;
+      }
 
-        #info-btn:hover {
-            background: rgba(255,255,255,0.15);
-            color: #bbd;
-        }
+      #info-btn:hover {
+          background: rgba(255,255,255,0.15);
+          color: #bbd;
+      }
 
-        #info-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-            align-items: center;
-            justify-content: center;
-        }
+      #info-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          align-items: center;
+          justify-content: center;
+      }
 
-        #info-overlay.visible {
-            display: flex;
-        }
+      #info-overlay.visible {
+          display: flex;
+      }
 
-        #info-popup {
-            background: rgba(30, 30, 50, 0.98);
-            border: 1px solid #3a3a5e;
-            border-radius: 16px;
-            padding: 0;
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            color: #bbc;
-            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
-            position: relative;
-            font-size: 14px;
-            line-height: 1.6;
-            transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-        }
+      #info-popup {
+          background: rgba(30, 30, 50, 0.98);
+          border: 1px solid #3a3a5e;
+          border-radius: 16px;
+          padding: 0;
+          max-width: 600px;
+          width: 90%;
+          max-height: 90vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          color: #bbc;
+          box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+          position: relative;
+          font-size: 14px;
+          line-height: 1.6;
+          transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          flex-direction: column;
+      }
 
-        #info-slider {
-            display: flex;
-            width: 200%;
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            align-items: flex-start;
-        }
+      #info-slider {
+          display: flex;
+          width: 200%;
+          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          align-items: flex-start;
+      }
 
-        #info-main-view,
-        #info-sub-view {
-            padding: 28px 32px;
-            width: 50%;
-            flex-shrink: 0;
-            box-sizing: border-box;
-            transition: opacity 0.3s;
-        }
+      #info-main-view,
+      #info-sub-view {
+          padding: 28px 32px;
+          width: 50%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+          transition: opacity 0.3s;
+      }
 
-        #info-popup h2 {
-            margin: 0 0 12px;
-            font-size: 18px;
-            color: #dde;
-            font-weight: 600;
-        }
+      #info-popup h2 {
+          margin: 0 0 12px;
+          font-size: 18px;
+          color: #dde;
+          font-weight: 600;
+      }
 
-        #info-popup a {
-            color: #8af;
-            text-decoration: none;
-        }
+      #info-popup a {
+          color: #8af;
+          text-decoration: none;
+      }
 
-        #info-popup a:hover {
-            text-decoration: underline;
-        }
+      #info-popup a:hover {
+          text-decoration: underline;
+      }
 
-        #info-close {
-            position: absolute;
-            top: 10px;
-            right: 14px;
-            z-index: 10;
-            background: none;
-            border: none;
-            color: #667;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 2px 6px;
-            line-height: 1;
-            transition: color 0.15s;
-        }
+      #info-close {
+          position: absolute;
+          top: 10px;
+          right: 14px;
+          z-index: 10;
+          background: none;
+          border: none;
+          color: #667;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 2px 6px;
+          line-height: 1;
+          transition: color 0.15s;
+      }
 
-        #info-close:hover {
-            color: #ccf;
-        }
+      #info-close:hover {
+          color: #ccf;
+      }
 
-        .pick-icon-thumb {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(145deg, #2a2a48 0%, #1e1e36 100%);
-        }
+      .pick-icon-thumb {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(145deg, #2a2a48 0%, #1e1e36 100%);
+      }
 
-        .pick-icon-svg {
-            width: 80px;
-            height: 80px;
-        }
+      .pick-icon-svg {
+          width: 80px;
+          height: 80px;
+      }
 
-        /* {{LOCATION_CSS}} */
+      /* {{LOCATION_CSS}} */
 
-        /* General help iframe section */
-        #general-help-section {
-            margin: 12px 0 4px;
-            border: 1px solid #3a3a5e;
-            border-radius: 8px;
-            padding: 8px 14px;
-        }
+      /* General help iframe section */
+      #general-help-section {
+          margin: 12px 0 4px;
+          border: 1px solid #3a3a5e;
+          border-radius: 8px;
+          padding: 8px 14px;
+      }
 
-        #general-help-section summary {
-            cursor: pointer;
-            color: #8af;
-            font-size: 14px;
-        }
+      #general-help-section summary {
+          cursor: pointer;
+          color: #8af;
+          font-size: 14px;
+      }
 
-        #general-help-section summary:hover {
-            text-decoration: underline;
-        }
+      #general-help-section summary:hover {
+          text-decoration: underline;
+      }
 
-        #general-help-iframe {
-            width: 100%;
-            border: none;
-            border-radius: 8px;
-            margin-top: 8px;
-        }
+      #general-help-iframe {
+          width: 100%;
+          border: none;
+          border-radius: 8px;
+          margin-top: 8px;
+      }
 
-        /* Per-face help sections */
-        #help-content details {
-            margin: 12px 0;
-            border: 1px solid #3a3a5e;
-            border-radius: 8px;
-            padding: 8px 14px;
-        }
+      /* Per-face help sections */
+      #help-content details {
+          margin: 12px 0;
+          border: 1px solid #3a3a5e;
+          border-radius: 8px;
+          padding: 8px 14px;
+      }
 
-        #help-content details summary {
-            cursor: pointer;
-            color: #8af;
-            font-size: 14px;
-        }
+      #help-content details summary {
+          cursor: pointer;
+          color: #8af;
+          font-size: 14px;
+      }
 
-        #help-content details summary:hover {
-            text-decoration: underline;
-        }
+      #help-content details summary:hover {
+          text-decoration: underline;
+      }
 
-        {{HELP_SUBVIEW_CSS}}
+      {{HELP_SUBVIEW_CSS}}
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <button id="info-btn" title="About Chronometer">ℹ&#xFE0E;</button>
     <div id="info-overlay">
-        <div id="info-popup">
-            <button id="info-close">&times;</button>
+      <div id="info-popup">
+        <button id="info-close">&times;</button>
 
-            <div id="info-slider">
-                <div id="info-main-view">
-                    <h2>Chronometer for the Web</h2>
-                    <p>A web port of <a href="https://emeraldsequoia.com/h/index.html" target="_blank" rel="noopener">Emerald Chronometer</a> (<a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank" rel="noopener">GitHub</a>), an astronomical watch-face app originally built for iPhone and iPad.</p>
-                    <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits" target="_blank" rel="noopener">Credits</a> · <a href="privacy.html" class="help-subpage-link" data-template="privacy-template">Privacy</a> · <a href="support.html" class="help-subpage-link" data-template="support-template">Support</a> · <a href="disclaimer.html" class="help-subpage-link" data-template="disclaimer-template">Disclaimer</a></p>
-                    <hr style="border:none; border-top:1px solid #3a3a5e; margin:12px 0;">
-                    <p>Session state is persisted via URL only -- bookmark or share the URL to save your session. No cookies
-                        or local storage are used. See <a href="privacy.html" class="help-subpage-link" data-template="privacy-template">Privacy</a> for more information.</p>
-                    <hr style="border:none; border-top:1px solid #3a3a5e; margin:12px 0;">
-                    <details id="general-help-section">
-                        <summary>General Help Topics</summary>
-                        <iframe id="general-help-iframe"></iframe>
-                    </details>
-                </div>
+        <div id="info-slider">
+          <div id="info-main-view">
+            <h2>Chronometer for the Web</h2>
+            <p>
+              A web port of
+              <a
+                href="https://emeraldsequoia.com/h/index.html"
+                target="_blank"
+                rel="noopener"
+                >Emerald Chronometer</a
+              >
+              (<a
+                href="https://github.com/EmeraldSequoia/Chronometer"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >), an astronomical watch-face app originally built for iPhone and
+              iPad.
+            </p>
+            <p>
+              View the project on
+              <a
+                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >
+              ·
+              <a
+                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
+                target="_blank"
+                rel="noopener"
+                >Credits</a
+              >
+              ·
+              <a
+                href="privacy.html"
+                class="help-subpage-link"
+                data-template="privacy-template"
+                >Privacy</a
+              >
+              ·
+              <a
+                href="support.html"
+                class="help-subpage-link"
+                data-template="support-template"
+                >Support</a
+              >
+              ·
+              <a
+                href="disclaimer.html"
+                class="help-subpage-link"
+                data-template="disclaimer-template"
+                >Disclaimer</a
+              >
+            </p>
+            <hr
+              style="
+                border: none;
+                border-top: 1px solid #3a3a5e;
+                margin: 12px 0;
+              "
+            />
+            <p>
+              Session state is persisted via URL only -- bookmark or share the
+              URL to save your session. No cookies or local storage are used.
+              See
+              <a
+                href="privacy.html"
+                class="help-subpage-link"
+                data-template="privacy-template"
+                >Privacy</a
+              >
+              for more information.
+            </p>
+            <hr
+              style="
+                border: none;
+                border-top: 1px solid #3a3a5e;
+                margin: 12px 0;
+              "
+            />
+            <details id="general-help-section">
+              <summary>General Help Topics</summary>
+              <iframe id="general-help-iframe"></iframe>
+            </details>
+          </div>
 
-                <div id="info-sub-view">
-                    <button id="info-back-btn">← Help</button>
-                    <div id="info-sub-content"></div>
-                </div>
-            </div>
+          <div id="info-sub-view">
+            <button id="info-back-btn">← Help</button>
+            <div id="info-sub-content"></div>
+          </div>
         </div>
+      </div>
     </div>
-    <template id="privacy-template">
-        {{PRIVACY_CONTENT}}
-    </template>
-    <template id="support-template">
-        {{SUPPORT_CONTENT}}
-    </template>
-    <template id="disclaimer-template">
-        {{DISCLAIMER_CONTENT}}
-    </template>
-    <template id="help-template">
-        {{HELP_CONTENT}}
-    </template>
+    <template id="privacy-template"> {{PRIVACY_CONTENT}} </template>
+    <template id="support-template"> {{SUPPORT_CONTENT}} </template>
+    <template id="disclaimer-template"> {{DISCLAIMER_CONTENT}} </template>
+    <template id="help-template"> {{HELP_CONTENT}} </template>
     <header>
-        <h1>Emerald Chronometer</h1>
-        <p>Select a watch face</p>
+      <h1>Emerald Chronometer</h1>
+      <p>Select a watch face</p>
     </header>
 
     <div class="face-grid">
-        <a class="face-card" href="all.html">
-            <img class="thumb thumb-square" src="thumb-all-faces.png" alt="All Faces">
-            <h2>All Faces</h2>
-            <p class="desc">View all watch faces together</p>
-        </a>
+      <a class="face-card" href="all.html">
+        <img
+          class="thumb thumb-square"
+          src="thumb-all-faces.png"
+          alt="All Faces"
+        />
+        <h2>All Faces</h2>
+        <p class="desc">View all watch faces together</p>
+      </a>
 
-        <a class="face-card" id="pick-card" href="pick.html">
-            <div class="thumb thumb-square pick-icon-thumb">
-                <svg viewBox="0 0 24 24" class="pick-icon-svg">
-                    <circle cx="7" cy="7" r="2.8" fill="#5ca0d3"/>
-                    <circle cx="17" cy="7" r="2.8" fill="#5ca0d3"/>
-                    <circle cx="7" cy="17" r="2.8" fill="#5ca0d3"/>
-                    <circle cx="17" cy="17" r="2.8" fill="#5ca0d3"/>
-                </svg>
-            </div>
-            <h2 id="pick-card-title">Pick Faces</h2>
-            <p class="desc" id="pick-card-desc">Choose and order your favorite faces</p>
-        </a>
+      <a class="face-card" id="pick-card" href="pick.html">
+        <div class="thumb thumb-square pick-icon-thumb">
+          <svg viewBox="0 0 24 24" class="pick-icon-svg">
+            <circle cx="7" cy="7" r="2.8" fill="#5ca0d3" />
+            <circle cx="17" cy="7" r="2.8" fill="#5ca0d3" />
+            <circle cx="7" cy="17" r="2.8" fill="#5ca0d3" />
+            <circle cx="17" cy="17" r="2.8" fill="#5ca0d3" />
+          </svg>
+        </div>
+        <h2 id="pick-card-title">Pick Faces</h2>
+        <p class="desc" id="pick-card-desc">
+          Choose and order your favorite faces
+        </p>
+      </a>
 
-        <a class="face-card" href="babylon.html">
-            <img class="thumb" src="thumb-babylon.png" alt="Babylon">
-            <h2>Babylon</h2>
-            <p class="desc">Grid calendar with month and year</p>
-        </a>
+      <a class="face-card" href="babylon.html">
+        <img class="thumb" src="thumb-babylon.png" alt="Babylon" />
+        <h2>Babylon</h2>
+        <p class="desc">Grid calendar with month and year</p>
+      </a>
 
-        <a class="face-card" href="mauna-kea.html">
-            <img class="thumb" src="thumb-mauna-kea.png" alt="Mauna Kea">
-            <h2>Mauna Kea</h2>
-            <p class="desc">24-hour twilight ring with EOT</p>
-        </a>
+      <a class="face-card" href="mauna-kea.html">
+        <img class="thumb" src="thumb-mauna-kea.png" alt="Mauna Kea" />
+        <h2>Mauna Kea</h2>
+        <p class="desc">24-hour twilight ring with EOT</p>
+      </a>
 
-        <a class="face-card" href="haleakala.html">
-            <img class="thumb" src="thumb-haleakala.png" alt="Haleakalā">
-            <h2>Haleakalā</h2>
-            <p class="desc">Sunrise &amp; sunset times with alt/az</p>
-        </a>
+      <a class="face-card" href="haleakala.html">
+        <img class="thumb" src="thumb-haleakala.png" alt="Haleakalā" />
+        <h2>Haleakalā</h2>
+        <p class="desc">Sunrise &amp; sunset times with alt/az</p>
+      </a>
 
-        <a class="face-card" href="hana.html">
-            <img class="thumb" src="thumb-hana.png" alt="Hana">
-            <h2>Hana</h2>
-            <p class="desc">Moonrise &amp; moonset times, phase, and alt/az</p>
-        </a>
+      <a class="face-card" href="hana.html">
+        <img class="thumb" src="thumb-hana.png" alt="Hana" />
+        <h2>Hana</h2>
+        <p class="desc">Moonrise &amp; moonset times, phase, and alt/az</p>
+      </a>
 
-        <a class="face-card" href="chandra.html">
-            <img class="thumb" src="thumb-chandra.png" alt="Chandra">
-            <h2>Chandra</h2>
-            <p class="desc">Giant moonphase with alt/az dots</p>
-        </a>
+      <a class="face-card" href="chandra.html">
+        <img class="thumb" src="thumb-chandra.png" alt="Chandra" />
+        <h2>Chandra</h2>
+        <p class="desc">Giant moonphase with alt/az dots</p>
+      </a>
 
-        <a class="face-card" href="selene.html">
-            <img class="thumb" src="thumb-selene.png" alt="Selene">
-            <h2>Selene</h2>
-            <p class="desc">All about the moon</p>
-        </a>
+      <a class="face-card" href="selene.html">
+        <img class="thumb" src="thumb-selene.png" alt="Selene" />
+        <h2>Selene</h2>
+        <p class="desc">All about the moon</p>
+      </a>
 
-        <a class="face-card" href="geneva.html">
-            <img class="thumb" src="thumb-geneva.png" alt="Geneva">
-            <h2>Geneva</h2>
-            <p class="desc">Date ring, moon phase, rise/set times, year &amp; century</p>
-        </a>
+      <a class="face-card" href="geneva.html">
+        <img class="thumb" src="thumb-geneva.png" alt="Geneva" />
+        <h2>Geneva</h2>
+        <p class="desc">
+          Date ring, moon phase, rise/set times, year &amp; century
+        </p>
+      </a>
 
-        <a class="face-card" href="basel.html">
-            <img class="thumb" src="thumb-basel.png" alt="Basel">
-            <h2>Basel</h2>
-            <p class="desc">Sidereal time with zodiac dial and eclipse indicator</p>
-        </a>
+      <a class="face-card" href="basel.html">
+        <img class="thumb" src="thumb-basel.png" alt="Basel" />
+        <h2>Basel</h2>
+        <p class="desc">Sidereal time with zodiac dial and eclipse indicator</p>
+      </a>
 
-        <a class="face-card" href="firenze.html">
-            <img class="thumb" src="thumb-firenze.png" alt="Firenze">
-            <h2>Firenze</h2>
-            <p class="desc">Planetary positions</p>
-        </a>
+      <a class="face-card" href="firenze.html">
+        <img class="thumb" src="thumb-firenze.png" alt="Firenze" />
+        <h2>Firenze</h2>
+        <p class="desc">Planetary positions</p>
+      </a>
 
-        <a class="face-card" href="venezia.html">
-            <img class="thumb" src="thumb-venezia.png" alt="Venezia">
-            <h2>Venezia</h2>
-            <p class="desc">Planetary almanac with rise/transit/set</p>
-        </a>
+      <a class="face-card" href="venezia.html">
+        <img class="thumb" src="thumb-venezia.png" alt="Venezia" />
+        <h2>Venezia</h2>
+        <p class="desc">Planetary almanac with rise/transit/set</p>
+      </a>
 
-        <a class="face-card" href="terra.html">
-            <img class="thumb" src="thumb-terra.png" alt="Terra">
-            <h2>Terra</h2>
-            <p class="desc">World-time ring</p>
-        </a>
+      <a class="face-card" href="terra.html">
+        <img class="thumb" src="thumb-terra.png" alt="Terra" />
+        <h2>Terra</h2>
+        <p class="desc">World-time ring</p>
+      </a>
 
-        <a class="face-card" href="miami.html">
-            <img class="thumb" src="thumb-miami.png" alt="Miami">
-            <h2>Miami</h2>
-            <p class="desc">What planets are up now</p>
-        </a>
+      <a class="face-card" href="miami.html">
+        <img class="thumb" src="thumb-miami.png" alt="Miami" />
+        <h2>Miami</h2>
+        <p class="desc">What planets are up now</p>
+      </a>
 
-        <a class="face-card" href="gaia.html">
-            <img class="thumb" src="thumb-gaia.png" alt="Gaia">
-            <h2>Gaia</h2>
-            <p class="desc">World clock with four city subdials</p>
-        </a>
+      <a class="face-card" href="gaia.html">
+        <img class="thumb" src="thumb-gaia.png" alt="Gaia" />
+        <h2>Gaia</h2>
+        <p class="desc">World clock with four city subdials</p>
+      </a>
 
-        <a class="face-card" href="vienna.html">
-            <img class="thumb" src="thumb-vienna.png" alt="Vienna">
-            <h2>Vienna</h2>
-            <p class="desc">Analemma, equation of time, and day/night rings</p>
-        </a>
+      <a class="face-card" href="vienna.html">
+        <img class="thumb" src="thumb-vienna.png" alt="Vienna" />
+        <h2>Vienna</h2>
+        <p class="desc">Analemma, equation of time, and day/night rings</p>
+      </a>
 
-        <a class="face-card" href="kyoto.html">
-            <img class="thumb" src="thumb-kyoto.png" alt="Kyoto">
-            <h2>Kyoto</h2>
-            <p class="desc">Traditional Japanese Wadokei clock</p>
-        </a>
-
+      <a class="face-card" href="kyoto.html">
+        <img class="thumb" src="thumb-kyoto.png" alt="Kyoto" />
+        <h2>Kyoto</h2>
+        <p class="desc">Traditional Japanese Wadokei clock</p>
+      </a>
     </div>
 
     <!-- {{LOCATION_DIALOG}} -->
 
     <script src="index-page.js"></script>
     <script>
-        // Info popup
-        const infoBtn = document.getElementById('info-btn');
-        const infoOverlay = document.getElementById('info-overlay');
-        const infoClose = document.getElementById('info-close');
-        const helpContent = document.getElementById('info-popup');
-        const helpTemplate = document.getElementById('help-template');
-        let helpLoaded = false;
-        if (infoBtn && infoOverlay && infoClose) {
-            infoBtn.addEventListener('click', () => {
-                const slider = document.getElementById('info-slider');
-                const popup = document.getElementById('info-popup');
-                if (slider) slider.style.transform = 'translateX(0)';
-                if (popup) popup.style.height = 'auto';
-                infoOverlay.classList.add('visible');
-                // Clone help template into DOM on first open
-                if (!helpLoaded && helpContent && helpTemplate?.content) {
-                    helpLoaded = true;
-                    // Create a container for per-face help
-                    const helpDiv = document.createElement('div');
-                    helpDiv.id = 'help-content';
-                    helpDiv.appendChild(helpTemplate.content.cloneNode(true));
-                    // Add thumbnails to face help summaries
-                    helpDiv.querySelectorAll('.face-help-section[data-face]').forEach(el => {
-                        const face = el.dataset.face;
-                        const summary = el.querySelector('summary');
-                        if (summary) {
-                            const img = document.createElement('img');
-                            img.src = `thumb-${face}.png`;
-                            img.alt = '';
-                            img.style.cssText = 'width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;';
-                            summary.prepend(img);
-                        }
-                    });
-                    // Open external links in new tabs
-                    helpDiv.querySelectorAll('a[href^="http"]').forEach(a => {
-                        a.setAttribute('target', '_blank');
-                        a.setAttribute('rel', 'noopener');
-                    });
-                    // Reorder to match index page face card order
-                    const indexOrder = ['babylon','mauna-kea','haleakala','hana','chandra','selene','geneva','basel','firenze','venezia','terra','miami','gaia','vienna','kyoto'];
-                    const byFace = new Map();
-                    helpDiv.querySelectorAll('.face-help-section[data-face]').forEach(el => byFace.set(el.dataset.face, el));
-                    for (const slug of indexOrder) {
-                        const el = byFace.get(slug);
-                        if (el) helpDiv.appendChild(el);
-                    }
-                    mainView.appendChild(helpDiv);
+      // Info popup
+      const infoBtn = document.getElementById("info-btn");
+      const infoOverlay = document.getElementById("info-overlay");
+      const infoClose = document.getElementById("info-close");
+      const helpContent = document.getElementById("info-popup");
+      const helpTemplate = document.getElementById("help-template");
+      let helpLoaded = false;
+      if (infoBtn && infoOverlay && infoClose) {
+        infoBtn.addEventListener("click", () => {
+          const slider = document.getElementById("info-slider");
+          const popup = document.getElementById("info-popup");
+          if (slider) slider.style.transform = "translateX(0)";
+          if (popup) popup.style.height = "auto";
+          infoOverlay.classList.add("visible");
+          // Clone help template into DOM on first open
+          if (!helpLoaded && helpContent && helpTemplate?.content) {
+            helpLoaded = true;
+            // Create a container for per-face help
+            const helpDiv = document.createElement("div");
+            helpDiv.id = "help-content";
+            helpDiv.appendChild(helpTemplate.content.cloneNode(true));
+            // Add thumbnails to face help summaries
+            helpDiv
+              .querySelectorAll(".face-help-section[data-face]")
+              .forEach((el) => {
+                const face = el.dataset.face;
+                const summary = el.querySelector("summary");
+                if (summary) {
+                  const img = document.createElement("img");
+                  img.src = `thumb-${face}.png`;
+                  img.alt = "";
+                  img.style.cssText =
+                    "width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;";
+                  summary.prepend(img);
                 }
+              });
+            // Open external links in new tabs
+            helpDiv.querySelectorAll('a[href^="http"]').forEach((a) => {
+              a.setAttribute("target", "_blank");
+              a.setAttribute("rel", "noopener");
             });
-            infoClose.addEventListener('click', () => infoOverlay.classList.remove('visible'));
-            infoOverlay.addEventListener('click', (e) => {
-                if (e.target === infoOverlay) infoOverlay.classList.remove('visible');
-            });
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && infoOverlay.classList.contains('visible')) {
-                    infoOverlay.classList.remove('visible');
-                }
-            });
-
-            // Sub-view navigation (Privacy/Support)
-            const mainView = document.getElementById('info-main-view');
-            const subView = document.getElementById('info-sub-view');
-            const subContent = document.getElementById('info-sub-content');
-            const backBtn = document.getElementById('info-back-btn');
-            const slider = document.getElementById('info-slider');
-            const popup = document.getElementById('info-popup');
-
-            function updatePopupHeight(targetView) {
-                if (!popup || !targetView) return;
-                // Temporarily allow natural height to measure
-                const currentHeight = popup.offsetHeight;
-                popup.style.height = currentHeight + 'px';
-                
-                // Measure target (padding is now inside targetView)
-                const targetHeight = targetView.scrollHeight;
-                popup.style.height = targetHeight + 'px';
+            // Reorder to match index page face card order
+            const indexOrder = [
+              "babylon",
+              "mauna-kea",
+              "haleakala",
+              "hana",
+              "chandra",
+              "selene",
+              "geneva",
+              "basel",
+              "firenze",
+              "venezia",
+              "terra",
+              "miami",
+              "gaia",
+              "vienna",
+              "kyoto",
+            ];
+            const byFace = new Map();
+            helpDiv
+              .querySelectorAll(".face-help-section[data-face]")
+              .forEach((el) => byFace.set(el.dataset.face, el));
+            for (const slug of indexOrder) {
+              const el = byFace.get(slug);
+              if (el) helpDiv.appendChild(el);
             }
+            mainView.appendChild(helpDiv);
+          }
+        });
+        infoClose.addEventListener("click", () =>
+          infoOverlay.classList.remove("visible"),
+        );
+        infoOverlay.addEventListener("click", (e) => {
+          if (e.target === infoOverlay) infoOverlay.classList.remove("visible");
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && infoOverlay.classList.contains("visible")) {
+            infoOverlay.classList.remove("visible");
+          }
+        });
 
-            document.querySelectorAll('.help-subpage-link').forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const templateId = link.dataset.template;
-                    const template = document.getElementById(templateId);
-                    if (template && mainView && subView && subContent && slider) {
-                        subContent.innerHTML = template.innerHTML;
-                        slider.style.transform = 'translateX(-50%)';
-                        updatePopupHeight(subView);
-                    }
-                });
-            });
+        // Sub-view navigation (Privacy/Support)
+        const mainView = document.getElementById("info-main-view");
+        const subView = document.getElementById("info-sub-view");
+        const subContent = document.getElementById("info-sub-content");
+        const backBtn = document.getElementById("info-back-btn");
+        const slider = document.getElementById("info-slider");
+        const popup = document.getElementById("info-popup");
 
-            if (backBtn) {
-                backBtn.addEventListener('click', () => {
-                    if (mainView && subView && slider) {
-                        slider.style.transform = 'translateX(0)';
-                        updatePopupHeight(mainView);
-                    }
-                });
+        function updatePopupHeight(targetView) {
+          if (!popup || !targetView) return;
+          // Temporarily allow natural height to measure
+          const currentHeight = popup.offsetHeight;
+          popup.style.height = currentHeight + "px";
+
+          // Measure target (padding is now inside targetView)
+          const targetHeight = targetView.scrollHeight;
+          popup.style.height = targetHeight + "px";
+        }
+
+        document.querySelectorAll(".help-subpage-link").forEach((link) => {
+          link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const templateId = link.dataset.template;
+            const template = document.getElementById(templateId);
+            if (template && mainView && subView && subContent && slider) {
+              subContent.innerHTML = template.innerHTML;
+              slider.style.transform = "translateX(-50%)";
+              updatePopupHeight(subView);
             }
+          });
+        });
+
+        if (backBtn) {
+          backBtn.addEventListener("click", () => {
+            if (mainView && subView && slider) {
+              slider.style.transform = "translateX(0)";
+              updatePopupHeight(mainView);
+            }
+          });
         }
-        // General Help iframe lazy-loading
-        const generalHelpSection = document.getElementById('general-help-section');
-        const generalHelpIframe = document.getElementById('general-help-iframe');
-        if (generalHelpSection && generalHelpIframe) {
-            generalHelpSection.addEventListener('toggle', () => {
-                if (generalHelpSection.open && !generalHelpIframe.src) {
-                    generalHelpIframe.src = 'help.html?embed=1';
-                }
-            });
-            window.addEventListener('message', (e) => {
-                if (e.data?.type === 'help-resize' && typeof e.data.height === 'number') {
-                    generalHelpIframe.style.height = e.data.height + 'px';
-                }
-            });
-        }
+      }
+      // General Help iframe lazy-loading
+      const generalHelpSection = document.getElementById(
+        "general-help-section",
+      );
+      const generalHelpIframe = document.getElementById("general-help-iframe");
+      if (generalHelpSection && generalHelpIframe) {
+        generalHelpSection.addEventListener("toggle", () => {
+          if (generalHelpSection.open && !generalHelpIframe.src) {
+            generalHelpIframe.src = "help.html?embed=1";
+          }
+        });
+        window.addEventListener("message", (e) => {
+          if (
+            e.data?.type === "help-resize" &&
+            typeof e.data.height === "number"
+          ) {
+            generalHelpIframe.style.height = e.data.height + "px";
+          }
+        });
+      }
     </script>
-</body>
-
+  </body>
 </html>
