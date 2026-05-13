@@ -66,7 +66,7 @@
 <!-- 24-hour numbers: outside static block so they can animate during noon/midnight toggle -->
   <QDial	name='24 nums'      x='0' y='0'	modes='front' radius='(hrDialR+0.5)/0.92-0.5' orientation='radial' fontSize='hrSz' fontName='Arial' bgColor='clear' strokeColor='fgColor' text='24,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23' angle='dialFlip' animSpeed='1' update='0' />
 
-  <Qhand	name='EOT'	    x=' 0'  y='ly+4' z='2' thick='3' modes='front'  length='36.5' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgColor' fillColor='fgColor' />
+  <Qhand	name='EOT'	    x=' 0'  y='ly+4' z='2' thick='3' modes='front'  length='36.5' width='1'  tail='0' type='tri'    update='30 * minutes()'	angle='24 * EOTAngle()' strokeColor='fgColor' fillColor='fgColor' />
 
 <!-- the day/night rings that make this a *proper* 24-hour watch -->
 <!-- and moon day/night rings for the amateur astronomer! -->

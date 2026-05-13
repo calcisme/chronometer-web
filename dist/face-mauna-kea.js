@@ -48,7 +48,7 @@
     <QDial	name='12 dial3'	    x='0'   y='0'   modes='front'  radius='hr12R' bgColor='clear' strokeColor='fgclr' marks='tickOut' nMarks=' 12' markWidth='0.7' mSize='hr12sz'     />
   </static>
 
-  <Qhand	name='EOT'	    x=' 0'  y='25' modes='front'  length='30' width='1'  tail='0' type='tri'    update='1*days()'	angle='24 * EOTAngle()' strokeColor='fgclr' fillColor='fgclr' />
+  <Qhand	name='EOT'	    x=' 0'  y='25' modes='front'  length='30' width='1'  tail='0' type='tri'    update='30 * minutes()'	angle='24 * EOTAngle()' strokeColor='fgclr' fillColor='fgclr' />
 
   <QdayNightRing name='daytime' x='0' y='0' modes='front' outerRadius='r-10' innerRadius='108' update='3600' strokeColor='leafBorder'  fillColor='leafFill' input='0' numWedges='24'
 						    planetNumber='planetSun' masterOffset='pi + longitude()-tzOffsetAngle()+EOTAngle()' />
