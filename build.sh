@@ -61,17 +61,53 @@ echo "=== Generating HTML files ==="
 inject_partials() {
     local HELP_FILE="${1:-}"
     awk -v P="$SRC/partials" -v H="$HELP_FILE" '
-    /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
-    /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
-    /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
-    /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
-    /\{\{TERRA_CITY_CSS\}\}/ { next }
-    /\{\{TERRA_CITY_DIALOG\}\}/ { next }
-    /\{\{HELP_CONTENT\}\}/ { if (H != "") { while ((getline line < H) > 0) print line; close(H) }; next }
-    /\{\{PRIVACY_CONTENT\}\}/ { while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html"); next }
-    /\{\{SUPPORT_CONTENT\}\}/ { while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html"); next }
-    /\{\{DISCLAIMER_CONTENT\}\}/ { while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html"); next }
-    /\{\{HELP_SUBVIEW_CSS\}\}/ { while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css"); next }
+    /\{\{ *LOCATION_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
+        s=$0; sub(/.*\{\{ *LOCATION_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *LOCATION_DIALOG *\}\}/ { 
+        s=$0; sub(/\{\{ *LOCATION_DIALOG *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html");
+        s=$0; sub(/.*\{\{ *LOCATION_DIALOG *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TIME_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *TIME_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css");
+        s=$0; sub(/.*\{\{ *TIME_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TIME_CONTROLLER *\}\}/ { 
+        s=$0; sub(/\{\{ *TIME_CONTROLLER *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html");
+        s=$0; sub(/.*\{\{ *TIME_CONTROLLER *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TERRA_CITY_CSS *\}\}/ { next }
+    /\{\{ *TERRA_CITY_DIALOG *\}\}/ { next }
+    /\{\{ *HELP_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *HELP_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        if (H != "") { while ((getline line < H) > 0) print line; close(H) };
+        s=$0; sub(/.*\{\{ *HELP_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *PRIVACY_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *PRIVACY_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html");
+        s=$0; sub(/.*\{\{ *PRIVACY_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *SUPPORT_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *SUPPORT_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html");
+        s=$0; sub(/.*\{\{ *SUPPORT_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *DISCLAIMER_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *DISCLAIMER_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html");
+        s=$0; sub(/.*\{\{ *DISCLAIMER_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *HELP_SUBVIEW_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *HELP_SUBVIEW_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css");
+        s=$0; sub(/.*\{\{ *HELP_SUBVIEW_CSS *\}\}/, "", s); print s; next
+    }
     { print }
     '
 }
@@ -80,17 +116,61 @@ inject_partials() {
 inject_partials_terra() {
     local HELP_FILE="${1:-}"
     awk -v P="$SRC/partials" -v H="$HELP_FILE" '
-    /\{\{LOCATION_CSS\}\}/ { while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css"); next }
-    /\{\{LOCATION_DIALOG\}\}/ { while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html"); next }
-    /\{\{TIME_CSS\}\}/ { while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css"); next }
-    /\{\{TIME_CONTROLLER\}\}/ { while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html"); next }
-    /\{\{TERRA_CITY_CSS\}\}/ { while ((getline line < (P"/terra-city-dialog.css")) > 0) print line; close(P"/terra-city-dialog.css"); next }
-    /\{\{TERRA_CITY_DIALOG\}\}/ { while ((getline line < (P"/terra-city-dialog.html")) > 0) print line; close(P"/terra-city-dialog.html"); next }
-    /\{\{HELP_CONTENT\}\}/ { if (H != "") { while ((getline line < H) > 0) print line; close(H) }; next }
-    /\{\{PRIVACY_CONTENT\}\}/ { while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html"); next }
-    /\{\{SUPPORT_CONTENT\}\}/ { while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html"); next }
-    /\{\{DISCLAIMER_CONTENT\}\}/ { while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html"); next }
-    /\{\{HELP_SUBVIEW_CSS\}\}/ { while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css"); next }
+    /\{\{ *LOCATION_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
+        s=$0; sub(/.*\{\{ *LOCATION_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *LOCATION_DIALOG *\}\}/ { 
+        s=$0; sub(/\{\{ *LOCATION_DIALOG *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/location-dialog.html")) > 0) print line; close(P"/location-dialog.html");
+        s=$0; sub(/.*\{\{ *LOCATION_DIALOG *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TIME_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *TIME_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/time-controller.css")) > 0) print line; close(P"/time-controller.css");
+        s=$0; sub(/.*\{\{ *TIME_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TIME_CONTROLLER *\}\}/ { 
+        s=$0; sub(/\{\{ *TIME_CONTROLLER *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/time-controller.html")) > 0) print line; close(P"/time-controller.html");
+        s=$0; sub(/.*\{\{ *TIME_CONTROLLER *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TERRA_CITY_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *TERRA_CITY_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/terra-city-dialog.css")) > 0) print line; close(P"/terra-city-dialog.css");
+        s=$0; sub(/.*\{\{ *TERRA_CITY_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *TERRA_CITY_DIALOG *\}\}/ { 
+        s=$0; sub(/\{\{ *TERRA_CITY_DIALOG *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/terra-city-dialog.html")) > 0) print line; close(P"/terra-city-dialog.html");
+        s=$0; sub(/.*\{\{ *TERRA_CITY_DIALOG *\}\}/, "", s); print s; next
+    }
+    /\{\{ *HELP_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *HELP_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        if (H != "") { while ((getline line < H) > 0) print line; close(H) };
+        s=$0; sub(/.*\{\{ *HELP_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *PRIVACY_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *PRIVACY_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html");
+        s=$0; sub(/.*\{\{ *PRIVACY_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *SUPPORT_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *SUPPORT_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html");
+        s=$0; sub(/.*\{\{ *SUPPORT_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *DISCLAIMER_CONTENT *\}\}/ { 
+        s=$0; sub(/\{\{ *DISCLAIMER_CONTENT *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html");
+        s=$0; sub(/.*\{\{ *DISCLAIMER_CONTENT *\}\}/, "", s); print s; next
+    }
+    /\{\{ *HELP_SUBVIEW_CSS *\}\}/ { 
+        s=$0; sub(/\{\{ *HELP_SUBVIEW_CSS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css");
+        s=$0; sub(/.*\{\{ *HELP_SUBVIEW_CSS *\}\}/, "", s); print s; next
+    }
     { print }
     '
 }

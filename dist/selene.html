@@ -1,123 +1,122 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="apple-touch-icon" href="thumb-selene.png">
-    <link rel="icon" type="image/png" href="thumb-selene.png">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="apple-touch-icon" href="thumb-selene.png" />
+    <link rel="icon" type="image/png" href="thumb-selene.png" />
     <title>Selene (Chronometer)</title>
     <style>
-        *,
-        *::before,
-        *::after {
-            box-sizing: border-box;
-        }
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+      }
 
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: #1a1a2e;
-            font-family: system-ui, sans-serif;
-            color: #aaa;
-        }
+      html,
+      body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: #1a1a2e;
+          font-family: system-ui, sans-serif;
+          color: #aaa;
+      }
 
-        /* Outer flex column: grid on top, controls at bottom */
-        #app {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            height: 100%;
-        }
+      /* Outer flex column: grid on top, controls at bottom */
+      #app {
+          display: flex;
+          flex-direction: column;
+          width: 100%;
+          height: 100%;
+      }
 
-        /* The watch grid takes all remaining vertical space */
-        #watch-grid {
-            flex: 1 1 0;
-            min-height: 0;
-            position: relative;
-        }
+      /* The watch grid takes all remaining vertical space */
+      #watch-grid {
+          flex: 1 1 0;
+          min-height: 0;
+          position: relative;
+      }
 
-        /* Each face cell contains exactly one canvas */
-        .face-cell {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+      /* Each face cell contains exactly one canvas */
+      .face-cell {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+      }
 
-        .face-cell canvas {
-            border-radius: 50%;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-            display: block;
-        }
+      .face-cell canvas {
+          border-radius: 50%;
+          box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+          display: block;
+      }
 
-        /* Location display strip at the bottom */
-        #location-panel {
-            flex: 0 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin: 0 20px;
-            padding: 8px 16px;
-            font-size: 13px;
-            border-top: 1px solid #2a2a3e;
-        }
+      /* Location display strip at the bottom */
+      #location-panel {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          margin: 0 20px;
+          padding: 8px 16px;
+          font-size: 13px;
+          border-top: 1px solid #2a2a3e;
+      }
 
-        #location-info {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-        }
+      #location-info {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+      }
 
-        #location-info-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+      #location-info-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
 
-        #location-tz {
-            color: #667;
-            font-size: 11px;
-            white-space: nowrap;
-        }
+      #location-tz {
+          color: #667;
+          font-size: 11px;
+          white-space: nowrap;
+      }
 
-        #location-display {
-            color: #888;
-        }
+      #location-display {
+          color: #888;
+      }
 
-        #location-source {
-            color: #666;
-            font-style: italic;
-        }
+      #location-source {
+          color: #666;
+          font-style: italic;
+      }
 
-        #set-location-btn {
-            background: #2a2a3e;
-            border: 1px solid #444;
-            border-radius: 4px;
-            color: #aac;
-            font-size: 12px;
-            padding: 2px 10px;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
+      #set-location-btn {
+          background: #2a2a3e;
+          border: 1px solid #444;
+          border-radius: 4px;
+          color: #aac;
+          font-size: 12px;
+          padding: 2px 10px;
+          cursor: pointer;
+          transition: background 0.15s;
+      }
 
-        #set-location-btn:hover {
-            background: #3a3a5e;
-            color: #ddf;
-        }
+      #set-location-btn:hover {
+          background: #3a3a5e;
+          color: #ddf;
+      }
 
-        /* Grid blur when location prompt is up */
-        #watch-grid.blurred {
-            filter: blur(8px);
-            pointer-events: none;
-        }
+      /* Grid blur when location prompt is up */
+      #watch-grid.blurred {
+          filter: blur(8px);
+          pointer-events: none;
+      }
 
-        /* Location prompt overlay */
+              /* Location prompt overlay */
         #location-prompt {
             position: fixed;
             inset: 0;
@@ -548,945 +547,946 @@
         }
 
 
-        #back-link,
-        #all-faces-link,
-        #selected-faces-link,
-        #info-btn {
-            position: absolute;
-            top: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.08);
-            color: #889;
-            text-decoration: none;
-            z-index: 10;
-            transition: background 0.2s, color 0.2s;
-        }
-
-        #back-link {
-            left: 16px;
-        }
-
-        #all-faces-link {
-            left: 60px;
-        }
-
-        #selected-faces-link {
-            left: 104px;
-        }
-
-        #selected-faces-link svg {
-            width: 16px;
-            height: 16px;
-            fill: currentColor;
-        }
-
-        /* Accent dots in the selected-faces icon */
-        #selected-faces-link .accent-dot {
-            fill: #5ca0d3;
-        }
-
-        #info-btn {
-            right: 16px;
-            cursor: pointer;
-            border: none;
-            font-size: 18px;
-            font-family: serif;
-            font-style: italic;
-            font-weight: 700;
-            padding: 0;
-        }
-
-        #face-name {
-            position: absolute;
-            top: 16px;
-            right: 60px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            z-index: 10;
-            color: #778;
-            font-size: 24px;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            user-select: none;
-        }
-
-        #back-link:hover,
-        #all-faces-link:hover,
-        #selected-faces-link:hover,
-        #info-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: #bbd;
-        }
-
-        #back-link svg,
-        #all-faces-link svg {
-            width: 18px;
-            height: 18px;
-            fill: currentColor;
-        }
-
-        /* Hide nav elements on the all-faces page */
-        body.is-all-faces #all-faces-link,
-        body.is-all-faces #face-name {
-            display: none;
-        }
-
-        /* Hide nav elements on the selected-faces page */
-        body.is-selected-faces #selected-faces-link,
-        body.is-selected-faces #face-name {
-            display: none;
-        }
-
-        /* Edit Picks link — only visible on selected.html */
-        #edit-picks-link {
-            display: none;
-            position: absolute;
-            top: 60px;
-            left: 16px;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.08);
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-            color: #5ca0d3;
-            text-decoration: none;
-            transition: background 0.2s, color 0.2s;
-        }
-
-        #edit-picks-link svg {
-            width: 16px;
-            height: 16px;
-            fill: currentColor;
-        }
-
-        #edit-picks-link:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: #7dc0ef;
-        }
-
-        body.is-selected-faces #edit-picks-link {
-            display: flex;
-        }
-
-        /* Info popup overlay */
-        #info-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
-            align-items: center;
-            justify-content: center;
-        }
-
-        #info-overlay.visible {
-            display: flex;
-        }
-
-        #info-popup {
-            background: rgba(30, 30, 50, 0.98);
-            border: 1px solid #3a3a5e;
-            border-radius: 16px;
-            padding: 0;
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            color: #bbc;
-            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
-            position: relative;
-            font-size: 14px;
-            line-height: 1.6;
-            transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-        }
-
-        #info-slider {
-            display: flex;
-            width: 200%;
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            align-items: flex-start;
-        }
-
-        #info-main-view,
-        #info-sub-view {
-            padding: 28px 32px;
-            width: 50%;
-            flex-shrink: 0;
-            box-sizing: border-box;
-        }
-
-        #info-popup h2 {
-            margin: 0 0 12px;
-            font-size: 18px;
-            color: #dde;
-            font-weight: 600;
-        }
-
-        #info-popup a {
-            color: #8af;
-            text-decoration: none;
-        }
-
-        #info-popup a:hover {
-            text-decoration: underline;
-        }
-
-        #info-close {
-            position: absolute;
-            top: 10px;
-            right: 14px;
-            z-index: 10;
-            background: none;
-            border: none;
-            color: #667;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 2px 6px;
-            line-height: 1;
-            transition: color 0.15s;
-        }
-
-        #info-close:hover {
-            color: #ccf;
-        }
-
-        /* Help content styles */
-        .help-separator {
-            border: none;
-            border-top: 1px solid #3a3a5e;
-            margin: 16px 0;
-        }
-
-        #help-content img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 4px;
-            margin: 4px 0;
-        }
-
-        #help-content img[align="left"] {
-            max-width: 45%;
-            margin: 4px 12px 4px 0;
-            float: left;
-        }
-
-        #help-content img[align="right"] {
-            max-width: 45%;
-            margin: 4px 0 4px 12px;
-            float: right;
-        }
-
-        #help-content img[src*="extlink"] {
-            display: inline;
-            width: 12px;
-            height: 12px;
-            vertical-align: middle;
-            margin: 0 1px;
-            border-radius: 0;
-        }
-
-        #help-content p,
-        #help-content br[clear] {
-            clear: both;
-        }
-
-        #help-content center {
-            display: block;
-            text-align: center;
-        }
-
-        #help-content center img {
-            max-width: 60%;
-        }
-
-        #help-content details {
-            margin: 12px 0;
-            border: 1px solid #3a3a5e;
-            border-radius: 8px;
-            padding: 8px 14px;
-        }
-
-        #help-content details summary {
-            cursor: pointer;
-            color: #8af;
-            font-size: 14px;
-        }
-
-        #help-content details summary:hover {
-            text-decoration: underline;
-        }
-
-        #help-content h3 {
-            font-size: 16px;
-            color: #dde;
-            margin: 16px 0 8px;
-        }
-
-        /* General help iframe section */
-        #general-help-section {
-            margin: 0 0 4px;
-            border: 1px solid #3a3a5e;
-            border-radius: 8px;
-            padding: 8px 14px;
-        }
-
-        #general-help-section summary {
-            cursor: pointer;
-            color: #8af;
-            font-size: 14px;
-        }
-
-        #general-help-section summary:hover {
-            text-decoration: underline;
-        }
-
-        #general-help-iframe {
-            width: 100%;
-            border: none;
-            border-radius: 8px;
-            margin-top: 8px;
-        }
-
-        /* ============= Time Controller ============= */
-
-        /* Time bar (always visible, between watch-grid and location-panel) */
-        #time-bar {
-            flex: 0 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 5px 16px;
-            font-size: 13px;
-            border-top: 1px solid #2a2a3e;
-            background: rgba(25, 25, 42, 0.9);
-            color: #99b;
-            font-family: monospace;
-            user-select: none;
-        }
-
-        #time-bar-label {
-            background: rgba(42, 42, 62, 0.85);
-            border: 1px solid #3a3a5e;
-            border-radius: 16px;
-            color: #99b;
-            font-size: 13px;
-            padding: 4px 16px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-        }
-
-        #time-bar-label:hover {
-            background: rgba(60, 60, 90, 0.95);
-            color: #ccf;
-        }
-
-        #time-bar-label.active {
-            background: #99b;
-            color: #1a1a2e;
-            border-color: #99b;
-        }
-
-        #time-bar-label.active:hover {
-            background: #bbf;
-            color: #1a1a2e;
-        }
-
-        #time-bar-info {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-
-        #time-bar-date {
-            color: #99b;
-        }
-
-        #time-bar.overridden #time-bar-date {
-            color: #f66;
-            font-weight: 600;
-        }
-
-        #time-bar-offset {
-            color: #f99;
-            font-size: 12px;
-            display: none;
-        }
-
-        #time-bar.overridden #time-bar-offset {
-            display: inline;
-        }
-
-        #time-bar-rate {
-            color: #f88;
-            font-weight: 600;
-            cursor: pointer;
-            display: none;
-        }
-
-        #time-bar.overridden #time-bar-rate {
-            display: inline;
-        }
-
-        .time-bar-btn {
-            background: #2a2a3e;
-            border: 1px solid #444;
-            border-radius: 4px;
-            color: #aac;
-            font-size: 12px;
-            padding: 2px 10px;
-            cursor: pointer;
-            transition: background 0.15s;
-            display: none;
-        }
-
-        #time-bar.overridden .time-bar-btn {
-            display: inline-block;
-        }
-
-        .time-bar-btn:hover {
-            background: #3a3a5e;
-            color: #ddf;
-        }
-
-        /* Boundary limit indicator — static amber */
-        #time-bar.at-limit {
-            background: rgba(100, 60, 0, 0.92);
-        }
-
-        #time-bar.at-limit #time-bar-date {
-            color: #fc0 !important;
-            font-weight: 700;
-        }
-
-        /* Popover */
-        /* ---- L-shaped time popover ---- */
-        #time-popover {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            z-index: 30;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            background: none;
-            /* sections carry their own bg */
-            overflow: visible;
-            /* close btn floats above */
-            padding: 0;
-        }
-
-        /* Close button: floats above popover top edge */
-        #tp-close {
-            position: absolute;
-            top: -26px;
-            right: 4px;
-            background: rgba(26, 26, 46, 0.85);
-            border: 1px solid #3a3a5e;
-            border-radius: 50%;
-            color: #667;
-            font-size: 14px;
-            width: 24px;
-            height: 24px;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: color 0.15s, background 0.15s;
-            z-index: 31;
-        }
-
-        #tp-close:hover {
-            color: #ccf;
-            background: rgba(50, 50, 80, 0.95);
-        }
-
-        /* Upper section: narrow, right-aligned */
-        #tp-upper {
-            width: 120px;
-            padding: 10px 10px 6px;
-            background: rgba(26, 26, 46, 0.96);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid #3a3a5e;
-            border-radius: 14px 0 0 0;
-            border-bottom: none;
-            box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
-        }
-
-        /* Lower section: full width */
-        #tp-lower {
-            width: 100%;
-            min-width: 200px;
-            padding: 8px 14px 12px;
-            background: rgba(26, 26, 46, 0.96);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid #3a3a5e;
-            border-radius: 14px 0 0 0;
-            border-top: 1px solid #3a3a5e;
-            box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
-        }
-
-        .tp-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            color: #667;
-            letter-spacing: 0.5px;
-            margin-bottom: 5px;
-            text-align: center;
-        }
-
-        #tp-upper .tp-label {
-            margin-top: 8px;
-        }
-
-        .tp-btn {
-            background: #2a2a3e;
-            border: 1px solid #3a3a5e;
-            border-radius: 6px;
-            color: #99b;
-            font-size: 12px;
-            padding: 5px 8px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-            white-space: nowrap;
-            min-width: 32px;
-            text-align: center;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        .tp-btn:hover {
-            background: #3a3a5e;
-            color: #ccf;
-        }
-
-        .tp-btn.active {
-            background: #445;
-            border-color: #8af;
-            color: #8af;
-        }
-
-        /* Step buttons: 2 per row, fill equally */
-        .tp-step-row {
-            display: flex;
-            gap: 3px;
-            margin-bottom: 3px;
-        }
-
-        .tp-step-row .tp-btn {
-            flex: 1;
-            font-size: 11px;
-            padding: 4px 2px;
-        }
-
-        .tp-btn.holding {
-            background: #556;
-            border-color: #8af;
-            color: #ccf;
-        }
-
-        /* Transport: flex column with sub-rows */
-        .tp-transport {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-
-        .tp-transport-row {
-            display: flex;
-            gap: 3px;
-            justify-content: center;
-        }
-
-        .tp-transport .tp-btn {
-            font-size: 13px;
-            padding: 4px 10px;
-            flex: 1;
-        }
-
-        #tp-rate-label {
-            font-size: 11px;
-            color: #8af;
-            text-align: center;
-            margin-top: 4px;
-            margin-bottom: 2px;
-        }
-
-        .tp-date-inputs {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 4px;
-        }
-
-        .tp-date-inputs input {
-            width: 52px;
-            padding: 4px 5px;
-            border: 1px solid #444;
-            border-radius: 4px;
-            background: #2a2a3e;
-            color: #ddd;
-            font-size: 13px;
-            font-family: monospace;
-            text-align: center;
-            -moz-appearance: textfield;
-        }
-
-        .tp-date-inputs input::-webkit-outer-spin-button,
-        .tp-date-inputs input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        .tp-date-inputs input:first-child {
-            width: 58px;
-        }
-
-        /* BCE toggle */
-        #tp-bce {
-            background: #2a2a3e;
-            border: 1px solid #3a3a5e;
-            border-radius: 4px;
-            color: #99b;
-            font-size: 10px;
-            padding: 4px 5px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-            white-space: nowrap;
-            line-height: 1;
-            flex-shrink: 0;
-            width: 58px;
-        }
-
-        #tp-bce:hover {
-            color: #ccf;
-        }
-
-        #tp-bce.active {
-            background: #2a2a3e;
-            border-color: #a44;
-            color: #f44;
-        }
-
-        /* YYYY */
-
-        /* ============= Tab strip for lower panel ============= */
-
-        #tp-tabs {
-            display: flex;
-            gap: 0;
-            margin-bottom: 8px;
-        }
-
-        .tp-tab {
-            flex: 1;
-            background: #222238;
-            border: 1px solid #3a3a5e;
-            color: #667;
-            font-size: 11px;
-            padding: 5px 8px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-            text-align: center;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        .tp-tab:first-child {
-            border-radius: 6px 0 0 6px;
-            border-right: none;
-        }
-
-        .tp-tab:last-child {
-            border-radius: 0 6px 6px 0;
-        }
-
-        .tp-tab.active {
-            background: #2a2a3e;
-            border-color: #8af;
-            color: #8af;
-        }
-
-        .tp-tab:hover:not(.active) {
-            color: #99b;
-            background: #2a2a44;
-        }
-
-        .tp-tab-pane {
-            display: grid;
-            grid-template-rows: 1fr;
-            transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
-            opacity: 1;
-        }
-
-        .tp-tab-pane>* {
-            overflow: hidden;
-            /* children clip during collapse */
-        }
-
-        .tp-tab-pane.tp-pane-hidden {
-            grid-template-rows: 0fr;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* ============= Astro stepper rows ============= */
-
-        .tp-astro-row {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-bottom: 3px;
-        }
-
-        .tp-astro-btn {
-            flex: 0 0 auto;
-            font-size: 11px;
-            padding: 4px 8px;
-            min-width: 28px;
-        }
-
-        .tp-astro-label {
-            flex: 1;
-            font-size: 12px;
-            color: #99b;
-            text-align: center;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        /* Highlighted body name on Venezia */
-        .tp-body-label {
-            color: #8af;
-        }
-
-        .tp-astro-btn.flash-fail {
-            background: #432;
-            border-color: #754;
-            color: #a86;
-            transition: none;
-        }
-
-        /* ============= Vienna Noon Toggle ============= */
-
-        #vienna-noon-toggle {
-            flex: 0 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0;
-            padding: 6px 16px 4px;
-            border-top: 1px solid #2a2a3e;
-            background: rgba(25, 25, 42, 0.9);
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        .noon-pill {
-            background: #2a2a3e;
-            border: 1px solid #3a3a5e;
-            color: #99b;
-            font-size: 12px;
-            padding: 5px 14px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-            white-space: nowrap;
-        }
-
-        .noon-pill:first-child {
-            border-radius: 12px 0 0 12px;
-            border-right: none;
-        }
-
-        .noon-pill:last-child {
-            border-radius: 0 12px 12px 0;
-        }
-
-        .noon-pill:hover {
-            background: #3a3a5e;
-            color: #ccf;
-        }
-
-        .noon-pill.active {
-            background: #445;
-            border-color: #8af;
-            color: #8af;
-        }
-
-        /* ============= Kyoto Mode Toggle ============= */
-
-        #kyoto-mode-toggle {
-            flex: 0 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0;
-            padding: 6px 16px 4px;
-            border-top: 1px solid #2a2a3e;
-            background: rgba(25, 25, 42, 0.9);
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        .kyoto-pill {
-            background: #2a2a3e;
-            border: 1px solid #3a3a5e;
-            color: #99b;
-            font-size: 12px;
-            padding: 5px 14px;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s, border-color 0.15s;
-            white-space: nowrap;
-        }
-
-        .kyoto-pill:first-child {
-            border-radius: 12px 0 0 12px;
-            border-right: none;
-        }
-
-        .kyoto-pill:last-child {
-            border-radius: 0 12px 12px 0;
-        }
-
-        .kyoto-pill:hover {
-            background: #3a3a5e;
-            color: #ccf;
-        }
-
-        .kyoto-pill.active {
-            background: #445;
-            border-color: #8af;
-            color: #8af;
-        }
-
-        /* ============= Planet Selector (Venezia) ============= */
-
-        #planet-selector {
-            display: none;
-            /* shown dynamically for Venezia */
-            flex: 0 0 auto;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 16px 4px;
-            border-top: 1px solid #2a2a3e;
-            background: rgba(25, 25, 42, 0.9);
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
-        .planet-icons {
-            display: flex;
-            gap: 6px;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .planet-icon-btn {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            border: 2px solid transparent;
-            background: rgba(42, 42, 62, 0.6);
-            cursor: pointer;
-            padding: 2px;
-            transition: border-color 0.2s, background 0.2s, transform 0.15s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .planet-icon-btn img {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            object-fit: contain;
-        }
-
-        .planet-icon-btn:hover {
-            background: rgba(60, 60, 90, 0.8);
-            transform: scale(1.1);
-        }
-
-        .planet-icon-btn.selected {
-            border-color: #8af;
-            background: rgba(60, 60, 90, 0.9);
-        }
-
-        .planet-name-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .planet-nav-btn {
-            background: none;
-            border: none;
-            color: #667;
-            font-size: 16px;
-            cursor: pointer;
-            padding: 2px 6px;
-            transition: color 0.15s;
-            line-height: 1;
-        }
-
-        .planet-nav-btn:hover {
-            color: #ccf;
-        }
-
-        #planet-name {
-            color: #99b;
-            font-size: 13px;
-            min-width: 70px;
-            text-align: center;
-            font-family: system-ui, sans-serif;
-        }
-
-        /* ============= Embed mode: transparent, no chrome ============= */
-
-        body.embed-mode {
-            background: transparent !important;
-        }
-
-        /* Also clear html background (base rule sets it on html,body) */
-        html:has(body.embed-mode) {
-            background: transparent !important;
-        }
-
-        body.embed-mode .face-cell canvas {
-            border-radius: 50%;
-            box-shadow: none;
-        }
-
-        body.embed-mode #watch-grid {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        body.embed-mode #app {
-            margin: 0;
-            padding: 0;
-        }
-
-/* Styles for privacy/support content when shown inside the info popup */
+
+      #back-link,
+      #all-faces-link,
+      #selected-faces-link,
+      #info-btn {
+          position: absolute;
+          top: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.08);
+          color: #889;
+          text-decoration: none;
+          z-index: 10;
+          transition: background 0.2s, color 0.2s;
+      }
+
+      #back-link {
+          left: 16px;
+      }
+
+      #all-faces-link {
+          left: 60px;
+      }
+
+      #selected-faces-link {
+          left: 104px;
+      }
+
+      #selected-faces-link svg {
+          width: 16px;
+          height: 16px;
+          fill: currentColor;
+      }
+
+      /* Accent dots in the selected-faces icon */
+      #selected-faces-link .accent-dot {
+          fill: #5ca0d3;
+      }
+
+      #info-btn {
+          right: 16px;
+          cursor: pointer;
+          border: none;
+          font-size: 18px;
+          font-family: serif;
+          font-style: italic;
+          font-weight: 700;
+          padding: 0;
+      }
+
+      #face-name {
+          position: absolute;
+          top: 16px;
+          right: 60px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          z-index: 10;
+          color: #778;
+          font-size: 24px;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+          user-select: none;
+      }
+
+      #back-link:hover,
+      #all-faces-link:hover,
+      #selected-faces-link:hover,
+      #info-btn:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: #bbd;
+      }
+
+      #back-link svg,
+      #all-faces-link svg {
+          width: 18px;
+          height: 18px;
+          fill: currentColor;
+      }
+
+      /* Hide nav elements on the all-faces page */
+      body.is-all-faces #all-faces-link,
+      body.is-all-faces #face-name {
+          display: none;
+      }
+
+      /* Hide nav elements on the selected-faces page */
+      body.is-selected-faces #selected-faces-link,
+      body.is-selected-faces #face-name {
+          display: none;
+      }
+
+      /* Edit Picks link — only visible on selected.html */
+      #edit-picks-link {
+          display: none;
+          position: absolute;
+          top: 60px;
+          left: 16px;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.08);
+          align-items: center;
+          justify-content: center;
+          z-index: 10;
+          color: #5ca0d3;
+          text-decoration: none;
+          transition: background 0.2s, color 0.2s;
+      }
+
+      #edit-picks-link svg {
+          width: 16px;
+          height: 16px;
+          fill: currentColor;
+      }
+
+      #edit-picks-link:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: #7dc0ef;
+      }
+
+      body.is-selected-faces #edit-picks-link {
+          display: flex;
+      }
+
+      /* Info popup overlay */
+      #info-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          align-items: center;
+          justify-content: center;
+      }
+
+      #info-overlay.visible {
+          display: flex;
+      }
+
+      #info-popup {
+          background: rgba(30, 30, 50, 0.98);
+          border: 1px solid #3a3a5e;
+          border-radius: 16px;
+          padding: 0;
+          max-width: 600px;
+          width: 90%;
+          max-height: 90vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          color: #bbc;
+          box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+          position: relative;
+          font-size: 14px;
+          line-height: 1.6;
+          transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          flex-direction: column;
+      }
+
+      #info-slider {
+          display: flex;
+          width: 200%;
+          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          align-items: flex-start;
+      }
+
+      #info-main-view,
+      #info-sub-view {
+          padding: 28px 32px;
+          width: 50%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+      }
+
+      #info-popup h2 {
+          margin: 0 0 12px;
+          font-size: 18px;
+          color: #dde;
+          font-weight: 600;
+      }
+
+      #info-popup a {
+          color: #8af;
+          text-decoration: none;
+      }
+
+      #info-popup a:hover {
+          text-decoration: underline;
+      }
+
+      #info-close {
+          position: absolute;
+          top: 10px;
+          right: 14px;
+          z-index: 10;
+          background: none;
+          border: none;
+          color: #667;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 2px 6px;
+          line-height: 1;
+          transition: color 0.15s;
+      }
+
+      #info-close:hover {
+          color: #ccf;
+      }
+
+      /* Help content styles */
+      .help-separator {
+          border: none;
+          border-top: 1px solid #3a3a5e;
+          margin: 16px 0;
+      }
+
+      #help-content img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 4px;
+          margin: 4px 0;
+      }
+
+      #help-content img[align="left"] {
+          max-width: 45%;
+          margin: 4px 12px 4px 0;
+          float: left;
+      }
+
+      #help-content img[align="right"] {
+          max-width: 45%;
+          margin: 4px 0 4px 12px;
+          float: right;
+      }
+
+      #help-content img[src*="extlink"] {
+          display: inline;
+          width: 12px;
+          height: 12px;
+          vertical-align: middle;
+          margin: 0 1px;
+          border-radius: 0;
+      }
+
+      #help-content p,
+      #help-content br[clear] {
+          clear: both;
+      }
+
+      #help-content center {
+          display: block;
+          text-align: center;
+      }
+
+      #help-content center img {
+          max-width: 60%;
+      }
+
+      #help-content details {
+          margin: 12px 0;
+          border: 1px solid #3a3a5e;
+          border-radius: 8px;
+          padding: 8px 14px;
+      }
+
+      #help-content details summary {
+          cursor: pointer;
+          color: #8af;
+          font-size: 14px;
+      }
+
+      #help-content details summary:hover {
+          text-decoration: underline;
+      }
+
+      #help-content h3 {
+          font-size: 16px;
+          color: #dde;
+          margin: 16px 0 8px;
+      }
+
+      /* General help iframe section */
+      #general-help-section {
+          margin: 0 0 4px;
+          border: 1px solid #3a3a5e;
+          border-radius: 8px;
+          padding: 8px 14px;
+      }
+
+      #general-help-section summary {
+          cursor: pointer;
+          color: #8af;
+          font-size: 14px;
+      }
+
+      #general-help-section summary:hover {
+          text-decoration: underline;
+      }
+
+      #general-help-iframe {
+          width: 100%;
+          border: none;
+          border-radius: 8px;
+          margin-top: 8px;
+      }
+
+      /* ============= Time Controller ============= */
+
+      /* Time bar (always visible, between watch-grid and location-panel) */
+      #time-bar {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 5px 16px;
+          font-size: 13px;
+          border-top: 1px solid #2a2a3e;
+          background: rgba(25, 25, 42, 0.9);
+          color: #99b;
+          font-family: monospace;
+          user-select: none;
+      }
+
+      #time-bar-label {
+          background: rgba(42, 42, 62, 0.85);
+          border: 1px solid #3a3a5e;
+          border-radius: 16px;
+          color: #99b;
+          font-size: 13px;
+          padding: 4px 16px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s;
+      }
+
+      #time-bar-label:hover {
+          background: rgba(60, 60, 90, 0.95);
+          color: #ccf;
+      }
+
+      #time-bar-label.active {
+          background: #99b;
+          color: #1a1a2e;
+          border-color: #99b;
+      }
+
+      #time-bar-label.active:hover {
+          background: #bbf;
+          color: #1a1a2e;
+      }
+
+      #time-bar-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
+
+
+      #time-bar-date {
+          color: #99b;
+      }
+
+      #time-bar.overridden #time-bar-date {
+          color: #f66;
+          font-weight: 600;
+      }
+
+      #time-bar-offset {
+          color: #f99;
+          font-size: 12px;
+          display: none;
+      }
+
+      #time-bar.overridden #time-bar-offset {
+          display: inline;
+      }
+
+      #time-bar-rate {
+          color: #f88;
+          font-weight: 600;
+          cursor: pointer;
+          display: none;
+      }
+
+      #time-bar.overridden #time-bar-rate {
+          display: inline;
+      }
+
+      .time-bar-btn {
+          background: #2a2a3e;
+          border: 1px solid #444;
+          border-radius: 4px;
+          color: #aac;
+          font-size: 12px;
+          padding: 2px 10px;
+          cursor: pointer;
+          transition: background 0.15s;
+          display: none;
+      }
+
+      #time-bar.overridden .time-bar-btn {
+          display: inline-block;
+      }
+
+      .time-bar-btn:hover {
+          background: #3a3a5e;
+          color: #ddf;
+      }
+
+      /* Boundary limit indicator — static amber */
+      #time-bar.at-limit {
+          background: rgba(100, 60, 0, 0.92);
+      }
+
+      #time-bar.at-limit #time-bar-date {
+          color: #fc0 !important;
+          font-weight: 700;
+      }
+
+      /* Popover */
+      /* ---- L-shaped time popover ---- */
+      #time-popover {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          z-index: 30;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          background: none;
+          /* sections carry their own bg */
+          overflow: visible;
+          /* close btn floats above */
+          padding: 0;
+      }
+
+      /* Close button: floats above popover top edge */
+      #tp-close {
+          position: absolute;
+          top: -26px;
+          right: 4px;
+          background: rgba(26, 26, 46, 0.85);
+          border: 1px solid #3a3a5e;
+          border-radius: 50%;
+          color: #667;
+          font-size: 14px;
+          width: 24px;
+          height: 24px;
+          cursor: pointer;
+          padding: 0;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.15s, background 0.15s;
+          z-index: 31;
+      }
+
+      #tp-close:hover {
+          color: #ccf;
+          background: rgba(50, 50, 80, 0.95);
+      }
+
+      /* Upper section: narrow, right-aligned */
+      #tp-upper {
+          width: 120px;
+          padding: 10px 10px 6px;
+          background: rgba(26, 26, 46, 0.96);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid #3a3a5e;
+          border-radius: 14px 0 0 0;
+          border-bottom: none;
+          box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Lower section: full width */
+      #tp-lower {
+          width: 100%;
+          min-width: 200px;
+          padding: 8px 14px 12px;
+          background: rgba(26, 26, 46, 0.96);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid #3a3a5e;
+          border-radius: 14px 0 0 0;
+          border-top: 1px solid #3a3a5e;
+          box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
+      }
+
+      .tp-label {
+          font-size: 10px;
+          text-transform: uppercase;
+          color: #667;
+          letter-spacing: 0.5px;
+          margin-bottom: 5px;
+          text-align: center;
+      }
+
+      #tp-upper .tp-label {
+          margin-top: 8px;
+      }
+
+      .tp-btn {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          border-radius: 6px;
+          color: #99b;
+          font-size: 12px;
+          padding: 5px 8px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+          min-width: 32px;
+          text-align: center;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .tp-btn:hover {
+          background: #3a3a5e;
+          color: #ccf;
+      }
+
+      .tp-btn.active {
+          background: #445;
+          border-color: #8af;
+          color: #8af;
+      }
+
+      /* Step buttons: 2 per row, fill equally */
+      .tp-step-row {
+          display: flex;
+          gap: 3px;
+          margin-bottom: 3px;
+      }
+
+      .tp-step-row .tp-btn {
+          flex: 1;
+          font-size: 11px;
+          padding: 4px 2px;
+      }
+
+      .tp-btn.holding {
+          background: #556;
+          border-color: #8af;
+          color: #ccf;
+      }
+
+      /* Transport: flex column with sub-rows */
+      .tp-transport {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+      }
+
+      .tp-transport-row {
+          display: flex;
+          gap: 3px;
+          justify-content: center;
+      }
+
+      .tp-transport .tp-btn {
+          font-size: 13px;
+          padding: 4px 10px;
+          flex: 1;
+      }
+
+      #tp-rate-label {
+          font-size: 11px;
+          color: #8af;
+          text-align: center;
+          margin-top: 4px;
+          margin-bottom: 2px;
+      }
+
+      .tp-date-inputs {
+          display: flex;
+          gap: 4px;
+          margin-bottom: 4px;
+      }
+
+      .tp-date-inputs input {
+          width: 52px;
+          padding: 4px 5px;
+          border: 1px solid #444;
+          border-radius: 4px;
+          background: #2a2a3e;
+          color: #ddd;
+          font-size: 13px;
+          font-family: monospace;
+          text-align: center;
+          -moz-appearance: textfield;
+      }
+
+      .tp-date-inputs input::-webkit-outer-spin-button,
+      .tp-date-inputs input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+      }
+
+      .tp-date-inputs input:first-child {
+          width: 58px;
+      }
+
+      /* BCE toggle */
+      #tp-bce {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          border-radius: 4px;
+          color: #99b;
+          font-size: 10px;
+          padding: 4px 5px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+          line-height: 1;
+          flex-shrink: 0;
+          width: 58px;
+      }
+
+      #tp-bce:hover {
+          color: #ccf;
+      }
+
+      #tp-bce.active {
+          background: #2a2a3e;
+          border-color: #a44;
+          color: #f44;
+      }
+
+      /* YYYY */
+
+      /* ============= Tab strip for lower panel ============= */
+
+      #tp-tabs {
+          display: flex;
+          gap: 0;
+          margin-bottom: 8px;
+      }
+
+      .tp-tab {
+          flex: 1;
+          background: #222238;
+          border: 1px solid #3a3a5e;
+          color: #667;
+          font-size: 11px;
+          padding: 5px 8px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          text-align: center;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .tp-tab:first-child {
+          border-radius: 6px 0 0 6px;
+          border-right: none;
+      }
+
+      .tp-tab:last-child {
+          border-radius: 0 6px 6px 0;
+      }
+
+      .tp-tab.active {
+          background: #2a2a3e;
+          border-color: #8af;
+          color: #8af;
+      }
+
+      .tp-tab:hover:not(.active) {
+          color: #99b;
+          background: #2a2a44;
+      }
+
+      .tp-tab-pane {
+          display: grid;
+          grid-template-rows: 1fr;
+          transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
+          opacity: 1;
+      }
+
+      .tp-tab-pane>* {
+          overflow: hidden;
+          /* children clip during collapse */
+      }
+
+      .tp-tab-pane.tp-pane-hidden {
+          grid-template-rows: 0fr;
+          opacity: 0;
+          pointer-events: none;
+      }
+
+      /* ============= Astro stepper rows ============= */
+
+      .tp-astro-row {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-bottom: 3px;
+      }
+
+      .tp-astro-btn {
+          flex: 0 0 auto;
+          font-size: 11px;
+          padding: 4px 8px;
+          min-width: 28px;
+      }
+
+      .tp-astro-label {
+          flex: 1;
+          font-size: 12px;
+          color: #99b;
+          text-align: center;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      /* Highlighted body name on Venezia */
+      .tp-body-label {
+          color: #8af;
+      }
+
+      .tp-astro-btn.flash-fail {
+          background: #432;
+          border-color: #754;
+          color: #a86;
+          transition: none;
+      }
+
+      /* ============= Vienna Noon Toggle ============= */
+
+      #vienna-noon-toggle {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0;
+          padding: 6px 16px 4px;
+          border-top: 1px solid #2a2a3e;
+          background: rgba(25, 25, 42, 0.9);
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .noon-pill {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          color: #99b;
+          font-size: 12px;
+          padding: 5px 14px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+      }
+
+      .noon-pill:first-child {
+          border-radius: 12px 0 0 12px;
+          border-right: none;
+      }
+
+      .noon-pill:last-child {
+          border-radius: 0 12px 12px 0;
+      }
+
+      .noon-pill:hover {
+          background: #3a3a5e;
+          color: #ccf;
+      }
+
+      .noon-pill.active {
+          background: #445;
+          border-color: #8af;
+          color: #8af;
+      }
+
+      /* ============= Kyoto Mode Toggle ============= */
+
+      #kyoto-mode-toggle {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0;
+          padding: 6px 16px 4px;
+          border-top: 1px solid #2a2a3e;
+          background: rgba(25, 25, 42, 0.9);
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .kyoto-pill {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          color: #99b;
+          font-size: 12px;
+          padding: 5px 14px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+      }
+
+      .kyoto-pill:first-child {
+          border-radius: 12px 0 0 12px;
+          border-right: none;
+      }
+
+      .kyoto-pill:last-child {
+          border-radius: 0 12px 12px 0;
+      }
+
+      .kyoto-pill:hover {
+          background: #3a3a5e;
+          color: #ccf;
+      }
+
+      .kyoto-pill.active {
+          background: #445;
+          border-color: #8af;
+          color: #8af;
+      }
+
+      /* ============= Planet Selector (Venezia) ============= */
+
+      #planet-selector {
+          display: none;
+          /* shown dynamically for Venezia */
+          flex: 0 0 auto;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 16px 4px;
+          border-top: 1px solid #2a2a3e;
+          background: rgba(25, 25, 42, 0.9);
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .planet-icons {
+          display: flex;
+          gap: 6px;
+          justify-content: center;
+          align-items: center;
+      }
+
+      .planet-icon-btn {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          border: 2px solid transparent;
+          background: rgba(42, 42, 62, 0.6);
+          cursor: pointer;
+          padding: 2px;
+          transition: border-color 0.2s, background 0.2s, transform 0.15s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+      }
+
+      .planet-icon-btn img {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          object-fit: contain;
+      }
+
+      .planet-icon-btn:hover {
+          background: rgba(60, 60, 90, 0.8);
+          transform: scale(1.1);
+      }
+
+      .planet-icon-btn.selected {
+          border-color: #8af;
+          background: rgba(60, 60, 90, 0.9);
+      }
+
+      .planet-name-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+      }
+
+      .planet-nav-btn {
+          background: none;
+          border: none;
+          color: #667;
+          font-size: 16px;
+          cursor: pointer;
+          padding: 2px 6px;
+          transition: color 0.15s;
+          line-height: 1;
+      }
+
+      .planet-nav-btn:hover {
+          color: #ccf;
+      }
+
+      #planet-name {
+          color: #99b;
+          font-size: 13px;
+          min-width: 70px;
+          text-align: center;
+          font-family: system-ui, sans-serif;
+      }
+
+      /* ============= Embed mode: transparent, no chrome ============= */
+
+      body.embed-mode {
+          background: transparent !important;
+      }
+
+      /* Also clear html background (base rule sets it on html,body) */
+      html:has(body.embed-mode) {
+          background: transparent !important;
+      }
+
+      body.embed-mode .face-cell canvas {
+          border-radius: 50%;
+          box-shadow: none;
+      }
+
+      body.embed-mode #watch-grid {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+      }
+
+      body.embed-mode #app {
+          margin: 0;
+          padding: 0;
+      }
+
+      /* Styles for privacy/support content when shown inside the info popup */
 
 #info-sub-view {
     padding-top: 14px;
@@ -1553,136 +1553,312 @@
     font-size: 11px;
     color: #556;
 }
+
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <div id="app">
-        <a id="back-link" href="index.html" title="Home"><svg viewBox="0 0 24 24">
-                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-            </svg></a>
-        <a id="all-faces-link" href="all.html" title="All Faces"><svg viewBox="0 0 24 24">
-                <circle cx="5" cy="5" r="2" />
-                <circle cx="12" cy="5" r="2" />
-                <circle cx="19" cy="5" r="2" />
-                <circle cx="5" cy="12" r="2" />
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="19" cy="12" r="2" />
-                <circle cx="5" cy="19" r="2" />
-                <circle cx="12" cy="19" r="2" />
-                <circle cx="19" cy="19" r="2" />
-            </svg></a>
-        <a id="selected-faces-link" href="selected.html" title="Selected Faces"><svg viewBox="0 0 24 24">
-                <circle class="accent-dot" cx="7" cy="7" r="2.5" />
-                <circle class="accent-dot" cx="17" cy="7" r="2.5" />
-                <circle class="accent-dot" cx="7" cy="17" r="2.5" />
-                <circle class="accent-dot" cx="17" cy="17" r="2.5" />
-            </svg></a>
-        <a id="edit-picks-link" href="pick.html" title="Edit face selection"><svg viewBox="0 0 24 24">
-                <path
-                    d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-            </svg></a>
-        <span id="face-name">Selene</span>
-        <button id="info-btn" title="About this face">ℹ&#xFE0E;</button>
-        <div id="info-overlay">
-            <div id="info-popup">
-                <button id="info-close">&times;</button>
-                <div id="info-slider">
-                    <div id="info-main-view">
-                        <h2>Chronometer for the Web</h2>
-                        <p>A web port of <a href="https://github.com/EmeraldSequoia/Chronometer" target="_blank"
-                                rel="noopener">Emerald Chronometer</a>, an astronomical watch-face app originally built for
-                            iPhone and iPad.</p>
-                        <p>View the project on <a href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
-                                target="_blank" rel="noopener">GitHub</a> · <a
-                                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
-                                target="_blank" rel="noopener">Credits</a> · <a href="privacy.html" class="help-subpage-link" data-template="privacy-template">Privacy</a> · <a href="support.html" class="help-subpage-link" data-template="support-template">Support</a> · <a href="disclaimer.html" class="help-subpage-link" data-template="disclaimer-template">Disclaimer</a></p>
-                        <hr class="help-separator">
-                        <p>Session state is persisted via URL only -- bookmark or share the URL to save your session. No cookies
-                            or local storage are used. See <a href="privacy.html" class="help-subpage-link" data-template="privacy-template">Privacy</a> for more information.</p>
-                        <hr class="help-separator">
-                        <details id="general-help-section">
-                            <summary>General Help Topics</summary>
-                            <iframe id="general-help-iframe"></iframe>
-                        </details>
-                        <hr class="help-separator">
-                        <div id="help-content">
-                            <!-- Populated from help-template on first info click -->
-                        </div>
-                    </div>
-
-                    <div id="info-sub-view">
-                        <button id="info-back-btn">← Help</button>
-                        <div id="info-sub-content"></div>
-                    </div>
-                </div>
+      <a id="back-link" href="index.html" title="Home"
+        ><svg viewBox="0 0 24 24">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" /></svg
+      ></a>
+      <a id="all-faces-link" href="all.html" title="All Faces"
+        ><svg viewBox="0 0 24 24">
+          <circle cx="5" cy="5" r="2" />
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="19" cy="5" r="2" />
+          <circle cx="5" cy="12" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="19" cy="12" r="2" />
+          <circle cx="5" cy="19" r="2" />
+          <circle cx="12" cy="19" r="2" />
+          <circle cx="19" cy="19" r="2" /></svg
+      ></a>
+      <a id="selected-faces-link" href="selected.html" title="Selected Faces"
+        ><svg viewBox="0 0 24 24">
+          <circle class="accent-dot" cx="7" cy="7" r="2.5" />
+          <circle class="accent-dot" cx="17" cy="7" r="2.5" />
+          <circle class="accent-dot" cx="7" cy="17" r="2.5" />
+          <circle class="accent-dot" cx="17" cy="17" r="2.5" /></svg
+      ></a>
+      <a id="edit-picks-link" href="pick.html" title="Edit face selection"
+        ><svg viewBox="0 0 24 24">
+          <path
+            d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+          /></svg
+      ></a>
+      <span id="face-name">Selene</span>
+      <button id="info-btn" title="About this face">ℹ&#xFE0E;</button>
+      <div id="info-overlay">
+        <div id="info-popup">
+          <button id="info-close">&times;</button>
+          <div id="info-slider">
+            <div id="info-main-view">
+              <h2>Chronometer for the Web</h2>
+              <p>
+                A web port of
+                <a
+                  href="https://github.com/EmeraldSequoia/Chronometer"
+                  target="_blank"
+                  rel="noopener"
+                  >Emerald Chronometer</a
+                >, an astronomical watch-face app originally built for iPhone
+                and iPad.
+              </p>
+              <p>
+                View the project on
+                <a
+                  href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
+                  target="_blank"
+                  rel="noopener"
+                  >GitHub</a
+                >
+                ·
+                <a
+                  href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
+                  target="_blank"
+                  rel="noopener"
+                  >Credits</a
+                >
+                ·
+                <a
+                  href="privacy.html"
+                  class="help-subpage-link"
+                  data-template="privacy-template"
+                  >Privacy</a
+                >
+                ·
+                <a
+                  href="support.html"
+                  class="help-subpage-link"
+                  data-template="support-template"
+                  >Support</a
+                >
+                ·
+                <a
+                  href="disclaimer.html"
+                  class="help-subpage-link"
+                  data-template="disclaimer-template"
+                  >Disclaimer</a
+                >
+              </p>
+              <hr class="help-separator" />
+              <p>
+                Session state is persisted via URL only -- bookmark or share the
+                URL to save your session. No cookies or local storage are used.
+                See
+                <a
+                  href="privacy.html"
+                  class="help-subpage-link"
+                  data-template="privacy-template"
+                  >Privacy</a
+                >
+                for more information.
+              </p>
+              <hr class="help-separator" />
+              <details id="general-help-section">
+                <summary>General Help Topics</summary>
+                <iframe id="general-help-iframe"></iframe>
+              </details>
+              <hr class="help-separator" />
+              <div id="help-content">
+                <!-- Populated from help-template on first info click -->
+              </div>
             </div>
+
+            <div id="info-sub-view">
+              <button id="info-back-btn">← Help</button>
+              <div id="info-sub-content"></div>
+            </div>
+          </div>
         </div>
-        <template id="privacy-template">
-<h1>Privacy</h1>
+      </div>
+      <template id="privacy-template"> <h1>Privacy</h1>
 <p class="subtitle">Emerald Chronometer for the Web</p>
 
 <h2>Overview</h2>
-<p>Emerald Chronometer for the Web is a fully client-side application. It runs entirely in your browser and does not communicate with any application server for its core functionality.</p>
+<p>
+  Emerald Chronometer for the Web is a fully client-side application. It runs
+  entirely in your browser and does not communicate with any application server
+  for its core functionality.
+</p>
 
 <h2>Data Collection</h2>
-<p>The app itself does not collect, store, or transmit any personal data to any application server. There are no app-level analytics, tracking pixels, cookies, or telemetry of any kind.</p>
+<p>
+  The app itself does not collect, store, or transmit any personal data to any
+  application server. There are no app-level analytics, tracking pixels,
+  cookies, or telemetry of any kind.
+</p>
 
 <h2>Web Server Logs</h2>
-<p>When the app is served over HTTP or HTTPS, the hosting provider (SiteGround) records standard web server access logs for each page and resource request. These logs include:</p>
+<p>
+  When the app is served over HTTP or HTTPS, the hosting provider (SiteGround)
+  records standard web server access logs for each page and resource request.
+  These logs include:
+</p>
 <ul>
-    <li>Your <strong>IP address</strong></li>
-    <li>The <strong>URL requested</strong>, including query-string parameters such as latitude, longitude, city name, and timezone</li>
-    <li><strong>Timestamp</strong>, HTTP status code, referrer, and browser user-agent string</li>
+  <li>Your <strong>IP address</strong></li>
+  <li>
+    The <strong>URL requested</strong>, including query-string parameters such
+    as latitude, longitude, city name, and timezone
+  </li>
+  <li>
+    <strong>Timestamp</strong>, HTTP status code, referrer, and browser
+    user-agent string
+  </li>
 </ul>
-<p>These logs are retained by SiteGround for up to 30 days and are used solely for security monitoring and troubleshooting. They are not analyzed for user tracking purposes.</p>
-<p>When running from <code>file://</code> URLs (a local copy of the app), no server is involved and no logs are generated.</p>
+<p>
+  These logs are retained by SiteGround for up to 30 days and are used solely
+  for security monitoring and troubleshooting. They are not analyzed for user
+  tracking purposes.
+</p>
+<p>
+  When running from <code>file://</code> URLs (a local copy of the app), no
+  server is involved and no logs are generated.
+</p>
 
 <h2>Map Tile Requests</h2>
-<p>When you use the location dialog (on pages served via <code>http://</code> or <code>https://</code>), the app fetches map tile images from <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a> to display a preview of the selected location.</p>
-<p>These requests are standard image fetches and <strong>do not include any metadata identifying the tile coordinates as your location</strong> — OpenStreetMap sees only which map tile was requested, the same as any map browsing.</p>
+<p>
+  When you use the location dialog (on pages served via <code>http://</code> or
+  <code>https://</code>), the app fetches map tile images from
+  <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener"
+    >OpenStreetMap</a
+  >
+  to display a preview of the selected location.
+</p>
+<p>
+  These requests are standard image fetches and
+  <strong
+    >do not include any metadata identifying the tile coordinates as your
+    location</strong
+  >
+  — OpenStreetMap sees only which map tile was requested, the same as any map
+  browsing.
+</p>
 
 <h2>Browser Location (Geolocation API)</h2>
-<p>If you tap "Use device location via browser", the app uses the browser's Geolocation API to obtain your coordinates. This data is processed entirely within the browser — the app never sends it to any application server.</p>
-<p>The resolved coordinates are matched against a bundled database of approximately 47,000 cities to display a human-readable location name. This reverse-geolocation lookup happens entirely in the browser — no external geocoding service is contacted.</p>
+<p>
+  If you tap "Use device location via browser", the app uses the browser's
+  Geolocation API to obtain your coordinates. This data is processed entirely
+  within the browser — the app never sends it to any application server.
+</p>
+<p>
+  The resolved coordinates are matched against a bundled database of
+  approximately 47,000 cities to display a human-readable location name. This
+  reverse-geolocation lookup happens entirely in the browser — no external
+  geocoding service is contacted.
+</p>
 
 <h2>URL Parameters</h2>
-<p>The app stores your location settings (latitude, longitude, city name, timezone) as URL query parameters. This is the only persistence mechanism — no cookies or local storage are used.</p>
-<p><strong>Note:</strong> Because these parameters are part of the URL, they are visible in your browser history and, when served over HTTP or HTTPS, in the hosting provider's access logs.</p>
+<p>
+  The app stores your location settings (latitude, longitude, city name,
+  timezone) as URL query parameters. This is the only persistence mechanism — no
+  cookies or local storage are used.
+</p>
+<p>
+  <strong>Note:</strong> Because these parameters are part of the URL, they are
+  visible in your browser history and, when served over HTTP or HTTPS, in the
+  hosting provider's access logs.
+</p>
 
 <h2>Third-Party Services</h2>
 <ul>
-    <li><strong>OpenStreetMap</strong> (map tiles only, HTTP/HTTPS only) — governed by <a href="https://wiki.osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener">OSM's privacy policy</a>.</li>
+  <li>
+    <strong>OpenStreetMap</strong> (map tiles only, HTTP/HTTPS only) — governed
+    by
+    <a
+      href="https://wiki.osmfoundation.org/wiki/Privacy_Policy"
+      target="_blank"
+      rel="noopener"
+      >OSM's privacy policy</a
+    >.
+  </li>
 </ul>
 
 <h2>Contact</h2>
-<p>For questions about this privacy policy, please visit the <a href="https://github.com/EmeraldSequoia/chronometer-web" target="_blank" rel="noopener">project on GitHub</a>.</p>
+<p>
+  For questions about this privacy policy, please visit the
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web"
+    target="_blank"
+    rel="noopener"
+    >project on GitHub</a
+  >.
+</p>
 
-<hr>
+<hr />
 <p class="last-updated">Last updated: May 2026</p>
-        </template>
-        <template id="support-template">
-<h1>Support</h1>
+ </template>
+      <template id="support-template"> <h1>Support</h1>
 <p class="subtitle">Emerald Chronometer for the Web</p>
 
-<p>This free web app is served by a site run by volunteers and provides no support. All the website does is serve, as a convenience, files available from the <a href="https://github.com/EmeraldSequoia/chronometer-web/releases" target="_blank" rel="noopener">GitHub releases page</a> (see instructions for running the app <a href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server" target="_blank" rel="noopener">here</a>).</p>
+<p>
+  This free web app is served by a site run by volunteers and provides no
+  support. All the website does is serve, as a convenience, files available from
+  the
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web/releases"
+    target="_blank"
+    rel="noopener"
+    >GitHub releases page</a
+  >
+  (see instructions for running the app
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server"
+    target="_blank"
+    rel="noopener"
+    >here</a
+  >).
+</p>
 
-<p>You are encouraged to report issues to the developers at the GitHub issues page <a href="https://github.com/EmeraldSequoia/chronometer-web/issues" target="_blank" rel="noopener">here</a>, but as the developers are also volunteers you may not get a response in a timely fashion.</p>
+<p>
+  You are encouraged to report issues to the developers at the GitHub issues
+  page
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web/issues"
+    target="_blank"
+    rel="noopener"
+    >here</a
+  >, but as the developers are also volunteers you may not get a response in a
+  timely fashion.
+</p>
 
-<hr>
-        </template>
-        <template id="disclaimer-template">
-<h1>Disclaimer</h1>
+<hr />
+ </template>
+      <template id="disclaimer-template"> <h1>Disclaimer</h1>
 <p class="subtitle">Emerald Chronometer for the Web</p>
 
-<p>THIS FREE WEB APP IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+<p>
+  THIS FREE WEB APP IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+</p>
 
-<p>The pages served to your browser are available at the <a href="https://github.com/EmeraldSequoia/chronometer-web/releases" target="_blank" rel="noopener">GitHub releases page</a> (see instructions for running the app <a href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server" target="_blank" rel="noopener">here</a>).</p>
+<p>
+  The pages served to your browser are available at the
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web/releases"
+    target="_blank"
+    rel="noopener"
+    >GitHub releases page</a
+  >
+  (see instructions for running the app
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server"
+    target="_blank"
+    rel="noopener"
+    >here</a
+  >).
+</p>
 
-<hr>
-        </template>
-        <template id="help-template">
-<b>Selene</b> (Greek goddess of the Moon) shows the phases of the Moon.
+<hr />
+ </template>
+      <template id="help-template"> <b>Selene</b> (Greek goddess of the Moon) shows the phases of the Moon.
 <p>
   The main black hand indicates the difference between the Moon's ecliptic
   longitude and the Sun's; this is a representation of the Moon's cycle through
@@ -1793,212 +1969,443 @@
   solar eclipse is possible. When both near 180 degrees (full moon), a lunar
   eclipse is possible.
 </p>
-        </template>
-        <div id="watch-grid"></div>
-        <div id="planet-selector">
-            <div class="planet-icons" id="planet-icons"></div>
-            <div class="planet-name-row">
-                <button class="planet-nav-btn" id="planet-prev">◀</button>
-                <span id="planet-name">Jupiter</span>
-                <button class="planet-nav-btn" id="planet-next">▶</button>
+ </template>
+      <div id="watch-grid"></div>
+      <div id="planet-selector">
+        <div class="planet-icons" id="planet-icons"></div>
+        <div class="planet-name-row">
+          <button class="planet-nav-btn" id="planet-prev">◀</button>
+          <span id="planet-name">Jupiter</span>
+          <button class="planet-nav-btn" id="planet-next">▶</button>
+        </div>
+      </div>
+      <div id="vienna-noon-toggle" style="display: none">
+        <button class="noon-pill" data-mode="midnight">Midnight on top</button>
+        <button class="noon-pill" data-mode="noon">Noon on top</button>
+      </div>
+      <div id="kyoto-mode-toggle" style="display: none">
+        <button class="kyoto-pill" data-mode="variable">
+          Constant hand rate
+        </button>
+        <button class="kyoto-pill" data-mode="constant">
+          Variable hand rate
+        </button>
+      </div>
+      <div id="time-bar">
+        <button id="time-bar-label">⏱ Show time controller</button>
+        <span id="time-bar-info">
+          <span id="time-bar-date"></span>
+          <span id="time-bar-offset"></span>
+          <span id="time-bar-rate"></span>
+        </span>
+        <button class="time-bar-btn" id="time-bar-now">Now</button>
+      </div>
+      <div id="location-panel">
+        <div id="location-info">
+          <div id="location-info-row">
+            <span id="location-display"></span>
+            <span id="location-source"></span>
+          </div>
+          <span id="location-tz"></span>
+        </div>
+        <button id="set-location-btn">Location</button>
+      </div>
+
+      <!-- Location prompt overlay (hidden by default) -->
+<div id="location-prompt" style="display: none">
+  <div class="lp-backdrop"></div>
+  <div class="lp-dialog">
+    <h3 class="lp-title">Location</h3>
+
+    <!-- Current location status (map + name) — shown at top when we have a location -->
+    <div class="lp-status-section" id="lp-status-section">
+      <div class="lp-map-row" id="lp-map-row">
+        <canvas id="lp-globe" width="100" height="100"></canvas>
+        <div class="lp-osm-container" id="lp-osm-container">
+          <img id="lp-osm-tile" alt="" />
+          <div class="lp-map-marker" id="lp-map-marker"></div>
+          <div class="lp-osm-offline" id="lp-osm-offline" style="display: none">
+            (offline)
+          </div>
+        </div>
+      </div>
+      <div class="lp-map-attribution" id="lp-osm-attribution">
+        ©
+        <a
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noopener"
+          >OpenStreetMap</a
+        >
+        contributors
+      </div>
+      <div class="lp-location-name" id="lp-location-name"></div>
+      <div class="lp-location-tz" id="lp-location-tz"></div>
+    </div>
+
+    <!-- "No location set yet" placeholder -->
+    <div class="lp-no-location" id="lp-no-location">
+      <div
+        class="lp-no-location-hint"
+        id="lp-no-location-hint"
+        style="display: none"
+      >
+        <div class="lp-hint-icon">📍</div>
+        <div class="lp-hint-text">No location specified via URL</div>
+        <div class="lp-hint-sub">
+          To skip this dialog in the future, bookmark the page after selecting a
+          location below
+        </div>
+      </div>
+      <div class="lp-no-location-text" id="lp-no-location-default">
+        No location set yet
+      </div>
+    </div>
+
+    <div class="lp-search-section">
+      <div class="lp-search-label">City search</div>
+      <div class="lp-search-input-wrap">
+        <input
+          type="text"
+          id="lp-city-input"
+          placeholder="Search city or airport code…"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+      </div>
+      <div id="lp-city-results"></div>
+    </div>
+    <div class="lp-browser-section">
+      <button class="lp-btn" id="lp-use-browser">
+        Use device location via browser
+      </button>
+    </div>
+    <div class="lp-manual-section">
+      <div class="lp-search-label">Manual coordinates</div>
+      <div class="lp-inputs">
+        <label
+          >Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"
+        /></label>
+        <label
+          >Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"
+        /></label>
+      </div>
+      <div class="lp-buttons">
+        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
+      </div>
+    </div>
+    <div class="lp-dialog-footer">
+      <button class="lp-btn lp-btn-done" id="lp-done">Done</button>
+    </div>
+  </div>
+</div>
+
+
+
+      <!-- Time controller popover (L-shaped) -->
+      <div id="time-popover" style="display: none">
+        <button id="tp-close">&times;</button>
+        <div id="tp-upper">
+          <div class="tp-transport" id="tp-transport"></div>
+          <div id="tp-rate-label">1× (real time)</div>
+          <div class="tp-label">Hold to scrub</div>
+          <div class="tp-step-row">
+            <button class="tp-btn" data-step="-year" data-unit="year">
+              ◀1y
+            </button>
+            <button class="tp-btn" data-step="+year" data-unit="year">
+              1y ▶
+            </button>
+          </div>
+          <div class="tp-step-row">
+            <button class="tp-btn" data-step="-month" data-unit="month">
+              ◀1mo
+            </button>
+            <button class="tp-btn" data-step="+month" data-unit="month">
+              1mo ▶
+            </button>
+          </div>
+          <div class="tp-step-row">
+            <button class="tp-btn" data-step="-day" data-unit="day">◀1d</button>
+            <button class="tp-btn" data-step="+day" data-unit="day">
+              1d ▶
+            </button>
+          </div>
+          <div class="tp-step-row">
+            <button class="tp-btn" data-step="-hour" data-unit="hour">
+              ◀1h
+            </button>
+            <button class="tp-btn" data-step="+hour" data-unit="hour">
+              1h ▶
+            </button>
+          </div>
+          <div class="tp-step-row">
+            <button class="tp-btn" data-step="-minute" data-unit="minute">
+              ◀1mi
+            </button>
+            <button class="tp-btn" data-step="+minute" data-unit="minute">
+              1mi ▶
+            </button>
+          </div>
+        </div>
+        <div id="tp-lower">
+          <div id="tp-tabs">
+            <button class="tp-tab active" data-tab="date">Date</button>
+            <button class="tp-tab" data-tab="astro">Astro</button>
+          </div>
+          <div id="tp-tab-date" class="tp-tab-pane">
+            <div>
+              <div class="tp-label">Set Date &amp; Time</div>
+              <div class="tp-date-inputs">
+                <input
+                  id="tp-year"
+                  type="number"
+                  min="1"
+                  max="4000"
+                  placeholder="YYYY"
+                />
+                <input
+                  id="tp-month"
+                  type="number"
+                  min="1"
+                  max="12"
+                  placeholder="MM"
+                />
+                <input
+                  id="tp-day"
+                  type="number"
+                  min="1"
+                  max="31"
+                  placeholder="DD"
+                />
+              </div>
+              <div class="tp-date-inputs">
+                <button id="tp-bce" title="Toggle BCE (Before Common Era)">
+                  CE
+                </button>
+                <input
+                  id="tp-hour"
+                  type="number"
+                  min="0"
+                  max="23"
+                  placeholder="HH"
+                />
+                <input
+                  id="tp-minute"
+                  type="number"
+                  min="0"
+                  max="59"
+                  placeholder="mm"
+                />
+              </div>
             </div>
-        </div>
-        <div id="vienna-noon-toggle" style="display:none">
-            <button class="noon-pill" data-mode="midnight">Midnight on top</button>
-            <button class="noon-pill" data-mode="noon">Noon on top</button>
-        </div>
-        <div id="kyoto-mode-toggle" style="display:none">
-            <button class="kyoto-pill" data-mode="variable">Constant hand rate</button>
-            <button class="kyoto-pill" data-mode="constant">Variable hand rate</button>
-        </div>
-        <div id="time-bar">
-            <button id="time-bar-label">⏱ Show time controller</button>
-            <span id="time-bar-info">
-                <span id="time-bar-date"></span>
-                <span id="time-bar-offset"></span>
-                <span id="time-bar-rate"></span>
-            </span>
-            <button class="time-bar-btn" id="time-bar-now">Now</button>
-        </div>
-        <div id="location-panel">
-            <div id="location-info">
-                <div id="location-info-row">
-                    <span id="location-display"></span>
-                    <span id="location-source"></span>
-                </div>
-                <span id="location-tz"></span>
+          </div>
+          <div id="tp-tab-astro" class="tp-tab-pane tp-pane-hidden">
+            <div>
+              <div class="tp-label">Astronomical Events</div>
+              <div class="tp-astro-row">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="sunrise"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Sunrise</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="sunrise"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div class="tp-astro-row">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="sunset"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Sunset</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="sunset"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div class="tp-astro-row" id="tp-astro-moonrise">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moonrise"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Moonrise</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moonrise"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div
+                class="tp-astro-row"
+                id="tp-astro-body-rise"
+                style="display: none"
+              >
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="body-rise"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span
+                  class="tp-astro-label tp-body-label"
+                  id="tp-body-rise-label"
+                  >Moon Rise</span
+                >
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="body-rise"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div class="tp-astro-row" id="tp-astro-moonset">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moonset"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Moonset</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moonset"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div
+                class="tp-astro-row"
+                id="tp-astro-body-set"
+                style="display: none"
+              >
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="body-set"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span
+                  class="tp-astro-label tp-body-label"
+                  id="tp-body-set-label"
+                  >Moon Set</span
+                >
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="body-set"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div class="tp-astro-row">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moonphase"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Moon Phase</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moonphase"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div class="tp-astro-row">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="sun-transit"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Sun Transit</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="sun-transit"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div class="tp-astro-row" id="tp-astro-moon-transit">
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moon-transit"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span class="tp-astro-label">Moon Transit</span>
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="moon-transit"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
+              <div
+                class="tp-astro-row"
+                id="tp-astro-body-transit"
+                style="display: none"
+              >
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="body-transit"
+                  data-dir="-1"
+                >
+                  ◀
+                </button>
+                <span
+                  class="tp-astro-label tp-body-label"
+                  id="tp-body-transit-label"
+                  >Moon Trans</span
+                >
+                <button
+                  class="tp-btn tp-astro-btn"
+                  data-astro="body-transit"
+                  data-dir="1"
+                >
+                  ▶
+                </button>
+              </div>
             </div>
-            <button id="set-location-btn">Location</button>
+          </div>
         </div>
-
-        <!-- Location prompt overlay (hidden by default) -->
-        <div id="location-prompt" style="display:none">
-            <div class="lp-backdrop"></div>
-            <div class="lp-dialog">
-                <h3 class="lp-title">Location</h3>
-
-                <!-- Current location status (map + name) — shown at top when we have a location -->
-                <div class="lp-status-section" id="lp-status-section">
-                    <div class="lp-map-row" id="lp-map-row">
-                        <canvas id="lp-globe" width="100" height="100"></canvas>
-                        <div class="lp-osm-container" id="lp-osm-container">
-                            <img id="lp-osm-tile" alt="">
-                            <div class="lp-map-marker" id="lp-map-marker"></div>
-                            <div class="lp-osm-offline" id="lp-osm-offline" style="display:none">(offline)</div>
-                        </div>
-                    </div>
-                    <div class="lp-map-attribution" id="lp-osm-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
-                    <div class="lp-location-name" id="lp-location-name"></div>
-                    <div class="lp-location-tz" id="lp-location-tz"></div>
-                </div>
-
-                <!-- "No location set yet" placeholder -->
-                <div class="lp-no-location" id="lp-no-location">
-                    <div class="lp-no-location-hint" id="lp-no-location-hint" style="display:none">
-                        <div class="lp-hint-icon">📍</div>
-                        <div class="lp-hint-text">No location specified via URL</div>
-                        <div class="lp-hint-sub">To skip this dialog in the future, bookmark the page after selecting a location below</div>
-                    </div>
-                    <div class="lp-no-location-text" id="lp-no-location-default">No location set yet</div>
-                </div>
-
-                <div class="lp-search-section">
-                    <div class="lp-search-label">City search</div>
-                    <div class="lp-search-input-wrap">
-                        <input type="text" id="lp-city-input" placeholder="Search city or airport code…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-                    </div>
-                    <div id="lp-city-results"></div>
-                </div>
-                <div class="lp-browser-section">
-                    <button class="lp-btn" id="lp-use-browser">Use device location via browser</button>
-                </div>
-                <div class="lp-manual-section">
-                    <div class="lp-search-label">Manual coordinates</div>
-                    <div class="lp-inputs">
-                        <label>Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"></label>
-                        <label>Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"></label>
-                    </div>
-                    <div class="lp-buttons">
-                        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
-                    </div>
-                </div>
-                <div class="lp-dialog-footer">
-                    <button class="lp-btn lp-btn-done" id="lp-done">Done</button>
-                </div>
-            </div>
-        </div>
-
-
-        <!-- Time controller popover (L-shaped) -->
-        <div id="time-popover" style="display:none">
-            <button id="tp-close">&times;</button>
-            <div id="tp-upper">
-                <div class="tp-transport" id="tp-transport"></div>
-                <div id="tp-rate-label">1× (real time)</div>
-                <div class="tp-label">Hold to scrub</div>
-                <div class="tp-step-row">
-                    <button class="tp-btn" data-step="-year" data-unit="year">◀1y</button>
-                    <button class="tp-btn" data-step="+year" data-unit="year">1y ▶</button>
-                </div>
-                <div class="tp-step-row">
-                    <button class="tp-btn" data-step="-month" data-unit="month">◀1mo</button>
-                    <button class="tp-btn" data-step="+month" data-unit="month">1mo ▶</button>
-                </div>
-                <div class="tp-step-row">
-                    <button class="tp-btn" data-step="-day" data-unit="day">◀1d</button>
-                    <button class="tp-btn" data-step="+day" data-unit="day">1d ▶</button>
-                </div>
-                <div class="tp-step-row">
-                    <button class="tp-btn" data-step="-hour" data-unit="hour">◀1h</button>
-                    <button class="tp-btn" data-step="+hour" data-unit="hour">1h ▶</button>
-                </div>
-                <div class="tp-step-row">
-                    <button class="tp-btn" data-step="-minute" data-unit="minute">◀1mi</button>
-                    <button class="tp-btn" data-step="+minute" data-unit="minute">1mi ▶</button>
-                </div>
-            </div>
-            <div id="tp-lower">
-                <div id="tp-tabs">
-                    <button class="tp-tab active" data-tab="date">Date</button>
-                    <button class="tp-tab" data-tab="astro">Astro</button>
-                </div>
-                <div id="tp-tab-date" class="tp-tab-pane">
-                    <div>
-                        <div class="tp-label">Set Date &amp; Time</div>
-                        <div class="tp-date-inputs">
-                            <input id="tp-year" type="number" min="1" max="4000" placeholder="YYYY">
-                            <input id="tp-month" type="number" min="1" max="12" placeholder="MM">
-                            <input id="tp-day" type="number" min="1" max="31" placeholder="DD">
-                        </div>
-                        <div class="tp-date-inputs">
-                            <button id="tp-bce" title="Toggle BCE (Before Common Era)">CE</button>
-                            <input id="tp-hour" type="number" min="0" max="23" placeholder="HH">
-                            <input id="tp-minute" type="number" min="0" max="59" placeholder="mm">
-                        </div>
-                    </div>
-                </div>
-                <div id="tp-tab-astro" class="tp-tab-pane tp-pane-hidden">
-                    <div>
-                        <div class="tp-label">Astronomical Events</div>
-                        <div class="tp-astro-row">
-                            <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Sunrise</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="sunrise" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row">
-                            <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Sunset</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="sunset" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row" id="tp-astro-moonrise">
-                            <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Moonrise</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="moonrise" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row" id="tp-astro-body-rise" style="display:none">
-                            <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="-1">◀</button>
-                            <span class="tp-astro-label tp-body-label" id="tp-body-rise-label">Moon Rise</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="body-rise" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row" id="tp-astro-moonset">
-                            <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Moonset</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="moonset" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row" id="tp-astro-body-set" style="display:none">
-                            <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="-1">◀</button>
-                            <span class="tp-astro-label tp-body-label" id="tp-body-set-label">Moon Set</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="body-set" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row">
-                            <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Moon Phase</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="moonphase" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row">
-                            <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Sun Transit</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="sun-transit" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row" id="tp-astro-moon-transit">
-                            <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="-1">◀</button>
-                            <span class="tp-astro-label">Moon Transit</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="moon-transit" data-dir="1">▶</button>
-                        </div>
-                        <div class="tp-astro-row" id="tp-astro-body-transit" style="display:none">
-                            <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="-1">◀</button>
-                            <span class="tp-astro-label tp-body-label" id="tp-body-transit-label">Moon Trans</span>
-                            <button class="tp-btn tp-astro-btn" data-astro="body-transit" data-dir="1">▶</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+      </div>
     </div>
         <script src="chronometer-engine.js"></script>
     <script src="face-selene.js"></script>
     <!-- Link preservation now handled by url-state.ts via initNavigationLinks() -->
-</body>
-
+  </body>
 </html>
