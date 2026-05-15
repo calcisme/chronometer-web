@@ -265,6 +265,31 @@ export function createWatchEnvironment(
         }
     }
 
+    /** Kyoto hand mode: 0 = moving hand, 1 = fixed hand at top */
+    env.kyHandMode = 0;
+
+    env.functions.set('kyotoHandMode', () => env.kyHandMode);
+
+    /**
+     * Kyoto master rotation: returns the amount to rotate the dial pieces
+     * so that the active hand appears fixed at the top (0 degrees).
+     */
+    env.functions.set('kyotoMasterRotation', () => {
+        if (env.kyHandMode === 0) {
+            return 0;
+        }
+        const kmode = env.variables.get('kyMode') || 0;
+        if (kmode === 0) {
+            // Constant rate: use hour24ValueAngle() + pi - solarNoonAngle()
+            const h24 = env.functions.get('hour24ValueAngle')?.() || 0;
+            const sn = env.functions.get('solarNoonAngle')?.() || 0;
+            return h24 + Math.PI - sn;
+        } else {
+            // Variable rate: use Japan hour
+            return env.functions.get('japanHourValueAngle')?.() || 0;
+        }
+    });
+
     return env;
 }
 

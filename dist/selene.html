@@ -116,6 +116,8 @@
           pointer-events: none;
       }
 
+
+
               /* Location prompt overlay */
         #location-prompt {
             position: fixed;
@@ -1332,7 +1334,7 @@
 
       /* ============= Kyoto Mode Toggle ============= */
 
-      #kyoto-mode-toggle {
+      #kyoto-hand-toggle, #kyoto-mode-toggle {
           flex: 0 0 auto;
           display: flex;
           align-items: center;
@@ -1982,6 +1984,10 @@
       <div id="vienna-noon-toggle" style="display: none">
         <button class="noon-pill" data-mode="midnight">Midnight on top</button>
         <button class="noon-pill" data-mode="noon">Noon on top</button>
+      </div>
+      <div id="kyoto-hand-toggle" style="display: none">
+        <button class="kyoto-pill" data-mode="moving">Moving hand</button>
+        <button class="kyoto-pill" data-mode="fixed">Fixed hand</button>
       </div>
       <div id="kyoto-mode-toggle" style="display: none">
         <button class="kyoto-pill" data-mode="variable">

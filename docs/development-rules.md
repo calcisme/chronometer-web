@@ -108,6 +108,16 @@ This follows the same post-init-override pattern as `body=` (applied after init 
 Terra supports an `embed=1` URL parameter for iframe embedding.
 See [Embedding](embedding.md) for full details.
 
+### Kyoto wadokei toggles
+
+Kyoto's fixed-hand and rate-mode toggles are controlled by the `wadokei='1'` XML feature flag (not by face name). The engine uses `face.watch.wadokei` to decide whether to show the toggle UI — following the same pattern as `planetSelector` for Venezia.
+
+**State restoration**: `restoreKyotoState(face)` must be called after every `createWatchEnvironment()` invocation (currently 6 sites in `engine-entry.ts`). It reads `kyhand` and `kmode` from the URL and injects them into the fresh environment. If you add a new `createWatchEnvironment()` call site, add `restoreKyotoState(face)` immediately after.
+
+**Animation snapping**: When toggling modes, `finishAnimations()` must be called on the face's hand states *before* applying the new mode values. Without this, `kyotoMasterRotation()` jumps by a large angle and the animation system may interpolate through the wrong direction.
+
+**Face image**: `face.png` is a `<hand>` element (outside `<static>`) with `angle='0 - kyotoMasterRotation()'` so it rotates with the dial in fixed-hand mode. See [XML Syntax — Kyoto Wadokei Toggles](xml-syntax.md#kyoto-wadokei-toggles) for full details.
+
 ## 9. Cross-Browser Text Positioning
 
 **Never** use `textBaseline = 'top'` — Safari positions it differently from Chrome. Always use `textBaseline = 'alphabetic'` with `textVisualCenterY(ctx, label)` as the Y-offset. This applies to all dial, wheel, and calendar text rendering. See [Rendering — Cross-Browser Text Positioning](rendering.md#cross-browser-text-positioning) for details.

@@ -37,6 +37,7 @@ Colors can be: named (`black`, `white`, `clear`, `red`, etc.), hex `0xAARRGGBB` 
 | `worldTimeRing` | `'1'` | Terra-style 24-city ring around the dial |
 | `worldTimeSubdials` | `'1'` | Gaia-style separate subdials for cities |
 | `planetSelector` | `'1'` | Venezia-style user-switchable planet display |
+| `wadokei` | `'1'` | Kyoto-style Japanese temporal hour face with hand/rate mode toggles |
 | `numEnvironments` | number | Number of environment slots (for multi-city faces) |
 | `maxSeparateLoc` | number | Max distinct location slots |
 | `calendarWeekStart` | `'1'` | Babylon-style calendar grid |
@@ -621,6 +622,55 @@ A pill toggle ("Midnight ↑ | Noon ↑") in `#vienna-noon-toggle` is shown belo
 2. Rebuilds the static cache and resets hand/dial schedules
 3. The 24-hour number dial animates automatically via its `HandState` (driven by `angle='dialFlip'`)
 4. Writes `vnoon=1` to the URL (or removes it)
+
+---
+
+## Kyoto Wadokei Toggles
+
+Kyoto is a Japanese temporal hour face that supports two independent toggles controlled by the `wadokei='1'` feature flag on `<watch>`.
+
+### Feature flag
+
+The engine detects wadokei faces via `face.watch.wadokei` (parsed from the XML attribute), **not** by face name. This means any face declaring `wadokei='1'` automatically gets the toggle UI and state management — no engine changes needed.
+
+### Hand mode toggle (Moving hand / Fixed hand)
+
+| Variable | Values | Effect |
+|----------|--------|--------|
+| `env.kyHandMode` | `0` (default) | Hand moves, dial is stationary |
+| | `1` | Hand locks at 12 o'clock, entire dial rotates |
+
+The environment function `kyotoHandMode()` returns the current value.  The companion function `kyotoMasterRotation()` returns the hand's angle when `kyHandMode=1` (and 0 when `kyHandMode=0`).  All dial elements (kanji, ticks, 24-hour labels) include `- kyotoMasterRotation()` in their `angle` or `offsetAngle` expressions so they counter-rotate in fixed-hand mode.
+
+The face background image (`face.png`) is a `<hand>` element (not in `<static>`) with `angle='0 - kyotoMasterRotation()'` so it rotates with the dial in fixed mode and stays still in moving mode.
+
+### Rate mode toggle (Variable hand rate / Constant hand rate)
+
+| Variable | Values | Effect |
+|----------|--------|--------|
+| `kyMode` | `0` (default) | Variable hand rate — hand speeds up/slows down for unequal hours |
+| | `1` | Constant hand rate — dial markings shift position, hand moves steadily |
+
+`kyMode` is set in the XML via `<init expr='kyMode=0' />` and overridden at runtime.
+
+### URL persistence
+
+- `kyhand=1` → fixed hand mode (absent or 0 → moving hand)
+- `kmode=1` → constant hand rate (absent or 0 → variable hand rate)
+
+These are applied after init block evaluation in `watch-env.ts` (same pattern as `body=` and `vnoon=`).
+
+### State restoration across environment rebuilds
+
+Because `createWatchEnvironment()` produces a fresh `Environment` with default values, the function `restoreKyotoState(face)` in `engine-entry.ts` re-reads `kyhand` and `kmode` from the URL and injects them into the new environment. This is called at **every** `createWatchEnvironment()` call site (6 locations) — time stepping, location changes, timezone changes, etc.
+
+### Animation on mode change
+
+When the user toggles either mode, the engine calls `finishAnimations()` on all Kyoto hand states before applying the new values and resetting schedules. This snaps in-flight animations to their current targets so the animation system doesn't interpolate through the wrong direction when `kyotoMasterRotation()` jumps.
+
+### UI
+
+Two pill toggles in `#kyoto-hand-toggle` and `#kyoto-mode-toggle` are shown below the face in single-face mode. The toggle labels update dynamically: in fixed-hand mode, the rate toggle reads "Variable dial rate" / "Constant dial rate" instead of "Variable hand rate" / "Constant hand rate".
 
 ---
 

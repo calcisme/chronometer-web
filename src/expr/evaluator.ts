@@ -19,6 +19,8 @@ export interface Environment {
     variables: Map<string, number>;
     /** Function bindings (math builtins + watch-specific functions). */
     functions: Map<string, ExprFunction>;
+    /** Kyoto hand mode: 0 = moving hand (default), 1 = fixed hand at top */
+    kyHandMode: number;
     /** Observer latitude in radians (set by watch-env, used by sentinel scheduling). */
     observerLatRad?: number;
     /** Observer longitude in radians (set by watch-env, used by sentinel scheduling). */
@@ -80,7 +82,7 @@ export function createDefaultEnvironment(): Environment {
     // fmod: C-style float modulus (matches the original's use of fmod)
     functions.set('fmod', (a: number, b: number) => a - Math.trunc(a / b) * b);
 
-    return { variables, functions };
+    return { variables, functions, kyHandMode: 0 };
 }
 
 // ============================================================================

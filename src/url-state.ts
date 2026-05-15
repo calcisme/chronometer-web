@@ -35,6 +35,10 @@ export interface UrlState {
     tp: 'd' | 'a';
     /** Embed mode: minimal UI, transparent background (Terra only). */
     embed: boolean;
+    /** Kyoto hand mode: '1' = fixed hand at top, null/absent = moving hand. */
+    kyhand: string | null;
+    /** Kyoto rate mode: '1' = constant rate, null/absent = variable rate. */
+    kmode: string | null;
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -70,6 +74,8 @@ export function readUrlState(): UrlState {
         picks: params.get('picks') || null,
         tp: params.get('tp') === 'a' ? 'a' : 'd',
         embed: params.get('embed') === '1',
+        kyhand: params.get('kyhand'),
+        kmode: params.get('kmode'),
     };
 }
 
@@ -97,6 +103,14 @@ export function writeUrlState(changes: Partial<UrlState>): void {
         } else {
             params.delete('lon');
         }
+    }
+    if ('kyhand' in changes) {
+        if (changes.kyhand) params.set('kyhand', changes.kyhand);
+        else params.delete('kyhand');
+    }
+    if ('kmode' in changes) {
+        if (changes.kmode) params.set('kmode', changes.kmode);
+        else params.delete('kmode');
     }
     if ('city' in changes) {
         if (changes.city) {

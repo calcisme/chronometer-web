@@ -438,6 +438,7 @@
       worldTimeRing: (attr(watchEl, "worldTimeRing") ?? "") === "1",
       worldTimeSubdials: (attr(watchEl, "worldTimeSubdials") ?? "") === "1",
       planetSelector: (attr(watchEl, "planetSelector") ?? "") === "1",
+      wadokei: (attr(watchEl, "wadokei") ?? "") === "1",
       numEnvironments: parseInt(attr(watchEl, "numEnvironments") ?? "1", 10),
       maxSeparateLoc: parseInt(attr(watchEl, "maxSeparateLoc") ?? "1", 10),
       calendarWeekStart: (attr(watchEl, "calendarWeekStart") ?? "") === "1",
@@ -969,7 +970,7 @@
     functions.set("max", Math.max);
     functions.set("round", Math.round);
     functions.set("fmod", (a, b) => a - Math.trunc(a / b) * b);
-    return { variables, functions };
+    return { variables, functions, kyHandMode: 0 };
   }
   var EvalError = class extends Error {
     constructor(message) {
@@ -12518,6 +12519,21 @@
         env.variables.set("kyMode", parseInt(kmodeParam, 10));
       }
     }
+    env.kyHandMode = 0;
+    env.functions.set("kyotoHandMode", () => env.kyHandMode);
+    env.functions.set("kyotoMasterRotation", () => {
+      if (env.kyHandMode === 0) {
+        return 0;
+      }
+      const kmode = env.variables.get("kyMode") || 0;
+      if (kmode === 0) {
+        const h24 = env.functions.get("hour24ValueAngle")?.() || 0;
+        const sn = env.functions.get("solarNoonAngle")?.() || 0;
+        return h24 + Math.PI - sn;
+      } else {
+        return env.functions.get("japanHourValueAngle")?.() || 0;
+      }
+    });
     return env;
   }
   function evalAttr(expr, env) {
@@ -17274,7 +17290,9 @@
       tz: params.get("tz") || null,
       picks: params.get("picks") || null,
       tp: params.get("tp") === "a" ? "a" : "d",
-      embed: params.get("embed") === "1"
+      embed: params.get("embed") === "1",
+      kyhand: params.get("kyhand"),
+      kmode: params.get("kmode")
     };
   }
   function writeUrlState(changes) {
@@ -17292,6 +17310,14 @@
       } else {
         params.delete("lon");
       }
+    }
+    if ("kyhand" in changes) {
+      if (changes.kyhand) params.set("kyhand", changes.kyhand);
+      else params.delete("kyhand");
+    }
+    if ("kmode" in changes) {
+      if (changes.kmode) params.set("kmode", changes.kmode);
+      else params.delete("kmode");
     }
     if ("city" in changes) {
       if (changes.city) {
@@ -18369,6 +18395,12 @@
     }
     let cols = 1, rows = 1;
     const faces = [];
+    function restoreKyotoState(face) {
+      if (!face.watch.wadokei) return;
+      const s = readUrlState();
+      if (s.kyhand === "1") face.env.kyHandMode = 1;
+      if (s.kmode === "1") face.env.variables.set("kyMode", 1);
+    }
     for (let i = 0; i < parsedWatches.length; i++) {
       const cell = document.createElement("div");
       cell.className = "face-cell";
@@ -18476,6 +18508,7 @@
         if (!face.enabled) continue;
         const oldKnockout = face.env._terraCityKnockout;
         face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        restoreKyotoState(face);
         if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
         invalidateDayNightCaches(face.watch);
         const { canvas, watch, env, images, scale } = face;
@@ -18706,6 +18739,7 @@
         if (!face.enabled) continue;
         const oldKnockout = face.env._terraCityKnockout;
         face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        restoreKyotoState(face);
         if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
         invalidateDayNightCaches(face.watch);
         if (face.terminatorLeaves.length > 0) {
@@ -19120,6 +19154,7 @@
           };
         }
         face.env = createWatchEnvironment(face.watch, newLat, newLon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+        restoreKyotoState(face);
         if (face.terminatorLeaves.length > 0) {
           updateLeafAngles(face.terminatorLeaves, face.env);
           resetLeafSchedules(face.terminatorLeaves);
@@ -20245,6 +20280,7 @@
           for (const face of faces) {
             if (!face.enabled) continue;
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            restoreKyotoState(face);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -20394,57 +20430,83 @@
         });
       }
     }
-    const kyotoFace = faces.find((f) => f.watch.urlAbbrev === "ky");
+    const kyotoFace = faces.find((f) => f.watch.wadokei);
     if (kyotoFace && isSingleFace) {
-      const toggleContainer = document.getElementById("kyoto-mode-toggle");
-      if (toggleContainer) {
-        let isConstantMode2 = function() {
-          return (kyotoFace.env.variables.get("kyMode") ?? 0) !== 0;
-        }, updateKyotoPillHighlight2 = function() {
-          const constant = isConstantMode2();
-          variablePill.classList.toggle("active", !constant);
-          constantPill.classList.toggle("active", constant);
-        }, setKyotoMode2 = function(constant) {
-          const val = constant ? 1 : 0;
-          kyotoFace.env.variables.set("kyMode", val);
-          invalidateDayNightCaches(kyotoFace.watch);
-          const { canvas, watch, env, images, scale } = kyotoFace;
-          buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, kyotoFace.terminatorLeaves);
+      const handToggle = document.getElementById("kyoto-hand-toggle");
+      const rateToggle = document.getElementById("kyoto-mode-toggle");
+      const getEnv = () => kyotoFace.env;
+      const updateUI = () => {
+        const env = getEnv();
+        if (handToggle) {
+          const isFixed = env.kyHandMode === 1;
+          handToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
+            const btn = p;
+            btn.classList.toggle("active", btn.dataset.mode === "fixed" === isFixed);
+          });
+          if (rateToggle) {
+            rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
+              const btn = p;
+              if (btn.dataset.mode === "variable") {
+                btn.textContent = isFixed ? "Variable dial rate" : "Variable hand rate";
+              } else {
+                btn.textContent = isFixed ? "Constant dial rate" : "Constant hand rate";
+              }
+            });
+          }
+        }
+        if (rateToggle) {
+          const isConstant = (env.variables.get("kyMode") || 0) !== 0;
+          rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
+            const btn = p;
+            btn.classList.toggle("active", btn.dataset.mode === "constant" === isConstant);
+          });
+        }
+      };
+      const setKyotoState = (handMode, rateMode) => {
+        const env = getEnv();
+        let changed = false;
+        if (handMode !== null && env.kyHandMode !== handMode) {
+          env.kyHandMode = handMode;
+          writeUrlState({ kyhand: handMode === 1 ? "1" : null });
+          changed = true;
+        }
+        if (rateMode !== null && (env.variables.get("kyMode") || 0) !== rateMode) {
+          env.variables.set("kyMode", rateMode);
+          writeUrlState({ kmode: rateMode === 1 ? "1" : null });
+          changed = true;
+        }
+        if (changed) {
+          finishAnimations(kyotoFace.handStates);
           for (const hs of kyotoFace.handStates) {
             hs.nextUpdateTime = 0;
           }
-          if (kyotoFace.terminatorLeaves.length > 0) {
-            updateLeafAngles(kyotoFace.terminatorLeaves, kyotoFace.env);
-            resetLeafSchedules(kyotoFace.terminatorLeaves);
-            kyotoFace.lastTerminatorRebuild = 0;
-          }
+          updateUI();
           stopScheduler();
           startScheduler();
-          const params = new URLSearchParams(window.location.search);
-          if (constant) {
-            params.set("kmode", "1");
-          } else {
-            params.delete("kmode");
-          }
-          const qs = params.toString();
-          history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
-          updateNavigationLinks();
-          updateKyotoPillHighlight2();
-        };
-        var isConstantMode = isConstantMode2, updateKyotoPillHighlight = updateKyotoPillHighlight2, setKyotoMode = setKyotoMode2;
-        toggleContainer.style.display = "flex";
-        const variablePill = toggleContainer.querySelector('[data-mode="variable"]');
-        const constantPill = toggleContainer.querySelector('[data-mode="constant"]');
-        updateKyotoPillHighlight2();
-        variablePill.addEventListener("click", () => {
-          if (!isConstantMode2()) return;
-          setKyotoMode2(false);
-        });
-        constantPill.addEventListener("click", () => {
-          if (isConstantMode2()) return;
-          setKyotoMode2(true);
+        }
+      };
+      if (handToggle) {
+        handToggle.style.display = "flex";
+        handToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
+          p.addEventListener("click", () => {
+            const btn = p;
+            setKyotoState(btn.dataset.mode === "fixed" ? 1 : 0, null);
+          });
         });
       }
+      if (rateToggle) {
+        rateToggle.style.display = "flex";
+        rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
+          p.addEventListener("click", () => {
+            const btn = p;
+            setKyotoState(null, btn.dataset.mode === "constant" ? 1 : 0);
+          });
+        });
+      }
+      const kyState = readUrlState();
+      if (kyState.kyhand === "1") getEnv().kyHandMode = 1;
+      if (kyState.kmode === "1") getEnv().variables.set("kyMode", 1);
+      updateUI();
     }
     const terraFace = faces.find((f) => f.watch.worldTimeRing);
     if (terraFace && isSingleFace) {
@@ -20504,6 +20566,7 @@
           for (const face of faces) {
             if (!face.enabled) continue;
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            restoreKyotoState(face);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);
@@ -20762,6 +20825,7 @@
           for (const face of faces) {
             if (!face.enabled) continue;
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            restoreKyotoState(face);
             if (face.terminatorLeaves.length > 0) {
               updateLeafAngles(face.terminatorLeaves, face.env);
               resetLeafSchedules(face.terminatorLeaves);

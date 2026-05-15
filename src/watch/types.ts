@@ -27,6 +27,8 @@ export interface Watch {
     worldTimeSubdials: boolean;
     /** True if this face has a planet body selector (Venezia-style). */
     planetSelector: boolean;
+    /** True if this face uses wadokei (Japanese temporal hours) with hand/rate mode toggles. */
+    wadokei: boolean;
     /** Number of environment slots (from numEnvironments attribute). */
     numEnvironments: number;
     /** Maximum separate locations (from maxSeparateLoc attribute). */

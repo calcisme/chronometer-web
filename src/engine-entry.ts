@@ -602,6 +602,19 @@ async function main() {
 
     const faces: FaceInstance[] = [];
 
+    /**
+     * Restore Kyoto-specific state (hand mode and rate mode) onto a fresh
+     * Environment after it has been recreated by createWatchEnvironment().
+     * Reads the persisted values from the URL so toggles survive time stepping,
+     * location changes, and other operations that rebuild the environment.
+     */
+    function restoreKyotoState(face: FaceInstance): void {
+        if (!face.watch.wadokei) return;
+        const s = readUrlState();
+        if (s.kyhand === '1') face.env.kyHandMode = 1;
+        if (s.kmode === '1') face.env.variables.set('kyMode', 1);
+    }
+
     for (let i = 0; i < parsedWatches.length; i++) {
         const cell = document.createElement('div');
         cell.className = 'face-cell';
@@ -741,6 +754,7 @@ async function main() {
             const oldKnockout = (face.env as any)._terraCityKnockout;
             // Rebuild the environment but keep the same watch/parts
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    restoreKyotoState(face);
             if (oldKnockout) (face.env as any)._terraCityKnockout = oldKnockout;
             // Invalidate QDayNightRing render caches so astronomy values
             // are recomputed immediately for the new time.
@@ -1068,6 +1082,7 @@ async function main() {
             if (!face.enabled) continue;
             const oldKnockout = (face.env as any)._terraCityKnockout;
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    restoreKyotoState(face);
             if (oldKnockout) (face.env as any)._terraCityKnockout = oldKnockout;
             invalidateDayNightCaches(face.watch);
             if (face.terminatorLeaves.length > 0) {
@@ -1660,6 +1675,7 @@ async function main() {
             }
             // Fresh environment with new lat/lon/tz — same watch/parts
             face.env = createWatchEnvironment(face.watch, newLat, newLon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+            restoreKyotoState(face);
             // Update terminator leaves (preserve for animation interpolation)
             if (face.terminatorLeaves.length > 0) {
                 updateLeafAngles(face.terminatorLeaves, face.env);
@@ -3141,6 +3157,7 @@ async function main() {
                     if (!face.enabled) continue;
                     // Rebuild environment (picks up new body URL param)
                     face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    restoreKyotoState(face);
                     // Update terminator leaf angles for the new planet's phase
                     // (keep existing leaves so the animation system can interpolate)
                     if (face.terminatorLeaves.length > 0) {
@@ -3269,80 +3286,106 @@ async function main() {
     }
 
     // =========================================================================
-    // Kyoto mode toggle (single-face mode only)
+    // Kyoto toggles (Hand mode and Rate mode)
     // =========================================================================
-    const kyotoFace = faces.find(f => f.watch.urlAbbrev === 'ky');
+    const kyotoFace = faces.find(f => f.watch.wadokei);
     if (kyotoFace && isSingleFace) {
-        const toggleContainer = document.getElementById('kyoto-mode-toggle');
-        if (toggleContainer) {
-            toggleContainer.style.display = 'flex';
-            const variablePill = toggleContainer.querySelector('[data-mode="variable"]') as HTMLButtonElement;
-            const constantPill = toggleContainer.querySelector('[data-mode="constant"]') as HTMLButtonElement;
+        const handToggle = document.getElementById('kyoto-hand-toggle');
+        const rateToggle = document.getElementById('kyoto-mode-toggle');
+        // Use a getter instead of a captured const so we always access the
+        // *current* environment even after createWatchEnvironment() replaces it
+        // (e.g. during time-controller stepping or location changes).
+        const getEnv = () => kyotoFace.env;
 
-            function isConstantMode(): boolean {
-                return (kyotoFace!.env.variables.get('kyMode') ?? 0) !== 0;
+        const updateUI = () => {
+            const env = getEnv();
+            // Update Hand Mode pills
+            if (handToggle) {
+                const isFixed = (env.kyHandMode === 1);
+                handToggle.querySelectorAll('.kyoto-pill').forEach(p => {
+                    const btn = p as HTMLButtonElement;
+                    btn.classList.toggle('active', (btn.dataset.mode === 'fixed') === isFixed);
+                });
+
+                // Update Rate Mode labels based on Hand Mode
+                if (rateToggle) {
+                    rateToggle.querySelectorAll('.kyoto-pill').forEach(p => {
+                        const btn = p as HTMLButtonElement;
+                        if (btn.dataset.mode === 'variable') {
+                            btn.textContent = isFixed ? 'Variable dial rate' : 'Variable hand rate';
+                        } else {
+                            btn.textContent = isFixed ? 'Constant dial rate' : 'Constant hand rate';
+                        }
+                    });
+                }
             }
 
-            function updateKyotoPillHighlight() {
-                const constant = isConstantMode();
-                variablePill.classList.toggle('active', !constant);
-                constantPill.classList.toggle('active', constant);
+            // Update Rate Mode pills
+            if (rateToggle) {
+                const isConstant = (env.variables.get('kyMode') || 0) !== 0;
+                rateToggle.querySelectorAll('.kyoto-pill').forEach(p => {
+                    const btn = p as HTMLButtonElement;
+                    btn.classList.toggle('active', (btn.dataset.mode === 'constant') === isConstant);
+                });
+            }
+        };
+
+        const setKyotoState = (handMode: number | null, rateMode: number | null) => {
+            const env = getEnv();
+            let changed = false;
+            if (handMode !== null && env.kyHandMode !== handMode) {
+                env.kyHandMode = handMode;
+                writeUrlState({ kyhand: handMode === 1 ? '1' : null });
+                changed = true;
+            }
+            if (rateMode !== null && (env.variables.get('kyMode') || 0) !== rateMode) {
+                env.variables.set('kyMode', rateMode);
+                writeUrlState({ kmode: rateMode === 1 ? '1' : null });
+                changed = true;
             }
 
-            function setKyotoMode(constant: boolean) {
-                const val = constant ? 1 : 0;
-
-                // 1. Update env variable
-                kyotoFace!.env.variables.set('kyMode', val);
-
-                // 2. Rebuild static cache
-                invalidateDayNightCaches(kyotoFace!.watch);
-                const { canvas, watch, env, images, scale } = kyotoFace!;
-                buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, kyotoFace!.terminatorLeaves);
-
-                // 3. Reset hand/dial schedules so expressions re-evaluate
-                for (const hs of kyotoFace!.handStates) {
+            if (changed) {
+                // Snap all in-flight animations to their current targets
+                // before re-evaluating with the new mode.  Without this,
+                // the animation system may interpolate through the wrong
+                // direction when kyotoMasterRotation() jumps.
+                finishAnimations(kyotoFace.handStates);
+                // Force immediate re-evaluation for all dial pieces
+                for (const hs of kyotoFace.handStates) {
                     hs.nextUpdateTime = 0;
                 }
-
-                // 4. Reset terminator leaves
-                if (kyotoFace!.terminatorLeaves.length > 0) {
-                    updateLeafAngles(kyotoFace!.terminatorLeaves, kyotoFace!.env);
-                    resetLeafSchedules(kyotoFace!.terminatorLeaves);
-                    kyotoFace!.lastTerminatorRebuild = 0;
-                }
-
-                // 5. Kick the scheduler
+                updateUI();
+                // Trigger re-draw
                 stopScheduler();
                 startScheduler();
-
-                // 6. Update URL
-                const params = new URLSearchParams(window.location.search);
-                if (constant) {
-                    params.set('kmode', '1');
-                } else {
-                    params.delete('kmode');
-                }
-                const qs = params.toString();
-                history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
-                updateNavigationLinks();
-
-                // 7. Update pill highlight
-                updateKyotoPillHighlight();
             }
+        };
 
-            // Apply initial pill highlight from URL state
-            updateKyotoPillHighlight();
-
-            variablePill.addEventListener('click', () => {
-                if (!isConstantMode()) return;
-                setKyotoMode(false);
-            });
-            constantPill.addEventListener('click', () => {
-                if (isConstantMode()) return;
-                setKyotoMode(true);
+        if (handToggle) {
+            handToggle.style.display = 'flex';
+            handToggle.querySelectorAll('.kyoto-pill').forEach(p => {
+                p.addEventListener('click', () => {
+                    const btn = p as HTMLButtonElement;
+                    setKyotoState(btn.dataset.mode === 'fixed' ? 1 : 0, null);
+                });
             });
         }
+
+        if (rateToggle) {
+            rateToggle.style.display = 'flex';
+            rateToggle.querySelectorAll('.kyoto-pill').forEach(p => {
+                p.addEventListener('click', () => {
+                    const btn = p as HTMLButtonElement;
+                    setKyotoState(null, btn.dataset.mode === 'constant' ? 1 : 0);
+                });
+            });
+        }
+
+        // Initialize from URL
+        const kyState = readUrlState();
+        if (kyState.kyhand === '1') getEnv().kyHandMode = 1;
+        if (kyState.kmode === '1') getEnv().variables.set('kyMode', 1);
+        updateUI();
     }
 
     // =========================================================================
@@ -3428,6 +3471,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    restoreKyotoState(face);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);
@@ -3742,6 +3786,7 @@ async function main() {
                 for (const face of faces) {
                     if (!face.enabled) continue;
                     face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
+                    restoreKyotoState(face);
                     if (face.terminatorLeaves.length > 0) {
                         updateLeafAngles(face.terminatorLeaves, face.env);
                         resetLeafSchedules(face.terminatorLeaves);

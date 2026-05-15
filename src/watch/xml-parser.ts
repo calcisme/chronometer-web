@@ -63,6 +63,7 @@ export function parseWatchXML(
         worldTimeRing: (attr(watchEl, 'worldTimeRing') ?? '') === '1',
         worldTimeSubdials: (attr(watchEl, 'worldTimeSubdials') ?? '') === '1',
         planetSelector: (attr(watchEl, 'planetSelector') ?? '') === '1',
+        wadokei: (attr(watchEl, 'wadokei') ?? '') === '1',
         numEnvironments: parseInt(attr(watchEl, 'numEnvironments') ?? '1', 10),
         maxSeparateLoc: parseInt(attr(watchEl, 'maxSeparateLoc') ?? '1', 10),
         calendarWeekStart: (attr(watchEl, 'calendarWeekStart') ?? '') === '1',
