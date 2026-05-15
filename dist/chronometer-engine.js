@@ -12484,6 +12484,7 @@
     for (const expr of watch.initExprs) {
       evaluate(expr, env);
     }
+    env.kyHandMode = 0;
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const bodyParam = params.get("body");
@@ -12518,8 +12519,11 @@
       if (kmodeParam === "1" || kmodeParam === "0") {
         env.variables.set("kyMode", parseInt(kmodeParam, 10));
       }
+      const kyhandParam = params.get("kyhand");
+      if (kyhandParam === "1") {
+        env.kyHandMode = 1;
+      }
     }
-    env.kyHandMode = 0;
     env.functions.set("kyotoHandMode", () => env.kyHandMode);
     env.functions.set("kyotoMasterRotation", () => {
       if (env.kyHandMode === 0) {

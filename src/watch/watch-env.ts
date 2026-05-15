@@ -216,6 +216,9 @@ export function createWatchEnvironment(
         evaluate(expr, env);
     }
 
+    /** Kyoto hand mode: 0 = moving hand, 1 = fixed hand at top */
+    env.kyHandMode = 0;
+
     // URL param override for 'body' (Venezia planet selection via ?body=jupiter etc.)
     // Must run AFTER init blocks so it overrides the XML's default body assignment.
     if (typeof window !== 'undefined') {
@@ -263,10 +266,13 @@ export function createWatchEnvironment(
         if (kmodeParam === '1' || kmodeParam === '0') {
             env.variables.set('kyMode', parseInt(kmodeParam, 10));
         }
-    }
 
-    /** Kyoto hand mode: 0 = moving hand, 1 = fixed hand at top */
-    env.kyHandMode = 0;
+        // URL param override for 'kyHandMode' (Kyoto fixed-hand toggle via ?kyhand=1)
+        const kyhandParam = params.get('kyhand');
+        if (kyhandParam === '1') {
+            env.kyHandMode = 1;
+        }
+    }
 
     env.functions.set('kyotoHandMode', () => env.kyHandMode);
 
