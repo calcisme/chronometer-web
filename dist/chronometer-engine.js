@@ -20462,7 +20462,7 @@
           }
         }
         if (rateToggle) {
-          const isConstant = (env.variables.get("kyMode") || 0) !== 0;
+          const isConstant = (env.variables.get("kyMode") || 0) === 0;
           rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
             const btn = p;
             btn.classList.toggle("active", btn.dataset.mode === "constant" === isConstant);
@@ -20506,7 +20506,7 @@
         rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
           p.addEventListener("click", () => {
             const btn = p;
-            setKyotoState(null, btn.dataset.mode === "constant" ? 1 : 0);
+            setKyotoState(null, btn.dataset.mode === "constant" ? 0 : 1);
           });
         });
       }

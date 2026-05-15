@@ -3325,7 +3325,7 @@ async function main() {
 
             // Update Rate Mode pills
             if (rateToggle) {
-                const isConstant = (env.variables.get('kyMode') || 0) !== 0;
+                const isConstant = (env.variables.get('kyMode') || 0) === 0;
                 rateToggle.querySelectorAll('.kyoto-pill').forEach(p => {
                     const btn = p as HTMLButtonElement;
                     btn.classList.toggle('active', (btn.dataset.mode === 'constant') === isConstant);
@@ -3379,7 +3379,7 @@ async function main() {
             rateToggle.querySelectorAll('.kyoto-pill').forEach(p => {
                 p.addEventListener('click', () => {
                     const btn = p as HTMLButtonElement;
-                    setKyotoState(null, btn.dataset.mode === 'constant' ? 1 : 0);
+                    setKyotoState(null, btn.dataset.mode === 'constant' ? 0 : 1);
                 });
             });
         }
