@@ -1606,7 +1606,8 @@ async function main() {
         const ccH = document.getElementById('change-cities-btn')?.offsetHeight ?? 0;
         const vtH = document.getElementById('vienna-noon-toggle')?.offsetHeight ?? 0;
         const ktH = document.getElementById('kyoto-mode-toggle')?.offsetHeight ?? 0;
-        onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH - ktH);
+        const khH = document.getElementById('kyoto-hand-toggle')?.offsetHeight ?? 0;
+        onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH - ktH - khH);
     }
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1634,7 +1635,9 @@ async function main() {
             const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
             const kyotoToggleEl = document.getElementById('kyoto-mode-toggle');
             const kyotoToggleH = kyotoToggleEl ? kyotoToggleEl.offsetHeight : 0;
-            const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH - kyotoToggleH;
+            const kyotoHandToggleEl = document.getElementById('kyoto-hand-toggle');
+            const kyotoHandToggleH = kyotoHandToggleEl ? kyotoHandToggleEl.offsetHeight : 0;
+            const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH - kyotoToggleH - kyotoHandToggleH;
             if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
             resizeDebounceTimer = setTimeout(() => {
                 resizeDebounceTimer = null;
@@ -4026,7 +4029,7 @@ async function main() {
             'location-panel', 'time-bar', 'back-link', 'all-faces-link',
             'selected-faces-link', 'info-btn', 'face-name', 'time-popover',
             'location-prompt', 'planet-selector', 'vienna-noon-toggle',
-            'kyoto-mode-toggle',
+            'kyoto-hand-toggle', 'kyoto-mode-toggle',
             'change-cities-btn', 'edit-picks-link', 'info-overlay',
         ];
         for (const id of removeIds) {
