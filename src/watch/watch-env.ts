@@ -296,6 +296,39 @@ export function createWatchEnvironment(
         }
     });
 
+    /**
+     * wadokeiDNNumVisible(numWedges): compute how many wedges are needed
+     * to tile the nighttime arc on a wadokei day/night ring.
+     *
+     * Uses the sunrise/sunset indicator angles (leaf 0 and 1 with numLeaves=0)
+     * for planetMidnightSun to determine the nighttime arc span, then returns
+     * ceil(arcSpan / wedgeSpan) clamped to [0, numWedges].
+     *
+     * Must be called BEFORE positioning wedges so overlap is distributed
+     * evenly among all visible wedge boundaries.
+     */
+    env.functions.set('wadokeiDNNumVisible', (numWedges: number) => {
+        const leafAngleFn = env.functions.get('dayNightLeafAngle');
+        if (!leafAngleFn || numWedges <= 0) return 0;
+
+        // Get sunrise/sunset angles for planetMidnightSun on the 24-hour dial.
+        // leafNumber 0 with numLeaves=0 = Sun's rise = sunrise
+        // leafNumber 1 with numLeaves=0 = Sun's set  = sunset
+        const ECPlanetMidnightSun = env.variables.get('planetMidnightSun') ?? 10;
+        const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
+        const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
+
+        // Compute nighttime arc span (sunset → sunrise, going forward)
+        let nightArc = sunriseAngle - sunsetAngle;
+        if (nightArc < 0) nightArc += 2 * Math.PI;
+        // Handle edge cases: polar summer (arc ≈ 0) and polar winter (arc ≈ 2π)
+        if (nightArc < 0.01) return 0;
+        if (nightArc > 2 * Math.PI - 0.01) return numWedges;
+
+        const wedgeSpan = (2 * Math.PI) / numWedges;
+        return Math.min(numWedges, Math.max(1, Math.ceil(nightArc / wedgeSpan)));
+    });
+
     return env;
 }
 

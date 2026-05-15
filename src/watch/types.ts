@@ -392,6 +392,10 @@ export interface QDayNightRingPart extends PartBase {
     update?: ASTNode;
     timeBase?: string;         // 'LST' for Local Sidereal Time, omitted for local time
     envSlot?: ASTNode;         // env slot number — routes astronomy to slot's city lat/lon
+    /** Wadokei slide: distance (px) to translate hidden wedges inward past center. */
+    slideDistance?: ASTNode;
+    /** Wadokei slide: animation speed multiplier (default 1.0 = kECGLLinearAnimationSpeed). */
+    slideAnimSpeed?: ASTNode;
     // --- Render-level cache (not from XML) ---
     /** Cached wedge angles from last computation; avoids per-frame astronomy calls. */
     _cachedAngles?: number[];
@@ -401,6 +405,10 @@ export interface QDayNightRingPart extends PartBase {
     _cacheNextUpdate?: number;
     /** Optional animation state for masterOffset (used by Vienna noon/midnight toggle). */
     _masterOffsetAnim?: import('../watch/animation.js').AnimatingValue;
+    /** Per-wedge slide animation state (wadokei day/night ring). */
+    _wedgeSlides?: import('../watch/animation.js').AnimatingValue[];
+    /** Per-wedge angle animation state (smooth angular transitions). */
+    _wedgeAngleAnims?: import('../watch/animation.js').AnimatingValue[];
 }
 
 // ============================================================================

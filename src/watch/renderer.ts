@@ -39,6 +39,8 @@ import type { TerminatorLeafState } from './terminator.js';
 import { drawTerminator } from './terminator.js';
 import type { AnalemmaState } from './analemma.js';
 import { drawAnalemma } from './analemma.js';
+import type { AnimatingValue } from './animation.js';
+import { makeAnimatingValue, interpolateValue, interpolateRaw, startLinearAnimation, startAnimationRaw } from './animation.js';
 
 /** Returns true if a CSS color string has alpha = 0 (fully transparent). */
 function isTransparent(cssColor: string): boolean {
@@ -2695,28 +2697,134 @@ function drawQDayNightRing(
     const displayNowMs = env.getNow ? env.getNow().getTime() : performance.now();
     let angles: number[];
 
+    // --- Wadokei slide mode ---
+    const slideDistance = part.slideDistance ? evalAttr(part.slideDistance, env) : 0;
+    const slideAnimSpeed = part.slideAnimSpeed ? evalAttr(part.slideAnimSpeed, env) : 1.0;
+    const perfNow = performance.now();
+
+    let numVis = numWedges;  // default: all visible
+    if (slideDistance > 0) {
+        // Compute how many wedges are needed to tile the nighttime arc
+        const numVisFn = env.functions.get('wadokeiDNNumVisible') as
+            ((n: number) => number) | undefined;
+        if (numVisFn) {
+            numVis = numVisFn(numWedges);
+        }
+    }
+
+    // Angle caching: in slide mode, we compute wedge positions directly from
+    // sunset/sunrise angles using the actual rendered wedge span, rather than
+    // the leaf function (whose internal leafWidth doesn't match our wedge span).
     if (part._cachedAngles && part._cachedAngles.length === numWedges
         && part._cacheStart != null && part._cacheNextUpdate != null
-        && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate) {
+        && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate
+        && (part as any)._cacheNumVis === numVis) {
         angles = part._cachedAngles;
     } else {
         angles = new Array(numWedges);
-        for (let i = 0; i < numWedges; i++) {
-            angles[i] = leafAngleFn(planetNumber, i, numWedges);
+        if (slideDistance > 0 && numVis > 0 && numVis < numWedges) {
+            // Slide mode: compute positions directly.
+            // Get sunset/sunrise angles from the leaf function's indicator mode.
+            // For planetMidnightSun: leaf 0 = Sun's rise = sunrise,
+            //                        leaf 1 = Sun's set  = sunset.
+            // Night runs from sunset → sunrise.
+            const sunriseAngle = leafAngleFn(planetNumber, 0, 0);
+            const sunsetAngle = leafAngleFn(planetNumber, 1, 0);
+
+            // Compute the nighttime arc (sunset → sunrise, wrapping forward)
+            let nightArc = sunriseAngle - sunsetAngle;
+            if (nightArc < 0) nightArc += 2 * Math.PI;
+
+            // Adjust the arc inward by half a wedge span on each side so that
+            // the EDGES of the first/last wedge align with sunset/sunrise.
+            const adjustedStart = sunsetAngle + wedgeSpan / 2;
+            const adjustedArc = nightArc - wedgeSpan; // arc between first and last centers
+
+            // Distribute numVis wedge centers evenly across the adjusted arc
+            const step = numVis > 1 ? adjustedArc / (numVis - 1) : 0;
+            for (let i = 0; i < numVis; i++) {
+                const raw = adjustedStart + step * i;
+                angles[i] = ((raw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+            }
+
+            // Park hidden wedges at the sunrise edge — where they enter/exit visibility.
+            // This avoids a large angular jump when numVis changes.
+            const parkAngle = numVis > 0
+                ? adjustedStart + step * (numVis - 1)   // last visible wedge position
+                : sunsetAngle;
+            for (let i = numVis; i < numWedges; i++) {
+                angles[i] = parkAngle;
+            }
+        } else if (slideDistance > 0 && numVis >= numWedges) {
+            // All wedges visible (long winter night): full circle distribution
+            for (let i = 0; i < numWedges; i++) {
+                angles[i] = leafAngleFn(planetNumber, i, numWedges);
+            }
+        } else {
+            // Normal mode (non-slide): standard leaf distribution
+            for (let i = 0; i < numWedges; i++) {
+                angles[i] = leafAngleFn(planetNumber, i, numWedges);
+            }
         }
         part._cachedAngles = angles;
         part._cacheStart = displayNowMs;
         part._cacheNextUpdate = displayNowMs + updateMs;
+        (part as any)._cacheNumVis = numVis;
+    }
+
+    // --- Per-wedge angle animation ---
+    // Initialize angle AnimatingValues on first call
+    if (!part._wedgeAngleAnims || part._wedgeAngleAnims.length !== numWedges) {
+        part._wedgeAngleAnims = [];
+        for (let i = 0; i < numWedges; i++) {
+            part._wedgeAngleAnims.push(makeAnimatingValue(angles[i], perfNow));
+        }
+    }
+    // Drive angle animations toward the current target angles
+    for (let i = 0; i < numWedges; i++) {
+        startAnimationRaw(part._wedgeAngleAnims[i], angles[i], perfNow);
+    }
+
+    if (slideDistance > 0) {
+        // Initialize per-wedge slide AnimatingValues on first call
+        if (!part._wedgeSlides || part._wedgeSlides.length !== numWedges) {
+            part._wedgeSlides = [];
+            for (let i = 0; i < numWedges; i++) {
+                // Start all wedges in hidden position
+                part._wedgeSlides.push(makeAnimatingValue(slideDistance, perfNow));
+            }
+        }
+
+        // Update slide targets and start animations
+        for (let i = 0; i < numWedges; i++) {
+            const target = i < numVis ? 0 : slideDistance;
+            startLinearAnimation(part._wedgeSlides[i], target, perfNow, slideAnimSpeed);
+        }
     }
 
     ctx.save();
     ctx.translate(cx, cy);
 
     for (let i = 0; i < numWedges; i++) {
-        const angle = masterOffset + angles[i];
+        // Use interpolated angle for smooth transitions
+        const animatedAngle = interpolateRaw(part._wedgeAngleAnims[i], perfNow);
+        const angle = masterOffset + animatedAngle;
+
+        // Interpolate slide for this frame
+        let slide = 0;
+        if (part._wedgeSlides && part._wedgeSlides[i]) {
+            slide = interpolateValue(part._wedgeSlides[i], perfNow);
+        }
 
         ctx.save();
         ctx.rotate(angle);
+
+        // Wadokei slide: translate drawing origin inward past center
+        // Positive slide = origin moves in +Y direction (opposite wedge's
+        // -PI/2 direction), placing the wedge under the cover disc
+        if (Math.abs(slide) > 0.01) {
+            ctx.translate(0, slide);
+        }
 
         // Draw annular sector centred on -PI/2 (12 o'clock)
         const startAngle = -Math.PI / 2 - wedgeSpan / 2;

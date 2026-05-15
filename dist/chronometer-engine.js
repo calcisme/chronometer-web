@@ -866,7 +866,9 @@
       fillColor: attrExpr(el, "fillColor"),
       update: attrExpr(el, "update"),
       timeBase: attr(el, "timeBase"),
-      envSlot: attrExpr(el, "envSlot")
+      envSlot: attrExpr(el, "envSlot"),
+      slideDistance: attrExpr(el, "slideDistance"),
+      slideAnimSpeed: attrExpr(el, "slideAnimSpeed")
     };
   }
   function parseCalendarRowCover(el) {
@@ -11591,6 +11593,36 @@
       compressLinear(state.xMotion, computeCalendarCoverOffset(state.part, env));
     }
   }
+  function finishDayNightSlides(watch) {
+    for (const part of watch.parts) {
+      if (part.type === "QDayNightRing") {
+        if (part._wedgeSlides) {
+          for (const slide of part._wedgeSlides) {
+            if (slide.animating) {
+              slide.currentValue = slide.targetValue;
+              slide.animating = false;
+            }
+          }
+        }
+        if (part._wedgeAngleAnims) {
+          for (const anim of part._wedgeAngleAnims) {
+            if (anim.animating) {
+              anim.currentValue = anim.targetValue;
+              anim.animating = false;
+            }
+          }
+        }
+      }
+    }
+  }
+  function resetDayNightSlides(watch) {
+    for (const part of watch.parts) {
+      if (part.type === "QDayNightRing") {
+        part._cacheNextUpdate = 0;
+        part._cacheStart = void 0;
+      }
+    }
+  }
 
   // src/astronomy/es-astro.ts
   var TWO_PI4 = Math.PI * 2;
@@ -12537,6 +12569,19 @@
       } else {
         return env.functions.get("japanHourValueAngle")?.() || 0;
       }
+    });
+    env.functions.set("wadokeiDNNumVisible", (numWedges) => {
+      const leafAngleFn = env.functions.get("dayNightLeafAngle");
+      if (!leafAngleFn || numWedges <= 0) return 0;
+      const ECPlanetMidnightSun = env.variables.get("planetMidnightSun") ?? 10;
+      const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
+      const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
+      let nightArc = sunriseAngle - sunsetAngle;
+      if (nightArc < 0) nightArc += 2 * Math.PI;
+      if (nightArc < 0.01) return 0;
+      if (nightArc > 2 * Math.PI - 0.01) return numWedges;
+      const wedgeSpan = 2 * Math.PI / numWedges;
+      return Math.min(numWedges, Math.max(1, Math.ceil(nightArc / wedgeSpan)));
     });
     return env;
   }
@@ -16130,23 +16175,85 @@
     const updateMs = updateSec * 1e3;
     const displayNowMs = env.getNow ? env.getNow().getTime() : performance.now();
     let angles;
-    if (part._cachedAngles && part._cachedAngles.length === numWedges && part._cacheStart != null && part._cacheNextUpdate != null && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate) {
+    const slideDistance = part.slideDistance ? evalAttr(part.slideDistance, env) : 0;
+    const slideAnimSpeed = part.slideAnimSpeed ? evalAttr(part.slideAnimSpeed, env) : 1;
+    const perfNow = performance.now();
+    let numVis = numWedges;
+    if (slideDistance > 0) {
+      const numVisFn = env.functions.get("wadokeiDNNumVisible");
+      if (numVisFn) {
+        numVis = numVisFn(numWedges);
+      }
+    }
+    if (part._cachedAngles && part._cachedAngles.length === numWedges && part._cacheStart != null && part._cacheNextUpdate != null && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate && part._cacheNumVis === numVis) {
       angles = part._cachedAngles;
     } else {
       angles = new Array(numWedges);
-      for (let i = 0; i < numWedges; i++) {
-        angles[i] = leafAngleFn(planetNumber, i, numWedges);
+      if (slideDistance > 0 && numVis > 0 && numVis < numWedges) {
+        const sunriseAngle = leafAngleFn(planetNumber, 0, 0);
+        const sunsetAngle = leafAngleFn(planetNumber, 1, 0);
+        let nightArc = sunriseAngle - sunsetAngle;
+        if (nightArc < 0) nightArc += 2 * Math.PI;
+        const adjustedStart = sunsetAngle + wedgeSpan / 2;
+        const adjustedArc = nightArc - wedgeSpan;
+        const step = numVis > 1 ? adjustedArc / (numVis - 1) : 0;
+        for (let i = 0; i < numVis; i++) {
+          const raw = adjustedStart + step * i;
+          angles[i] = (raw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        }
+        const parkAngle = numVis > 0 ? adjustedStart + step * (numVis - 1) : sunsetAngle;
+        for (let i = numVis; i < numWedges; i++) {
+          angles[i] = parkAngle;
+        }
+      } else if (slideDistance > 0 && numVis >= numWedges) {
+        for (let i = 0; i < numWedges; i++) {
+          angles[i] = leafAngleFn(planetNumber, i, numWedges);
+        }
+      } else {
+        for (let i = 0; i < numWedges; i++) {
+          angles[i] = leafAngleFn(planetNumber, i, numWedges);
+        }
       }
       part._cachedAngles = angles;
       part._cacheStart = displayNowMs;
       part._cacheNextUpdate = displayNowMs + updateMs;
+      part._cacheNumVis = numVis;
+    }
+    if (!part._wedgeAngleAnims || part._wedgeAngleAnims.length !== numWedges) {
+      part._wedgeAngleAnims = [];
+      for (let i = 0; i < numWedges; i++) {
+        part._wedgeAngleAnims.push(makeAnimatingValue(angles[i], perfNow));
+      }
+    }
+    for (let i = 0; i < numWedges; i++) {
+      startAnimationRaw(part._wedgeAngleAnims[i], angles[i], perfNow);
+    }
+    if (slideDistance > 0) {
+      if (!part._wedgeSlides || part._wedgeSlides.length !== numWedges) {
+        part._wedgeSlides = [];
+        for (let i = 0; i < numWedges; i++) {
+          part._wedgeSlides.push(makeAnimatingValue(slideDistance, perfNow));
+        }
+      }
+      for (let i = 0; i < numWedges; i++) {
+        const target = i < numVis ? 0 : slideDistance;
+        startLinearAnimation(part._wedgeSlides[i], target, perfNow, slideAnimSpeed);
+      }
     }
     ctx.save();
     ctx.translate(cx, cy);
     for (let i = 0; i < numWedges; i++) {
-      const angle = masterOffset + angles[i];
+      const animatedAngle = interpolateRaw(part._wedgeAngleAnims[i], perfNow);
+      const angle = masterOffset + animatedAngle;
+      let slide = 0;
+      if (part._wedgeSlides && part._wedgeSlides[i]) {
+        slide = interpolateValue(part._wedgeSlides[i], perfNow);
+      }
       ctx.save();
       ctx.rotate(angle);
+      if (Math.abs(slide) > 0.01) {
+        ctx.translate(0, slide);
+      }
       const startAngle = -Math.PI / 2 - wedgeSpan / 2;
       const endAngle = -Math.PI / 2 + wedgeSpan / 2;
       ctx.beginPath();
@@ -19838,6 +19945,7 @@
       for (const face of faces) {
         finishAnimations(face.handStates);
         finishLeafAnimations(face.terminatorLeaves);
+        finishDayNightSlides(face.watch);
         if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
       }
     }
@@ -19845,6 +19953,7 @@
       for (const face of faces) {
         resetHandSchedules(face.handStates);
         resetLeafSchedules(face.terminatorLeaves);
+        resetDayNightSlides(face.watch);
         if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
       }
     }
@@ -20484,6 +20593,7 @@
         }
         if (changed) {
           finishAnimations(kyotoFace.handStates);
+          finishDayNightSlides(kyotoFace.watch);
           for (const hs of kyotoFace.handStates) {
             hs.nextUpdateTime = 0;
           }

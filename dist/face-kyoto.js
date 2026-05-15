@@ -15,6 +15,8 @@
   <init expr='faceColor=0xffe0e0e0, textColor=black, innerBg=0x80e0e0e0, dstBorder=0x80a0a0a0, subBg=0xffe7e7e7, midbg=0x40000000' />
   <init expr='hrColor=minColor=black, secColor=0xff000000, ticInColor=clear, tic24Color=0x40000000, label24Color=0x80000000' />
   <init expr='kyMode=0' />
+  <init expr='dnOutR=outrRad, dnInR=hrRad, dnWedges=24' />
+  <init expr='dnSlide=(dnOutR+dnInR)/2, dnCoverR=hrRad-5, dnColor=0x70000000' />
 
   <!-- Face image rotates with the dial in fixed-hand mode -->
   <hand name='face' x='0' y='0' z='0' modes='front' src='face.png' update='1' angle='0 - kyotoMasterRotation()' />
@@ -32,10 +34,15 @@
 
   </static>
 
-<!--
-  <QdayNightRing name='daytime' x='0' y='0' modes='front' outerRadius='outrRad' innerRadius='innRad' update='updateAtNextSunriseOrSunset' strokeColor='kyMode==0 ? 0x70000000 : clear' fillColor='kyMode==0 ? 0x70000000 : clear' input='0' numWedges='12' planetNumber='planetMidnightSun' masterOffset='pi - solarNoonAngle()' />
-  <QWedge name='nightMaskFixed' x='0' y='0' modes='front' outerRadius='outrRad' innerRadius='innRad' angleSpan='pi' angle='pi' strokeColor='kyMode==1 ? 0x70000000 : clear' fillColor='kyMode==1 ? 0x70000000 : clear' />
--->
+  <!-- Day/night ring: wadokei slide mode \u2014 hidden wedges slide under cover disc
+  <QdayNightRing name='daytime' x='0' y='0' modes='front'
+      outerRadius='dnOutR' innerRadius='dnInR'
+      numWedges='dnWedges' planetNumber='planetMidnightSun'
+      strokeColor='clear' fillColor='dnColor'
+      slideDistance='dnSlide' slideAnimSpeed='4'
+      masterOffset='(kyMode==0 ? pi - solarNoonAngle() : 0) - kyotoMasterRotation()'
+      update='1' />
+  -->
   <Qhand name='jh00' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='jhrRad' fillColor='black' strokeColor='black' text='\u5348' fontSize='21' fontName='Helvetica-Bold' oFillColor='clear' angle='0' offsetAngle='(kyMode==0 ? angleForJapanHour(0, topAnchorSolarNoon) : 0*pi/6) - kyotoMasterRotation()' update='1' />
   <Qhand name='jh01' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='jhrRad' fillColor='black' strokeColor='black' text='\u672A' fontSize='21' fontName='Helvetica-Bold' oFillColor='clear' angle='0' offsetAngle='(kyMode==0 ? angleForJapanHour(1, topAnchorSolarNoon) : 1*pi/6) - kyotoMasterRotation()' update='1' />
   <Qhand name='jh02' x='0' y='0' modes='front' type='spoke' orientation='radial' offsetRadius='jhrRad' fillColor='black' strokeColor='black' text='\u7533' fontSize='21' fontName='Helvetica-Bold' oFillColor='clear' angle='0' offsetAngle='(kyMode==0 ? angleForJapanHour(2, topAnchorSolarNoon) : 2*pi/6) - kyotoMasterRotation()' update='1' />
@@ -193,6 +200,10 @@
   <Qhand name='t24_22_1' x='0' y='0' modes='front' type='wire' width='1' lineWidth='.75' length='hrRad' length2='hrRad-5' fillColor='tic24Color' strokeColor='tic24Color' angle='(kyMode==0 ? 22.5*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(22.5)) - kyotoMasterRotation()' update='1' />
   <Qhand name='t24_23_0' x='0' y='0' modes='front' type='wire' width='2' lineWidth='1.5' length='hrRad' length2='hrRad-5' fillColor='tic24Color' strokeColor='tic24Color' angle='(kyMode==0 ? 23.0*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(23.0)) - kyotoMasterRotation()' update='1' />
   <Qhand name='t24_23_1' x='0' y='0' modes='front' type='wire' width='1' lineWidth='.75' length='hrRad' length2='hrRad-5' fillColor='tic24Color' strokeColor='tic24Color' angle='(kyMode==0 ? 23.5*pi/12+pi - solarNoonAngle() : temporalAngleFor24Hour(23.5)) - kyotoMasterRotation()' update='1' />
+
+  <!-- Cover disc: masks hidden wedges that have slid inward past center
+  <QDial name='dnCover' x='0' y='0' modes='front' radius='dnCoverR' bgColor='0xff989284' marks='0' />
+  -->
 
   <hand name='jhr' x='0' y='0' z='3' thick='2' modes='front' xAnchor='52.25' yAnchor='82' src='hand.png' update='1' angle='kyotoHandMode()==1 ? 0 : (kyMode==0 ? hour24ValueAngle()+pi - solarNoonAngle() : japanHourValueAngle())' />
 </watch>

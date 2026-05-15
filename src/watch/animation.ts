@@ -1057,7 +1057,7 @@ function fmod(value: number, modulus: number): number {
  * Start a linear animation (no angle wrapping) for xMotion/yMotion.
  * Delegates to the core startValueAnimation with linear speed.
  */
-function startLinearAnimation(
+export function startLinearAnimation(
     val: AnimatingValue,
     newTarget: number,
     now: number,
@@ -1122,5 +1122,51 @@ function compressLinearMotions(
     }
     if (state.part.type === 'CalendarRowCover' && state.xMotion) {
         compressLinear(state.xMotion, computeCalendarCoverOffset(state.part as CalendarRowCoverPart, env));
+    }
+}
+
+// ============================================================================
+// Day/Night Ring animation lifecycle helpers
+// ============================================================================
+
+/**
+ * Snap all QDayNightRing wedge slide and angle animations to their targets.
+ * Called alongside finishAnimations() during pause, mode toggles, and scrub start.
+ */
+export function finishDayNightSlides(watch: Watch): void {
+    for (const part of watch.parts) {
+        if (part.type === 'QDayNightRing') {
+            if (part._wedgeSlides) {
+                for (const slide of part._wedgeSlides) {
+                    if (slide.animating) {
+                        slide.currentValue = slide.targetValue;
+                        slide.animating = false;
+                    }
+                }
+            }
+            if (part._wedgeAngleAnims) {
+                for (const anim of part._wedgeAngleAnims) {
+                    if (anim.animating) {
+                        anim.currentValue = anim.targetValue;
+                        anim.animating = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Mark all QDayNightRing wedge animations for re-evaluation.
+ * Called alongside resetHandSchedules() when resuming playback or on env change.
+ * The next frame's drawQDayNightRing will recompute angles and start new animations.
+ */
+export function resetDayNightSlides(watch: Watch): void {
+    for (const part of watch.parts) {
+        if (part.type === 'QDayNightRing') {
+            // Invalidate the angle cache so wedges recompute on next frame
+            part._cacheNextUpdate = 0;
+            part._cacheStart = undefined;
+        }
     }
 }

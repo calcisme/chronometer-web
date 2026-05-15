@@ -30,7 +30,7 @@ import { TERRA_RING_DEFAULTS } from './watch/watch-env.js';
 import { validSlotsForTz, formatSlotOffset, getStandardOffsetMinutes, olsonIdToCityName } from './watch/terra-slots.js';
 import { buildStaticBlockCaches, renderFrame, invalidateDayNightCaches, buildHandShadowCaches, BEZEL_THICKNESS_XML } from './watch/renderer.js';
 import type { LoadedImage } from './watch/image-loader.js';
-import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, makeAnimatingValue, startAnimationRaw, interpolateValue, SCHEDULER_LOOKAHEAD_MS } from './watch/animation.js';
+import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, makeAnimatingValue, startAnimationRaw, interpolateValue, SCHEDULER_LOOKAHEAD_MS, finishDayNightSlides, resetDayNightSlides } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
 import type { Watch } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
@@ -2510,6 +2510,7 @@ async function main() {
         for (const face of faces) {
             finishAnimations(face.handStates);
             finishLeafAnimations(face.terminatorLeaves);
+            finishDayNightSlides(face.watch);
             if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         }
     }
@@ -2519,6 +2520,7 @@ async function main() {
         for (const face of faces) {
             resetHandSchedules(face.handStates);
             resetLeafSchedules(face.terminatorLeaves);
+            resetDayNightSlides(face.watch);
             if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         }
     }
@@ -3353,6 +3355,7 @@ async function main() {
                 // the animation system may interpolate through the wrong
                 // direction when kyotoMasterRotation() jumps.
                 finishAnimations(kyotoFace.handStates);
+                finishDayNightSlides(kyotoFace.watch);
                 // Force immediate re-evaluation for all dial pieces
                 for (const hs of kyotoFace.handStates) {
                     hs.nextUpdateTime = 0;

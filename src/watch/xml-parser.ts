@@ -562,6 +562,8 @@ function parseQDayNightRing(el: Element): QDayNightRingPart {
         update: attrExpr(el, 'update'),
         timeBase: attr(el, 'timeBase'),
         envSlot: attrExpr(el, 'envSlot'),
+        slideDistance: attrExpr(el, 'slideDistance'),
+        slideAnimSpeed: attrExpr(el, 'slideAnimSpeed'),
     };
 }
 
