@@ -297,29 +297,47 @@ export function createWatchEnvironment(
     });
 
     /**
+     * Helper: compute the raw sunset/sunrise angles for the wadokei day/night ring.
+     * In mode 0 (constant hand rate): uses the astronomical leaf function.
+     * In mode 1 (variable hand rate, temporal dial): sunset and sunrise are at
+     *   fixed temporal positions, each exactly 3 temporal hours from noon,
+     *   dividing the dial exactly in half (nightArc = π).
+     *   Raw angles (before masterOffset): sunset = 3π/2, sunrise = π/2.
+     */
+    function wadokeiDNAngles(): { sunsetAngle: number; sunriseAngle: number } | null {
+        const leafAngleFn = env.functions.get('dayNightLeafAngle');
+        if (!leafAngleFn) return null;
+
+        const kyMode = env.variables.get('kyMode') ?? 0;
+        if (kyMode === 1) {
+            // Mode 1: temporal dial — night always covers half the dial.
+            // Sunset is at temporal hour 酉 (position 3) → visual angle π/2 from noon.
+            // Sunrise is at temporal hour 卯 (position 9) → visual angle 3π/2 from noon.
+            // With masterOffset = π, raw angles are: sunset = 3π/2, sunrise = π/2.
+            return { sunsetAngle: 3 * Math.PI / 2, sunriseAngle: Math.PI / 2 };
+        }
+
+        // Mode 0: standard astronomical computation
+        const ECPlanetMidnightSun = env.variables.get('planetMidnightSun') ?? 10;
+        const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
+        const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
+        return { sunsetAngle, sunriseAngle };
+    }
+
+    /**
      * wadokeiDNNumVisible(numWedges): compute how many wedges are needed
      * to tile the nighttime arc on a wadokei day/night ring.
-     *
-     * Uses the sunrise/sunset indicator angles (leaf 0 and 1 with numLeaves=0)
-     * for planetMidnightSun to determine the nighttime arc span, then returns
-     * ceil(arcSpan / wedgeSpan) clamped to [0, numWedges].
      *
      * Must be called BEFORE positioning wedges so overlap is distributed
      * evenly among all visible wedge boundaries.
      */
     env.functions.set('wadokeiDNNumVisible', (numWedges: number) => {
-        const leafAngleFn = env.functions.get('dayNightLeafAngle');
-        if (!leafAngleFn || numWedges <= 0) return 0;
-
-        // Get sunrise/sunset angles for planetMidnightSun on the 24-hour dial.
-        // leafNumber 0 with numLeaves=0 = Sun's rise = sunrise
-        // leafNumber 1 with numLeaves=0 = Sun's set  = sunset
-        const ECPlanetMidnightSun = env.variables.get('planetMidnightSun') ?? 10;
-        const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
-        const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
+        if (numWedges <= 0) return 0;
+        const angles = wadokeiDNAngles();
+        if (!angles) return 0;
 
         // Compute nighttime arc span (sunset → sunrise, going forward)
-        let nightArc = sunriseAngle - sunsetAngle;
+        let nightArc = angles.sunriseAngle - angles.sunsetAngle;
         if (nightArc < 0) nightArc += 2 * Math.PI;
         // Handle edge cases: polar summer (arc ≈ 0) and polar winter (arc ≈ 2π)
         if (nightArc < 0.01) return 0;
@@ -327,6 +345,22 @@ export function createWatchEnvironment(
 
         const wedgeSpan = (2 * Math.PI) / numWedges;
         return Math.min(numWedges, Math.max(1, Math.ceil(nightArc / wedgeSpan)));
+    });
+
+    /**
+     * wadokeiDNSunsetAngle(): raw sunset angle for wedge positioning.
+     * Mode-aware: returns astronomical angle in mode 0, fixed temporal in mode 1.
+     */
+    env.functions.set('wadokeiDNSunsetAngle', () => {
+        return wadokeiDNAngles()?.sunsetAngle ?? 0;
+    });
+
+    /**
+     * wadokeiDNSunriseAngle(): raw sunrise angle for wedge positioning.
+     * Mode-aware: returns astronomical angle in mode 0, fixed temporal in mode 1.
+     */
+    env.functions.set('wadokeiDNSunriseAngle', () => {
+        return wadokeiDNAngles()?.sunriseAngle ?? 0;
     });
 
     return env;

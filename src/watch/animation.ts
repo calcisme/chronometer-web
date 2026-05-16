@@ -1152,6 +1152,10 @@ export function finishDayNightSlides(watch: Watch): void {
                     }
                 }
             }
+            // Invalidate cache so the next frame recomputes angles
+            // (critical for mode toggles where masterOffset changes)
+            part._cacheNextUpdate = 0;
+            part._cacheStart = undefined;
         }
     }
 }

@@ -867,6 +867,8 @@
       update: attrExpr(el, "update"),
       timeBase: attr(el, "timeBase"),
       envSlot: attrExpr(el, "envSlot"),
+      sunsetAngle: attrExpr(el, "sunsetAngle"),
+      sunriseAngle: attrExpr(el, "sunriseAngle"),
       slideDistance: attrExpr(el, "slideDistance"),
       slideAnimSpeed: attrExpr(el, "slideAnimSpeed")
     };
@@ -11612,6 +11614,8 @@
             }
           }
         }
+        part._cacheNextUpdate = 0;
+        part._cacheStart = void 0;
       }
     }
   }
@@ -12570,18 +12574,34 @@
         return env.functions.get("japanHourValueAngle")?.() || 0;
       }
     });
-    env.functions.set("wadokeiDNNumVisible", (numWedges) => {
+    function wadokeiDNAngles() {
       const leafAngleFn = env.functions.get("dayNightLeafAngle");
-      if (!leafAngleFn || numWedges <= 0) return 0;
+      if (!leafAngleFn) return null;
+      const kyMode = env.variables.get("kyMode") ?? 0;
+      if (kyMode === 1) {
+        return { sunsetAngle: 3 * Math.PI / 2, sunriseAngle: Math.PI / 2 };
+      }
       const ECPlanetMidnightSun = env.variables.get("planetMidnightSun") ?? 10;
       const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
       const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
-      let nightArc = sunriseAngle - sunsetAngle;
+      return { sunsetAngle, sunriseAngle };
+    }
+    env.functions.set("wadokeiDNNumVisible", (numWedges) => {
+      if (numWedges <= 0) return 0;
+      const angles = wadokeiDNAngles();
+      if (!angles) return 0;
+      let nightArc = angles.sunriseAngle - angles.sunsetAngle;
       if (nightArc < 0) nightArc += 2 * Math.PI;
       if (nightArc < 0.01) return 0;
       if (nightArc > 2 * Math.PI - 0.01) return numWedges;
       const wedgeSpan = 2 * Math.PI / numWedges;
       return Math.min(numWedges, Math.max(1, Math.ceil(nightArc / wedgeSpan)));
+    });
+    env.functions.set("wadokeiDNSunsetAngle", () => {
+      return wadokeiDNAngles()?.sunsetAngle ?? 0;
+    });
+    env.functions.set("wadokeiDNSunriseAngle", () => {
+      return wadokeiDNAngles()?.sunriseAngle ?? 0;
     });
     return env;
   }
@@ -16190,8 +16210,8 @@
     } else {
       angles = new Array(numWedges);
       if (slideDistance > 0 && numVis > 0 && numVis < numWedges) {
-        const sunriseAngle = leafAngleFn(planetNumber, 0, 0);
-        const sunsetAngle = leafAngleFn(planetNumber, 1, 0);
+        const sunsetAngle = part.sunsetAngle ? evalAttr(part.sunsetAngle, env) : leafAngleFn(planetNumber, 1, 0);
+        const sunriseAngle = part.sunriseAngle ? evalAttr(part.sunriseAngle, env) : leafAngleFn(planetNumber, 0, 0);
         let nightArc = sunriseAngle - sunsetAngle;
         if (nightArc < 0) nightArc += 2 * Math.PI;
         const adjustedStart = sunsetAngle + wedgeSpan / 2;
@@ -18778,7 +18798,7 @@
         }
         renderMs += performance.now() - renderStart;
         const ringAnimating = face.watch.parts.some(
-          (p) => p.type === "QDayNightRing" && p._masterOffsetAnim?.animating
+          (p) => p.type === "QDayNightRing" && (p._masterOffsetAnim?.animating || p._wedgeSlides?.some((s) => s.animating) || p._wedgeAngleAnims?.some((a) => a.animating))
         );
         const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
         if (faceAnimating) {
@@ -20580,6 +20600,14 @@
       };
       const setKyotoState = (handMode, rateMode) => {
         const env = getEnv();
+        const now = performance.now();
+        const oldMasterOffsets = /* @__PURE__ */ new Map();
+        for (const part of kyotoFace.watch.parts) {
+          if (part.type === "QDayNightRing") {
+            const oldVal = part._masterOffsetAnim && part._masterOffsetAnim.animating ? interpolateValue(part._masterOffsetAnim, now) : evalAttr(part.masterOffset, env);
+            oldMasterOffsets.set(part, oldVal);
+          }
+        }
         let changed = false;
         if (handMode !== null && env.kyHandMode !== handMode) {
           env.kyHandMode = handMode;
@@ -20596,6 +20624,19 @@
           finishDayNightSlides(kyotoFace.watch);
           for (const hs of kyotoFace.handStates) {
             hs.nextUpdateTime = 0;
+          }
+          for (const part of kyotoFace.watch.parts) {
+            if (part.type === "QDayNightRing") {
+              const oldVal = oldMasterOffsets.get(part) ?? 0;
+              const newVal = evalAttr(part.masterOffset, env);
+              if (!part._masterOffsetAnim) {
+                part._masterOffsetAnim = makeAnimatingValue(oldVal, now);
+              } else {
+                part._masterOffsetAnim.currentValue = oldVal;
+                part._masterOffsetAnim.animating = false;
+              }
+              startAnimationRaw(part._masterOffsetAnim, newVal, now, 1);
+            }
           }
           updateUI();
           stopScheduler();

@@ -2724,12 +2724,14 @@ function drawQDayNightRing(
         angles = new Array(numWedges);
         if (slideDistance > 0 && numVis > 0 && numVis < numWedges) {
             // Slide mode: compute positions directly.
-            // Get sunset/sunrise angles from the leaf function's indicator mode.
-            // For planetMidnightSun: leaf 0 = Sun's rise = sunrise,
-            //                        leaf 1 = Sun's set  = sunset.
-            // Night runs from sunset → sunrise.
-            const sunriseAngle = leafAngleFn(planetNumber, 0, 0);
-            const sunsetAngle = leafAngleFn(planetNumber, 1, 0);
+            // Use XML-specified sunset/sunrise angles if provided; otherwise
+            // fall back to the leaf function's indicator mode.
+            const sunsetAngle = part.sunsetAngle
+                ? evalAttr(part.sunsetAngle, env)
+                : leafAngleFn(planetNumber, 1, 0);
+            const sunriseAngle = part.sunriseAngle
+                ? evalAttr(part.sunriseAngle, env)
+                : leafAngleFn(planetNumber, 0, 0);
 
             // Compute the nighttime arc (sunset → sunrise, wrapping forward)
             let nightArc = sunriseAngle - sunsetAngle;

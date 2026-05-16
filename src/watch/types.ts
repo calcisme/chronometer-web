@@ -392,6 +392,10 @@ export interface QDayNightRingPart extends PartBase {
     update?: ASTNode;
     timeBase?: string;         // 'LST' for Local Sidereal Time, omitted for local time
     envSlot?: ASTNode;         // env slot number — routes astronomy to slot's city lat/lon
+    /** Optional override: raw sunset angle expression for slide-mode wedge positioning. */
+    sunsetAngle?: ASTNode;
+    /** Optional override: raw sunrise angle expression for slide-mode wedge positioning. */
+    sunriseAngle?: ASTNode;
     /** Wadokei slide: distance (px) to translate hidden wedges inward past center. */
     slideDistance?: ASTNode;
     /** Wadokei slide: animation speed multiplier (default 1.0 = kECGLLinearAnimationSpeed). */

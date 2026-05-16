@@ -32,12 +32,13 @@ import { buildStaticBlockCaches, renderFrame, invalidateDayNightCaches, buildHan
 import type { LoadedImage } from './watch/image-loader.js';
 import { initHandStates, tickAnimations, nextWakeupTime, anyAnimating, finishAnimations, resetHandSchedules, makeAnimatingValue, startAnimationRaw, interpolateValue, SCHEDULER_LOOKAHEAD_MS, finishDayNightSlides, resetDayNightSlides } from './watch/animation.js';
 import type { HandState } from './watch/animation.js';
-import type { Watch } from './watch/types.js';
+import type { Watch, QDayNightRingPart } from './watch/types.js';
 import type { Environment } from './expr/evaluator.js';
 import type { TerminatorLeafState } from './watch/terminator.js';
 import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishLeafAnimations, resetLeafSchedules, anyLeafAnimating } from './watch/terminator.js';
 import type { AnalemmaState } from './watch/analemma.js';
 import { expandAnalemma, tickAnalemma, resetAnalemmaSchedule } from './watch/analemma.js';
+import { evalAttr } from './watch/watch-env.js';
 import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 import type { TimeUnit } from './time-controller.js';
 import { readUrlState, writeUrlState, initNavigationLinks, updateNavigationLinks } from './url-state.js';
@@ -977,7 +978,11 @@ async function main() {
             renderMs += performance.now() - renderStart;
 
             const ringAnimating = face.watch.parts.some(p =>
-                (p.type === 'QDayNightRing' && p._masterOffsetAnim?.animating)
+                p.type === 'QDayNightRing' && (
+                    p._masterOffsetAnim?.animating ||
+                    p._wedgeSlides?.some(s => s.animating) ||
+                    p._wedgeAngleAnims?.some(a => a.animating)
+                )
             );
             const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
             if (faceAnimating) {
@@ -3337,6 +3342,20 @@ async function main() {
 
         const setKyotoState = (handMode: number | null, rateMode: number | null) => {
             const env = getEnv();
+            const now = performance.now();
+
+            // Capture the old masterOffset for each day/night ring part
+            // BEFORE changing kyMode/kyHandMode (which alter the expression result).
+            const oldMasterOffsets = new Map<QDayNightRingPart, number>();
+            for (const part of kyotoFace.watch.parts) {
+                if (part.type === 'QDayNightRing') {
+                    const oldVal = (part._masterOffsetAnim && part._masterOffsetAnim.animating)
+                        ? interpolateValue(part._masterOffsetAnim, now)
+                        : evalAttr(part.masterOffset, env);
+                    oldMasterOffsets.set(part, oldVal);
+                }
+            }
+
             let changed = false;
             if (handMode !== null && env.kyHandMode !== handMode) {
                 env.kyHandMode = handMode;
@@ -3360,6 +3379,24 @@ async function main() {
                 for (const hs of kyotoFace.handStates) {
                     hs.nextUpdateTime = 0;
                 }
+
+                // Start masterOffset animation on day/night ring parts
+                // (env now reflects the new kyMode, so masterOffset evaluates
+                // to the new target; animate from the captured old value)
+                for (const part of kyotoFace.watch.parts) {
+                    if (part.type === 'QDayNightRing') {
+                        const oldVal = oldMasterOffsets.get(part) ?? 0;
+                        const newVal = evalAttr(part.masterOffset, env);
+                        if (!part._masterOffsetAnim) {
+                            part._masterOffsetAnim = makeAnimatingValue(oldVal, now);
+                        } else {
+                            part._masterOffsetAnim.currentValue = oldVal;
+                            part._masterOffsetAnim.animating = false;
+                        }
+                        startAnimationRaw(part._masterOffsetAnim, newVal, now, 1.0);
+                    }
+                }
+
                 updateUI();
                 // Trigger re-draw
                 stopScheduler();
