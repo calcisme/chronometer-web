@@ -9,6 +9,21 @@
 #   dist/index-page.js           — index page location dialog logic
 set -e
 
+# Version handling
+if [ -f "version.txt" ]; then
+  CURRENT_VERSION=$(awk '/^[^# \t]/ {print; exit}' version.txt)
+  MAJOR_MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f1,2)
+  BUILD_NUM=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+  BUILD_NUM=$((BUILD_NUM + 1))
+  NEW_VERSION="${MAJOR_MINOR}.${BUILD_NUM}"
+else
+  echo "ERROR: version.txt is missing. It is required for the build." >&2
+  exit 1
+fi
+
+# Update version in place, preserving comments and blank lines
+awk -v new_ver="$NEW_VERSION" '/^#/ || /^[ \t]*$/ {print} /^[^# \t]/ {print new_ver; exit}' version.txt > version.tmp && mv version.tmp version.txt
+
 ESBUILD="npx --yes esbuild"
 DIST="dist"
 SRC="src"
@@ -60,7 +75,7 @@ echo "=== Generating HTML files ==="
 # {{TIME_CSS}}, {{TIME_CONTROLLER}}, and terra city dialog placeholders.
 inject_partials() {
     local HELP_FILE="${1:-}"
-    awk -v P="$SRC/partials" -v H="$HELP_FILE" '
+    awk -v P="$SRC/partials" -v H="$HELP_FILE" -v VERSION="$NEW_VERSION" '
     /\{\{ *LOCATION_CSS *\}\}/ { 
         s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
         while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
@@ -108,6 +123,9 @@ inject_partials() {
         while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css");
         s=$0; sub(/.*\{\{ *HELP_SUBVIEW_CSS *\}\}/, "", s); print s; next
     }
+    /\{\{ *VERSION *\}\}/ { 
+        gsub(/\{\{ *VERSION *\}\}/, VERSION); print; next
+    }
     { print }
     '
 }
@@ -115,7 +133,7 @@ inject_partials() {
 # Same as inject_partials but includes terra city dialog content.
 inject_partials_terra() {
     local HELP_FILE="${1:-}"
-    awk -v P="$SRC/partials" -v H="$HELP_FILE" '
+    awk -v P="$SRC/partials" -v H="$HELP_FILE" -v VERSION="$NEW_VERSION" '
     /\{\{ *LOCATION_CSS *\}\}/ { 
         s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
         while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
@@ -170,6 +188,9 @@ inject_partials_terra() {
         s=$0; sub(/\{\{ *HELP_SUBVIEW_CSS *\}\}.*/, "", s); printf "%s", s;
         while ((getline line < (P"/help-subview.css")) > 0) print line; close(P"/help-subview.css");
         s=$0; sub(/.*\{\{ *HELP_SUBVIEW_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *VERSION *\}\}/ { 
+        gsub(/\{\{ *VERSION *\}\}/, VERSION); print; next
     }
     { print }
     '
@@ -278,7 +299,7 @@ cp "$SRC/pick.html" "$DIST/pick.html"
 echo "  → pick.html"
 
 # help.html — general help topics page (simple copy)
-cp "$SRC/help.html" "$DIST/help.html"
+sed "s|</body>|<div style=\"text-align:center; margin-top: 24px; color: #667; font-size: 11px;\">v$NEW_VERSION</div></body>|" "$SRC/help.html" > "$DIST/help.html"
 echo "  → help.html"
 
 # privacy.html — privacy policy

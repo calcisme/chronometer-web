@@ -867,6 +867,7 @@
               <summary>General Help Topics</summary>
               <iframe id="general-help-iframe"></iframe>
             </details>
+            <div id="version-label" style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.5</div>
           </div>
 
           <div id="info-sub-view">
@@ -2389,7 +2390,12 @@ of Japan, shows traditional Japanese time like an
               const el = byFace.get(slug);
               if (el) helpDiv.appendChild(el);
             }
-            mainView.appendChild(helpDiv);
+            const vLabel = document.getElementById("version-label");
+            if (vLabel) {
+              mainView.insertBefore(helpDiv, vLabel);
+            } else {
+              mainView.appendChild(helpDiv);
+            }
           }
         });
         infoClose.addEventListener("click", () =>
