@@ -89,6 +89,16 @@ Since `watch-env.ts` is bundled into the shared engine:
 - Changes to `watch-env.ts` affect **all** faces
 - Per-face changes (XML, images, registration) only require rebuilding that face's bundle
 
+## Versioning
+
+The build system automatically tracks and increments the build number. This is driven by a `version.txt` file in the repository root.
+
+- **`version.txt`**: A required file containing the current version string in `<major>.<minor>.<build>` format (e.g., `1.4.1`), along with instructional comments. Blank lines and comment lines (starting with `#`) are preserved.
+- **Auto-increment**: Each time `build.sh` is run, it reads `version.txt`, increments the `<build>` component by 1, and updates `version.txt` in place without destroying the comments.
+- **HTML Injection**: The computed version is injected via a `{{VERSION}}` placeholder into the HTML templates, making it visible at the bottom of the help modals and the general `help.html` page.
+
+If you need to bump the major or minor version (e.g., from `1.4.x` to `1.5.1`), manually edit the version number inside `version.txt` before running the build script.
+
 ## Output Structure
 
 ```
@@ -151,6 +161,7 @@ npx vitest
 | `src/faces/face-*.ts` | Per-face registration entry points |
 | `src/help/*.html` | Per-face help content fragments (injected at build time) |
 | `src/help/images/` | Help content images (copied to `dist/help/images/`) |
+| `version.txt` | Current build version, read and updated by `build.sh` |
 | `tsconfig.json` | TypeScript configuration |
 | `package.json` | Dependencies (esbuild) |
 
