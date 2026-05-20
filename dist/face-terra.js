@@ -81,7 +81,7 @@
     <QDial	name='12 numsf'     x='0' y='1'	modes='front' radius='hour12IR+1' orientation='upright' fontSize='hour12FS'      fontName='Times New Roman' bgColor='clear' strokeColor='fgColor' text='12,,, ,,,6,,,9,,' />
     <QDial	name='12 numsfa'    x='0' y='0'	modes='front' radius='hour12IR'   orientation='upright' fontSize='hour12smallFS' fontName='Times New Roman' bgColor='clear' strokeColor='fgColor' text=',1, ,,4,5,,7,8,, ,11' />
   </static>
-    <Image	name='decoration'   x='0' y='0' modes='front'	src='continents.png'  alpha='.75*alph' />
+    <Image	name='decoration' special='specialDotsMap'  x='0' y='0' modes='front'	src='continents.png'  alpha='.75*alph' />
 
 <!-- date coloring hands -->
   <QWedge    name='moreW'   x='0' y='0' modes='front' outerRadius='cityRad1-1-offRad1' innerRadius='cityRad1-cityFS-2-offRad1' angleSpan='dateHandSpan' update='60' offsetRadius='offRad1' offsetAngle='sectorAngle(firstRingSlot +  0, terraIDeviceSlot()) - cityIndicatorOffset(terraIDeviceSlot(), firstRingSlot)' 
@@ -183,7 +183,7 @@
 
 <!-- the city ring dynamically manufactured by the Watch Factory -->
 
-<hand	    name='worldtime ring' x='0' y='0' modes='front' dragAnimationType='dragAnimationHack1'
+<hand	    name='worldtime ring' special='specialWorldtime' x='0' y='0' modes='front' dragAnimationType='dragAnimationHack1'
 	    angle='sectorAngle(firstRingSlot, terraIDeviceSlot()) - cityIndicatorOffset(terraIDeviceSlot(), firstRingSlot)' update='updateAtEnvChangeOnly' src='worldtimeRingBackground.png' animSpeed='aSpeed' alpha='alph' />
 
 <!-- city time reference dots -->
