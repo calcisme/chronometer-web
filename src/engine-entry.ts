@@ -750,6 +750,7 @@ async function main() {
     function rebuildEnvironments() {
         const oldTzDeltaMs = tzDeltaMs;
         tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
+        let tzOffsetChanged = false;
 
         for (const face of faces) {
             if (!face.enabled) continue;
@@ -777,6 +778,7 @@ async function main() {
             // If the timezone offset changed (e.g. DST transition), reset schedules to force immediate hand re-evaluation
             if (oldTzOffset !== undefined && face.env.tzOffsetSec !== oldTzOffset) {
                 console.log(`[rebuildEnvironments] DST transition detected (offset ${oldTzOffset} -> ${face.env.tzOffsetSec}) - resetting schedules`);
+                tzOffsetChanged = true;
                 resetHandSchedules(face.handStates);
                 resetLeafSchedules(face.terminatorLeaves);
                 resetDayNightSlides(face.watch);
@@ -784,7 +786,7 @@ async function main() {
             }
         }
 
-        if (tzDeltaMs !== oldTzDeltaMs) {
+        if (tzDeltaMs !== oldTzDeltaMs || tzOffsetChanged) {
             updateTimezoneDisplay();
         }
 

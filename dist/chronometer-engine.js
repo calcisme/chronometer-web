@@ -18638,6 +18638,7 @@
     function rebuildEnvironments() {
       const oldTzDeltaMs = tzDeltaMs;
       tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
+      let tzOffsetChanged = false;
       for (const face of faces) {
         if (!face.enabled) continue;
         const oldKnockout = face.env._terraCityKnockout;
@@ -18651,13 +18652,14 @@
         if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         if (oldTzOffset !== void 0 && face.env.tzOffsetSec !== oldTzOffset) {
           console.log(`[rebuildEnvironments] DST transition detected (offset ${oldTzOffset} -> ${face.env.tzOffsetSec}) - resetting schedules`);
+          tzOffsetChanged = true;
           resetHandSchedules(face.handStates);
           resetLeafSchedules(face.terminatorLeaves);
           resetDayNightSlides(face.watch);
           if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
         }
       }
-      if (tzDeltaMs !== oldTzDeltaMs) {
+      if (tzDeltaMs !== oldTzDeltaMs || tzOffsetChanged) {
         updateTimezoneDisplay();
       }
       scheduleDstRebuild();
