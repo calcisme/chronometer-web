@@ -303,6 +303,12 @@ export function createWatchEnvironment(
      *   fixed temporal positions, each exactly 3 temporal hours from noon,
      *   dividing the dial exactly in half (nightArc = π).
      *   Raw angles (before masterOffset): sunset = 3π/2, sunrise = π/2.
+     *
+     * Polar handling: when there is no sunrise or sunset (polar summer/winter),
+     * the leafNumber 0/1 queries return transit-angle fallbacks that look like
+     * normal angles. We detect this by also querying leafNumber 2 (polarSummer)
+     * and 3 (polarWinter), then return sentinel angles that produce a near-zero
+     * or near-2π nightArc for wadokeiDNNumVisible() to handle correctly.
      */
     function wadokeiDNAngles(): { sunsetAngle: number; sunriseAngle: number } | null {
         const leafAngleFn = env.functions.get('dayNightLeafAngle');
@@ -319,6 +325,25 @@ export function createWatchEnvironment(
 
         // Mode 0: standard astronomical computation
         const ECPlanetMidnightSun = env.variables.get('planetMidnightSun') ?? 10;
+
+        // Detect polar conditions: leafNumber 2 → polarSummer, leafNumber 3 → polarWinter.
+        // These return 1 when the condition is active, 0 otherwise.
+        const isPolarSummer = leafAngleFn(ECPlanetMidnightSun, 2, 0) > 0.5;
+        const isPolarWinter = leafAngleFn(ECPlanetMidnightSun, 3, 0) > 0.5;
+
+        if (isPolarSummer) {
+            // No sunset — sun is always up, no night at all.
+            // Return equal angles so nightArc ≈ 0 → wadokeiDNNumVisible() returns 0
+            // → all wedges slide out → transparent ring (no darkness).
+            return { sunsetAngle: 0, sunriseAngle: 0 };
+        }
+        if (isPolarWinter) {
+            // No sunrise — sun is always down, all night.
+            // Return angles spanning full circle so nightArc ≈ 2π
+            // → wadokeiDNNumVisible() returns numWedges → all wedges visible (full darkness).
+            return { sunsetAngle: 0, sunriseAngle: 2 * Math.PI - 0.001 };
+        }
+
         const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
         const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
         return { sunsetAngle, sunriseAngle };
@@ -1272,6 +1297,11 @@ function registerTimeFunctions(
      * Falls back to local noon ± 6h if no rise/set (polar regions).
      * iOS: getValueFromMainAstroWatchTime:@selector(watchTimeWithSunriseForDay)
      *      watchTimeSelector:@selector(hour24ValueUsingEnv:)
+     *
+     * NOTE: These "ForDay" functions are constrained to the current calendar day.
+     * For temporal hour calculations (japanHourValueAngle, angleForJapanHour),
+     * use sunriseSunsetBracketing() instead, which finds the rise/set events
+     * that bracket the current moment regardless of calendar day boundaries.
      */
     function sunriseHour24ForDay(): number {
         const sr = riseSetForDay(true, ECPlanetNumber.Sun);
@@ -1293,43 +1323,147 @@ function registerTimeFunctions(
         return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     }
 
+    /**
+     * Find the sunrise and sunset that bracket the current moment, returning
+     * them as hour24 values. Unlike sunriseHour24ForDay/sunsetHour24ForDay,
+     * this is NOT constrained to the current calendar day — it uses the same
+     * nextPrevRiseSetInternal search that computeDayNightLeafAngle uses.
+     *
+     * This is essential for temporal hour calculations at high latitudes
+     * (e.g. Fairbanks in summer) where sunset may fall past midnight into
+     * the next calendar day.
+     *
+     * Returns { sunrise, sunset } as fractional hours. sunrise is always
+     * the most recent rise, sunset is always the next set (when sun is up),
+     * and vice versa. dayLen = sunset - sunrise gives the correct day length
+     * even when they span different calendar days.
+     *
+     * For polar cases (no rise or set), falls back to transit-based estimates:
+     * polar summer → sunrise = transit - 12, sunset = transit + 12 (24h day)
+     * polar winter → sunrise = sunset = transit (0h day)
+     */
+    function sunriseSunsetBracketing(): { sunrise: number; sunset: number } {
+        const calcDate = dateToDateInterval(getNow());
+        const fudgeFactorSeconds = 5;
+        const lookahead = 3600 * 13.2;
+
+        const planetIsUp = planetIsUpForRiseSet(ECPlanetNumber.Sun, calcDate, OBSERVER_LAT, OBSERVER_LON);
+
+        // Same search logic as computeDayNightLeafAngle:
+        // Rise: search backward if sun is up, forward if sun is down
+        // Set:  search forward if sun is up, backward if sun is down
+        const riseResult = nextPrevRiseSetInternal(
+            calcDate, OBSERVER_LAT, OBSERVER_LON,
+            true, ECPlanetNumber.Sun, !planetIsUp, -fudgeFactorSeconds, lookahead, pool,
+        );
+        const setResult = nextPrevRiseSetInternal(
+            calcDate, OBSERVER_LAT, OBSERVER_LON,
+            false, ECPlanetNumber.Sun, planetIsUp, -fudgeFactorSeconds, lookahead, pool,
+        );
+
+        const riseDI = riseResult.eventTime;
+        const setDI = setResult.eventTime;
+
+        // Convert dateIntervals to fractional hours in local time
+        function diToHour24(di: number): number {
+            const d = new Date((di + 978307200) * 1000 + tzDeltaMs);
+            return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+        }
+
+        if (isNoRiseSet(riseDI) && isNoRiseSet(setDI)) {
+            // Both missing: polar case. Use transit-based estimate.
+            const transitDI = planettransitTimeRefined(
+                calcDate, OBSERVER_LAT, OBSERVER_LON,
+                true, ECPlanetNumber.Sun, pool,
+            );
+            const transitH = diToHour24(transitDI);
+            if (planetIsUp) {
+                // Polar summer: sun always up → 24h day
+                return { sunrise: transitH - 12, sunset: transitH + 12 };
+            } else {
+                // Polar winter: sun always down → 0h day
+                return { sunrise: transitH, sunset: transitH };
+            }
+        }
+
+        if (isNoRiseSet(riseDI)) {
+            // Rise missing but set valid: near-polar case
+            const setH = diToHour24(setDI);
+            if (isAlwaysAbove(riseDI)) {
+                // Sun always above → treat as 24h day
+                return { sunrise: setH - 24, sunset: setH };
+            } else {
+                // Sun always below but there's a set → degenerate, use set
+                return { sunrise: setH, sunset: setH };
+            }
+        }
+
+        if (isNoRiseSet(setDI)) {
+            // Set missing but rise valid
+            const riseH = diToHour24(riseDI);
+            if (isAlwaysAbove(setDI)) {
+                // Sun always above → 24h day
+                return { sunrise: riseH, sunset: riseH + 24 };
+            } else {
+                return { sunrise: riseH, sunset: riseH };
+            }
+        }
+
+        // Both valid. Convert to hours, ensuring sunset > sunrise for dayLen calc.
+        let riseH = diToHour24(riseDI);
+        let setH = diToHour24(setDI);
+
+        // If sunset hour < sunrise hour, the sunset is on the next calendar day.
+        // Add 24 to keep sunset > sunrise for day-length computation.
+        if (setH <= riseH) {
+            setH += 24;
+        }
+
+        return { sunrise: riseH, sunset: setH };
+    }
+
+
     // japanHourValueAngle(): angle of hand on traditional Japanese wadokei clock
     // with fixed dial. Noon on top. Variable-speed hand.
     // iOS: ECVirtualMachineOps.m lines 355–382
     functions.set('japanHourValueAngle', () => {
         let now = functions.get('hour24Value')!();
         const dayTime = functions.get('planetIsUp')!(ECPlanetNumber.Sun) !== 0;
-        const sunrise = sunriseHour24ForDay();
-        const sunset = sunsetHour24ForDay();
-        let dayLen = sunset - sunrise;
-        if (sunrise >= sunset) {
-            dayLen += 24;
-        }
+        const { sunrise, sunset } = sunriseSunsetBracketing();
+        const dayLen = sunset - sunrise;
         if (dayTime) {
             if (now < sunrise) {
                 now += 24;
             }
-            const dayFraction = (now - sunrise) / dayLen;
+            const dayFraction = dayLen > 0 ? (now - sunrise) / dayLen : 0.5;
             return (dayFraction + 3.0 / 2) * Math.PI;
         } else {
             let nightLen = 24 - dayLen;
-            if (nightLen === 0) {
+            if (nightLen <= 0) {
                 nightLen = 24;
             }
-            if (now < sunset) {
+            let adjustedSunset = sunset % 24;  // Bring sunset back to 0-24 range for comparison
+            if (adjustedSunset < 0) adjustedSunset += 24;
+            if (now < adjustedSunset) {
                 now += 24;
             }
-            const nightFraction = (now - sunset) / nightLen;
+            const nightFraction = (now - adjustedSunset) / nightLen;
             return (nightFraction + 1.0 / 2) * Math.PI;
         }
     });
 
     functions.set('solarNoonAngle', () => {
-        let sunrise = sunriseHour24ForDay();
-        let sunset = sunsetHour24ForDay();
-        if (sunrise > sunset) sunset += 24;
-        const solarNoon = (sunrise + sunset) / 2;
-        return (solarNoon * Math.PI / 12) + Math.PI;
+        // Compute solar noon from the sun's actual upper transit (meridian crossing).
+        // This is always valid — the sun transits every day regardless of
+        // whether sunrise/sunset occur (which they don't in polar regions).
+        // The old approach averaged sunrise and sunset, which broke at high
+        // latitudes where those events may be missing or fall on the wrong day.
+        const calcDate = dateToDateInterval(getNow());
+        const transitDI = planettransitTimeRefined(
+            calcDate, OBSERVER_LAT, OBSERVER_LON,
+            true, ECPlanetNumber.Sun, pool,
+        );
+        return angle24HourForDate(transitDI, tzOffsetSeconds) + Math.PI;
     });
 
     // angleForJapanHour(n, topAnchor): angle of center of temporal hour N on a
@@ -1338,9 +1472,8 @@ function registerTimeFunctions(
     // topAnchor allows aligning the dial to a specific standard.
     // iOS: ECVirtualMachineOps.m lines 388–407
     functions.set('angleForJapanHour', (japanHourNumber: number, topAnchor: number = 0) => {
-        const sunrise = sunriseHour24ForDay();
-        const sunset = sunsetHour24ForDay();
-        const dayLen = sunrise < sunset ? sunset - sunrise : sunset + 24 - sunrise;
+        const { sunrise, sunset } = sunriseSunsetBracketing();
+        const dayLen = sunset - sunrise;
         const nightLen = 24 - dayLen;
         
         let absoluteAngle = 0;
@@ -1376,32 +1509,31 @@ function registerTimeFunctions(
     // and nighttime clock hours into the 180° nighttime arc.
     functions.set('temporalAngleFor24Hour', (h: number, topAnchor: number = 2) => {
         const calculateAngle = (hour: number) => {
-            const sunrise = sunriseHour24ForDay();
-            const sunset = sunsetHour24ForDay();
-            let dayLen = sunset - sunrise;
-            if (sunrise >= sunset) {
-                dayLen += 24;
-            }
+            const { sunrise, sunset } = sunriseSunsetBracketing();
+            const dayLen = sunset - sunrise;
             let nightLen = 24 - dayLen;
-            if (nightLen === 0) nightLen = 24;
+            if (nightLen <= 0) nightLen = 24;
 
             const sunriseAngle = 9 * Math.PI / 6;  // 270° = 3π/2
             const sunsetAngle = 3 * Math.PI / 6;   // 90° = π/2
 
+            // Use modular sunrise/sunset for day/night determination
+            const srMod = ((sunrise % 24) + 24) % 24;
+            const ssMod = ((sunset % 24) + 24) % 24;
             let inDaytime: boolean;
-            if (sunrise < sunset) {
-                inDaytime = hour >= sunrise && hour < sunset;
+            if (srMod < ssMod) {
+                inDaytime = hour >= srMod && hour < ssMod;
             } else {
-                inDaytime = hour >= sunrise || hour < sunset;
+                inDaytime = hour >= srMod || hour < ssMod;
             }
 
             if (inDaytime) {
-                let hFromSunrise = hour - sunrise;
+                let hFromSunrise = hour - srMod;
                 if (hFromSunrise < 0) hFromSunrise += 24;
-                const dayFrac = hFromSunrise / dayLen;
+                const dayFrac = dayLen > 0 ? hFromSunrise / dayLen : 0.5;
                 return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
             } else {
-                let hFromSunset = hour - sunset;
+                let hFromSunset = hour - ssMod;
                 if (hFromSunset < 0) hFromSunset += 24;
                 const nightFrac = hFromSunset / nightLen;
                 return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);

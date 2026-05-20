@@ -12582,6 +12582,14 @@
         return { sunsetAngle: 3 * Math.PI / 2, sunriseAngle: Math.PI / 2 };
       }
       const ECPlanetMidnightSun = env.variables.get("planetMidnightSun") ?? 10;
+      const isPolarSummer = leafAngleFn(ECPlanetMidnightSun, 2, 0) > 0.5;
+      const isPolarWinter = leafAngleFn(ECPlanetMidnightSun, 3, 0) > 0.5;
+      if (isPolarSummer) {
+        return { sunsetAngle: 0, sunriseAngle: 0 };
+      }
+      if (isPolarWinter) {
+        return { sunsetAngle: 0, sunriseAngle: 2 * Math.PI - 1e-3 };
+      }
       const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
       const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
       return { sunsetAngle, sunriseAngle };
@@ -13273,44 +13281,118 @@
       const d = new Date((ss + 978307200) * 1e3 + tzDeltaMs);
       return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     }
+    function sunriseSunsetBracketing() {
+      const calcDate = dateToDateInterval(getNow());
+      const fudgeFactorSeconds = 5;
+      const lookahead = 3600 * 13.2;
+      const planetIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, OBSERVER_LAT, OBSERVER_LON);
+      const riseResult = nextPrevRiseSetInternal(
+        calcDate,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        0 /* Sun */,
+        !planetIsUp,
+        -fudgeFactorSeconds,
+        lookahead,
+        pool
+      );
+      const setResult = nextPrevRiseSetInternal(
+        calcDate,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        false,
+        0 /* Sun */,
+        planetIsUp,
+        -fudgeFactorSeconds,
+        lookahead,
+        pool
+      );
+      const riseDI = riseResult.eventTime;
+      const setDI = setResult.eventTime;
+      function diToHour24(di) {
+        const d = new Date((di + 978307200) * 1e3 + tzDeltaMs);
+        return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+      }
+      if (isNoRiseSet(riseDI) && isNoRiseSet(setDI)) {
+        const transitDI = planettransitTimeRefined(
+          calcDate,
+          OBSERVER_LAT,
+          OBSERVER_LON,
+          true,
+          0 /* Sun */,
+          pool
+        );
+        const transitH = diToHour24(transitDI);
+        if (planetIsUp) {
+          return { sunrise: transitH - 12, sunset: transitH + 12 };
+        } else {
+          return { sunrise: transitH, sunset: transitH };
+        }
+      }
+      if (isNoRiseSet(riseDI)) {
+        const setH2 = diToHour24(setDI);
+        if (isAlwaysAbove(riseDI)) {
+          return { sunrise: setH2 - 24, sunset: setH2 };
+        } else {
+          return { sunrise: setH2, sunset: setH2 };
+        }
+      }
+      if (isNoRiseSet(setDI)) {
+        const riseH2 = diToHour24(riseDI);
+        if (isAlwaysAbove(setDI)) {
+          return { sunrise: riseH2, sunset: riseH2 + 24 };
+        } else {
+          return { sunrise: riseH2, sunset: riseH2 };
+        }
+      }
+      let riseH = diToHour24(riseDI);
+      let setH = diToHour24(setDI);
+      if (setH <= riseH) {
+        setH += 24;
+      }
+      return { sunrise: riseH, sunset: setH };
+    }
     functions.set("japanHourValueAngle", () => {
       let now2 = functions.get("hour24Value")();
       const dayTime = functions.get("planetIsUp")(0 /* Sun */) !== 0;
-      const sunrise = sunriseHour24ForDay();
-      const sunset = sunsetHour24ForDay();
-      let dayLen = sunset - sunrise;
-      if (sunrise >= sunset) {
-        dayLen += 24;
-      }
+      const { sunrise, sunset } = sunriseSunsetBracketing();
+      const dayLen = sunset - sunrise;
       if (dayTime) {
         if (now2 < sunrise) {
           now2 += 24;
         }
-        const dayFraction = (now2 - sunrise) / dayLen;
+        const dayFraction = dayLen > 0 ? (now2 - sunrise) / dayLen : 0.5;
         return (dayFraction + 3 / 2) * Math.PI;
       } else {
         let nightLen = 24 - dayLen;
-        if (nightLen === 0) {
+        if (nightLen <= 0) {
           nightLen = 24;
         }
-        if (now2 < sunset) {
+        let adjustedSunset = sunset % 24;
+        if (adjustedSunset < 0) adjustedSunset += 24;
+        if (now2 < adjustedSunset) {
           now2 += 24;
         }
-        const nightFraction = (now2 - sunset) / nightLen;
+        const nightFraction = (now2 - adjustedSunset) / nightLen;
         return (nightFraction + 1 / 2) * Math.PI;
       }
     });
     functions.set("solarNoonAngle", () => {
-      let sunrise = sunriseHour24ForDay();
-      let sunset = sunsetHour24ForDay();
-      if (sunrise > sunset) sunset += 24;
-      const solarNoon = (sunrise + sunset) / 2;
-      return solarNoon * Math.PI / 12 + Math.PI;
+      const calcDate = dateToDateInterval(getNow());
+      const transitDI = planettransitTimeRefined(
+        calcDate,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        0 /* Sun */,
+        pool
+      );
+      return angle24HourForDate(transitDI, tzOffsetSeconds) + Math.PI;
     });
     functions.set("angleForJapanHour", (japanHourNumber, topAnchor = 0) => {
-      const sunrise = sunriseHour24ForDay();
-      const sunset = sunsetHour24ForDay();
-      const dayLen = sunrise < sunset ? sunset - sunrise : sunset + 24 - sunrise;
+      const { sunrise, sunset } = sunriseSunsetBracketing();
+      const dayLen = sunset - sunrise;
       const nightLen = 24 - dayLen;
       let absoluteAngle = 0;
       if (japanHourNumber >= 9) {
@@ -13334,29 +13416,27 @@
     });
     functions.set("temporalAngleFor24Hour", (h, topAnchor = 2) => {
       const calculateAngle = (hour) => {
-        const sunrise = sunriseHour24ForDay();
-        const sunset = sunsetHour24ForDay();
-        let dayLen = sunset - sunrise;
-        if (sunrise >= sunset) {
-          dayLen += 24;
-        }
+        const { sunrise, sunset } = sunriseSunsetBracketing();
+        const dayLen = sunset - sunrise;
         let nightLen = 24 - dayLen;
-        if (nightLen === 0) nightLen = 24;
+        if (nightLen <= 0) nightLen = 24;
         const sunriseAngle = 9 * Math.PI / 6;
         const sunsetAngle = 3 * Math.PI / 6;
+        const srMod = (sunrise % 24 + 24) % 24;
+        const ssMod = (sunset % 24 + 24) % 24;
         let inDaytime;
-        if (sunrise < sunset) {
-          inDaytime = hour >= sunrise && hour < sunset;
+        if (srMod < ssMod) {
+          inDaytime = hour >= srMod && hour < ssMod;
         } else {
-          inDaytime = hour >= sunrise || hour < sunset;
+          inDaytime = hour >= srMod || hour < ssMod;
         }
         if (inDaytime) {
-          let hFromSunrise = hour - sunrise;
+          let hFromSunrise = hour - srMod;
           if (hFromSunrise < 0) hFromSunrise += 24;
-          const dayFrac = hFromSunrise / dayLen;
+          const dayFrac = dayLen > 0 ? hFromSunrise / dayLen : 0.5;
           return fmod(sunriseAngle + dayFrac * Math.PI, 2 * Math.PI);
         } else {
-          let hFromSunset = hour - sunset;
+          let hFromSunset = hour - ssMod;
           if (hFromSunset < 0) hFromSunset += 24;
           const nightFrac = hFromSunset / nightLen;
           return fmod(sunsetAngle + nightFrac * Math.PI, 2 * Math.PI);
@@ -16225,9 +16305,13 @@
         for (let i = numVis; i < numWedges; i++) {
           angles[i] = parkAngle;
         }
+      } else if (slideDistance > 0 && numVis === 0) {
+        for (let i = 0; i < numWedges; i++) {
+          angles[i] = 0;
+        }
       } else if (slideDistance > 0 && numVis >= numWedges) {
         for (let i = 0; i < numWedges; i++) {
-          angles[i] = leafAngleFn(planetNumber, i, numWedges);
+          angles[i] = 2 * Math.PI * i / numWedges;
         }
       } else {
         for (let i = 0; i < numWedges; i++) {

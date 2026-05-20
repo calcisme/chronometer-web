@@ -2757,10 +2757,22 @@ function drawQDayNightRing(
             for (let i = numVis; i < numWedges; i++) {
                 angles[i] = parkAngle;
             }
-        } else if (slideDistance > 0 && numVis >= numWedges) {
-            // All wedges visible (long winter night): full circle distribution
+        } else if (slideDistance > 0 && numVis === 0) {
+            // Polar summer: no night at all — park all wedges at angle 0.
+            // They will all be slid out (hidden), so angle doesn't matter visually,
+            // but a consistent value prevents flash during slide-out animation.
             for (let i = 0; i < numWedges; i++) {
-                angles[i] = leafAngleFn(planetNumber, i, numWedges);
+                angles[i] = 0;
+            }
+        } else if (slideDistance > 0 && numVis >= numWedges) {
+            // Polar winter: all wedges visible, distributed evenly across the
+            // full circle. We can't use leafAngleFn here because it leaves a
+            // one-leaf-width gap around the transit point (designed for faces
+            // like Mauna Kea that have separate QWedge polar masks to cover
+            // the gap). Kyoto uses the slide mechanism instead of masks, so
+            // we fill the full circle directly.
+            for (let i = 0; i < numWedges; i++) {
+                angles[i] = (2 * Math.PI * i) / numWedges;
             }
         } else {
             // Normal mode (non-slide): standard leaf distribution
