@@ -17227,6 +17227,7 @@
         this.tickTime = new Date(this.nextTickTime.getTime());
         this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
         this.lastTickRealMs = nowPerfMs;
+        this.onTick?.();
         this.clampDisplayTime();
         return true;
       }
@@ -18635,9 +18636,12 @@
       buildNext();
     }
     function rebuildEnvironments() {
+      const oldTzDeltaMs = tzDeltaMs;
+      tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
       for (const face of faces) {
         if (!face.enabled) continue;
         const oldKnockout = face.env._terraCityKnockout;
+        const oldTzOffset = face.env.tzOffsetSec;
         face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
         restoreKyotoState(face);
         if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
@@ -18645,6 +18649,16 @@
         const { canvas, watch, env, images, scale } = face;
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
+        if (oldTzOffset !== void 0 && face.env.tzOffsetSec !== oldTzOffset) {
+          console.log(`[rebuildEnvironments] DST transition detected (offset ${oldTzOffset} -> ${face.env.tzOffsetSec}) - resetting schedules`);
+          resetHandSchedules(face.handStates);
+          resetLeafSchedules(face.terminatorLeaves);
+          resetDayNightSlides(face.watch);
+          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
+        }
+      }
+      if (tzDeltaMs !== oldTzDeltaMs) {
+        updateTimezoneDisplay();
       }
       scheduleDstRebuild();
     }

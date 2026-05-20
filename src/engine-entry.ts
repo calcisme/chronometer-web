@@ -748,11 +748,16 @@ async function main() {
      * a fresh environment.
      */
     function rebuildEnvironments() {
+        const oldTzDeltaMs = tzDeltaMs;
+        tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
+
         for (const face of faces) {
             if (!face.enabled) continue;
             // Preserve the Terra city-name knockout cache across env rebuilds
             // (it's stored on the env but doesn't depend on time — only on slot assignments).
             const oldKnockout = (face.env as any)._terraCityKnockout;
+            const oldTzOffset = face.env.tzOffsetSec;
+
             // Rebuild the environment but keep the same watch/parts
             face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
                     restoreKyotoState(face);
@@ -768,9 +773,21 @@ async function main() {
             buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
             // Force analemma to recompute on the next frame
             if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-            // Hand states are preserved — their angle expressions will
-            // be re-evaluated by tickAnimations using the fresh env
+
+            // If the timezone offset changed (e.g. DST transition), reset schedules to force immediate hand re-evaluation
+            if (oldTzOffset !== undefined && face.env.tzOffsetSec !== oldTzOffset) {
+                console.log(`[rebuildEnvironments] DST transition detected (offset ${oldTzOffset} -> ${face.env.tzOffsetSec}) - resetting schedules`);
+                resetHandSchedules(face.handStates);
+                resetLeafSchedules(face.terminatorLeaves);
+                resetDayNightSlides(face.watch);
+                if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
+            }
         }
+
+        if (tzDeltaMs !== oldTzDeltaMs) {
+            updateTimezoneDisplay();
+        }
+
         // Reschedule the DST timer — displayed time and/or direction may
         // have changed, so the next transition point could be different.
         scheduleDstRebuild();

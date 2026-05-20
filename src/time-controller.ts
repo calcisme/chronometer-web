@@ -317,11 +317,11 @@ export class TimeController {
             this.tickTime = new Date(this.nextTickTime.getTime());
             this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
             this.lastTickRealMs = nowPerfMs;
-            // NOTE: Do NOT call onTick() here. The env functions are live
-            // closures that call getNow(), so they automatically see the
-            // new tickTime via the frame snapshot. Calling onTick() would
-            // trigger rebuildAllForTime() which re-initializes hand states
-            // and destroys animation state.
+            // NOTE: We now call onTick() here. The env functions are live
+            // closures that call getNow(), but calendar-dependent init
+            // expressions, timezone/DST offsets, and terminator/analemma calculations
+            // need a rebuilt environment to reflect DST transitions during continuous scrubbing.
+            this.onTick?.();
             this.clampDisplayTime();
             return true;
         }
