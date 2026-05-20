@@ -19750,7 +19750,9 @@
         pauseBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           timeController.stop();
+          rebuildEnvironments();
           finishAllAnimations();
+          resetAllSchedules();
           updateTimeUI();
           ensureSchedulerRunning();
           writeTimeState();
@@ -20044,7 +20046,9 @@
         holdingBtn.classList.remove("holding");
         holdingBtn = null;
         timeController.stop();
+        rebuildEnvironments();
         finishAllAnimations();
+        resetAllSchedules();
         updateTimeUI();
         ensureSchedulerRunning();
         writeTimeState();

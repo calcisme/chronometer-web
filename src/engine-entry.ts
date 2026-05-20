@@ -2289,7 +2289,9 @@ async function main() {
             pauseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 timeController.stop();
+                rebuildEnvironments();
                 finishAllAnimations();
+                resetAllSchedules();
                 updateTimeUI();
                 ensureSchedulerRunning();
                 writeTimeState();
@@ -2625,7 +2627,9 @@ async function main() {
 
             // Stop at current position and snap animations
             timeController.stop();
+            rebuildEnvironments();
             finishAllAnimations();
+            resetAllSchedules();
             updateTimeUI();
             ensureSchedulerRunning();
             // Write time state to URL on button release
