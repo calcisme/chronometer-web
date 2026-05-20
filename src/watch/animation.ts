@@ -18,7 +18,7 @@
  * - Otherwise, use the normal speed-based duration (slow parts).
  */
 
-import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, QDialPart, CalendarRowCoverPart } from './types.js';
+import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, QDialPart, CalendarRowCoverPart, QDayNightRingPart } from './types.js';
 import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './watch-env.js';
 import {
@@ -87,7 +87,7 @@ export function makeAnimatingValue(initial: number, now: number): AnimatingValue
 /** Per-part state tracked by the animation system. */
 export interface HandState {
     /** Reference to the XML part definition. */
-    part: QHandPart | WheelPart | QWedgePart | QDialPart | CalendarRowCoverPart;
+    part: QHandPart | WheelPart | QWedgePart | QDialPart | CalendarRowCoverPart | QDayNightRingPart;
     /** The angle being animated. */
     angle: AnimatingValue;
     /** The offsetAngle being animated (only for offset-orbit hands like Moon). */
@@ -152,6 +152,8 @@ function collectDynamicParts(
             // QDials with animSpeed participate in the animation system
             // (e.g. Vienna 24-hour number dial with angle='dialFlip')
             out.push(createHandState(part, env, now, getNow, rawGetNow));
+        } else if (part.type === 'QDayNightRing') {
+            out.push(createHandState(part, env, now, getNow, rawGetNow));
         } else if (part.type === 'CalendarRowCover') {
             out.push(createCalendarCoverState(part as CalendarRowCoverPart, env, now, getNow, rawGetNow));
         } else if (part.type === 'Static') {
@@ -161,7 +163,7 @@ function collectDynamicParts(
 }
 
 function createHandState(
-    part: QHandPart | WheelPart | QWedgePart | QDialPart,
+    part: QHandPart | WheelPart | QWedgePart | QDialPart | QDayNightRingPart,
     env: Environment,
     now: number,
     getNow: () => Date,
@@ -173,10 +175,12 @@ function createHandState(
     const updateIntervalMs = updateIntervalSec * 1000;
 
     // animSpeed: default 1.0 (from original iOS boundsCheck default)
-    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1.0;
+    const animSpeed = ('animSpeed' in part && part.animSpeed) ? evalAttr(part.animSpeed, env) : 1.0;
 
     // Evaluate initial angle and write to part's dynamicState
-    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
+    const initialAngle = part.type === 'QDayNightRing'
+        ? (part.masterOffset ? evalAttr(part.masterOffset, env) : 0)
+        : (part.angle ? evalAttr(part.angle, env) : 0);
     // Evaluate initial offsetAngle if present (e.g. Moon orbit position)
     const hasOffsetAngle = (part.type === 'QHand' || part.type === 'QWedge') && part.offsetAngle;
     const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle!, env) : 0;
@@ -198,15 +202,30 @@ function createHandState(
     // where boundaries are computed in iPhone time, not latched watch time.
     const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
 
-    return {
-        part,
-        angle: {
+    let angleAnim: AnimatingValue;
+    if (part.type === 'QDayNightRing') {
+        if (!part._masterOffsetAnim) {
+            part._masterOffsetAnim = makeAnimatingValue(initialAngle, now);
+        } else {
+            if (!part._masterOffsetAnim.animating) {
+                part._masterOffsetAnim.currentValue = initialAngle;
+                part._masterOffsetAnim.targetValue = initialAngle;
+            }
+        }
+        angleAnim = part._masterOffsetAnim;
+    } else {
+        angleAnim = {
             currentValue: initialAngle,
             targetValue: initialAngle,
             lastAnimationTime: now,
             animationStopTime: now,
             animating: false,
-        },
+        };
+    }
+
+    return {
+        part,
+        angle: angleAnim,
         offsetAngle: hasOffsetAngle ? {
             currentValue: initialOffsetAngle,
             targetValue: initialOffsetAngle,
@@ -378,9 +397,9 @@ export function tickAnimations(
         // and freeze (nextUpdateTime=Infinity → never) direction-agnostically.
         // The display-time boundary is used to COMPUTE nextUpdateTime, not as the gate.
         if (now >= state.nextUpdateTime) {
-            const newTarget = ('angle' in state.part && state.part.angle)
-                ? evalAttr(state.part.angle, env)
-                : 0;
+            const newTarget = state.part.type === 'QDayNightRing'
+                ? (state.part.masterOffset ? evalAttr(state.part.masterOffset, env) : 0)
+                : (('angle' in state.part && state.part.angle) ? evalAttr(state.part.angle, env) : 0);
 
             // Also evaluate offsetAngle if this hand has one
             const newOffsetTarget = state.offsetAngle && (state.part.type === 'QHand' || state.part.type === 'QWedge') && state.part.offsetAngle

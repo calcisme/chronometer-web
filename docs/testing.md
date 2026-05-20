@@ -12,6 +12,7 @@ npm test
 npm run test:regression
 
 # Regenerate golden snapshot baselines
+# NEVER NEVER NEVER run this command unless the user expressly asks you to.
 npm run test:capture
 
 # Watch mode (re-run on file changes)
@@ -70,7 +71,7 @@ src/__tests__/
    | E. Scrub Backward | Same as D, direction = −1 | 4 per unit |
    | F. Play/Pause/Reverse | play-fwd, pause, resume, reverse, final | 5 |
 
-3. **Golden files** are JSON snapshots of all part values at each checkpoint. On first run (or after changes), generate baselines with `npm run test:capture`. Subsequent runs compare against these baselines.
+3. **Golden files** are JSON snapshots of all part values at each checkpoint. On first run, generate baselines with `npm run test:capture`. Subsequent runs compare against these baselines. If tests fail, NEVER NEVER NEVER run this capture command unless the user expressly asks you to.
 
 4. **Numeric tolerance**: 1e-9 for floating-point comparisons; strict equality for booleans and animation flags.
 

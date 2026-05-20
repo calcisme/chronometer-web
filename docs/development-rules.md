@@ -134,3 +134,9 @@ The astronomical series approximations (Willmann-Bell planetary/sun tables) are 
 - The method is called after every time mutation (`step`, `setTime`, `setRate`, `setDirection`, `setOffset`, `checkTick`) and in the render-loop frame callback (for 1×/-1× with offset).
 - Date input fields in `applyDateInputs()` clamp the constructed date before passing it to `setTime()`.
 - `formatSimTime()` appends "⚠ earliest" or "⚠ latest" at the boundary.
+
+## 12. NEVER NEVER NEVER rebuild golden files unless the user expressly asks you to.
+
+Since the golden files are gitignored, if you regenerate the inappropriately, the previous version will need to be regenerated with an older version of the code, and it is not always obvious which
+version of the code that would need to be. If a test fails and you think you need to regenerate,
+ask the user and do nothing without explicit instruction.

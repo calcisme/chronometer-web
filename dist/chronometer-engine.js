@@ -11038,6 +11038,8 @@
         out.push(createHandState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "QDial" && part.animSpeed) {
         out.push(createHandState(part, env, now, getNow, rawGetNow));
+      } else if (part.type === "QDayNightRing") {
+        out.push(createHandState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "CalendarRowCover") {
         out.push(createCalendarCoverState(part, env, now, getNow, rawGetNow));
       } else if (part.type === "Static") {
@@ -11048,8 +11050,8 @@
   function createHandState(part, env, now, getNow, rawGetNow) {
     const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
     const updateIntervalMs = updateIntervalSec * 1e3;
-    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
-    const initialAngle = part.angle ? evalAttr(part.angle, env) : 0;
+    const animSpeed = "animSpeed" in part && part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
+    const initialAngle = part.type === "QDayNightRing" ? part.masterOffset ? evalAttr(part.masterOffset, env) : 0 : part.angle ? evalAttr(part.angle, env) : 0;
     const hasOffsetAngle = (part.type === "QHand" || part.type === "QWedge") && part.offsetAngle;
     const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle, env) : 0;
     part.dynamicState = {
@@ -11065,15 +11067,29 @@
       part.dynamicState.currentYMotion = initialYMotion;
     }
     const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
-    return {
-      part,
-      angle: {
+    let angleAnim;
+    if (part.type === "QDayNightRing") {
+      if (!part._masterOffsetAnim) {
+        part._masterOffsetAnim = makeAnimatingValue(initialAngle, now);
+      } else {
+        if (!part._masterOffsetAnim.animating) {
+          part._masterOffsetAnim.currentValue = initialAngle;
+          part._masterOffsetAnim.targetValue = initialAngle;
+        }
+      }
+      angleAnim = part._masterOffsetAnim;
+    } else {
+      angleAnim = {
         currentValue: initialAngle,
         targetValue: initialAngle,
         lastAnimationTime: now,
         animationStopTime: now,
         animating: false
-      },
+      };
+    }
+    return {
+      part,
+      angle: angleAnim,
       offsetAngle: hasOffsetAngle ? {
         currentValue: initialOffsetAngle,
         targetValue: initialOffsetAngle,
@@ -11181,7 +11197,7 @@
   function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
     for (const state of states) {
       if (now >= state.nextUpdateTime) {
-        const newTarget = "angle" in state.part && state.part.angle ? evalAttr(state.part.angle, env) : 0;
+        const newTarget = state.part.type === "QDayNightRing" ? state.part.masterOffset ? evalAttr(state.part.masterOffset, env) : 0 : "angle" in state.part && state.part.angle ? evalAttr(state.part.angle, env) : 0;
         const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
         const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.rawGetNow, timeDirection, env);
         if (tickIntervalMs !== null && tickIntervalMs > 0) {
