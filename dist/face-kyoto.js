@@ -15,7 +15,7 @@
   <init expr='faceColor=0xffe0e0e0, textColor=black, innerBg=0x80e0e0e0, dstBorder=0x80a0a0a0, subBg=0xffe7e7e7, midbg=0x40000000' />
   <init expr='hrColor=minColor=black, secColor=0xff000000, ticInColor=clear, tic24Color=0x40000000, label24Color=0x80000000' />
   <init expr='kyMode=0' />
-  <init expr='dnOutR=outrRad, dnInR=hrRad, dnWedges=75' />
+  <init expr='dnOutR=outrRad, dnInR=hrRad-5, dnWedges=75' />
   <init expr='dnSlide=(dnOutR+dnInR)/2, dnCoverR=hrRad-5, dnColor=0x48000000' />
 
   <!-- Face image rotates with the dial in fixed-hand mode -->
