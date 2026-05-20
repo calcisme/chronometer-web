@@ -91,6 +91,9 @@ export interface PartBase {
     modes?: string;
     /** Runtime animation state — populated by the animation system, not by XML parsing. */
     dynamicState?: DynamicState;
+    special?: string;
+    specialParam?: ASTNode;
+    envSlot?: ASTNode;
 }
 
 // ============================================================================

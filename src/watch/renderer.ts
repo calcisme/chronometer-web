@@ -683,9 +683,11 @@ function renderPartsDocumentOrder(
             pendingWindows.length = 0;
 
             // Terra: draw ring image with city-name knockouts + channel lines
-            if (part.name === 'worldtime ring') {
+            if (part.special === 'specialWorldtime') {
                 drawTerraRingWithKnockouts(ctx, part, env, images);
                 drawTerraChannelLines(ctx, part, env);
+            } else if (part.special === 'specialSubdial') {
+                drawGaiaSubdial(ctx, part, env, images);
             } else if (part.src && images) {
                 drawImageHand(ctx, part, env, images);
             } else {
@@ -729,7 +731,7 @@ function renderPartsDocumentOrder(
         }
 
         // Terra: draw city dots on top of the continents image
-        if (part.name === 'decoration') {
+        if (part.special === 'specialDotsMap') {
             drawTerraCityDots(ctx, env);
         }
     }
@@ -740,7 +742,6 @@ function renderPartsDocumentOrder(
     }
 }
 
-/** Draw only QHands found within a list of parts (recursive into Static). */
 function drawQHandsInParts(
     ctx: CanvasRenderingContext2D,
     parts: WatchPart[],
@@ -749,7 +750,12 @@ function drawQHandsInParts(
 ): void {
     for (const part of parts) {
         if (part.type === 'QHand') {
-            if (part.src && images) {
+            if (part.special === 'specialWorldtime') {
+                drawTerraRingWithKnockouts(ctx, part, env, images);
+                drawTerraChannelLines(ctx, part, env);
+            } else if (part.special === 'specialSubdial') {
+                drawGaiaSubdial(ctx, part, env, images);
+            } else if (part.src && images) {
                 drawImageHand(ctx, part, env, images);
             } else {
                 drawQHand(ctx, part, env);
@@ -3930,6 +3936,115 @@ function drawEotDial(
     const titleYOff = part.titleYOffset ? evalAttr(part.titleYOffset, env) : 0;
     const arcBottomY = Math.sin(arcDrawEnd) * radius + 2 - titleYOff;
     ctx.fillText(labelText, 0, arcBottomY);
+
+    ctx.restore();
+}
+
+/**
+ * Draw city name labels and 24-hour numbers/dots on each subdial for Gaia.
+ * This replaces the legacy imperative rendering in engine-entry.ts with a
+ * declarative approach running in the standard watch renderer pipeline.
+ */
+function drawGaiaSubdial(
+    ctx: CanvasRenderingContext2D,
+    part: WatchPart,
+    env: Environment,
+    images?: Map<string, LoadedImage>,
+): void {
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env); // Negate Y: XML Y-up → Canvas Y-down
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    const sp = part.specialParam !== undefined ? evalAttr(part.specialParam, env) : 0;
+    const slot = part.envSlot !== undefined ? evalAttr(part.envSlot, env) : 0;
+
+    const terraSlots = (env as any)._terraSlots as Record<number, { cityName: string }> | undefined;
+    const slotData = terraSlots ? terraSlots[slot] : undefined;
+    const text = slotData ? slotData.cityName : '';
+
+    // Subdial geometry
+    // sp=0: local (W), sp=1: s1 (N), sp=2: s2 (E), sp=3: s3 (S)
+    const fs = sp === 0 ? 12.5 : 11;
+    const labelR = sp === 0 ? 82.5 : 54.5;
+    const numR = sp === 0 ? 72 : 45;
+    const numFS = sp === 0 ? 9 : 7;
+
+    // --- City name (curved along bottom arc) ---
+    ctx.fillStyle = 'black';
+    ctx.font = `${fs}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+
+    const charWidths: number[] = [];
+    let totalWidth = 0;
+    for (let i = 0; i < text.length; i++) {
+        const w = ctx.measureText(text[i]).width;
+        charWidths.push(w);
+        totalWidth += w;
+    }
+    const cityTotalAngle = totalWidth / labelR;
+    // Bottom half: chars flip π, step counter-clockwise
+    let currentAngle = Math.PI + cityTotalAngle / 2;
+    for (let i = 0; i < text.length; i++) {
+        const charAngle = charWidths[i] / labelR;
+        const midAngle = currentAngle - charAngle / 2;
+        ctx.save();
+        ctx.rotate(midAngle);
+        ctx.translate(0, -labelR + fs / 2);
+        ctx.rotate(Math.PI); // flip for bottom-half readability
+        ctx.fillText(text[i], 0, 0);
+        ctx.restore();
+        currentAngle -= charAngle;
+    }
+
+    // --- 24-hour markers (numbers + dots, matching iOS specialSubdial) ---
+    const cityExclusionHalf = cityTotalAngle / 2 + 10 / labelR;
+
+    // Hardcoded inter-dial occlusion skips (from iOS specialParameter)
+    // sp=0: local/W, sp=1: N, sp=2: E, sp=3: S
+    const skipSet = new Set<number>(
+        sp === 0 ? [15, 16] :
+        sp === 2 ? [9, 10, 11] :
+        sp === 3 ? [8, 9, 10, 13, 14, 15] :
+        [] // sp=1 (N): no skips
+    );
+
+    ctx.font = `${numFS}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 1; i < 24; i++) {
+        // Hardcoded inter-dial skip
+        if (skipSet.has(i)) continue;
+
+        // iOS angle: pointAngle = π * (18 - i) / 12
+        const pointAngle = Math.PI * (18 - i) / 12;
+
+        // City text exclusion: angular distance from bottom (hour 0)
+        const angularDistFromBottom = (i < 12 ? i : (24 - i)) * Math.PI / 12;
+        if (angularDistFromBottom <= cityExclusionHalf) continue;
+
+        if (i % 2 === 1) {
+            // Odd hours: small dot (half-alpha)
+            const dotX = numR * Math.cos(pointAngle);
+            const dotY = -numR * Math.sin(pointAngle); // canvas Y-flip
+            ctx.save();
+            ctx.fillStyle = 'black';
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, 0.5, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.restore();
+        } else {
+            // Even hours: upright number
+            const numX = numR * Math.cos(pointAngle);
+            const numY = -numR * Math.sin(pointAngle); // canvas Y-flip
+            ctx.fillStyle = 'black';
+            ctx.fillText(i.toString(), numX, numY);
+        }
+    }
 
     ctx.restore();
 }

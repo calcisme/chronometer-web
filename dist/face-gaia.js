@@ -173,6 +173,11 @@
 
   </static>
 
+  <!-- Subdial text and number overlays -->
+  <hand  special='specialSubdial' specialParam='3' envSlot='subdial3Slot'    name='s3 deco clear'	    x='s3x' y='s3y'	modes='front'	angle='0' update='updateAtEnvChangeOnly' src='rose-dial104.png' alpha='0' />
+  <hand  special='specialSubdial' specialParam='0' envSlot='subdial0Slot'    name='ls deco clear'	    x='lsx' y='lsy'	modes='front'	angle='0' update='updateAtEnvChangeOnly' src='rose-dial158.png' alpha='0' />
+  <hand  special='specialSubdial' specialParam='2' envSlot='subdial2Slot'    name='s2 deco clear'	    x='s2x' y='s2y'	modes='front'	angle='0' update='updateAtEnvChangeOnly' src='rose-dial104.png' alpha='0' />
+  <hand  special='specialSubdial' specialParam='1' envSlot='subdial1Slot'    name='s1 deco clear'	    x='s1x' y='s1y'	modes='front'	angle='0' update='updateAtEnvChangeOnly' src='rose-dial104.png' alpha='0' />
 
 <!-- rings, suns, and other hands.  Keep all parts for the same env slot together for much better performance -->
 <init expr='hourHack=2*pi/12' />

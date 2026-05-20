@@ -654,7 +654,10 @@
       xMotion: attrExpr(el, "xMotion"),
       yMotion: attrExpr(el, "yMotion"),
       alpha: attrExpr(el, "alpha"),
-      orientation: attr(el, "orientation")
+      orientation: attr(el, "orientation"),
+      special: attr(el, "special"),
+      specialParam: attrExpr(el, "specialParam"),
+      envSlot: attrExpr(el, "envSlot")
     };
   }
   function parseWheel(el, variant) {
@@ -719,7 +722,10 @@
       modes: attr(el, "modes"),
       src: attr(el, "src"),
       alpha: attrExpr(el, "alpha"),
-      scale: attrExpr(el, "scale")
+      scale: attrExpr(el, "scale"),
+      special: attr(el, "special"),
+      specialParam: attrExpr(el, "specialParam"),
+      envSlot: attrExpr(el, "envSlot")
     };
   }
   function parseButton(el) {
@@ -14993,9 +14999,11 @@
           drawWindowBorder(ctx, win, env);
         }
         pendingWindows.length = 0;
-        if (part.name === "worldtime ring") {
+        if (part.special === "specialWorldtime") {
           drawTerraRingWithKnockouts(ctx, part, env, images);
           drawTerraChannelLines(ctx, part, env);
+        } else if (part.special === "specialSubdial") {
+          drawGaiaSubdial(ctx, part, env, images);
         } else if (part.src && images) {
           drawImageHand(ctx, part, env, images);
         } else {
@@ -15029,7 +15037,7 @@
       } else {
         drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
       }
-      if (part.name === "decoration") {
+      if (part.special === "specialDotsMap") {
         drawTerraCityDots(ctx, env);
       }
     }
@@ -15040,7 +15048,12 @@
   function drawQHandsInParts(ctx, parts, env, images) {
     for (const part of parts) {
       if (part.type === "QHand") {
-        if (part.src && images) {
+        if (part.special === "specialWorldtime") {
+          drawTerraRingWithKnockouts(ctx, part, env, images);
+          drawTerraChannelLines(ctx, part, env);
+        } else if (part.special === "specialSubdial") {
+          drawGaiaSubdial(ctx, part, env, images);
+        } else if (part.src && images) {
           drawImageHand(ctx, part, env, images);
         } else {
           drawQHand(ctx, part, env);
@@ -17076,6 +17089,76 @@
     ctx.fillText(labelText, 0, arcBottomY);
     ctx.restore();
   }
+  function drawGaiaSubdial(ctx, part, env, images) {
+    const x = evalAttr(part.x, env);
+    const y = -evalAttr(part.y, env);
+    ctx.save();
+    ctx.translate(x, y);
+    const sp = part.specialParam !== void 0 ? evalAttr(part.specialParam, env) : 0;
+    const slot = part.envSlot !== void 0 ? evalAttr(part.envSlot, env) : 0;
+    const terraSlots = env._terraSlots;
+    const slotData = terraSlots ? terraSlots[slot] : void 0;
+    const text = slotData ? slotData.cityName : "";
+    const fs = sp === 0 ? 12.5 : 11;
+    const labelR = sp === 0 ? 82.5 : 54.5;
+    const numR = sp === 0 ? 72 : 45;
+    const numFS = sp === 0 ? 9 : 7;
+    ctx.fillStyle = "black";
+    ctx.font = `${fs}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    const charWidths = [];
+    let totalWidth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const w = ctx.measureText(text[i]).width;
+      charWidths.push(w);
+      totalWidth += w;
+    }
+    const cityTotalAngle = totalWidth / labelR;
+    let currentAngle = Math.PI + cityTotalAngle / 2;
+    for (let i = 0; i < text.length; i++) {
+      const charAngle = charWidths[i] / labelR;
+      const midAngle = currentAngle - charAngle / 2;
+      ctx.save();
+      ctx.rotate(midAngle);
+      ctx.translate(0, -labelR + fs / 2);
+      ctx.rotate(Math.PI);
+      ctx.fillText(text[i], 0, 0);
+      ctx.restore();
+      currentAngle -= charAngle;
+    }
+    const cityExclusionHalf = cityTotalAngle / 2 + 10 / labelR;
+    const skipSet = new Set(
+      sp === 0 ? [15, 16] : sp === 2 ? [9, 10, 11] : sp === 3 ? [8, 9, 10, 13, 14, 15] : []
+      // sp=1 (N): no skips
+    );
+    ctx.font = `${numFS}px Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 1; i < 24; i++) {
+      if (skipSet.has(i)) continue;
+      const pointAngle = Math.PI * (18 - i) / 12;
+      const angularDistFromBottom = (i < 12 ? i : 24 - i) * Math.PI / 12;
+      if (angularDistFromBottom <= cityExclusionHalf) continue;
+      if (i % 2 === 1) {
+        const dotX = numR * Math.cos(pointAngle);
+        const dotY = -numR * Math.sin(pointAngle);
+        ctx.save();
+        ctx.fillStyle = "black";
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 0.5, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        const numX = numR * Math.cos(pointAngle);
+        const numY = -numR * Math.sin(pointAngle);
+        ctx.fillStyle = "black";
+        ctx.fillText(i.toString(), numX, numY);
+      }
+    }
+    ctx.restore();
+  }
 
   // src/time-controller.ts
   var RATE_OPTIONS = [
@@ -18832,86 +18915,6 @@
         }
         const renderStart = performance.now();
         renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves, face.analemmaState);
-        if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
-          const ctx2d = face.ctx;
-          const fw = face.env.variables.get("faceWidth") || 278;
-          ctx2d.save();
-          ctx2d.translate(face.canvas.width / 2, face.canvas.height / 2);
-          const pxPerUnit = face.canvas.width / (fw + 2 * BEZEL_THICKNESS_XML);
-          ctx2d.scale(pxPerUnit, pxPerUnit);
-          const subdials = [
-            { slot: 1, x: -58.5, y: 0, labelR: 82.5, fs: 12.5, numR: 72, numFS: 9, sp: 0 },
-            // local (W)
-            { slot: 2, x: 32.19, y: 77.716, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 1 },
-            // s1 (N)
-            { slot: 3, x: 84.12, y: 0, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 2 },
-            // s2 (E)
-            { slot: 4, x: 32.19, y: -77.72, labelR: 54.5, fs: 11, numR: 45, numFS: 7, sp: 3 }
-            // s3 (S)
-          ];
-          for (const sd of subdials) {
-            const slotData = face.terraSlotOverrides[sd.slot];
-            if (!slotData) continue;
-            const text = slotData.cityName;
-            ctx2d.save();
-            ctx2d.translate(sd.x, -sd.y);
-            ctx2d.fillStyle = "black";
-            ctx2d.font = `${sd.fs}px Arial`;
-            ctx2d.textAlign = "center";
-            ctx2d.textBaseline = "alphabetic";
-            const radius = sd.labelR;
-            const charWidths = [];
-            let totalWidth = 0;
-            for (let i = 0; i < text.length; i++) {
-              const w = ctx2d.measureText(text[i]).width;
-              charWidths.push(w);
-              totalWidth += w;
-            }
-            const cityTotalAngle = totalWidth / radius;
-            let currentAngle = Math.PI + cityTotalAngle / 2;
-            for (let i = 0; i < text.length; i++) {
-              const charAngle = charWidths[i] / radius;
-              const midAngle = currentAngle - charAngle / 2;
-              ctx2d.save();
-              ctx2d.rotate(midAngle);
-              ctx2d.translate(0, -radius + sd.fs / 2);
-              ctx2d.rotate(Math.PI);
-              ctx2d.fillText(text[i], 0, 0);
-              ctx2d.restore();
-              currentAngle -= charAngle;
-            }
-            const cityExclusionHalf = cityTotalAngle / 2 + 10 / radius;
-            const skipSet = new Set(
-              sd.sp === 0 ? [15, 16] : sd.sp === 2 ? [9, 10, 11] : sd.sp === 3 ? [8, 9, 10, 13, 14, 15] : []
-              // sp=1 (N): no skips
-            );
-            ctx2d.font = `${sd.numFS}px Arial`;
-            ctx2d.textAlign = "center";
-            ctx2d.textBaseline = "middle";
-            for (let i = 1; i < 24; i++) {
-              if (skipSet.has(i)) continue;
-              const pointAngle = Math.PI * (18 - i) / 12;
-              const angularDistFromBottom = (i < 12 ? i : 24 - i) * Math.PI / 12;
-              if (angularDistFromBottom <= cityExclusionHalf) continue;
-              if (i % 2 === 1) {
-                const dotX = sd.numR * Math.cos(pointAngle);
-                const dotY = -sd.numR * Math.sin(pointAngle);
-                ctx2d.save();
-                ctx2d.globalAlpha = 0.5;
-                ctx2d.beginPath();
-                ctx2d.arc(dotX, dotY, 0.5, 0, 2 * Math.PI);
-                ctx2d.fill();
-                ctx2d.restore();
-              } else {
-                const numX = sd.numR * Math.cos(pointAngle);
-                const numY = -sd.numR * Math.sin(pointAngle);
-                ctx2d.fillText(i.toString(), numX, numY);
-              }
-            }
-            ctx2d.restore();
-          }
-          ctx2d.restore();
-        }
         renderMs += performance.now() - renderStart;
         const ringAnimating = face.watch.parts.some(
           (p) => p.type === "QDayNightRing" && (p._masterOffsetAnim?.animating || p._wedgeSlides?.some((s) => s.animating) || p._wedgeAngleAnims?.some((a) => a.animating))

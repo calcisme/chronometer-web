@@ -339,6 +339,9 @@ function parseQHand(el: Element): QHandPart {
         yMotion: attrExpr(el, 'yMotion'),
         alpha: attrExpr(el, 'alpha'),
         orientation: attr(el, 'orientation'),
+        special: attr(el, 'special'),
+        specialParam: attrExpr(el, 'specialParam'),
+        envSlot: attrExpr(el, 'envSlot'),
     };
 }
 
@@ -407,6 +410,9 @@ function parseImage(el: Element): ImagePart {
         src: attr(el, 'src'),
         alpha: attrExpr(el, 'alpha'),
         scale: attrExpr(el, 'scale'),
+        special: attr(el, 'special'),
+        specialParam: attrExpr(el, 'specialParam'),
+        envSlot: attrExpr(el, 'envSlot'),
     };
 }
 
