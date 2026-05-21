@@ -2946,6 +2946,18 @@ async function main() {
         });
     }
 
+    // --- Fullscreen toggle button ---
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+    }
+
 
     // =========================================================================
     // Time bar clock — update at the top of each second
@@ -3983,7 +3995,7 @@ async function main() {
     if (isEmbedMode) {
         const removeIds = [
             'location-panel', 'time-bar', 'back-link', 'all-faces-link',
-            'selected-faces-link', 'info-btn', 'face-name', 'time-popover',
+            'selected-faces-link', 'info-btn', 'fullscreen-btn', 'face-name', 'time-popover',
             'location-prompt', 'planet-selector', 'vienna-noon-toggle',
             'kyoto-hand-toggle', 'kyoto-mode-toggle',
             'change-cities-btn', 'edit-picks-link', 'info-overlay',

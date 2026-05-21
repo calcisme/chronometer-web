@@ -20490,6 +20490,16 @@
         }
       });
     }
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener("click", () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          document.documentElement.requestFullscreen();
+        }
+      });
+    }
     function tickTimeBarClock() {
       if (timeController.isRealTime) {
         timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
@@ -21319,6 +21329,7 @@
         "all-faces-link",
         "selected-faces-link",
         "info-btn",
+        "fullscreen-btn",
         "face-name",
         "time-popover",
         "location-prompt",
