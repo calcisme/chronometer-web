@@ -21,7 +21,21 @@ Colors can be: named (`black`, `white`, `clear`, `red`, etc.), hex `0xAARRGGBB` 
 
 ---
 
+## Common Part Attributes
+
+Most watch parts (such as dials, hands, wheels, text, images, windows, etc.) support a set of common attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `name` | string | Unique identifier for the part. |
+| `refName` | string | Alternative identifier; parsed as `name` if `name` is omitted. |
+| `x`, `y` | expr | Position offset in XML units (origin `0,0` is at the center of the watch face). Note that Y is upward. Defaults to 0. |
+| `modes` | string | Mode filter indicating when the part is visible (e.g., `'front'`, `'back'`, `'front\|back'`, or `'all'`). Defaults to `'front'` if omitted. |
+
+---
+
 ## `<watch>` — Root Element
+
 
 ```xml
 <watch name='Haleakala I' beatsPerSecond='1' faceWidth='266' bezelColor='rgb(218,201,162)'>
@@ -29,7 +43,9 @@ Colors can be: named (`black`, `white`, `clear`, `red`, etc.), hex `0xAARRGGBB` 
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `name` | string | Display name of the watch face |
+| `name` | string | Internal name of the watch face |
+| `displayName` | string | **[Build-Time Required]** User-facing display name of the watch face (e.g. `Haleakalā`), used in selectors and index lists |
+| `description` | string | **[Build-Time Required]** Short user-facing description of the watch face's features and layout |
 | `faceWidth` | number | Diameter of the face in XML units. Determines the coordinate scale |
 | `beatsPerSecond` | string | Tick frequency for the second hand (1 = once/sec, 4 = quartz sweep) |
 | `bezelColor` | color | CSS color for the surrounding bezel ring. Empty = no bezel |
@@ -41,6 +57,7 @@ Colors can be: named (`black`, `white`, `clear`, `red`, etc.), hex `0xAARRGGBB` 
 | `numEnvironments` | number | Number of environment slots (for multi-city faces) |
 | `maxSeparateLoc` | number | Max distinct location slots |
 | `calendarWeekStart` | `'1'` | Babylon-style calendar grid |
+| `urlAbbrev` | string | Two-letter URL abbreviation for compact parameter encoding |
 
 ---
 
@@ -61,17 +78,18 @@ Init blocks run in document order. Later blocks can reference variables from ear
 ## `<static>` — Container for Cached Parts
 
 ```xml
-<static name='front' modes='front'>
+<static name='front' x='0' y='0' modes='front'>
     <Image name='face' src='face.png' />
     <QDial name='main dial' ... />
 </static>
 ```
 
-Groups parts that are pre-rendered once to an OffscreenCanvas and blitted per-frame. Window cutouts are applied to the entire block.
+Groups parts that are pre-rendered once to an OffscreenCanvas and blitted per-frame. Window cutouts are applied to the entire block. Supports common attributes including `x`, `y` offsets.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `name` | string | Identifier |
+| `x`, `y` | expr | Center offset in XML units |
 | `modes` | enum | Mode filter (see [Modes](#modes)) |
 
 Children can be any part type. Nesting `<static>` blocks is not supported.
@@ -235,6 +253,7 @@ For `tri` and `rect` hands, an ornament (arrowhead/diamond) can be overlaid at t
 | `yAnchor` | expr | Y offset of rotation pivot (from bottom, iOS convention) |
 | `offsetRadius` | expr | Polar orbit radius (places hand at a distance from center) |
 | `offsetAngle` | expr | Polar orbit angle |
+| `alpha` | expr | Opacity (0–1). Default 1 |
 
 ### Spoke Type (Text Labels)
 
@@ -245,6 +264,7 @@ For `tri` and `rect` hands, an ornament (arrowhead/diamond) can be overlaid at t
 | `fontName` | string | Font family |
 | `offsetRadius` | expr | Distance from pivot to text position |
 | `offsetAngle` | expr | Angular position of text |
+| `orientation` | string | Text orientation; `'radial'` to orient text radially (bottom towards center), otherwise stays upright |
 
 ### Sun Type
 
@@ -270,6 +290,16 @@ For `tri` and `rect` hands, an ornament (arrowhead/diamond) can be overlaid at t
 |-----------|------|-------------|
 | `xMotion` | expr | Horizontal translation (for sliding parts like Babylon day wires) |
 | `yMotion` | expr | Vertical translation |
+
+### Special Custom Hand Features (Terra & Gaia World Clock)
+
+Hands can define custom drawing behaviors for world-clock subdials and maps:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `special` | string | Special drawing mode. Value can be `'specialWorldtime'` (Terra world-time ring with city knockouts and channel lines) or `'specialSubdial'` (Gaia world clock subdials). |
+| `specialParam` | expr | Parameter for special modes (e.g., Gaia subdial ID 0–3: 0=Local, 1=N, 2=E, 3=S). |
+| `envSlot` | expr | Environment slot containing the location/timezone data (e.g. `'subdial0Slot'`). |
 
 ---
 
@@ -375,6 +405,9 @@ Displays text labels arranged around a circle, rotated to show the current value
 | `src` | string | Image filename (resolved from the face's asset directory or parts-bin) |
 | `alpha` | expr | Opacity (0–1). Default 1 |
 | `scale` | expr | Render scale multiplier (e.g., `0.25` for 4x assets) |
+| `special` | string | Special drawing mode, e.g., `'specialDotsMap'` to draw Terra city dots |
+| `specialParam` | expr | Parameter for special modes |
+| `envSlot` | expr | Environment slot containing the location/timezone data |
 
 ---
 
@@ -472,6 +505,10 @@ Colored wedges showing daylight hours on a 24-hour dial. Computes sunrise/sunset
 | `update` | expr | Recomputation interval |
 | `timeBase` | string | `'LST'` for Local Sidereal Time; omitted for local time |
 | `envSlot` | expr | Environment slot number (routes astronomy to that slot's location) |
+| `sunsetAngle` | expr | Optional override: raw sunset angle expression (used for Kyoto) |
+| `sunriseAngle` | expr | Optional override: raw sunrise angle expression (used for Kyoto) |
+| `slideDistance` | expr | Wadokei slide: distance (px) to translate hidden wedges inward (used for Kyoto) |
+| `slideAnimSpeed` | expr | Wadokei slide: animation speed multiplier (used for Kyoto) |
 
 Wedge angles are cached in a **bidirectional display-time window** (`[_cacheStart, _cacheNextUpdate]`) keyed on `env.getNow()`. The cache expires when display time moves past either bound — forward (normal play) or backward (reverse animation/scrubbing). The cache is also force-invalidated via `invalidateDayNightCaches()` on environment changes.
 
@@ -569,6 +606,9 @@ A procedurally rendered subdial showing the [Equation of Time](https://en.wikipe
 | `strokeColor` | color-expr | Color for ticks, labels, and arc |
 | `fontSize` | expr | Base font size for tick labels and +/− symbols |
 | `titleFontSize` | expr | Font size for the title label (default: `fontSize × 3`) |
+| `arcSpan` | expr | Total arc span in radians (default: `7*pi/6` ≈ 210°) |
+| `labelText` | string | Title label text (default: `'Equation of Time'`) |
+| `titleYOffset` | expr | Y offset for the title label in XML units (positive is upward) |
 
 ### Rendering Details
 
