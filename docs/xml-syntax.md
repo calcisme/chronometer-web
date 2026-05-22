@@ -50,14 +50,17 @@ Most watch parts (such as dials, hands, wheels, text, images, windows, etc.) sup
 | `beatsPerSecond` | string | Tick frequency for the second hand (1 = once/sec, 4 = quartz sweep) |
 | `bezelColor` | color | CSS color for the surrounding bezel ring. Empty = no bezel |
 | `bezelNoonMark` | `'true'` | If present, draws a fine noon-indicator line at bezel top |
-| `worldTimeRing` | `'1'` | Terra-style 24-city ring around the dial |
-| `worldTimeSubdials` | `'1'` | Gaia-style separate subdials for cities |
-| `planetSelector` | `'1'` | Venezia-style user-switchable planet display |
-| `wadokei` | `'1'` | Kyoto-style Japanese temporal hour face with hand/rate mode toggles |
+| `worldTimeRing` | `'1'` | Enables supporting controller/environment logic for a Terra-style 24-city ring. Does not render the ring itself |
+| `worldTimeSubdials` | `'1'` | Enables supporting controller/environment logic for Gaia-style separate subdials. Does not render the subdials |
+| `planetSelector` | `'1'` | Enables/shows the Venezia-style user-switchable planet selector UI. Does not render the dials/planets |
+| `wadokei` | `'1'` | Enables Kyoto-style temporal hour toggles and environment rate calculations. Does not render the Wadokei face components |
 | `numEnvironments` | number | Number of environment slots (for multi-city faces) |
 | `maxSeparateLoc` | number | Max distinct location slots |
 | `calendarWeekStart` | `'1'` | Babylon-style calendar grid |
 | `urlAbbrev` | string | Two-letter URL abbreviation for compact parameter encoding |
+
+> [!IMPORTANT]
+> **Feature Flag Attributes** (such as `worldTimeRing`, `worldTimeSubdials`, `planetSelector`, and `wadokei`) do not procedurally generate or render the visual elements themselves. They act as declarative flags that instruct the Chronometer engine to initialize required background states, show corresponding UI controls (such as the planet/wadokei mode toggle panels), and enable specific environment variables or calculations. The actual rendering of dials, hands, text, or maps for these features must still be defined by appropriate elements (like `<QDial>`, `<QHand>`, and `<Image>`) within the rest of the XML document.
 
 ---
 
