@@ -13,30 +13,7 @@
 // Face registry
 // ============================================================================
 
-interface FaceInfo {
-    slug: string;
-    name: string;
-    thumb: string;
-    abbrev: string;
-}
-
-const FACES: FaceInfo[] = [
-    { slug: 'babylon',    name: 'Babylon',    thumb: 'thumb-babylon.png',    abbrev: 'bb' },
-    { slug: 'mauna-kea',  name: 'Mauna Kea',  thumb: 'thumb-mauna-kea.png',  abbrev: 'mk' },
-    { slug: 'haleakala',  name: 'Haleakalā',  thumb: 'thumb-haleakala.png',  abbrev: 'hk' },
-    { slug: 'hana',       name: 'Hana',        thumb: 'thumb-hana.png',       abbrev: 'hn' },
-    { slug: 'chandra',    name: 'Chandra',     thumb: 'thumb-chandra.png',    abbrev: 'ch' },
-    { slug: 'selene',     name: 'Selene',      thumb: 'thumb-selene.png',     abbrev: 'sl' },
-    { slug: 'geneva',     name: 'Geneva',      thumb: 'thumb-geneva.png',     abbrev: 'gn' },
-    { slug: 'basel',      name: 'Basel',       thumb: 'thumb-basel.png',      abbrev: 'bs' },
-    { slug: 'firenze',    name: 'Firenze',     thumb: 'thumb-firenze.png',    abbrev: 'fi' },
-    { slug: 'venezia',    name: 'Venezia',     thumb: 'thumb-venezia.png',    abbrev: 'vz' },
-    { slug: 'terra',      name: 'Terra',       thumb: 'thumb-terra.png',      abbrev: 'tr' },
-    { slug: 'miami',      name: 'Miami',       thumb: 'thumb-miami.png',      abbrev: 'mi' },
-    { slug: 'gaia',       name: 'Gaia',        thumb: 'thumb-gaia.png',       abbrev: 'ga' },
-    { slug: 'vienna',     name: 'Vienna',      thumb: 'thumb-vienna.png',     abbrev: 'vi' },
-    { slug: 'kyoto',      name: 'Kyoto',       thumb: 'thumb-kyoto.png',      abbrev: 'ky' },
-];
+import { FACES } from './faces/generated/faces-list.js';
 
 const faceByAbbrev = new Map(FACES.map(f => [f.abbrev, f]));
 

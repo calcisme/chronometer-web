@@ -9,7 +9,7 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Basel I' urlAbbrev='bs' beatsPerSecond='10' faceWidth='275' statusBarLoc='bottom' bezelColor='rgb(200,195,180)'>
+<watch name='Basel I' urlAbbrev='bs' beatsPerSecond='10' faceWidth='275' statusBarLoc='bottom' bezelColor='rgb(200,195,180)' displayName="Basel" description="Sidereal time with zodiac dial and eclipse indicator">
   <atlas frontWidth='1024' frontHeight='512' backWidth='64' backHeight='64' nightWidth='1024' nightHeight='512'/>
   <init expr='faceWidth=275, backerWidth=faceWidth' />
 

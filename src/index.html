@@ -416,97 +416,7 @@
         </p>
       </a>
 
-      <a class="face-card" href="babylon.html">
-        <img class="thumb" src="thumb-babylon.png" alt="Babylon" />
-        <h2>Babylon</h2>
-        <p class="desc">Grid calendar with month and year</p>
-      </a>
-
-      <a class="face-card" href="mauna-kea.html">
-        <img class="thumb" src="thumb-mauna-kea.png" alt="Mauna Kea" />
-        <h2>Mauna Kea</h2>
-        <p class="desc">24-hour twilight ring with EOT</p>
-      </a>
-
-      <a class="face-card" href="haleakala.html">
-        <img class="thumb" src="thumb-haleakala.png" alt="Haleakalā" />
-        <h2>Haleakalā</h2>
-        <p class="desc">Sunrise &amp; sunset times with alt/az</p>
-      </a>
-
-      <a class="face-card" href="hana.html">
-        <img class="thumb" src="thumb-hana.png" alt="Hana" />
-        <h2>Hana</h2>
-        <p class="desc">Moonrise &amp; moonset times, phase, and alt/az</p>
-      </a>
-
-      <a class="face-card" href="chandra.html">
-        <img class="thumb" src="thumb-chandra.png" alt="Chandra" />
-        <h2>Chandra</h2>
-        <p class="desc">Giant moonphase with alt/az dots</p>
-      </a>
-
-      <a class="face-card" href="selene.html">
-        <img class="thumb" src="thumb-selene.png" alt="Selene" />
-        <h2>Selene</h2>
-        <p class="desc">All about the moon</p>
-      </a>
-
-      <a class="face-card" href="geneva.html">
-        <img class="thumb" src="thumb-geneva.png" alt="Geneva" />
-        <h2>Geneva</h2>
-        <p class="desc">
-          Date ring, moon phase, rise/set times, year &amp; century
-        </p>
-      </a>
-
-      <a class="face-card" href="basel.html">
-        <img class="thumb" src="thumb-basel.png" alt="Basel" />
-        <h2>Basel</h2>
-        <p class="desc">Sidereal time with zodiac dial and eclipse indicator</p>
-      </a>
-
-      <a class="face-card" href="firenze.html">
-        <img class="thumb" src="thumb-firenze.png" alt="Firenze" />
-        <h2>Firenze</h2>
-        <p class="desc">Planetary positions</p>
-      </a>
-
-      <a class="face-card" href="venezia.html">
-        <img class="thumb" src="thumb-venezia.png" alt="Venezia" />
-        <h2>Venezia</h2>
-        <p class="desc">Planetary almanac with rise/transit/set</p>
-      </a>
-
-      <a class="face-card" href="terra.html">
-        <img class="thumb" src="thumb-terra.png" alt="Terra" />
-        <h2>Terra</h2>
-        <p class="desc">World-time ring</p>
-      </a>
-
-      <a class="face-card" href="miami.html">
-        <img class="thumb" src="thumb-miami.png" alt="Miami" />
-        <h2>Miami</h2>
-        <p class="desc">What planets are up now</p>
-      </a>
-
-      <a class="face-card" href="gaia.html">
-        <img class="thumb" src="thumb-gaia.png" alt="Gaia" />
-        <h2>Gaia</h2>
-        <p class="desc">World clock with four city subdials</p>
-      </a>
-
-      <a class="face-card" href="vienna.html">
-        <img class="thumb" src="thumb-vienna.png" alt="Vienna" />
-        <h2>Vienna</h2>
-        <p class="desc">Analemma, equation of time, and day/night rings</p>
-      </a>
-
-      <a class="face-card" href="kyoto.html">
-        <img class="thumb" src="thumb-kyoto.png" alt="Kyoto" />
-        <h2>Kyoto</h2>
-        <p class="desc">Traditional Japanese Wadokei clock</p>
-      </a>
+      {{FACE_CARDS}}
     </div>
 
     {{LOCATION_DIALOG}}
@@ -554,24 +464,7 @@
               a.setAttribute("target", "_blank");
               a.setAttribute("rel", "noopener");
             });
-            // Reorder to match index page face card order
-            const indexOrder = [
-              "babylon",
-              "mauna-kea",
-              "haleakala",
-              "hana",
-              "chandra",
-              "selene",
-              "geneva",
-              "basel",
-              "firenze",
-              "venezia",
-              "terra",
-              "miami",
-              "gaia",
-              "vienna",
-              "kyoto",
-            ];
+            const indexOrder = {{INDEX_ORDER}};
             const byFace = new Map();
             helpDiv
               .querySelectorAll(".face-help-section[data-face]")

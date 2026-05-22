@@ -5,12 +5,13 @@
  * browser-based face-*.ts entry points (which require Vite imports).
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ASSETS_DIR = join(__dirname, '..', 'watch', 'assets');
+const FACES_TXT_PATH = join(__dirname, '..', '..', 'faces.txt');
 
 // ============================================================================
 // Face metadata
@@ -25,26 +26,45 @@ export interface FaceConfig {
     beatsPerSecond: number;
 }
 
+function slugToKey(slug: string): string {
+    return slug
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
 /**
- * All 14 faces with their XML paths and bps values.
- * The bps values must match the `beatsPerSecond` attribute in each XML.
+ * Dynamically constructed face registry based on active faces.
  */
-export const FACE_CONFIGS: Record<string, FaceConfig> = {
-    'Babylon':   { name: 'Babylon',   xmlPath: 'babylon/Babylon-I.xml',             beatsPerSecond: 1 },
-    'Basel':     { name: 'Basel',     xmlPath: 'basel/Basel-I.xml',                  beatsPerSecond: 10 },
-    'Chandra':   { name: 'Chandra',   xmlPath: 'chandra/Chandra-I-android.xml',      beatsPerSecond: 0 },
-    'Firenze':   { name: 'Firenze',   xmlPath: 'firenze/Firenze-I.xml',              beatsPerSecond: 0 },
-    'Gaia':      { name: 'Gaia',      xmlPath: 'gaia/Gaia-I.xml',                    beatsPerSecond: 8 },
-    'Geneva':    { name: 'Geneva',    xmlPath: 'geneva/Geneva-I.xml',                beatsPerSecond: 10 },
-    'Haleakala': { name: 'Haleakala', xmlPath: 'haleakala/Haleakala-android.xml',    beatsPerSecond: 1 },
-    'Hana':      { name: 'Hana',      xmlPath: 'hana/Hana-I-android.xml',            beatsPerSecond: 1 },
-    'Mauna Kea': { name: 'Mauna Kea', xmlPath: 'mauna-kea/MaunaKea-I.xml',          beatsPerSecond: 10 },
-    'Miami':     { name: 'Miami',     xmlPath: 'miami/Miami-I.xml',                  beatsPerSecond: 0 },
-    'Selene':    { name: 'Selene',    xmlPath: 'selene/Selene-I.xml',                beatsPerSecond: 0 },
-    'Terra':     { name: 'Terra',     xmlPath: 'terra/Terra-I.xml',                  beatsPerSecond: 8 },
-    'Venezia':   { name: 'Venezia',   xmlPath: 'venezia/Venezia-I.xml',              beatsPerSecond: 0 },
-    'Vienna':    { name: 'Vienna',    xmlPath: 'vienna/Vienna-I.xml',                beatsPerSecond: 8 },
-};
+export const FACE_CONFIGS: Record<string, FaceConfig> = {};
+
+if (existsSync(FACES_TXT_PATH)) {
+    const slugs = readFileSync(FACES_TXT_PATH, 'utf8')
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'));
+
+    for (const slug of slugs) {
+        const slugDir = join(ASSETS_DIR, slug);
+        if (!existsSync(slugDir)) continue;
+        const xmlFiles = readdirSync(slugDir).filter(f => f.endsWith('.xml'));
+        if (xmlFiles.length !== 1) continue;
+        const xmlFile = xmlFiles[0];
+        const xmlRelativePath = `${slug}/${xmlFile}`;
+        const xmlText = readFileSync(join(ASSETS_DIR, xmlRelativePath), 'utf8');
+
+        // Extract beatsPerSecond with a fast regexp
+        const bpsMatch = xmlText.match(/beatsPerSecond=['"]([^'"]+)['"]/);
+        const beatsPerSecond = bpsMatch ? parseInt(bpsMatch[1], 10) : 1;
+
+        const nameKey = slugToKey(slug);
+        FACE_CONFIGS[nameKey] = {
+            name: nameKey,
+            xmlPath: xmlRelativePath,
+            beatsPerSecond
+        };
+    }
+}
 
 // ============================================================================
 // Test locations

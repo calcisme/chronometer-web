@@ -10,3 +10,4 @@ scripts/geonames-data/*.zip
 src/cities-data.js
 # Test snapshots (regenerate with: CAPTURE=1 npm test)
 src/__tests__/snapshots/
+src/faces/generated/

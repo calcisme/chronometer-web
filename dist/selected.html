@@ -623,6 +623,8 @@
       #fullscreen-btn .fs-compress { display: none; }
       :fullscreen #fullscreen-btn .fs-expand { display: none; }
       :fullscreen #fullscreen-btn .fs-compress { display: block; }
+      :-webkit-full-screen #fullscreen-btn .fs-expand { display: none; }
+      :-webkit-full-screen #fullscreen-btn .fs-compress { display: block; }
 
       #face-name {
           position: absolute;
@@ -1697,7 +1699,7 @@
               <div id="help-content">
                 <!-- Populated from help-template on first info click -->
               </div>
-              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.22</div>
+              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.32</div>
             </div>
 
             <div id="info-sub-view">
@@ -1891,7 +1893,165 @@
 
 <hr />
  </template>
-      <template id="help-template"> <details class="face-help-section" data-face="haleakala"><summary>Haleakalā</summary>
+      <template id="help-template"> <details class="face-help-section" data-face="babylon"><summary>Babylon</summary>
+<b>Babylon</b> takes its name from the ancient city of
+<a href="http://en.m.wikipedia.org/wiki/Babylon"
+  >Babylon<img src="help/images/extlink.png" /></a
+>, where early calendars were invented.
+
+<p>
+  Babylon displays a whole-month calendar in the usual format, including the
+  last days of the previous month and the first days of the following month. See
+  <a href="#mechanical">below</a> for a description of the mechanics being
+  simulated.
+</p>
+
+<p>
+  Two sets of red indicator wires (two horizontal and two vertical) move
+  linearly to indicate the current day of the month (more precisely, the two
+  horizontal indicators show the week, the two vertical ones show the weekday,
+  and their intersection shows the current day).
+</p>
+
+<p>
+  A moon phase indicator like that of
+  <a href="chandra.html">Chandra</a> is present at the lower left, along with a
+  month display at the top and a year display at the lower right.
+</p>
+
+<p>
+  <a name="mechanical"><b>Mechanical model</b></a>
+</p>
+
+<p>
+  The calendar display is implemented with stacked wheels which rotate to show
+  the configuration for the current month in the window at the top of the dial.
+  There are two primary wheels:
+</p>
+
+<p>
+  <center>
+    <img src="help/images/babylon/SundayWheel012@2x.png" width="240" />
+    <img src="help/images/babylon/SundayWheel3456@2x.png" width="239" />
+  </center>
+</p>
+
+<p>
+  Spread over these two wheels are the seven possible 31-day month
+  configurations, corresponding to the seven weekdays that the first falls on.
+  The bottom wheel shows four of these seven, and the top one shows the
+  remaining three and has a "cutout" in the fourth position. When one of the top
+  wheel's configurations is needed for the current month, that configuration
+  rotates around to be at the top and thus visible in the window; when one of
+  the bottom wheel's configurations is needed, the top wheel rotates so its
+  cutout section is at the top, letting the bottom wheel show through.
+</p>
+
+<p>
+  Since all of the configurations on the primary wheels display 31-day months,
+  covers slide in from the right to cover days which don't exist in the current
+  month (for example, as shown below, the missing days 30 and 31 in a leap-year
+  February). These covers are inscribed with the days of the following month,
+  and their numbers align with the correct days of the week:
+</p>
+
+<p>
+  <center>
+    <img src="help/images/babylon/NextMonthCovers@2x.png" width="110" />
+  </center>
+</p>
+
+<p>
+  Similarly, the last few days of the previous month are shown with sliders that
+  slide underneath the current month, sliding to show the days in their proper
+  weekday positions:
+</p>
+
+<p>
+  <center>
+    <img src="help/images/babylon/PrevMonthUnderlays@2x.png" width="106" />
+  </center>
+</p>
+</details>
+<details class="face-help-section" data-face="mauna-kea"><summary>Mauna Kea</summary>
+<b>Mauna Kea</b> (the site of several of the world's largest telescopes)
+displays a variety of astronomical information.
+<p>
+  <img src="help/images/mauna_kea/mk-dawn.png" align="left" /> On Mauna Kea the
+  outer ring is a 24-hour dial which rotates so that the time of local solar
+  noon ("<a href="http://solar.physics.montana.edu/tslater/plunger/time_sun.htm"
+    >local apparent noon"<img src="help/images/extlink.png" /></a
+  >) is at the top. The Sun indicator shows the local 24-hour time (04:30 in
+  this example). The outer ring's background is divided into day and night
+  sections with twilight in between. These regions move according to the season
+  and the watch's latitude. The straight edges of the yellow semi-circles mark
+  the exact times of sunrise and sunset (05:53 in the example at left). When
+  there is no sunrise or sunset (at high latitudes) they disappear behind a
+  cover. Also on the outer dial is a green triangle indicating the current
+  <a
+    href="http://en.m.wikipedia.org/wiki/Coordinated_Universal_Time"
+    target="_top"
+    >UTC<img src="help/images/extlink.png"
+  /></a>
+  time.
+</p>
+
+<p>
+  The next ring in is marked with the constellations of the zodiac. It rotates
+  so that the constellation currently transiting the meridian (i.e., due south
+  for northern observers) is at the 12 o'clock position on the face (between
+  Gemini and Taurus in the example at right).
+  <img src="help/images/mauna_kea/mk-zod.png" align="right" />
+  The Sun indicator also shows the position of the Sun in the sky relative to
+  the zodiac. Another way of saying this is that the zodiac dial rotates once
+  per
+  <a href="http://en.m.wikipedia.org/wiki/Sidereal_day" target="_top"
+    >sidereal<img src="help/images/extlink.png"
+  /></a>
+  day; its numbers represent local apparent sidereal time (approximately, for
+  times within a few centuries of the present). The Moon indicator shows the
+  position of the Moon with respect to the zodiac and the Sun (but it is not
+  related to the time dials).
+</p>
+
+<p>
+  Note that the positions of the constellations are (approximately)
+  astronomically correct for the present era and do NOT correspond to the
+  "signs" of Western astrology. (The Western division of the sky into
+  constellations is at least 2500 years old; for most of that time astronomy and
+  astrology were the same thing. Though in modern times an astronomer will
+  cringe at being called an astrologer, much of the ancient terminology remains
+  in use in science.)
+</p>
+
+<p>
+  <img src="help/images/mauna_kea/mk-eot.png" align="left" />
+  The small half-dial at 12 o'clock shows the "Equation of Time". Though you
+  might think from the name that this is the Holy Grail of 21st-century physics,
+  it is actually just the difference between clock time and
+  <a href="http://tf.nist.gov/general/enc-s.htm#solartime"
+    >apparent solar time<img src="help/images/extlink.png"
+  /></a>
+  (or sundial time) for the standard meridian of the local time zone. The arc
+  spans the actual range of the Equation of Time, from −14.2 to +16.5 minutes.
+  It varies over the year because the Earth does not move at a constant angular
+  velocity around the Sun; positive means the sundial is ahead. This was indeed
+  of critical importance to mariners before the days of electronic navigation.
+  They could determine their longitude by observing the time of local noon and
+  comparing that to their chronometers. But that comparison requires adding in
+  the Equation of Time; without that correction the calculation could be off by
+  hundreds of miles.
+</p>
+
+<p>
+  The outer dial, with local solar noon at the top, does not always have 12
+  o'clock at the top for several reasons. It moves ahead (counterclockwise) for
+  daylight time. It is offset by the Equation of Time (which can be a quarter of
+  an hour either way). And the distance away from the standard meridian of the
+  time zone can result in a shift of more than an hour in some cases.
+</p>
+</details>
+<details class="face-help-section" data-face="haleakala"><summary>Haleakalā</summary>
 <b>Haleakal&#257;</b>'s two sub-dials show the time of the sunrise and sunset
 for the current day.
 <p>
@@ -2061,84 +2221,6 @@ local horizon. The Moon's image is shown ignoring
   When a nodal marker and the main black hand are both near zero (new moon), a
   solar eclipse is possible. When both near 180 degrees (full moon), a lunar
   eclipse is possible.
-</p>
-</details>
-<details class="face-help-section" data-face="mauna-kea"><summary>Mauna Kea</summary>
-<b>Mauna Kea</b> (the site of several of the world's largest telescopes)
-displays a variety of astronomical information.
-<p>
-  <img src="help/images/mauna_kea/mk-dawn.png" align="left" /> On Mauna Kea the
-  outer ring is a 24-hour dial which rotates so that the time of local solar
-  noon ("<a href="http://solar.physics.montana.edu/tslater/plunger/time_sun.htm"
-    >local apparent noon"<img src="help/images/extlink.png" /></a
-  >) is at the top. The Sun indicator shows the local 24-hour time (04:30 in
-  this example). The outer ring's background is divided into day and night
-  sections with twilight in between. These regions move according to the season
-  and the watch's latitude. The straight edges of the yellow semi-circles mark
-  the exact times of sunrise and sunset (05:53 in the example at left). When
-  there is no sunrise or sunset (at high latitudes) they disappear behind a
-  cover. Also on the outer dial is a green triangle indicating the current
-  <a
-    href="http://en.m.wikipedia.org/wiki/Coordinated_Universal_Time"
-    target="_top"
-    >UTC<img src="help/images/extlink.png"
-  /></a>
-  time.
-</p>
-
-<p>
-  The next ring in is marked with the constellations of the zodiac. It rotates
-  so that the constellation currently transiting the meridian (i.e., due south
-  for northern observers) is at the 12 o'clock position on the face (between
-  Gemini and Taurus in the example at right).
-  <img src="help/images/mauna_kea/mk-zod.png" align="right" />
-  The Sun indicator also shows the position of the Sun in the sky relative to
-  the zodiac. Another way of saying this is that the zodiac dial rotates once
-  per
-  <a href="http://en.m.wikipedia.org/wiki/Sidereal_day" target="_top"
-    >sidereal<img src="help/images/extlink.png"
-  /></a>
-  day; its numbers represent local apparent sidereal time (approximately, for
-  times within a few centuries of the present). The Moon indicator shows the
-  position of the Moon with respect to the zodiac and the Sun (but it is not
-  related to the time dials).
-</p>
-
-<p>
-  Note that the positions of the constellations are (approximately)
-  astronomically correct for the present era and do NOT correspond to the
-  "signs" of Western astrology. (The Western division of the sky into
-  constellations is at least 2500 years old; for most of that time astronomy and
-  astrology were the same thing. Though in modern times an astronomer will
-  cringe at being called an astrologer, much of the ancient terminology remains
-  in use in science.)
-</p>
-
-<p>
-  <img src="help/images/mauna_kea/mk-eot.png" align="left" />
-  The small half-dial at 12 o'clock shows the "Equation of Time". Though you
-  might think from the name that this is the Holy Grail of 21st-century physics,
-  it is actually just the difference between clock time and
-  <a href="http://tf.nist.gov/general/enc-s.htm#solartime"
-    >apparent solar time<img src="help/images/extlink.png"
-  /></a>
-  (or sundial time) for the standard meridian of the local time zone. The arc
-  spans the actual range of the Equation of Time, from −14.2 to +16.5 minutes.
-  It varies over the year because the Earth does not move at a constant angular
-  velocity around the Sun; positive means the sundial is ahead. This was indeed
-  of critical importance to mariners before the days of electronic navigation.
-  They could determine their longitude by observing the time of local noon and
-  comparing that to their chronometers. But that comparison requires adding in
-  the Equation of Time; without that correction the calculation could be off by
-  hundreds of miles.
-</p>
-
-<p>
-  The outer dial, with local solar noon at the top, does not always have 12
-  o'clock at the top for several reasons. It moves ahead (counterclockwise) for
-  daylight time. It is offset by the Equation of Time (which can be a quarter of
-  an hour either way). And the distance away from the standard meridian of the
-  time zone can result in a shift of more than an hour in some cases.
 </p>
 </details>
 <details class="face-help-section" data-face="geneva"><summary>Geneva</summary>
@@ -2764,86 +2846,6 @@ represents daytime) is reproduced on all the rings.
   subdials.
 </p>
 </details>
-<details class="face-help-section" data-face="babylon"><summary>Babylon</summary>
-<b>Babylon</b> takes its name from the ancient city of
-<a href="http://en.m.wikipedia.org/wiki/Babylon"
-  >Babylon<img src="help/images/extlink.png" /></a
->, where early calendars were invented.
-
-<p>
-  Babylon displays a whole-month calendar in the usual format, including the
-  last days of the previous month and the first days of the following month. See
-  <a href="#mechanical">below</a> for a description of the mechanics being
-  simulated.
-</p>
-
-<p>
-  Two sets of red indicator wires (two horizontal and two vertical) move
-  linearly to indicate the current day of the month (more precisely, the two
-  horizontal indicators show the week, the two vertical ones show the weekday,
-  and their intersection shows the current day).
-</p>
-
-<p>
-  A moon phase indicator like that of
-  <a href="chandra.html">Chandra</a> is present at the lower left, along with a
-  month display at the top and a year display at the lower right.
-</p>
-
-<p>
-  <a name="mechanical"><b>Mechanical model</b></a>
-</p>
-
-<p>
-  The calendar display is implemented with stacked wheels which rotate to show
-  the configuration for the current month in the window at the top of the dial.
-  There are two primary wheels:
-</p>
-
-<p>
-  <center>
-    <img src="help/images/babylon/SundayWheel012@2x.png" width="240" />
-    <img src="help/images/babylon/SundayWheel3456@2x.png" width="239" />
-  </center>
-</p>
-
-<p>
-  Spread over these two wheels are the seven possible 31-day month
-  configurations, corresponding to the seven weekdays that the first falls on.
-  The bottom wheel shows four of these seven, and the top one shows the
-  remaining three and has a "cutout" in the fourth position. When one of the top
-  wheel's configurations is needed for the current month, that configuration
-  rotates around to be at the top and thus visible in the window; when one of
-  the bottom wheel's configurations is needed, the top wheel rotates so its
-  cutout section is at the top, letting the bottom wheel show through.
-</p>
-
-<p>
-  Since all of the configurations on the primary wheels display 31-day months,
-  covers slide in from the right to cover days which don't exist in the current
-  month (for example, as shown below, the missing days 30 and 31 in a leap-year
-  February). These covers are inscribed with the days of the following month,
-  and their numbers align with the correct days of the week:
-</p>
-
-<p>
-  <center>
-    <img src="help/images/babylon/NextMonthCovers@2x.png" width="110" />
-  </center>
-</p>
-
-<p>
-  Similarly, the last few days of the previous month are shown with sliders that
-  slide underneath the current month, sliding to show the days in their proper
-  weekday positions:
-</p>
-
-<p>
-  <center>
-    <img src="help/images/babylon/PrevMonthUnderlays@2x.png" width="106" />
-  </center>
-</p>
-</details>
 <details class="face-help-section" data-face="vienna"><summary>Vienna</summary>
 <b>Vienna</b> is a 24-hour astronomical face exploring how the Sun's path
 through the sky changes over the course of the year. Three complications each
@@ -3383,6 +3385,7 @@ of Japan, shows traditional Japanese time like an
       </div>
     </div>
         <script src="chronometer-engine.js"></script>
+    <script src="face-babylon.js"></script>
     <script src="face-mauna-kea.js"></script>
     <script src="face-haleakala.js"></script>
     <script src="face-hana.js"></script>
@@ -3395,7 +3398,6 @@ of Japan, shows traditional Japanese time like an
     <script src="face-terra.js"></script>
     <script src="face-miami.js"></script>
     <script src="face-gaia.js"></script>
-    <script src="face-babylon.js"></script>
     <script src="face-vienna.js"></script>
     <script src="face-kyoto.js"></script>
     <!-- Link preservation now handled by url-state.ts via initNavigationLinks() -->

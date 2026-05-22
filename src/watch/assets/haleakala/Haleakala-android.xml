@@ -10,7 +10,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Haleakala I' urlAbbrev='hk' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(218,201,162)'>
+<watch name='Haleakala I' urlAbbrev='hk' beatsPerSecond='1' faceWidth='266' statusBarLoc='center' bezelColor='rgb(218,201,162)' displayName="Haleakalā" description="Sunrise &amp; sunset times with alt/az">
   <atlas frontWidth='512' frontHeight='512' backWidth='128' backHeight='256' nightWidth='512' nightHeight='512'/>
   <init expr='faceWidth=266, backerWidth=faceWidth' />
 

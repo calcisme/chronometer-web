@@ -49,38 +49,27 @@ The all-faces page (`index.html`) includes all face scripts.
 
 ## Adding a New Face
 
-`build.sh` must be updated in **three places** (plus an optional fourth for help):
+Adding a new watch face requires zero manual changes to the build scripts or templates. The list of active faces is governed entirely by `faces.txt` at the root of the repository, and metadata is declared directly inside the watch XML files.
 
-### 1. `FACES` Variable
+Follow these steps to add a new face:
 
-Add the face basename to the `FACES` array:
-```bash
-FACES=(mauna-kea hana selene geneva miami ...)
-```
+### 1. Register in `faces.txt`
+Add the face's folder/slug name (e.g. `basel-clone`) on a new line in [faces.txt](file:///Users/spucci/chronometer-web/faces.txt). The order of lines in this file determines the display order on the homepage, the picker, and multi-face viewer pages.
 
-### 2. `get_title()` Function
+### 2. Define XML Metadata
+On the root `<watch>` tag of the watch face's XML file, you must define the following attributes:
+- `displayName`: The formatted name displayed on index cards, the picker page, and window titles (e.g., `displayName="Haleakalā"`).
+- `description`: A short description of the face's main features (e.g., `description="Sunrise &amp; sunset times with alt/az"`).
+- `urlAbbrev`: A unique 2-letter abbreviation code (e.g., `urlAbbrev="bs"`).
 
-Map the basename to a display title:
-```bash
-get_title() {
-    case "$1" in
-        mauna-kea) echo "Mauna Kea" ;;
-        hana)      echo "Hana" ;;
-        ...
-    esac
-}
-```
+> [!IMPORTANT]
+> The build process will strictly validate that both `displayName` and `description` are present in the XML. The build will fail if either attribute is missing.
 
-### 3. `ALL_SCRIPTS` Variable
-
-Add the face script to the all-faces page script list:
-```bash
-ALL_SCRIPTS="dist/face-mauna-kea.js dist/face-hana.js ..."
-```
+### 3. Add Thumbnail Image
+Add a thumbnail image for the new face named `thumb-<slug>.png` inside the `src/faces/` directory.
 
 ### 4. Help Content (if applicable)
-
-If the new face has a help file in `src/help/<face>.html`, the `get_help_file()` function will automatically find it by convention (it looks for `src/help/<face-slug>.html`). No explicit mapping is needed — just place the help fragment file with the correct slug name. See [Help System](help-system.md) for details on creating help files.
+If the new face has a help file, place the HTML fragment in `src/help/<slug>.html`. The build system will automatically find and inject it by convention. See [Help System](help-system.md) for details on creating help files.
 
 ## Engine Bundling Implications
 
@@ -156,9 +145,11 @@ npx vitest
 | File | Purpose |
 |------|---------|
 | `build.sh` | Main build script |
+| `faces.txt` | Root configuration file containing active face slug order |
+| `scripts/generate-face-modules.js` | Build-time Node.js script that compiles face TypeScript modules, cards, and manifests |
 | `src/face-template.html` | HTML template for individual face pages |
 | `src/index.html` | All-faces grid page source |
-| `src/faces/face-*.ts` | Per-face registration entry points |
+| `src/faces/generated/` | Output directory for auto-generated face configuration modules (gitignored) |
 | `src/help/*.html` | Per-face help content fragments (injected at build time) |
 | `src/help/images/` | Help content images (copied to `dist/help/images/`) |
 | `version.txt` | Current build version, read and updated by `build.sh` |

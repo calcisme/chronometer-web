@@ -32,6 +32,11 @@ COMMON_FLAGS="--format=iife --target=es2020"
 
 mkdir -p "$DIST"
 
+echo "=== Generating face data modules ==="
+node scripts/generate-face-modules.js
+
+FACES=($(grep -v '^#' faces.txt | grep -v '^$'))
+
 echo "=== Checking URL abbreviation uniqueness ==="
 ABBREVS=$(grep -roh "urlAbbrev='[^']*'" "$SRC"/watch/assets/*//*.xml | sed "s/urlAbbrev='//;s/'//" | sort)
 DUPES=$(echo "$ABBREVS" | uniq -d)
@@ -50,10 +55,9 @@ $ESBUILD "$SRC/engine-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/chronometer-engine.js"
 
 echo "=== Building face data modules ==="
-FACES="haleakala hana chandra selene mauna-kea geneva basel firenze venezia terra miami gaia babylon vienna kyoto"
-for face in $FACES; do
+for face in "${FACES[@]}"; do
   echo "  → face-$face.js"
-  $ESBUILD "$SRC/faces/face-$face.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
+  $ESBUILD "$SRC/faces/generated/face-$face.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
     --outfile="$DIST/face-$face.js"
 done
 
@@ -80,6 +84,16 @@ inject_partials() {
         s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
         while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
         s=$0; sub(/.*\{\{ *LOCATION_CSS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *FACE_CARDS *\}\}/ { 
+        s=$0; sub(/\{\{ *FACE_CARDS *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < "src/faces/generated/face-cards.html") > 0) print line; close("src/faces/generated/face-cards.html");
+        s=$0; sub(/.*\{\{ *FACE_CARDS *\}\}/, "", s); print s; next
+    }
+    /\{\{ *INDEX_ORDER *\}\}/ { 
+        s=$0; sub(/\{\{ *INDEX_ORDER *\}\}.*/, "", s); printf "%s", s;
+        while ((getline line < "src/faces/generated/index-order.json") > 0) printf "%s", line; close("src/faces/generated/index-order.json");
+        s=$0; sub(/.*\{\{ *INDEX_ORDER *\}\}/, "", s); print s; next
     }
     /\{\{ *LOCATION_DIALOG *\}\}/ { 
         s=$0; sub(/\{\{ *LOCATION_DIALOG *\}\}.*/, "", s); printf "%s", s;
@@ -198,23 +212,7 @@ inject_partials_terra() {
 
 # Helper to get display title for each face
 get_title() {
-  case "$1" in
-    haleakala)  echo "Haleakalā" ;;
-    hana)       echo "Hana" ;;
-    chandra)    echo "Chandra" ;;
-    selene)     echo "Selene" ;;
-    mauna-kea)  echo "Mauna Kea" ;;
-    geneva)     echo "Geneva" ;;
-    basel)      echo "Basel" ;;
-    firenze)    echo "Firenze" ;;
-    venezia)    echo "Venezia" ;;
-    terra)      echo "Terra" ;;
-    miami)      echo "Miami" ;;
-    gaia)       echo "Gaia" ;;
-    babylon)    echo "Babylon" ;;
-    vienna)     echo "Vienna" ;;
-    kyoto)      echo "Kyoto" ;;
-  esac
+  node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('./src/faces/generated/metadata.json', 'utf8'))['$1'].displayName)"
 }
 
 # Helper to get help file path for each face
@@ -226,13 +224,15 @@ get_help_file() {
 }
 
 # Per-face HTML
-for face in $FACES; do
+for face in "${FACES[@]}"; do
   TITLE=$(get_title "$face")
   SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
     <script src="face-'"$face"'.js"><\/script>'
   ICON="thumb-${face}.png"
   # Use city-dialog partial injection for faces with city customization
-  if [ "$face" = "terra" ] || [ "$face" = "gaia" ]; then
+  WORLD_TIME_RING=$(node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('./src/faces/generated/metadata.json', 'utf8'))['$face'].worldTimeRing)")
+  WORLD_TIME_SUBDIALS=$(node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('./src/faces/generated/metadata.json', 'utf8'))['$face'].worldTimeSubdials)")
+  if [ -n "$WORLD_TIME_RING" ] || [ -n "$WORLD_TIME_SUBDIALS" ]; then
     INJECTOR=inject_partials_terra
   else
     INJECTOR=inject_partials
@@ -246,27 +246,16 @@ for face in $FACES; do
 done
 
 # all.html / selected.html — loads all faces
-ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>\
-    <script src="face-mauna-kea.js"><\/script>\
-    <script src="face-haleakala.js"><\/script>\
-    <script src="face-hana.js"><\/script>\
-    <script src="face-chandra.js"><\/script>\
-    <script src="face-selene.js"><\/script>\
-    <script src="face-geneva.js"><\/script>\
-    <script src="face-basel.js"><\/script>\
-    <script src="face-firenze.js"><\/script>\
-    <script src="face-venezia.js"><\/script>\
-    <script src="face-terra.js"><\/script>\
-    <script src="face-miami.js"><\/script>\
-    <script src="face-gaia.js"><\/script>\
-    <script src="face-babylon.js"><\/script>\
-    <script src="face-vienna.js"><\/script>\
-    <script src="face-kyoto.js"><\/script>'
+ALL_SCRIPTS='    <script src="chronometer-engine.js"><\/script>'
+for face in "${FACES[@]}"; do
+  ALL_SCRIPTS="${ALL_SCRIPTS}\\
+    <script src=\"face-${face}.js\"><\/script>"
+done
 
 # Generate combined help file for multi-face pages
 COMBINED_HELP="$DIST/.combined-help.html"
 : > "$COMBINED_HELP"
-for face in $FACES; do
+for face in "${FACES[@]}"; do
   HELP_FILE=$(get_help_file "$face")
   if [ -n "$HELP_FILE" ]; then
     TITLE=$(get_title "$face")

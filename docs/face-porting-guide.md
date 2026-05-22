@@ -35,28 +35,27 @@ When the XML uses expression functions not yet in the web app:
 
 Remember that `watch-env.ts` is bundled into `chronometer-engine.js` (the shared engine). Adding new environment functions requires a full `bash build.sh` rebuild.
 
-## 5. Create the Face Registration File
+## 5. Declare XML Metadata & Asset References
 
-Use an existing `src/faces/face-*.ts` file (e.g., `face-geneva.ts`) as a template:
+The web app build process resolves and generates the face registration code dynamically. You must define the required metadata attributes on the root `<watch>` tag of the copy of the XML file:
+- `displayName`: The formatted name of the face (e.g. `displayName="Basel"`).
+- `description`: A short description of the face's main features (e.g. `description="Sidereal time with zodiac dial and eclipse indicator"`).
+- `urlAbbrev`: A unique 2-letter abbreviation code (e.g. `urlAbbrev="bs"`).
 
-```typescript
-import faceXML from '../watch/assets/<name>/<Name>-I.xml';
-import faceImage from '../watch/assets/<name>/faceFront-4x.png';
-// ... more imports
+> [!IMPORTANT]
+> The build will fail if either `displayName` or `description` is missing on the `<watch>` element.
 
-registerFace('<name>', faceXML, {
-    'faceFront': { data: faceImage, scale: 1/4 },
-    // ... more images
-});
-```
+All image files referenced in the XML elements (e.g., `faceFront.png`) must be placed either in the face's local asset directory (`src/watch/assets/<face_name>/`) or in the shared parts bin (`src/watch/assets/parts-bin/`). The build-time generator automatically finds them, determines their scaling (e.g., `0.25` for `-4x.png`), and sets up their dynamic import.
 
 ## 6. Update the Build System
 
-When adding a new face, `build.sh` must be updated in **three places**:
+Register the new face by adding its folder/slug name (e.g., `<face_name>`) on a new line in [faces.txt](file:///Users/spucci/chronometer-web/faces.txt).
 
-1. **`FACES` variable** — list of face basenames to build
-2. **`get_title()` function** — maps basename → display title
-3. **`ALL_SCRIPTS` variable** — list of face scripts for the all-faces page
+The build system will automatically:
+1. Compile the face TypeScript module under `src/faces/generated/`.
+2. Generate its viewer HTML page (e.g. `dist/<face_name>.html`).
+3. Construct the home page index card and append it in the correct order.
+4. Update the picker configuration list and multi-face view templates.
 
 See [Build System](build-system.md) for full details.
 
@@ -83,11 +82,14 @@ Check:
 
 If the face has hands with `offsetRadius > 0` (e.g., moon orbit, subdial hands), verify the polar-offset rendering matches iOS behavior. See [Rendering — Offset-Radius](rendering.md#offset-radius-hand-rendering).
 
-## 9. Thumbnails and Index Page
+## 9. Thumbnails
 
-- **Thumbnail**: Wait for the user to supply a screenshot. Scale it: `sips -z 400 400 --out src/faces/thumb-<name>.png <screenshot>.png`
-- **Index card**: Add to `src/index.html` in the `face-grid` div. "All Faces" card should always be first.
-- **Description**: Use a short phrase describing the face's distinguishing feature (e.g., "Planetary positions", "Giant moonphase with alt/az dots")
+- **Thumbnail**: Wait for the user to supply a screenshot file — do not attempt to capture one yourself. Once provided, scale it to 400×400 pixels and save it as `src/faces/thumb-<slug>.png` (where `<slug>` is the face folder name). For example, on macOS:
+  ```bash
+  sips -z 400 400 --out src/faces/thumb-<slug>.png <screenshot>.png
+  ```
+  The homepage and picker page will automatically display this thumbnail.
+- **Index card**: The index card is generated automatically at build time based on the `displayName` and `description` attributes defined in your watch XML file.
 
 ## 10. Interactive Features
 
@@ -118,6 +120,6 @@ See [Help System](help-system.md) for the full architecture and extraction rules
 - [Rendering](rendering.md) — How parts are drawn
 - [Animation](animation.md) — Update intervals, animation speed
 - [iOS Reference](ios-reference.md) — Navigating the reference repos
-- [Build System](build-system.md) — Three-place registration
+- [Build System](build-system.md) — Dynamic faces.txt workflow
 - [Development Rules](development-rules.md) — Critical invariants
 - [Help System](help-system.md) — Help content architecture and source material

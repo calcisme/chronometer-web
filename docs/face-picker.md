@@ -28,7 +28,7 @@ Each watch face has a 2-letter `urlAbbrev` attribute on its `<watch>` XML elemen
 The `urlAbbrev` is also stored in:
 - `Watch` interface in `types.ts`
 - `FaceData` interface in `engine-entry.ts`
-- Each `face-*.ts` registration call
+- Auto-generated registration modules under `src/faces/generated/`
 
 ### Build-Time Uniqueness Check
 
@@ -125,7 +125,7 @@ When the user arrives at the pick page with existing `picks` in the URL, or afte
 
 ### Face Registry
 
-`pick-page.ts` contains a hardcoded `FACES` array with slug, name, thumbnail path, and abbreviation for each face. This avoids loading/parsing XML just for the picker. The abbreviations must match the XML `urlAbbrev` values.
+Instead of hardcoding `FACES` inside `pick-page.ts`, the build-time code generator script constructs [faces-list.ts](file:///Users/spucci/chronometer-web/src/faces/generated/faces-list.ts) automatically. `pick-page.ts` imports this list dynamically to populate the picker's grid and selection layout, ensuring that the picker registration and the active faces in `faces.txt` are always kept in sync.
 
 ## Selected Faces Page (`selected.html`)
 
@@ -165,10 +165,9 @@ An "Edit Picks" text link (`#edit-picks-link`) is visible only on `selected.html
 
 When adding a new watch face:
 
-1. Add a unique 2-letter `urlAbbrev` to the new face's XML `<watch>` element
-2. Add `urlAbbrev` to the face's `face-*.ts` registration call
-3. Add an entry to the `FACES` array in `pick-page.ts`
-4. The build will fail if the abbreviation is not unique
+1. Add a unique 2-letter `urlAbbrev` attribute, a `displayName`, and a `description` to the new face's XML `<watch>` element.
+2. Add the face folder/slug name (e.g. `basel-clone`) to [faces.txt](file:///Users/spucci/chronometer-web/faces.txt).
+3. The build system automatically validates the abbreviation uniqueness, generates the typescript files, compiles the assets, and injects the new face into the picker.
 
 ## Related Docs
 

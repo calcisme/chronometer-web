@@ -10,7 +10,7 @@
   Copyright Emerald Sequoia LLC 2009. All rights reserved.
 -->
 
-<watch name='Vienna I' urlAbbrev='vi' beatsPerSecond='8' faceWidth='280' statusBarLoc='bottom' bezelColor='rgb(200,195,180)'>
+<watch name='Vienna I' urlAbbrev='vi' beatsPerSecond='8' faceWidth='280' statusBarLoc='bottom' bezelColor='rgb(200,195,180)' displayName="Vienna" description="Analemma, equation of time, and day/night rings">
   <atlas frontWidth='512' frontHeight='512' backWidth='64' backHeight='256' nightWidth='512' nightHeight='512'/>
 
 <!-- sizes, lengths, positions -->
