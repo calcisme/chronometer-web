@@ -99,7 +99,7 @@ When a location is set (from any source), the system:
 | File | Purpose |
 |------|---------|
 | `src/city-search.ts` | City/airport search engine |
-| `src/cities-data.js` | Bundled city database (generated, gitignored) |
+| `src/cities-data.js` | Bundled city database (generated, tracked in git) |
 | `src/cities-data.d.ts` | TypeScript declarations for city data |
 | `src/engine-entry.ts` | Location update handling, `rebuildAllForLocation()` |
 | `src/url-state.ts` | URL parameter reading/writing for location |

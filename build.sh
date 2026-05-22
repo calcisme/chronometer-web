@@ -32,6 +32,39 @@ COMMON_FLAGS="--format=iife --target=es2020"
 
 mkdir -p "$DIST"
 
+echo "=== Checking cities database ==="
+if [ ! -f "$SRC/cities-data.js" ]; then
+  echo "  src/cities-data.js is missing. Generating it from GeoNames data..."
+  # check if zip files exist and need to be unzipped
+  if [ ! -f "scripts/geonames-data/cities1000.txt" ] && [ -f "scripts/geonames-data/cities1000.zip" ]; then
+    echo "  Unzipping cities1000.zip..."
+    unzip -o scripts/geonames-data/cities1000.zip -d scripts/geonames-data
+  fi
+  if [ ! -f "scripts/geonames-data/alternateNamesV2.txt" ] && [ -f "scripts/geonames-data/alternateNamesV2.zip" ]; then
+    echo "  Unzipping alternateNamesV2.zip..."
+    unzip -o scripts/geonames-data/alternateNamesV2.zip -d scripts/geonames-data
+  fi
+  if [ ! -f "scripts/geonames-data/allCountries.txt" ] && [ -f "scripts/geonames-data/allCountries.zip" ]; then
+    echo "  Unzipping allCountries.zip..."
+    unzip -o scripts/geonames-data/allCountries.zip -d scripts/geonames-data
+  fi
+  
+  if [ -f "scripts/geonames-data/cities1000.txt" ] && \
+     [ -f "scripts/geonames-data/alternateNamesV2.txt" ] && \
+     [ -f "scripts/geonames-data/allCountries.txt" ] && \
+     [ -f "scripts/geonames-data/admin1CodesASCII.txt" ] && \
+     [ -f "scripts/geonames-data/admin2Codes.txt" ]; then
+    node scripts/build-cities.js
+  else
+    echo "ERROR: GeoNames raw data files (.txt or .zip) are missing from scripts/geonames-data/." >&2
+    echo "Please download cities1000.zip, alternateNamesV2.zip, and allCountries.zip from GeoNames" >&2
+    echo "and place them in scripts/geonames-data/ before building." >&2
+    exit 1
+  fi
+else
+  echo "  ✓ cities-data.js exists"
+fi
+
 echo "=== Generating face data modules ==="
 node scripts/generate-face-modules.js
 
@@ -303,11 +336,9 @@ echo "  → support.html"
 inject_partials < "$SRC/disclaimer.html" > "$DIST/disclaimer.html"
 echo "  → disclaimer.html"
 
-# cities-data.js — city database for location picker (if generated)
-if [ -f "$SRC/cities-data.js" ]; then
-  cp "$SRC/cities-data.js" "$DIST/cities-data.js"
-  echo "  → cities-data.js ($(du -h "$DIST/cities-data.js" | cut -f1))"
-fi
+# cities-data.js — city database for location picker
+cp "$SRC/cities-data.js" "$DIST/cities-data.js"
+echo "  → cities-data.js ($(du -h "$DIST/cities-data.js" | cut -f1))"
 
 # Also copy thumbnail images and app icon if they exist
 for f in "$SRC"/faces/thumb-*.png "$SRC"/apple-touch-icon.png; do
