@@ -12,7 +12,7 @@
   Copyright Emerald Sequoia LLC 2008. All rights reserved.
 -->
 
-<watch name='Milano I' urlAbbrev='ml' beatsPerSecond='5' faceWidth='255' statusBarLoc='bottom' bezelColor='rgb(190,190,190)' displayName="Milano" description="Retrograde calendars for month, date, and day of the week, plus power reserve indicator">
+<watch name='Milano I' urlAbbrev='ml' beatsPerSecond='5' faceWidth='255' statusBarLoc='bottom' bezelColor='rgb(190,190,190)' displayName="Milano" description="Retrograde calendar hands, plus power reserve indicator if browser supports it">
   <atlas frontWidth='512' frontHeight='512' backWidth='16' backHeight='128' nightWidth='512' nightHeight='1024'/>
   <init expr='faceWidth=255, backerWidth=faceWidth' />
 
