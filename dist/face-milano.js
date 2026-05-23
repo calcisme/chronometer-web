@@ -1,0 +1,70 @@
+"use strict";
+(() => {
+  // src/watch/assets/milano/Milano-I.xml
+  var Milano_I_default = `<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Milano.xml
+  Emerald Chronometer
+
+  Copied from Milano.xml 2017 May 23
+  
+  Created 7/3/2008 by Bill Arnett
+  Copyright Emerald Sequoia LLC 2008. All rights reserved.
+-->
+
+<watch name='Milano I' urlAbbrev='ml' beatsPerSecond='5' faceWidth='255' statusBarLoc='bottom' bezelColor='rgb(190,190,190)' displayName="Milano" description="Retrograde calendars for month, date, and day of the week, plus power reserve indicator">
+  <atlas frontWidth='512' frontHeight='512' backWidth='16' backHeight='128' nightWidth='512' nightHeight='1024'/>
+  <init expr='faceWidth=255, backerWidth=faceWidth' />
+
+  <init	    expr='monClr=cyan, dateClr=yellow, wkdayClr=green, timClr=0xc0ffffff, timFill=0x80ffffff, secClr=red, fgclr=white, bgclr=black, pwrClr=magenta' />
+  <init	    expr='gClr=monClr, gaClr=dateClr, dialfg=0xffe0e0e0' />
+  <init	    expr='berryR=33' />
+  <init	    expr='timR=144, monR=95, datR=monR, wkdR=68, prR=wkdR' />
+  <init	    expr='hrL=timR*.60, minL=timR*.75, secL=timR*.85, monL=monR-12, datL=datR-12, wkdL=wkdR-12, prL=wkdL' />
+  <init	    expr='datefs=16, yoff2=datefs/2-1, dateX=0, dateY=-50-yoff2' />
+
+<!-- Front ================================================== -->
+
+ <static name='front' modes='front'>
+  <QRect  name='maskRect'   x='-backerWidth/2' y='-backerWidth/2'  modes='front'  w='backerWidth' h='backerWidth' bgColor='black'/>
+  <QDial  name='time'	    x='0' y=' 0' modes='front' radius='timR  ' orientation='upright' fontSize='24' fontName='Times New Roman' strokeColor='dialfg' bgColor='clear' text='12' />
+  <QDial  name='time2'	    x='0' y=' 0' modes='front' radius='timR-6' orientation='upright' fontSize='18' fontName='Times New Roman' strokeColor='dialfg' bgColor='clear' text=',3,6,9' />
+  <QDial  name='time dots'  x='0' y=' 0' modes='front' radius='timR-6' orientation='radial'  fontSize='18' fontName='Times New Roman' strokeColor='dialfg' bgColor='clear' text=',.,.,,.,.,,.,.,,.,.' />
+  <Image  name='berry'	    x='0' y='berryR' modes='front' src='../partsBin/berryWhite.png'/>
+
+  <QDial  name='power resr' x='0' y=' 0' modes='front' radius='batteryLevelSupported() ? prR : 0'  orientation='demi' fontSize='9' fontName='Arial' bgColor='clear' strokeColor='pwrClr' text='\xBD,\xBE,1,,,,,,,,,,,,,,,,,,,,0,\xBC' />
+  <QDial  name='retro mnth' x='0' y=' 0' modes='front' radius='monR' orientation='demi' fontSize='10' fontName='Times New Roman' bgColor='clear' strokeColor='monClr' text=',Jul,,Aug,,Sep,,Oct,,Nov,,Dec,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,Jan,,Feb,,Mar,,Apr,,May,,Jun' />
+  <QDial  name='retro day ' x='0' y=' 0' modes='front' radius='datR' orientation='demi' fontSize='10' fontName='Times New Roman' bgColor='clear' strokeColor='dateClr' text=',,,,,,,,,,,,,,,,,31,,29,,27,,25,,23,,21,,19,,17,,15,,13,,11,,9,,7,,5,,3,,1,,,,,,,,,,,,,,,,' />
+  <QDial  name='retro wkd ' x='0' y=' 0' modes='front' radius='wkdR' orientation='demi' fontSize='9' fontName='Times New Roman' bgColor='clear' strokeColor='wkdayClr' text=',,,,,,,,,,,S,F,T,W,T,M,S,,,,,,,,,,' />
+ </static>
+ 
+<!-- hands ================================================== -->
+
+<!-- retrograde month/date/day hands -->
+  <Qhand name='mon hn'	    x='0' y='0'	modes='front'		                   type='rect' length='monL' width='1'  tail=' 0' update='86400'    dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='(monthNumber()+1)  *2*pi/26 -    pi/2'  strokeColor='monClr'   fillColor='monClr' />
+  <Qhand name='date hn'	    x='0' y='0'	modes='front'		                   type='rect' length='datL' width='1'  tail=' 0' update='86400'    dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='(31-dayNumber())   *2*pi/64 +    pi/2'  strokeColor='dateClr'  fillColor='dateClr' />
+  <Qhand name='wkday hn'    x='0' y='0'	modes='front'		                   type='rect' length='wkdL' width='1'  tail=' 0' update='86400'    dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='(7-weekdayNumber())*2*pi/28 + 20*pi/28' strokeColor='wkdayClr' fillColor='wkdayClr' />
+  <Qhand name='pwr h'	    x='0' y='0'	modes='front'				   type='rect' length='batteryLevelSupported() ? prL : 0'  width='1'  tail=' 0' update='600'       dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='batteryLevel() >=  0 ? batteryLevel()*pi/3-pi/6 : -pi/6' strokeColor='pwrClr'  fillColor='pwrClr' />
+
+<!-- time hands -->
+  <Qhand name='hr'	    x='0' y='0'	modes='front'		kind='hour12Kind'  type='tri'  length=' hrL' width='7'  tail=' 8' update=' 1'	    angle='hour12ValueAngle()'	strokeColor='timClr'	fillColor='timFill' lineWidth='1' />
+  <Qhand name='min'	    x='0' y='0'	modes='front'		kind='minuteKind'  type='tri'  length='minL' width='5'  tail='10' update='.2'	    angle='minuteValueAngle()'	strokeColor='timClr'	fillColor='timFill' lineWidth='1' />
+  <Qhand name='sec'	    x='0' y='0'	modes='front'		kind='secondKind'  type='tri'  length='secL' width='1'  tail='30' update='.2'    angle='secondValueAngle()'	strokeColor='secClr'	fillColor='secClr' oCenter='1.5' oFillColor='secClr' oStrokeColor='secClr' />
+
+</watch>
+`;
+
+  // src/watch/assets/parts-bin/berryWhite.png
+  var berryWhite_default = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAANxJREFUeNqU0r0OwVAUwHH11UHEZGAQLCQ2ifhIPIBX8ABewka8gheQ2A3V0SbWegEDopGYLESk/pdTuSkGJ/k16Tn39H7V8Dwv9E+Ef+Q76CPzUVEzBNSxwAY9mHo9+uXrF7QRwR5Xvag3FGSQI8sxYaGMszQ/lxRDDVNMkJHpVb6KGcbIPg+IRwIj7xUumlqDnz+i5TeEZJCDobwnEUcDawz8TRtyD2rtKdlwDl2sYCONE+7BY1XNRdi4wUJe8u9x+sWpqbY4yOnNsZP8O4wvv0YJFSzhBosPAQYA9tbhguLIfBIAAAAASUVORK5CYII=";
+
+  // src/faces/generated/face-milano.ts
+  window.ChronometerFaces = window.ChronometerFaces || [];
+  window.ChronometerFaces.push({
+    name: "Milano",
+    urlAbbrev: "ml",
+    xml: Milano_I_default,
+    images: {
+      "../partsBin/berryWhite.png": { dataUrl: berryWhite_default, scale: 1 }
+    }
+  });
+})();

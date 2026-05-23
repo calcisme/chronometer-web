@@ -867,7 +867,7 @@
               <summary>General Help Topics</summary>
               <iframe id="general-help-iframe"></iframe>
             </details>
-            <div id="version-label" style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.34</div>
+            <div id="version-label" style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.41</div>
           </div>
 
           <div id="info-sub-view">
@@ -2113,6 +2113,23 @@ of Japan, shows traditional Japanese time like an
   A real Wadokei clock would of course have neither the 24-hour dial nor the
   day/night ring.
 </p></details>
+<details class="face-help-section" data-face="milano"><summary>Milano</summary>
+<p>
+  <b>Milano</b> has a secular perpetual calendar with four retrograde
+  complications, which are hands that snap back to their starting positions
+  without going all the way around.
+</p>
+<p>
+  The cyan hand shows the current month.<br />
+  The yellow hand shows the date.<br />
+  The green hand shows the day of the week.
+</p>
+<p>
+  The magenta hand indicates the fraction of the remaining power reserve
+  (battery level on your device). This hand and its dial are automatically
+  hidden if your browser or device does not support the Battery Status API.
+</p>
+</details>
  </template>
     <header>
       <h1>Emerald Chronometer</h1>
@@ -2219,6 +2236,11 @@ of Japan, shows traditional Japanese time like an
         <img class="thumb" src="thumb-kyoto.png" alt="Kyoto" />
         <h2>Kyoto</h2>
         <p class="desc">Traditional Japanese Wadokei clock</p>
+      </a>
+      <a class="face-card" href="milano.html">
+        <img class="thumb" src="thumb-milano.png" alt="Milano" />
+        <h2>Milano</h2>
+        <p class="desc">Retrograde calendars for month, date, and day of the week, plus power reserve indicator</p>
       </a>
 
     </div>
@@ -2358,7 +2380,7 @@ of Japan, shows traditional Japanese time like an
               a.setAttribute("target", "_blank");
               a.setAttribute("rel", "noopener");
             });
-            const indexOrder = ["babylon","mauna-kea","haleakala","hana","chandra","selene","geneva","basel","firenze","venezia","terra","miami","gaia","vienna","kyoto"];
+            const indexOrder = ["babylon","mauna-kea","haleakala","hana","chandra","selene","geneva","basel","firenze","venezia","terra","miami","gaia","vienna","kyoto","milano"];
             const byFace = new Map();
             helpDiv
               .querySelectorAll(".face-help-section[data-face]")

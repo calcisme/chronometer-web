@@ -91,6 +91,12 @@
       "name": "Kyoto",
       "thumb": "thumb-kyoto.png",
       "abbrev": "ky"
+    },
+    {
+      "slug": "milano",
+      "name": "Milano",
+      "thumb": "thumb-milano.png",
+      "abbrev": "ml"
     }
   ];
 

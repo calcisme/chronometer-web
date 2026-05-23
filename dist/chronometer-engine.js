@@ -12503,9 +12503,25 @@
     3: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
     4: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 }
   };
+  var cachedBatteryLevel = 1;
+  var batteryInitialized = false;
+  function initBatteryState() {
+    if (batteryInitialized) return;
+    if (typeof navigator !== "undefined" && "getBattery" in navigator) {
+      batteryInitialized = true;
+      navigator.getBattery().then((battery) => {
+        cachedBatteryLevel = battery.level;
+        battery.addEventListener("levelchange", () => {
+          cachedBatteryLevel = battery.level;
+        });
+      }).catch(() => {
+      });
+    }
+  }
   function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides, globalLocationSlot) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
+    initBatteryState();
     const env = createDefaultEnvironment();
     env.observerLatRad = OBSERVER_LAT;
     env.observerLonRad = OBSERVER_LON;
@@ -12702,6 +12718,10 @@
     functions.set("weekdayNumberAngle", () => {
       const di = dateToDateInterval(getNow());
       return weekdayFromTimeInterval(di, tzOffsetSeconds) * 2 * Math.PI / 7;
+    });
+    functions.set("weekdayNumber", () => {
+      const di = dateToDateInterval(getNow());
+      return weekdayFromTimeInterval(di, tzOffsetSeconds);
     });
     functions.set("yearNumber", () => {
       const cs = getLocalComponents();
@@ -13145,7 +13165,8 @@
     functions.set("advanceYear", () => 0);
     functions.set("advanceYears", (_n) => 0);
     functions.set("advanceToNextMoonPhase", () => 0);
-    functions.set("batteryLevel", () => 1);
+    functions.set("batteryLevel", () => cachedBatteryLevel);
+    functions.set("batteryLevelSupported", () => typeof navigator !== "undefined" && "getBattery" in navigator ? 1 : 0);
     functions.set("goodAccuracy", () => 1);
     functions.set("heading", () => 0);
     functions.set("tzOffset", () => tzOffsetSeconds);

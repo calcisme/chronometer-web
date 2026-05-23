@@ -153,6 +153,24 @@ export const GAIA_SUBDIAL_DEFAULTS: Record<number, TerraSlot> = {
     3: { cityName: 'London',   olsonId: 'Europe/London',    lat: 51.50842, lon:  -0.12553 },
     4: { cityName: 'Sydney',   olsonId: 'Australia/Sydney',  lat: -33.86785, lon: 151.20732 },
 };
+let cachedBatteryLevel = 1.0;
+let batteryInitialized = false;
+
+function initBatteryState(): void {
+    if (batteryInitialized) return;
+    if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+        batteryInitialized = true;
+        (navigator as any).getBattery().then((battery: any) => {
+            cachedBatteryLevel = battery.level;
+            battery.addEventListener('levelchange', () => {
+                cachedBatteryLevel = battery.level;
+            });
+        }).catch(() => {
+            // keep default 1.0
+        });
+    }
+}
+
 export function createWatchEnvironment(
     watch: Watch,
     observerLatDeg: number = DEFAULT_LAT_DEG,
@@ -164,6 +182,7 @@ export function createWatchEnvironment(
 ): Environment {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
     const OBSERVER_LON = observerLonDeg * Math.PI / 180;
+    initBatteryState();
     const env = createDefaultEnvironment();
 
     // Store observer params on the env for sentinel scheduling (animation.ts)
@@ -510,6 +529,10 @@ function registerTimeFunctions(
     functions.set('weekdayNumberAngle', () => {
         const di = dateToDateInterval(getNow());
         return weekdayFromTimeInterval(di, tzOffsetSeconds) * 2 * Math.PI / 7;
+    });
+    functions.set('weekdayNumber', () => {
+        const di = dateToDateInterval(getNow());
+        return weekdayFromTimeInterval(di, tzOffsetSeconds);
     });
     functions.set('yearNumber', () => {
         const cs = getLocalComponents();
@@ -1103,7 +1126,8 @@ function registerTimeFunctions(
     functions.set('advanceYear', () => 0);
     functions.set('advanceYears', (_n: number) => 0);
     functions.set('advanceToNextMoonPhase', () => 0);
-    functions.set('batteryLevel', () => 1.0);  // always full
+    functions.set('batteryLevel', () => cachedBatteryLevel);
+    functions.set('batteryLevelSupported', () => (typeof navigator !== 'undefined' && 'getBattery' in navigator) ? 1 : 0);
     functions.set('goodAccuracy', () => 1);
     functions.set('heading', () => 0);
 

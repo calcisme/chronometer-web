@@ -1699,7 +1699,7 @@
               <div id="help-content">
                 <!-- Populated from help-template on first info click -->
               </div>
-              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.34</div>
+              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.41</div>
             </div>
 
             <div id="info-sub-view">
@@ -2945,6 +2945,23 @@ of Japan, shows traditional Japanese time like an
   A real Wadokei clock would of course have neither the 24-hour dial nor the
   day/night ring.
 </p></details>
+<details class="face-help-section" data-face="milano"><summary>Milano</summary>
+<p>
+  <b>Milano</b> has a secular perpetual calendar with four retrograde
+  complications, which are hands that snap back to their starting positions
+  without going all the way around.
+</p>
+<p>
+  The cyan hand shows the current month.<br />
+  The yellow hand shows the date.<br />
+  The green hand shows the day of the week.
+</p>
+<p>
+  The magenta hand indicates the fraction of the remaining power reserve
+  (battery level on your device). This hand and its dial are automatically
+  hidden if your browser or device does not support the Battery Status API.
+</p>
+</details>
  </template>
       <div id="watch-grid"></div>
       <div id="planet-selector">
@@ -3400,6 +3417,7 @@ of Japan, shows traditional Japanese time like an
     <script src="face-gaia.js"></script>
     <script src="face-vienna.js"></script>
     <script src="face-kyoto.js"></script>
+    <script src="face-milano.js"></script>
     <!-- Link preservation now handled by url-state.ts via initNavigationLinks() -->
   </body>
 </html>

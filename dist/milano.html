@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="apple-touch-icon" href="thumb-venezia.png" />
-    <link rel="icon" type="image/png" href="thumb-venezia.png" />
-    <title>Venezia (Chronometer)</title>
+    <link rel="apple-touch-icon" href="thumb-milano.png" />
+    <link rel="icon" type="image/png" href="thumb-milano.png" />
+    <title>Milano (Chronometer)</title>
     <style>
       *,
       *::before,
@@ -1618,7 +1618,7 @@
             d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
           /></svg
       ></a>
-      <span id="face-name">Venezia</span>
+      <span id="face-name">Milano</span>
       <button id="info-btn" title="About this face">ℹ&#xFE0E;</button>
       <button id="fullscreen-btn" title="Toggle fullscreen">
         <svg class="fs-expand" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
@@ -1893,52 +1893,20 @@
 
 <hr />
  </template>
-      <template id="help-template"> <b>Venezia</b> shows info about one planet at a time but lets you select which
-one. You can use the planet selector buttons below the face to cycle through the
-available planets.
-<p>
-  In addition to the 5 planets visible to the naked eye, the Sun, and the Moon,
-  all of which are shown on <a href="miami.html">Miami</a> and
-  <a href="firenze.html">Firenze</a>, this face also can show information about
-  Uranus and Neptune, which can, with a little effort and the knowledge of where
-  to look, be seen with binoculars or a small telescope.
+      <template id="help-template"> <p>
+  <b>Milano</b> has a secular perpetual calendar with four retrograde
+  complications, which are hands that snap back to their starting positions
+  without going all the way around.
 </p>
-
 <p>
-  The three subdials show the rise, transit, and set times for the selected
-  planet on the current day. The tiny dot above 12 on each one is black for PM,
-  white for AM, and red if there is no such time for the selected planet for
-  this day. (There is always a transit time, which is defined as the time at
-  which the planet crosses the meridian, though at high latitudes it may be
-  below the horizon.)
+  The cyan hand shows the current month.<br />
+  The yellow hand shows the date.<br />
+  The green hand shows the day of the week.
 </p>
-
 <p>
-  The long cyan hand indicates the selected planet's azimuth read against the
-  outermost dial. The shorter magenta hand indicates its altitude read against
-  the magenta half-dial. And the yellow hand indicates its position in the
-  zodiac read against the yellow arc on the right. In addition, three tiny sun
-  icons always show the position of the Sun on these dials.
-</p>
-
-<p>
-  Near the top of the dial is a display indicating which planet is selected (a
-  different image is displayed for each planet), with a phase indicator like
-  that of <a href="chandra.html">Chandra</a>. The same phase indicator is also
-  shown for the planets, though only the inner planets (Mercury and Venus) have
-  any appreciable phase to display.
-</p>
-
-<p>
-  In example at the top of the page, the selected planet (actually the Moon in
-  this case) is almost exactly due west at 272 degrees azimuth, at 7 degrees
-  above the horizon, 123 degrees west of and lower than the Sun.
-</p>
-
-<p>
-  The large central hands show hours and minutes in ordinary 12-hour format (but
-  with no dial). The dot just above the six o'clock position is black for PM and
-  white for AM.
+  The magenta hand indicates the fraction of the remaining power reserve
+  (battery level on your device). This hand and its dial are automatically
+  hidden if your browser or device does not support the Battery Status API.
 </p>
  </template>
       <div id="watch-grid"></div>
@@ -2380,7 +2348,7 @@ available planets.
       </div>
     </div>
         <script src="chronometer-engine.js"></script>
-    <script src="face-venezia.js"></script>
+    <script src="face-milano.js"></script>
     <!-- Link preservation now handled by url-state.ts via initNavigationLinks() -->
   </body>
 </html>
