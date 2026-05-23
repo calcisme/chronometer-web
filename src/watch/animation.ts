@@ -1043,6 +1043,7 @@ function resolveSentinel(
         }
 
         // Environment change only — effectively never (only explicit reset)
+        case 0:
         case EC_UPDATE_ENV_CHANGE_ONLY:
             return Infinity;
 

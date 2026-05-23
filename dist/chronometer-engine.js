@@ -11563,6 +11563,7 @@
         return closerInTimeDirection(rise, set, timeDirection);
       }
       // Environment change only — effectively never (only explicit reset)
+      case 0:
       case EC_UPDATE_ENV_CHANGE_ONLY:
         return Infinity;
       default:
@@ -18881,16 +18882,86 @@
         rafId = null;
       }
     }
-    let _frameTimingStart = performance.now();
-    let _frameTotalMs = 0;
-    let _frameRenderMs = 0;
-    let _frameCount = 0;
-    let _frameAnimatingFaces = 0;
+    let _wasScrubbing = false;
+    let _scrubTotalExpectedTicks = 0;
+    let _scrubProcessedTicks = 0;
+    let _scrubLostTicks = 0;
+    let _intervalUpdateFrameTime = null;
+    let _intervalFrameCount = 0;
+    let _intervalLastFrameTime = null;
+    const _scrubIntervalFpsList = [];
+    let _scrubIntervalZeroFrameCount = 0;
     function frame() {
       rafId = null;
       const now = performance.now();
       const frameStart = now;
       let stillAnimating = false;
+      const isScrubbing = timeController.currentRate !== null && !timeController.isStopped;
+      let willTick = false;
+      if (isScrubbing) {
+        if (!_wasScrubbing) {
+          _wasScrubbing = true;
+          _scrubTotalExpectedTicks = 0;
+          _scrubProcessedTicks = 0;
+          _scrubLostTicks = 0;
+          _intervalUpdateFrameTime = null;
+          _intervalFrameCount = 0;
+          _intervalLastFrameTime = null;
+          _scrubIntervalFpsList.length = 0;
+          _scrubIntervalZeroFrameCount = 0;
+          console.log("[scrub-perf] Scrubbing session started.");
+        }
+        const elapsed = now - timeController.lastTickRealMs;
+        willTick = elapsed >= TICK_INTERVAL_MS;
+        if (willTick) {
+          const expectedTicks = Math.floor(elapsed / TICK_INTERVAL_MS);
+          const lostTicks = expectedTicks - 1;
+          _scrubTotalExpectedTicks += expectedTicks;
+          _scrubProcessedTicks += 1;
+          _scrubLostTicks += lostTicks;
+          if (_intervalUpdateFrameTime !== null) {
+            if (_intervalFrameCount > 0 && _intervalLastFrameTime !== null) {
+              const duration = _intervalLastFrameTime - _intervalUpdateFrameTime;
+              const fps = _intervalFrameCount / (duration / 1e3);
+              _scrubIntervalFpsList.push(fps);
+            } else {
+              _scrubIntervalZeroFrameCount++;
+            }
+          }
+          _intervalUpdateFrameTime = now;
+          _intervalFrameCount = 0;
+          _intervalLastFrameTime = null;
+        } else {
+          if (_intervalUpdateFrameTime !== null) {
+            _intervalFrameCount++;
+            _intervalLastFrameTime = now;
+          }
+        }
+      }
+      if (!isScrubbing && _wasScrubbing) {
+        _wasScrubbing = false;
+        if (_intervalUpdateFrameTime !== null) {
+          if (_intervalFrameCount > 0 && _intervalLastFrameTime !== null) {
+            const duration = _intervalLastFrameTime - _intervalUpdateFrameTime;
+            const fps = _intervalFrameCount / (duration / 1e3);
+            _scrubIntervalFpsList.push(fps);
+          } else {
+            _scrubIntervalZeroFrameCount++;
+          }
+        }
+        const avgFps = _scrubIntervalFpsList.length > 0 ? (_scrubIntervalFpsList.reduce((a, b) => a + b, 0) / _scrubIntervalFpsList.length).toFixed(1) : "N/A";
+        const minFps = _scrubIntervalFpsList.length > 0 ? Math.min(..._scrubIntervalFpsList).toFixed(1) : "N/A";
+        const maxFps = _scrubIntervalFpsList.length > 0 ? Math.max(..._scrubIntervalFpsList).toFixed(1) : "N/A";
+        const lostPercent = _scrubTotalExpectedTicks > 0 ? (_scrubLostTicks / _scrubTotalExpectedTicks * 100).toFixed(1) : "0.0";
+        console.log(
+          `[scrub-perf] Scrub session ended:
+  - Total expected ticks: ${_scrubTotalExpectedTicks}
+  - Processed ticks: ${_scrubProcessedTicks}
+  - Lost/skipped ticks: ${_scrubLostTicks} (${lostPercent}%)
+  - Avg animation FPS: ${avgFps} (min: ${minFps}, max: ${maxFps} over ${_scrubIntervalFpsList.length} intervals)
+  - Intervals with zero animation frames: ${_scrubIntervalZeroFrameCount}`
+        );
+      }
       timeController.checkTick(now);
       timeController.beginFrame();
       if (timeController.clampDisplayTime()) {
@@ -18957,24 +19028,6 @@
         timeBar.classList.toggle("at-limit", atLimit);
       }
       timeController.endFrame();
-      _frameTotalMs += performance.now() - frameStart;
-      _frameRenderMs += renderMs;
-      _frameCount++;
-      _frameAnimatingFaces += animatingFaceCount;
-      if (performance.now() - _frameTimingStart >= 1e4) {
-        const avgTotal = (_frameTotalMs / _frameCount).toFixed(2);
-        const avgRender = (_frameRenderMs / _frameCount).toFixed(2);
-        const avgAnimFaces = (_frameAnimatingFaces / _frameCount).toFixed(1);
-        const fps = (1e3 / (_frameTotalMs / _frameCount)).toFixed(0);
-        console.log(
-          `[perf] ${_frameCount} frames in 10s | avg total: ${avgTotal}ms | avg render: ${avgRender}ms | avg animating faces: ${avgAnimFaces}/${faces.length} | effective fps: ${fps}`
-        );
-        _frameTimingStart = performance.now();
-        _frameTotalMs = 0;
-        _frameRenderMs = 0;
-        _frameCount = 0;
-        _frameAnimatingFaces = 0;
-      }
       if (timeController.needsContinuousRender || stillAnimating) {
         rafId = requestAnimationFrame(frame);
       } else {
@@ -19004,7 +19057,6 @@
     }
     let _dstTimerId = null;
     function handleDstTransition() {
-      console.log("[dst-detect] Timezone/DST change \u2014 rebuilding environments");
       tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
       for (const face of faces) {
         if (!face.enabled) continue;
@@ -19045,18 +19097,15 @@
         next = locNext || browserNext;
       }
       if (!next) {
-        console.log("[dst-detect] No DST transitions found \u2014 no timer set");
         return;
       }
       let delay = Math.abs(next.getTime() - displayNow.getTime());
       const MAX_TIMEOUT = 2147483647;
       if (delay > MAX_TIMEOUT) {
-        console.log(`[dst-detect] Next transition > 24 days away \u2014 chaining timer`);
         _dstTimerId = setTimeout(scheduleDstRebuild, MAX_TIMEOUT);
         return;
       }
       delay = Math.max(0, delay) + 100;
-      console.log(`[dst-detect] Next transition at ${next.toISOString()} \u2014 timer set for ${Math.round(delay / 1e3)}s`);
       _dstTimerId = setTimeout(() => {
         _dstTimerId = null;
         handleDstTransition();

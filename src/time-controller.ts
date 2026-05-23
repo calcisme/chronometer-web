@@ -190,7 +190,7 @@ export class TimeController {
     /** The next tick target (for interpolation) */
     private nextTickTime: Date = new Date();
     /** performance.now() of the most recent tick */
-    private lastTickRealMs = 0;
+    public lastTickRealMs = 0;
 
     /** Callback fired on each tick (engine rebuilds caches, renders) */
     onTick: (() => void) | null = null;

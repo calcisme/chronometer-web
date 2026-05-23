@@ -810,18 +810,114 @@ async function main() {
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
     }
 
-    // --- Frame timing instrumentation ---
-    let _frameTimingStart = performance.now();
-    let _frameTotalMs = 0;
-    let _frameRenderMs = 0;
-    let _frameCount = 0;
-    let _frameAnimatingFaces = 0;
+
+    // --- Scrubbing performance instrumentation ---
+    let _wasScrubbing = false;
+    let _scrubTotalExpectedTicks = 0;
+    let _scrubProcessedTicks = 0;
+    let _scrubLostTicks = 0;
+
+    // Animation FPS tracking per update interval:
+    let _intervalUpdateFrameTime: number | null = null;
+    let _intervalFrameCount = 0;
+    let _intervalLastFrameTime: number | null = null;
+    const _scrubIntervalFpsList: number[] = [];
+    let _scrubIntervalZeroFrameCount = 0;
 
     function frame() {
         rafId = null;
         const now = performance.now();
         const frameStart = now;
         let stillAnimating = false;
+
+        const isScrubbing = timeController.currentRate !== null && !timeController.isStopped;
+        let willTick = false;
+
+        if (isScrubbing) {
+            if (!_wasScrubbing) {
+                _wasScrubbing = true;
+                _scrubTotalExpectedTicks = 0;
+                _scrubProcessedTicks = 0;
+                _scrubLostTicks = 0;
+                _intervalUpdateFrameTime = null;
+                _intervalFrameCount = 0;
+                _intervalLastFrameTime = null;
+                _scrubIntervalFpsList.length = 0;
+                _scrubIntervalZeroFrameCount = 0;
+                console.log('[scrub-perf] Scrubbing session started.');
+            }
+
+            const elapsed = now - timeController.lastTickRealMs;
+            willTick = elapsed >= TICK_INTERVAL_MS;
+
+            if (willTick) {
+                const expectedTicks = Math.floor(elapsed / TICK_INTERVAL_MS);
+                const lostTicks = expectedTicks - 1;
+
+                _scrubTotalExpectedTicks += expectedTicks;
+                _scrubProcessedTicks += 1;
+                _scrubLostTicks += lostTicks;
+
+                // Process the end of the previous update interval for animation FPS
+                if (_intervalUpdateFrameTime !== null) {
+                    if (_intervalFrameCount > 0 && _intervalLastFrameTime !== null) {
+                        const duration = _intervalLastFrameTime - _intervalUpdateFrameTime;
+                        const fps = _intervalFrameCount / (duration / 1000);
+                        _scrubIntervalFpsList.push(fps);
+                    } else {
+                        _scrubIntervalZeroFrameCount++;
+                    }
+                }
+
+                // Start the new update interval
+                _intervalUpdateFrameTime = now;
+                _intervalFrameCount = 0;
+                _intervalLastFrameTime = null;
+            } else {
+                // This is an animation frame within the current update interval
+                if (_intervalUpdateFrameTime !== null) {
+                    _intervalFrameCount++;
+                    _intervalLastFrameTime = now;
+                }
+            }
+        }
+
+        if (!isScrubbing && _wasScrubbing) {
+            _wasScrubbing = false;
+
+            // Process the final interval if it was in progress
+            if (_intervalUpdateFrameTime !== null) {
+                if (_intervalFrameCount > 0 && _intervalLastFrameTime !== null) {
+                    const duration = _intervalLastFrameTime - _intervalUpdateFrameTime;
+                    const fps = _intervalFrameCount / (duration / 1000);
+                    _scrubIntervalFpsList.push(fps);
+                } else {
+                    _scrubIntervalZeroFrameCount++;
+                }
+            }
+
+            const avgFps = _scrubIntervalFpsList.length > 0
+                ? (_scrubIntervalFpsList.reduce((a, b) => a + b, 0) / _scrubIntervalFpsList.length).toFixed(1)
+                : 'N/A';
+            const minFps = _scrubIntervalFpsList.length > 0
+                ? Math.min(..._scrubIntervalFpsList).toFixed(1)
+                : 'N/A';
+            const maxFps = _scrubIntervalFpsList.length > 0
+                ? Math.max(..._scrubIntervalFpsList).toFixed(1)
+                : 'N/A';
+            const lostPercent = _scrubTotalExpectedTicks > 0
+                ? ((_scrubLostTicks / _scrubTotalExpectedTicks) * 100).toFixed(1)
+                : '0.0';
+
+            console.log(
+                `[scrub-perf] Scrub session ended:\n` +
+                `  - Total expected ticks: ${_scrubTotalExpectedTicks}\n` +
+                `  - Processed ticks: ${_scrubProcessedTicks}\n` +
+                `  - Lost/skipped ticks: ${_scrubLostTicks} (${lostPercent}%)\n` +
+                `  - Avg animation FPS: ${avgFps} (min: ${minFps}, max: ${maxFps} over ${_scrubIntervalFpsList.length} intervals)\n` +
+                `  - Intervals with zero animation frames: ${_scrubIntervalZeroFrameCount}`
+            );
+        }
 
         // Check for quantized tick boundary
         timeController.checkTick(now);
@@ -917,25 +1013,6 @@ async function main() {
 
         timeController.endFrame();
 
-        // --- Accumulate frame timing stats ---
-        _frameTotalMs += performance.now() - frameStart;
-        _frameRenderMs += renderMs;
-        _frameCount++;
-        _frameAnimatingFaces += animatingFaceCount;
-        if (performance.now() - _frameTimingStart >= 10000) {
-            const avgTotal = (_frameTotalMs / _frameCount).toFixed(2);
-            const avgRender = (_frameRenderMs / _frameCount).toFixed(2);
-            const avgAnimFaces = (_frameAnimatingFaces / _frameCount).toFixed(1);
-            const fps = (1000 / (_frameTotalMs / _frameCount)).toFixed(0);
-            console.log(
-                `[perf] ${_frameCount} frames in 10s | avg total: ${avgTotal}ms | avg render: ${avgRender}ms | avg animating faces: ${avgAnimFaces}/${faces.length} | effective fps: ${fps}`
-            );
-            _frameTimingStart = performance.now();
-            _frameTotalMs = 0;
-            _frameRenderMs = 0;
-            _frameCount = 0;
-            _frameAnimatingFaces = 0;
-        }
 
         // Decide whether to keep the RAF loop running
         if (timeController.needsContinuousRender || stillAnimating) {
@@ -989,7 +1066,6 @@ async function main() {
      * system timezone changes.  Follows the §3 animation-preserving pattern.
      */
     function handleDstTransition() {
-        console.log('[dst-detect] Timezone/DST change — rebuilding environments');
 
         // Use displayed time — in offset 1× mode the displayed date may
         // be in a different DST state than the real date.
@@ -1056,7 +1132,6 @@ async function main() {
         }
 
         if (!next) {
-            console.log('[dst-detect] No DST transitions found — no timer set');
             return;
         }
 
@@ -1073,7 +1148,6 @@ async function main() {
         // If further out, set a wake-up at 24 days to re-check.
         const MAX_TIMEOUT = 2_147_483_647; // 2^31 - 1
         if (delay > MAX_TIMEOUT) {
-            console.log(`[dst-detect] Next transition > 24 days away — chaining timer`);
             _dstTimerId = setTimeout(scheduleDstRebuild, MAX_TIMEOUT);
             return;
         }
@@ -1083,7 +1157,7 @@ async function main() {
         // 100ms is sufficient.
         delay = Math.max(0, delay) + 100;
 
-        console.log(`[dst-detect] Next transition at ${next.toISOString()} — timer set for ${Math.round(delay / 1000)}s`);
+
         _dstTimerId = setTimeout(() => {
             _dstTimerId = null;
             handleDstTransition();
