@@ -824,6 +824,20 @@ async function main() {
     const _scrubIntervalFpsList: number[] = [];
     let _scrubIntervalZeroFrameCount = 0;
 
+    // Pure animation frame statistics:
+    let _pureAnimCount = 0;
+    let _pureAnimCpuTimeTotal = 0;
+    let _pureAnimCpuMin = Infinity;
+    let _pureAnimCpuMax = -Infinity;
+    let _pureAnimGpuTimeTotal = 0;
+    let _pureAnimGpuMin = Infinity;
+    let _pureAnimGpuMax = -Infinity;
+    let _pureAnimDeltaTotal = 0;
+    let _pureAnimDeltaCount = 0;
+    let _pureAnimDeltaMin = Infinity;
+    let _pureAnimDeltaMax = -Infinity;
+    let _lastAnimFrameTime: number | null = null;
+
     function frame() {
         rafId = null;
         const now = performance.now();
@@ -844,6 +858,19 @@ async function main() {
                 _intervalLastFrameTime = null;
                 _scrubIntervalFpsList.length = 0;
                 _scrubIntervalZeroFrameCount = 0;
+
+                _pureAnimCount = 0;
+                _pureAnimCpuTimeTotal = 0;
+                _pureAnimCpuMin = Infinity;
+                _pureAnimCpuMax = -Infinity;
+                _pureAnimGpuTimeTotal = 0;
+                _pureAnimGpuMin = Infinity;
+                _pureAnimGpuMax = -Infinity;
+                _pureAnimDeltaTotal = 0;
+                _pureAnimDeltaCount = 0;
+                _pureAnimDeltaMin = Infinity;
+                _pureAnimDeltaMax = -Infinity;
+                _lastAnimFrameTime = null;
                 console.log('[scrub-perf] Scrubbing session started.');
             }
 
@@ -909,13 +936,30 @@ async function main() {
                 ? ((_scrubLostTicks / _scrubTotalExpectedTicks) * 100).toFixed(1)
                 : '0.0';
 
+            const avgCpu = _pureAnimCount > 0 ? (_pureAnimCpuTimeTotal / _pureAnimCount).toFixed(2) : 'N/A';
+            const minCpu = _pureAnimCount > 0 ? _pureAnimCpuMin.toFixed(2) : 'N/A';
+            const maxCpu = _pureAnimCount > 0 ? _pureAnimCpuMax.toFixed(2) : 'N/A';
+
+            const avgGpu = _pureAnimCount > 0 ? (_pureAnimGpuTimeTotal / _pureAnimCount).toFixed(2) : 'N/A';
+            const minGpu = _pureAnimCount > 0 ? _pureAnimGpuMin.toFixed(2) : 'N/A';
+            const maxGpu = _pureAnimCount > 0 ? _pureAnimGpuMax.toFixed(2) : 'N/A';
+
+            const avgDelta = _pureAnimDeltaCount > 0 ? (_pureAnimDeltaTotal / _pureAnimDeltaCount).toFixed(2) : 'N/A';
+            const minDelta = _pureAnimDeltaCount > 0 ? _pureAnimDeltaMin.toFixed(2) : 'N/A';
+            const maxDelta = _pureAnimDeltaCount > 0 ? _pureAnimDeltaMax.toFixed(2) : 'N/A';
+            const avgAnimFps = _pureAnimDeltaCount > 0 ? (1000 / (_pureAnimDeltaTotal / _pureAnimDeltaCount)).toFixed(1) : 'N/A';
+
             console.log(
                 `[scrub-perf] Scrub session ended:\n` +
                 `  - Total expected ticks: ${_scrubTotalExpectedTicks}\n` +
                 `  - Processed ticks: ${_scrubProcessedTicks}\n` +
                 `  - Lost/skipped ticks: ${_scrubLostTicks} (${lostPercent}%)\n` +
                 `  - Avg animation FPS: ${avgFps} (min: ${minFps}, max: ${maxFps} over ${_scrubIntervalFpsList.length} intervals)\n` +
-                `  - Intervals with zero animation frames: ${_scrubIntervalZeroFrameCount}`
+                `  - Intervals with zero animation frames: ${_scrubIntervalZeroFrameCount}\n` +
+                `  - Pure Animation Frame Stats (N = ${_pureAnimCount}):\n` +
+                `    - CPU execution: avg ${avgCpu}ms (min: ${minCpu}ms, max: ${maxCpu}ms)\n` +
+                `    - GPU flush/render: avg ${avgGpu}ms (min: ${minGpu}ms, max: ${maxGpu}ms)\n` +
+                `    - Inter-frame interval: avg ${avgDelta}ms (min: ${minDelta}ms, max: ${maxDelta}ms) -> equivalent to ${avgAnimFps} FPS`
             );
         }
 
@@ -943,6 +987,9 @@ async function main() {
 
         let renderMs = 0;
         let animatingFaceCount = 0;
+
+        const isPureAnimFrame = isScrubbing && !willTick;
+        const animStart = isPureAnimFrame ? performance.now() : 0;
 
         for (const face of faces) {
             if (!face.enabled || !face.cachesBuilt) continue;
@@ -997,6 +1044,37 @@ async function main() {
                 stillAnimating = true;
                 animatingFaceCount++;
             }
+        }
+
+        if (isPureAnimFrame) {
+            const animJsEnd = performance.now();
+            const testFace = faces.find(f => f.enabled && f.cachesBuilt);
+            if (testFace) {
+                testFace.ctx.getImageData(0, 0, 1, 1);
+            }
+            const animGpuEnd = performance.now();
+            const cpuTime = animJsEnd - animStart;
+            const gpuTime = animGpuEnd - animJsEnd;
+
+            _pureAnimCount++;
+            _pureAnimCpuTimeTotal += cpuTime;
+            if (cpuTime < _pureAnimCpuMin) _pureAnimCpuMin = cpuTime;
+            if (cpuTime > _pureAnimCpuMax) _pureAnimCpuMax = cpuTime;
+
+            _pureAnimGpuTimeTotal += gpuTime;
+            if (gpuTime < _pureAnimGpuMin) _pureAnimGpuMin = gpuTime;
+            if (gpuTime > _pureAnimGpuMax) _pureAnimGpuMax = gpuTime;
+
+            if (_lastAnimFrameTime !== null) {
+                const delta = now - _lastAnimFrameTime;
+                _pureAnimDeltaTotal += delta;
+                _pureAnimDeltaCount++;
+                if (delta < _pureAnimDeltaMin) _pureAnimDeltaMin = delta;
+                if (delta > _pureAnimDeltaMax) _pureAnimDeltaMax = delta;
+            }
+            _lastAnimFrameTime = now;
+        } else if (isScrubbing && willTick) {
+            _lastAnimFrameTime = null;
         }
         // Update mini-bar time display (using frameRealTime captured at beginFrame)
         {
