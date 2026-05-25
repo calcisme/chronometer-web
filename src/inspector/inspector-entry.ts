@@ -22,6 +22,7 @@ import { dateToDateInterval } from '../astronomy/es-time.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
+import { EXPR_METADATA, CATEGORY_ORDER, type ExprEntry } from './expr-metadata.js';
 
 // ============================================================================
 // Initialization
@@ -367,7 +368,25 @@ function updateExpressionEvaluator(): void {
         const dateMs = value * 1000 + EPOCH_2001_MS;
         if (isFinite(dateMs) && dateMs > -6.2e13 && dateMs < 2.5e14) {
             const d = new Date(dateMs);
-            exprDate.textContent = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
+            if (locationTimezone) {
+                try {
+                    const fmt = new Intl.DateTimeFormat('en-US', {
+                        timeZone: locationTimezone,
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        hour12: false,
+                    });
+                    const tzAbbr = new Intl.DateTimeFormat('en-US', {
+                        timeZone: locationTimezone,
+                        timeZoneName: 'short',
+                    }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value || '';
+                    exprDate.textContent = `${fmt.format(d)} ${tzAbbr}`;
+                } catch {
+                    exprDate.textContent = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
+                }
+            } else {
+                exprDate.textContent = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
+            }
         } else {
             exprDate.textContent = '—';
         }
@@ -379,7 +398,241 @@ function updateExpressionEvaluator(): void {
 }
 
 // Listen for input changes
-exprInput.addEventListener('input', updateExpressionEvaluator);
+exprInput.addEventListener('input', () => {
+    updateExpressionEvaluator();
+    updateAutocomplete();
+});
+
+// ============================================================================
+// Autocomplete
+// ============================================================================
+
+const acDropdown = document.getElementById('expr-autocomplete')!;
+let acItems: ExprEntry[] = [];
+let acSelectedIdx = -1;
+
+/** Extract the word fragment at the cursor for autocomplete matching. */
+function getWordAtCursor(): { word: string; start: number; end: number } {
+    const pos = exprInput.selectionStart ?? exprInput.value.length;
+    const text = exprInput.value;
+    // Walk backward from cursor to find word start
+    let start = pos;
+    while (start > 0 && /[a-zA-Z0-9_]/.test(text[start - 1])) start--;
+    // Walk forward from cursor to find word end
+    let end = pos;
+    while (end < text.length && /[a-zA-Z0-9_]/.test(text[end])) end++;
+    return { word: text.slice(start, pos), start, end };
+}
+
+/** Build the merged list of completions from metadata + env keys. */
+function getAllCompletions(): ExprEntry[] {
+    // Start with curated metadata
+    const seen = new Set(EXPR_METADATA.map(e => e.name));
+    const extras: ExprEntry[] = [];
+    // Add any env functions not in metadata
+    if (env) {
+        for (const name of env.functions.keys()) {
+            if (!seen.has(name)) {
+                extras.push({ name, category: 'Other', desc: '', kind: 'fn' });
+                seen.add(name);
+            }
+        }
+        for (const name of env.variables.keys()) {
+            if (!seen.has(name)) {
+                extras.push({ name, category: 'Other', desc: '', kind: 'const' });
+                seen.add(name);
+            }
+        }
+    }
+    return [...EXPR_METADATA, ...extras];
+}
+
+function updateAutocomplete(): void {
+    const { word } = getWordAtCursor();
+    if (word.length < 2) {
+        acDropdown.classList.remove('visible');
+        acItems = [];
+        return;
+    }
+    const lc = word.toLowerCase();
+    const all = getAllCompletions();
+    // Filter: prefix match first, then substring match
+    const prefixMatches = all.filter(e => e.name.toLowerCase().startsWith(lc));
+    const subMatches = all.filter(e => !e.name.toLowerCase().startsWith(lc) && e.name.toLowerCase().includes(lc));
+    acItems = [...prefixMatches, ...subMatches].slice(0, 20);
+
+    if (acItems.length === 0 || (acItems.length === 1 && acItems[0].name.toLowerCase() === lc)) {
+        acDropdown.classList.remove('visible');
+        acItems = [];
+        return;
+    }
+
+    acSelectedIdx = -1;
+    renderAutocomplete();
+    acDropdown.classList.add('visible');
+}
+
+function renderAutocomplete(): void {
+    acDropdown.innerHTML = acItems.map((entry, i) => {
+        const kindClass = entry.kind === 'fn' ? 'fn' : 'const';
+        const kindLabel = entry.kind === 'fn' ? 'fn' : 'var';
+        const sig = entry.kind === 'fn' ? (entry.sig || '()') : '';
+        const selected = i === acSelectedIdx ? ' selected' : '';
+        return `<div class="ac-item${selected}" data-idx="${i}">
+            <span class="ac-kind ${kindClass}">${kindLabel}</span>
+            <span class="ac-name">${entry.name}</span>
+            <span class="ac-sig">${sig}</span>
+            <span class="ac-desc">${entry.desc}</span>
+        </div>`;
+    }).join('');
+}
+
+function acceptAutocomplete(idx: number): void {
+    const entry = acItems[idx];
+    if (!entry) return;
+    const { start, end } = getWordAtCursor();
+    const text = exprInput.value;
+    let insert = entry.name;
+    if (entry.kind === 'fn') {
+        insert += entry.sig || '()';
+    }
+    exprInput.value = text.slice(0, start) + insert + text.slice(end);
+    // Place cursor: inside parens if fn with args, after everything otherwise
+    const cursorPos = entry.kind === 'fn' && entry.sig && entry.sig !== '()'
+        ? start + entry.name.length + 1  // after '('
+        : start + insert.length;
+    exprInput.setSelectionRange(cursorPos, cursorPos);
+    acDropdown.classList.remove('visible');
+    acItems = [];
+    updateExpressionEvaluator();
+}
+
+// Keyboard navigation for autocomplete
+exprInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (!acDropdown.classList.contains('visible')) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        acSelectedIdx = Math.min(acSelectedIdx + 1, acItems.length - 1);
+        renderAutocomplete();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        acSelectedIdx = Math.max(acSelectedIdx - 1, 0);
+        renderAutocomplete();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (acSelectedIdx >= 0) {
+            e.preventDefault();
+            acceptAutocomplete(acSelectedIdx);
+        }
+    } else if (e.key === 'Escape') {
+        acDropdown.classList.remove('visible');
+        acItems = [];
+    }
+});
+
+// Click on autocomplete item
+acDropdown.addEventListener('mousedown', (e: MouseEvent) => {
+    e.preventDefault(); // keep focus on input
+    const item = (e.target as HTMLElement).closest('.ac-item') as HTMLElement;
+    if (item) {
+        const idx = parseInt(item.dataset.idx!, 10);
+        acceptAutocomplete(idx);
+    }
+});
+
+// Close autocomplete when input loses focus
+exprInput.addEventListener('blur', () => {
+    // Delay to allow click events on dropdown items
+    setTimeout(() => {
+        acDropdown.classList.remove('visible');
+        acItems = [];
+    }, 150);
+});
+
+// ============================================================================
+// Reference Panel
+// ============================================================================
+
+const refToggle = document.getElementById('ref-toggle')!;
+const refPanel = document.getElementById('ref-panel')!;
+
+function buildReferencePanel(): void {
+    const all = getAllCompletions();
+    // Group by category
+    const groups = new Map<string, ExprEntry[]>();
+    for (const entry of all) {
+        const cat = entry.category;
+        if (!groups.has(cat)) groups.set(cat, []);
+        groups.get(cat)!.push(entry);
+    }
+
+    // Sort categories by CATEGORY_ORDER, then alphabetical for unlisted
+    const catOrder = [...CATEGORY_ORDER];
+    for (const cat of groups.keys()) {
+        if (!catOrder.includes(cat)) catOrder.push(cat);
+    }
+
+    let html = '';
+    for (const cat of catOrder) {
+        const entries = groups.get(cat);
+        if (!entries || entries.length === 0) continue;
+        html += `<div class="ref-category">`;
+        html += `<div class="ref-cat-header"><span class="ref-cat-arrow">▶</span> ${cat} <span style="color:#4b5563;font-weight:400">(${entries.length})</span></div>`;
+        html += `<div class="ref-cat-body">`;
+        for (const entry of entries) {
+            const sig = entry.kind === 'fn' ? (entry.sig || '()') : '';
+            html += `<div class="ref-item" data-name="${entry.name}" data-kind="${entry.kind}" data-sig="${entry.sig || ''}">`;
+            html += `<span class="ref-item-name">${entry.name}${sig}</span>`;
+            html += `<span class="ref-item-desc">${entry.desc}</span>`;
+            html += `</div>`;
+        }
+        html += `</div></div>`;
+    }
+    refPanel.innerHTML = html;
+
+    // Category toggle
+    refPanel.querySelectorAll('.ref-cat-header').forEach(header => {
+        header.addEventListener('click', () => {
+            header.parentElement!.classList.toggle('open');
+        });
+    });
+
+    // Click to insert
+    refPanel.querySelectorAll('.ref-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const el = item as HTMLElement;
+            const name = el.dataset.name!;
+            const kind = el.dataset.kind!;
+            const sig = el.dataset.sig || '';
+            let insert = name;
+            if (kind === 'fn') {
+                insert += sig || '()';
+            }
+            // Append to current input (or replace if empty)
+            if (exprInput.value.trim() === '') {
+                exprInput.value = insert;
+            } else {
+                // Insert at cursor
+                const pos = exprInput.selectionStart ?? exprInput.value.length;
+                const text = exprInput.value;
+                exprInput.value = text.slice(0, pos) + insert + text.slice(pos);
+            }
+            const cursorPos = kind === 'fn' && sig && sig !== '()'
+                ? exprInput.value.indexOf(insert) + name.length + 1
+                : exprInput.value.indexOf(insert) + insert.length;
+            exprInput.setSelectionRange(cursorPos, cursorPos);
+            exprInput.focus();
+            updateExpressionEvaluator();
+        });
+    });
+}
+
+refToggle.addEventListener('click', () => {
+    const isOpen = refPanel.classList.toggle('visible');
+    refToggle.classList.toggle('active', isOpen);
+    if (isOpen && refPanel.innerHTML === '') {
+        buildReferencePanel();
+    }
+});
 
 // ============================================================================
 // Main update loop

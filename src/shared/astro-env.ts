@@ -728,6 +728,185 @@ export function registerAstroFunctions(
         return isNaN(s) ? 0 : riseSetAngles(s).hour24;
     });
 
+    // =========================================================================
+    // Time-returning functions (date intervals, for Inspector expression evaluator)
+    //
+    // "ForDay" variants: restricted to current calendar day (NaN if no event).
+    // "Next" variants: search forward from now (can cross into next day).
+    //
+    // All return Apple epoch date intervals (seconds since 2001-01-01 00:00 UTC).
+    // Planet numbers: Sun=0, Moon=1, Mercury=2, Venus=3, Mars=5, Jupiter=6,
+    //                 Saturn=7, Uranus=8, Neptune=9
+    // =========================================================================
+
+    // --- ForDay time (current calendar day only) ---
+    functions.set('sunriseForDayTime', () => {
+        return riseSetForDay(true, ECPlanetNumber.Sun);
+    });
+    functions.set('sunsetForDayTime', () => {
+        return riseSetForDay(false, ECPlanetNumber.Sun);
+    });
+    functions.set('sunTransitForDayTime', () => {
+        return transitForDay(ECPlanetNumber.Sun);
+    });
+    functions.set('moonriseForDayTime', () => {
+        return riseSetForDay(true, ECPlanetNumber.Moon);
+    });
+    functions.set('moonsetForDayTime', () => {
+        return riseSetForDay(false, ECPlanetNumber.Moon);
+    });
+    functions.set('moonTransitForDayTime', () => {
+        return transitForDay(ECPlanetNumber.Moon);
+    });
+    functions.set('riseOfPlanetForDayTime', (planetNumber: number) => {
+        return riseSetForDay(true, planetNumber as ECPlanetNumber);
+    });
+    functions.set('setOfPlanetForDayTime', (planetNumber: number) => {
+        return riseSetForDay(false, planetNumber as ECPlanetNumber);
+    });
+    functions.set('transitOfPlanetForDayTime', (planetNumber: number) => {
+        return transitForDay(planetNumber as ECPlanetNumber);
+    });
+
+    // --- "Next" time helpers ---
+    // Search forward from now for the next rise or set event.
+    // Uses planetaryRiseSetTimeRefined with a small fudge forward (+60s)
+    // to avoid returning an event that just happened.
+    function nextRiseSet(riseNotSet: boolean, planetNumber: ECPlanetNumber): number {
+        const now = getNow();
+        const calcDate = dateToDateInterval(now);
+        // Search forward: start from now + 60s fudge
+        const fudgeDate = calcDate + 60;
+        const result1 = planetaryRiseSetTimeRefined(
+            fudgeDate, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        // Accept if the result is in the future
+        if (!isNoRiseSet(result1.riseSetTime) && result1.riseSetTime > calcDate) {
+            return result1.riseSetTime;
+        }
+        // If the result is in the past (or no event), try from 12h later
+        const result2 = planetaryRiseSetTimeRefined(
+            fudgeDate + 12 * 3600, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(result2.riseSetTime) && result2.riseSetTime > calcDate) {
+            return result2.riseSetTime;
+        }
+        // Last resort: try from 24h later (for slow-moving planets)
+        const result3 = planetaryRiseSetTimeRefined(
+            fudgeDate + 24 * 3600, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(result3.riseSetTime) && result3.riseSetTime > calcDate) {
+            return result3.riseSetTime;
+        }
+        return NaN;
+    }
+
+    // Search forward from now for the next transit.
+    function nextTransit(planetNumber: ECPlanetNumber): number {
+        const now = getNow();
+        const calcDate = dateToDateInterval(now);
+        // Start from now
+        const result1 = planettransitTimeRefined(
+            calcDate + 60, OBSERVER_LAT, OBSERVER_LON,
+            true, planetNumber, pool,
+        );
+        if (result1 > calcDate) return result1;
+        // Try from 12h later
+        const result2 = planettransitTimeRefined(
+            calcDate + 12 * 3600, OBSERVER_LAT, OBSERVER_LON,
+            true, planetNumber, pool,
+        );
+        if (result2 > calcDate) return result2;
+        return NaN;
+    }
+
+    // --- Next time (search forward from now) ---
+    functions.set('nextSunrise', () => nextRiseSet(true, ECPlanetNumber.Sun));
+    functions.set('nextSunset', () => nextRiseSet(false, ECPlanetNumber.Sun));
+    functions.set('nextSunTransit', () => nextTransit(ECPlanetNumber.Sun));
+    functions.set('nextMoonrise', () => nextRiseSet(true, ECPlanetNumber.Moon));
+    functions.set('nextMoonset', () => nextRiseSet(false, ECPlanetNumber.Moon));
+    functions.set('nextMoonTransit', () => nextTransit(ECPlanetNumber.Moon));
+    functions.set('nextRiseOfPlanet', (planetNumber: number) => {
+        return nextRiseSet(true, planetNumber as ECPlanetNumber);
+    });
+    functions.set('nextSetOfPlanet', (planetNumber: number) => {
+        return nextRiseSet(false, planetNumber as ECPlanetNumber);
+    });
+    functions.set('nextTransitOfPlanet', (planetNumber: number) => {
+        return nextTransit(planetNumber as ECPlanetNumber);
+    });
+
+    // --- "Prev" time helpers ---
+    // Search backward from now for the most recent rise or set event.
+    function prevRiseSet(riseNotSet: boolean, planetNumber: ECPlanetNumber): number {
+        const now = getNow();
+        const calcDate = dateToDateInterval(now);
+        // Search backward: start from now - 60s fudge
+        const fudgeDate = calcDate - 60;
+        const result1 = planetaryRiseSetTimeRefined(
+            fudgeDate, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(result1.riseSetTime) && result1.riseSetTime < calcDate) {
+            return result1.riseSetTime;
+        }
+        // Try from 12h earlier
+        const result2 = planetaryRiseSetTimeRefined(
+            fudgeDate - 12 * 3600, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(result2.riseSetTime) && result2.riseSetTime < calcDate) {
+            return result2.riseSetTime;
+        }
+        // Last resort: try from 24h earlier
+        const result3 = planetaryRiseSetTimeRefined(
+            fudgeDate - 24 * 3600, OBSERVER_LAT, OBSERVER_LON,
+            riseNotSet, planetNumber, NaN, pool,
+        );
+        if (!isNoRiseSet(result3.riseSetTime) && result3.riseSetTime < calcDate) {
+            return result3.riseSetTime;
+        }
+        return NaN;
+    }
+
+    function prevTransit(planetNumber: ECPlanetNumber): number {
+        const now = getNow();
+        const calcDate = dateToDateInterval(now);
+        const result1 = planettransitTimeRefined(
+            calcDate - 60, OBSERVER_LAT, OBSERVER_LON,
+            true, planetNumber, pool,
+        );
+        if (result1 < calcDate) return result1;
+        // Try from 12h earlier
+        const result2 = planettransitTimeRefined(
+            calcDate - 12 * 3600, OBSERVER_LAT, OBSERVER_LON,
+            true, planetNumber, pool,
+        );
+        if (result2 < calcDate) return result2;
+        return NaN;
+    }
+
+    // --- Prev time (search backward from now) ---
+    functions.set('prevSunrise', () => prevRiseSet(true, ECPlanetNumber.Sun));
+    functions.set('prevSunset', () => prevRiseSet(false, ECPlanetNumber.Sun));
+    functions.set('prevSunTransit', () => prevTransit(ECPlanetNumber.Sun));
+    functions.set('prevMoonrise', () => prevRiseSet(true, ECPlanetNumber.Moon));
+    functions.set('prevMoonset', () => prevRiseSet(false, ECPlanetNumber.Moon));
+    functions.set('prevMoonTransit', () => prevTransit(ECPlanetNumber.Moon));
+    functions.set('prevRiseOfPlanet', (planetNumber: number) => {
+        return prevRiseSet(true, planetNumber as ECPlanetNumber);
+    });
+    functions.set('prevSetOfPlanet', (planetNumber: number) => {
+        return prevRiseSet(false, planetNumber as ECPlanetNumber);
+    });
+    functions.set('prevTransitOfPlanet', (planetNumber: number) => {
+        return prevTransit(planetNumber as ECPlanetNumber);
+    });
+
     // --- Planet phase/terminator functions (Venezia) ---
     // planetMoonAgeAngle(body): returns an age-like angle for the terminator display
     // Follows ECAstronomy.m planetAge + planetMoonAgeAngle

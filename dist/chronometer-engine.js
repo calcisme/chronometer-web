@@ -960,6 +960,17 @@
     variables.set("magenta", 4294902015 >>> 0);
     variables.set("darkGray", 4283782485 >>> 0);
     variables.set("lightGray", 4289374890 >>> 0);
+    variables.set("Sun", 0);
+    variables.set("Moon", 1);
+    variables.set("Mercury", 2);
+    variables.set("Venus", 3);
+    variables.set("Earth", 4);
+    variables.set("Mars", 5);
+    variables.set("Jupiter", 6);
+    variables.set("Saturn", 7);
+    variables.set("Uranus", 8);
+    variables.set("Neptune", 9);
+    variables.set("Pluto", 10);
     variables.set("planetSun", 0);
     variables.set("planetMoon", 1);
     functions.set("sin", Math.sin);
@@ -12197,6 +12208,193 @@
     functions.set("setOfPlanetForDayHour24Number", (planetNumber) => {
       const s = riseSetForDay(false, planetNumber);
       return isNaN(s) ? 0 : riseSetAngles(s).hour24;
+    });
+    functions.set("sunriseForDayTime", () => {
+      return riseSetForDay(true, 0 /* Sun */);
+    });
+    functions.set("sunsetForDayTime", () => {
+      return riseSetForDay(false, 0 /* Sun */);
+    });
+    functions.set("sunTransitForDayTime", () => {
+      return transitForDay(0 /* Sun */);
+    });
+    functions.set("moonriseForDayTime", () => {
+      return riseSetForDay(true, 1 /* Moon */);
+    });
+    functions.set("moonsetForDayTime", () => {
+      return riseSetForDay(false, 1 /* Moon */);
+    });
+    functions.set("moonTransitForDayTime", () => {
+      return transitForDay(1 /* Moon */);
+    });
+    functions.set("riseOfPlanetForDayTime", (planetNumber) => {
+      return riseSetForDay(true, planetNumber);
+    });
+    functions.set("setOfPlanetForDayTime", (planetNumber) => {
+      return riseSetForDay(false, planetNumber);
+    });
+    functions.set("transitOfPlanetForDayTime", (planetNumber) => {
+      return transitForDay(planetNumber);
+    });
+    function nextRiseSet(riseNotSet, planetNumber) {
+      const now2 = getNow();
+      const calcDate = dateToDateInterval(now2);
+      const fudgeDate = calcDate + 60;
+      const result1 = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (!isNoRiseSet(result1.riseSetTime) && result1.riseSetTime > calcDate) {
+        return result1.riseSetTime;
+      }
+      const result2 = planetaryRiseSetTimeRefined(
+        fudgeDate + 12 * 3600,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (!isNoRiseSet(result2.riseSetTime) && result2.riseSetTime > calcDate) {
+        return result2.riseSetTime;
+      }
+      const result3 = planetaryRiseSetTimeRefined(
+        fudgeDate + 24 * 3600,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (!isNoRiseSet(result3.riseSetTime) && result3.riseSetTime > calcDate) {
+        return result3.riseSetTime;
+      }
+      return NaN;
+    }
+    function nextTransit(planetNumber) {
+      const now2 = getNow();
+      const calcDate = dateToDateInterval(now2);
+      const result1 = planettransitTimeRefined(
+        calcDate + 60,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        planetNumber,
+        pool
+      );
+      if (result1 > calcDate) return result1;
+      const result2 = planettransitTimeRefined(
+        calcDate + 12 * 3600,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        planetNumber,
+        pool
+      );
+      if (result2 > calcDate) return result2;
+      return NaN;
+    }
+    functions.set("nextSunrise", () => nextRiseSet(true, 0 /* Sun */));
+    functions.set("nextSunset", () => nextRiseSet(false, 0 /* Sun */));
+    functions.set("nextSunTransit", () => nextTransit(0 /* Sun */));
+    functions.set("nextMoonrise", () => nextRiseSet(true, 1 /* Moon */));
+    functions.set("nextMoonset", () => nextRiseSet(false, 1 /* Moon */));
+    functions.set("nextMoonTransit", () => nextTransit(1 /* Moon */));
+    functions.set("nextRiseOfPlanet", (planetNumber) => {
+      return nextRiseSet(true, planetNumber);
+    });
+    functions.set("nextSetOfPlanet", (planetNumber) => {
+      return nextRiseSet(false, planetNumber);
+    });
+    functions.set("nextTransitOfPlanet", (planetNumber) => {
+      return nextTransit(planetNumber);
+    });
+    function prevRiseSet(riseNotSet, planetNumber) {
+      const now2 = getNow();
+      const calcDate = dateToDateInterval(now2);
+      const fudgeDate = calcDate - 60;
+      const result1 = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (!isNoRiseSet(result1.riseSetTime) && result1.riseSetTime < calcDate) {
+        return result1.riseSetTime;
+      }
+      const result2 = planetaryRiseSetTimeRefined(
+        fudgeDate - 12 * 3600,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (!isNoRiseSet(result2.riseSetTime) && result2.riseSetTime < calcDate) {
+        return result2.riseSetTime;
+      }
+      const result3 = planetaryRiseSetTimeRefined(
+        fudgeDate - 24 * 3600,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (!isNoRiseSet(result3.riseSetTime) && result3.riseSetTime < calcDate) {
+        return result3.riseSetTime;
+      }
+      return NaN;
+    }
+    function prevTransit(planetNumber) {
+      const now2 = getNow();
+      const calcDate = dateToDateInterval(now2);
+      const result1 = planettransitTimeRefined(
+        calcDate - 60,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        planetNumber,
+        pool
+      );
+      if (result1 < calcDate) return result1;
+      const result2 = planettransitTimeRefined(
+        calcDate - 12 * 3600,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        planetNumber,
+        pool
+      );
+      if (result2 < calcDate) return result2;
+      return NaN;
+    }
+    functions.set("prevSunrise", () => prevRiseSet(true, 0 /* Sun */));
+    functions.set("prevSunset", () => prevRiseSet(false, 0 /* Sun */));
+    functions.set("prevSunTransit", () => prevTransit(0 /* Sun */));
+    functions.set("prevMoonrise", () => prevRiseSet(true, 1 /* Moon */));
+    functions.set("prevMoonset", () => prevRiseSet(false, 1 /* Moon */));
+    functions.set("prevMoonTransit", () => prevTransit(1 /* Moon */));
+    functions.set("prevRiseOfPlanet", (planetNumber) => {
+      return prevRiseSet(true, planetNumber);
+    });
+    functions.set("prevSetOfPlanet", (planetNumber) => {
+      return prevRiseSet(false, planetNumber);
+    });
+    functions.set("prevTransitOfPlanet", (planetNumber) => {
+      return prevTransit(planetNumber);
     });
     functions.set("planetMoonAgeAngle", (planetNumber) => {
       const di = dateToDateInterval(getNow());

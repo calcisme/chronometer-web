@@ -244,6 +244,204 @@
           display: block;
       }
 
+      /* ── Autocomplete Dropdown ────────────────── */
+      .expr-input-wrap {
+          position: relative;
+      }
+
+      #expr-autocomplete {
+          display: none;
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 100%;
+          margin-top: 4px;
+          max-height: 220px;
+          overflow-y: auto;
+          background: #1e293b;
+          border: 1px solid rgba(75, 85, 99, 0.5);
+          border-radius: 8px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+          z-index: 50;
+          padding: 4px 0;
+      }
+
+      #expr-autocomplete.visible {
+          display: block;
+      }
+
+      .ac-item {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          padding: 6px 12px;
+          cursor: pointer;
+          font-size: 13px;
+          transition: background 0.1s;
+      }
+
+      .ac-item:hover,
+      .ac-item.selected {
+          background: rgba(99, 102, 241, 0.15);
+      }
+
+      .ac-name {
+          font-family: 'JetBrains Mono', monospace;
+          color: #e5e7eb;
+          white-space: nowrap;
+      }
+
+      .ac-sig {
+          font-family: 'JetBrains Mono', monospace;
+          color: #6b7280;
+          font-size: 12px;
+      }
+
+      .ac-desc {
+          color: #9ca3af;
+          font-size: 12px;
+          margin-left: auto;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+      }
+
+      .ac-kind {
+          font-size: 10px;
+          padding: 1px 5px;
+          border-radius: 3px;
+          font-weight: 500;
+          flex-shrink: 0;
+      }
+
+      .ac-kind.fn {
+          background: rgba(99, 102, 241, 0.2);
+          color: #818cf8;
+      }
+
+      .ac-kind.const {
+          background: rgba(34, 197, 94, 0.2);
+          color: #4ade80;
+      }
+
+      /* ── Reference Panel ───────────────────────────── */
+      .expr-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 4px;
+      }
+
+      #ref-toggle {
+          background: none;
+          border: 1px solid rgba(75, 85, 99, 0.4);
+          border-radius: 6px;
+          color: #9ca3af;
+          font-size: 13px;
+          padding: 3px 10px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+      }
+
+      #ref-toggle:hover {
+          background: rgba(99, 102, 241, 0.1);
+          border-color: rgba(99, 102, 241, 0.3);
+          color: #c7d2fe;
+      }
+
+      #ref-toggle.active {
+          background: rgba(99, 102, 241, 0.15);
+          border-color: rgba(99, 102, 241, 0.4);
+          color: #a5b4fc;
+      }
+
+      #ref-panel {
+          display: none;
+          margin-top: 10px;
+          max-height: 400px;
+          overflow-y: auto;
+          border: 1px solid rgba(75, 85, 99, 0.3);
+          border-radius: 8px;
+          background: rgba(17, 24, 39, 0.6);
+      }
+
+      #ref-panel.visible {
+          display: block;
+      }
+
+      .ref-category {
+          border-bottom: 1px solid rgba(75, 85, 99, 0.2);
+      }
+
+      .ref-category:last-child {
+          border-bottom: none;
+      }
+
+      .ref-cat-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+          color: #9ca3af;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          user-select: none;
+          transition: background 0.1s;
+      }
+
+      .ref-cat-header:hover {
+          background: rgba(75, 85, 99, 0.15);
+      }
+
+      .ref-cat-arrow {
+          font-size: 10px;
+          transition: transform 0.15s;
+      }
+
+      .ref-category.open .ref-cat-arrow {
+          transform: rotate(90deg);
+      }
+
+      .ref-cat-body {
+          display: none;
+          padding: 0 0 4px;
+      }
+
+      .ref-category.open .ref-cat-body {
+          display: block;
+      }
+
+      .ref-item {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          padding: 4px 12px 4px 24px;
+          cursor: pointer;
+          font-size: 13px;
+          transition: background 0.1s;
+      }
+
+      .ref-item:hover {
+          background: rgba(99, 102, 241, 0.1);
+      }
+
+      .ref-item-name {
+          font-family: 'JetBrains Mono', monospace;
+          color: #c7d2fe;
+          white-space: nowrap;
+      }
+
+      .ref-item-desc {
+          color: #6b7280;
+          font-size: 12px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+      }
+
       /* ── Footer ───────────────────────────────────── */
       .app-footer {
           margin-top: auto;
@@ -738,14 +936,20 @@
 
       <!-- Expression Evaluator -->
       <div class="section-card expr-section">
-        <p class="section-label">Expression Evaluator</p>
-        <input
-          type="text"
-          id="expr-input"
-          placeholder="e.g. sunAltitude() * 180 / pi"
-          autocomplete="off"
-          spellcheck="false"
-        />
+        <div class="expr-header">
+          <p class="section-label" style="margin:0">Expression Evaluator</p>
+          <button id="ref-toggle" title="Function reference">📖 Reference</button>
+        </div>
+        <div class="expr-input-wrap">
+          <input
+            type="text"
+            id="expr-input"
+            placeholder="e.g. nextSunset() or sunAltitude() * 180 / pi"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div id="expr-autocomplete"></div>
+        </div>
         <div id="expr-results" class="expr-results">
           <div class="expr-result-row">
             <span class="expr-result-label">Number</span>
@@ -761,6 +965,7 @@
           </div>
         </div>
         <p id="expr-error">—</p>
+        <div id="ref-panel"></div>
       </div>
 
       <!-- Footer -->
