@@ -421,527 +421,6 @@
     return parseFloat(s);
   }
 
-  // src/watch/xml-parser.ts
-  function parseWatchXML(xmlText, mode, domParser) {
-    const parser = domParser ?? new DOMParser();
-    const doc = parser.parseFromString(xmlText, "text/xml");
-    const watchEl = doc.querySelector("watch");
-    if (!watchEl) {
-      throw new Error("No <watch> element found in XML");
-    }
-    const watch = {
-      name: attr(watchEl, "name") ?? "unknown",
-      beatsPerSecond: parseInt(attr(watchEl, "beatsPerSecond") ?? "0", 10),
-      faceWidth: parseFloat(attr(watchEl, "faceWidth") ?? "290"),
-      bezelColor: attr(watchEl, "bezelColor") ?? "",
-      bezelNoonMark: (attr(watchEl, "bezelNoonMark") ?? "") === "true",
-      worldTimeRing: (attr(watchEl, "worldTimeRing") ?? "") === "1",
-      worldTimeSubdials: (attr(watchEl, "worldTimeSubdials") ?? "") === "1",
-      planetSelector: (attr(watchEl, "planetSelector") ?? "") === "1",
-      wadokei: (attr(watchEl, "wadokei") ?? "") === "1",
-      numEnvironments: parseInt(attr(watchEl, "numEnvironments") ?? "1", 10),
-      maxSeparateLoc: parseInt(attr(watchEl, "maxSeparateLoc") ?? "1", 10),
-      calendarWeekStart: (attr(watchEl, "calendarWeekStart") ?? "") === "1",
-      urlAbbrev: attr(watchEl, "urlAbbrev") ?? "",
-      initExprs: [],
-      parts: []
-    };
-    for (const child of Array.from(watchEl.children)) {
-      processElement(child, mode, watch.initExprs, watch.parts);
-    }
-    return watch;
-  }
-  function processElement(el, mode, initExprs, parts) {
-    const tag = el.tagName.toLowerCase();
-    switch (tag) {
-      case "init":
-        {
-          const exprStr = attr(el, "expr");
-          if (exprStr) {
-            try {
-              initExprs.push(parse(exprStr));
-            } catch (e) {
-              console.error(`Failed to parse <init expr="${exprStr}">`, e);
-            }
-          }
-        }
-        break;
-      case "atlas":
-        break;
-      case "static":
-        processStatic(el, mode, initExprs, parts);
-        break;
-      case "qdial":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQDial(el));
-        }
-        break;
-      case "qhand":
-      case "hand":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQHand(el));
-        }
-        break;
-      case "swheel":
-      case "qwheel":
-      case "twheel":
-        if (matchesMode(el, mode)) {
-          const wv = tag === "qwheel" ? "QWheel" : tag === "twheel" ? "TWheel" : "SWheel";
-          parts.push(parseWheel(el, wv));
-        }
-        break;
-      case "qtext":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQText(el));
-        }
-        break;
-      case "image":
-        if (matchesMode(el, mode)) {
-          parts.push(parseImage(el));
-        }
-        break;
-      case "qwedge":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQWedge(el));
-        }
-        break;
-      case "button":
-        if (matchesMode(el, mode)) {
-          parts.push(parseButton(el));
-        }
-        break;
-      case "window":
-        if (matchesMode(el, mode)) {
-          parts.push(parseWindow(el));
-        }
-        break;
-      case "qrect":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQRect(el));
-        }
-        break;
-      case "terminator":
-        if (matchesMode(el, mode)) {
-          parts.push(parseTerminator(el));
-        }
-        break;
-      case "qdaynightring":
-        if (matchesMode(el, mode)) {
-          parts.push(parseQDayNightRing(el));
-        }
-        break;
-      case "calendarrowcover":
-        if (matchesMode(el, mode)) {
-          parts.push(parseCalendarRowCover(el));
-        }
-        break;
-      case "calendarheader":
-        if (matchesMode(el, mode)) {
-          parts.push(parseCalendarHeader(el));
-        }
-        break;
-      case "tick":
-        break;
-      case "analemma":
-        if (matchesMode(el, mode)) {
-          parts.push(parseAnalemma(el));
-        }
-        break;
-      case "eotdial":
-        if (matchesMode(el, mode)) {
-          parts.push(parseEotDial(el));
-        }
-        break;
-      default:
-        break;
-    }
-  }
-  function processStatic(el, mode, initExprs, parts) {
-    if (!matchesMode(el, mode)) {
-      return;
-    }
-    const staticPart = {
-      type: "Static",
-      name: attr(el, "name") ?? "",
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      children: []
-    };
-    for (const child of Array.from(el.children)) {
-      processElement(child, mode, initExprs, staticPart.children);
-    }
-    parts.push(staticPart);
-  }
-  function parseQDial(el) {
-    return {
-      type: "QDial",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      radius: attrExpr(el, "radius"),
-      radius2: attrExpr(el, "radius2"),
-      clipRadius: attrExpr(el, "clipRadius"),
-      orientation: attr(el, "orientation"),
-      demiTweak: attrExpr(el, "demiTweak"),
-      text: attr(el, "text"),
-      fontSize: attrExpr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      bgColor: attrExpr(el, "bgColor"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      fillColor1: attrExpr(el, "fillColor1"),
-      fillColor2: attrExpr(el, "fillColor2"),
-      marks: attr(el, "marks"),
-      markWidth: attrExpr(el, "markWidth"),
-      nMarks: attrExpr(el, "nMarks"),
-      mSize: attrExpr(el, "mSize"),
-      angle: attrExpr(el, "angle"),
-      angle0: attrExpr(el, "angle0"),
-      angle1: attrExpr(el, "angle1"),
-      angle2: attrExpr(el, "angle2"),
-      update: attrExpr(el, "update"),
-      updateOffset: attrExpr(el, "updateOffset"),
-      kind: attr(el, "kind"),
-      z: attrExpr(el, "z"),
-      thick: attrExpr(el, "thick"),
-      animSpeed: attrExpr(el, "animSpeed")
-    };
-  }
-  function parseQHand(el) {
-    return {
-      type: "QHand",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      angle: attrExpr(el, "angle"),
-      length: attrExpr(el, "length"),
-      length2: attrExpr(el, "length2"),
-      width: attrExpr(el, "width"),
-      tail: attrExpr(el, "tail"),
-      handType: attr(el, "type"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      fillColor: attrExpr(el, "fillColor"),
-      lineWidth: attrExpr(el, "lineWidth"),
-      kind: attr(el, "kind"),
-      update: attrExpr(el, "update"),
-      updateOffset: attrExpr(el, "updateOffset"),
-      z: attrExpr(el, "z"),
-      thick: attrExpr(el, "thick"),
-      animSpeed: attrExpr(el, "animSpeed"),
-      dragAnimationType: attr(el, "dragAnimationType"),
-      oLength: attrExpr(el, "oLength"),
-      oWidth: attrExpr(el, "oWidth"),
-      oTail: attrExpr(el, "oTail"),
-      oLineWidth: attrExpr(el, "oLineWidth"),
-      oStrokeColor: attrExpr(el, "oStrokeColor"),
-      oFillColor: attrExpr(el, "oFillColor"),
-      oCenter: attrExpr(el, "oCenter"),
-      oRadius: attrExpr(el, "oRadius"),
-      tFillColor: attrExpr(el, "tFillColor"),
-      tStrokeColor: attrExpr(el, "tStrokeColor"),
-      tLineWidth: attrExpr(el, "tLineWidth"),
-      src: attr(el, "src"),
-      xAnchor: attrExpr(el, "xAnchor"),
-      yAnchor: attrExpr(el, "yAnchor"),
-      offsetRadius: attrExpr(el, "offsetRadius"),
-      offsetAngle: attrExpr(el, "offsetAngle"),
-      nRays: attrExpr(el, "nRays"),
-      text: attr(el, "text"),
-      fontSize: attrExpr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      xMotion: attrExpr(el, "xMotion"),
-      yMotion: attrExpr(el, "yMotion"),
-      alpha: attrExpr(el, "alpha"),
-      orientation: attr(el, "orientation"),
-      special: attr(el, "special"),
-      specialParam: attrExpr(el, "specialParam"),
-      envSlot: attrExpr(el, "envSlot")
-    };
-  }
-  function parseWheel(el, variant) {
-    return {
-      type: "Wheel",
-      wheelVariant: variant,
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      angle: attrExpr(el, "angle"),
-      angle1: attrExpr(el, "angle1"),
-      angle2: attrExpr(el, "angle2"),
-      radius: attrExpr(el, "radius"),
-      orientation: attr(el, "orientation"),
-      text: attr(el, "text"),
-      fontSize: attrExpr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      bgColor: attrExpr(el, "bgColor"),
-      bgColor2: attrExpr(el, "bgColor2"),
-      update: attrExpr(el, "update"),
-      updateOffset: attrExpr(el, "updateOffset"),
-      animSpeed: attrExpr(el, "animSpeed"),
-      dragAnimationType: attr(el, "dragAnimationType"),
-      marks: attr(el, "marks"),
-      refName: attr(el, "refName"),
-      tradius: attrExpr(el, "tradius"),
-      tick: attr(el, "tick"),
-      kind: attr(el, "kind"),
-      halfAndHalf: attrExpr(el, "halfAndHalf"),
-      ticks: attrExpr(el, "ticks"),
-      tickWidth: attrExpr(el, "tickWidth"),
-      calendar: attr(el, "calendar"),
-      calendarStartDay: attr(el, "calendarStartDay"),
-      calendarWeekendColor: attrExpr(el, "calendarWeekendColor"),
-      z: attrExpr(el, "z")
-    };
-  }
-  function parseQText(el) {
-    return {
-      type: "QText",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      text: attr(el, "text"),
-      fontSize: attrExpr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      radius: attrExpr(el, "radius"),
-      startAngle: attrExpr(el, "startAngle"),
-      orientation: attr(el, "orientation")
-    };
-  }
-  function parseImage(el) {
-    return {
-      type: "Image",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      src: attr(el, "src"),
-      alpha: attrExpr(el, "alpha"),
-      scale: attrExpr(el, "scale"),
-      special: attr(el, "special"),
-      specialParam: attrExpr(el, "specialParam"),
-      envSlot: attrExpr(el, "envSlot")
-    };
-  }
-  function parseButton(el) {
-    return {
-      type: "Button",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      action: attr(el, "action"),
-      enabled: attrExpr(el, "enabled"),
-      src: attr(el, "src"),
-      motion: attrExpr(el, "motion"),
-      xMotion: attrExpr(el, "xMotion"),
-      yMotion: attrExpr(el, "yMotion"),
-      w: attrExpr(el, "w"),
-      h: attrExpr(el, "h"),
-      opacity: attrExpr(el, "opacity"),
-      rotation: attrExpr(el, "rotation"),
-      expanded: attrExpr(el, "expanded"),
-      immediate: attr(el, "immediate"),
-      repeatStrategy: attr(el, "repeatStrategy"),
-      grabPrio: attr(el, "grabPrio")
-    };
-  }
-  function parseWindow(el) {
-    return {
-      type: "Window",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      w: attrExpr(el, "w"),
-      h: attrExpr(el, "h"),
-      windowType: attr(el, "type"),
-      border: attrExpr(el, "border"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      shadowOpacity: attrExpr(el, "shadowOpacity"),
-      shadowSigma: attrExpr(el, "shadowSigma"),
-      shadowOffset: attrExpr(el, "shadowOffset"),
-      shadowOffsetX: attrExpr(el, "shadowOffsetX")
-    };
-  }
-  function parseQRect(el) {
-    return {
-      type: "QRect",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      w: attrExpr(el, "w"),
-      h: attrExpr(el, "h"),
-      bgColor: attrExpr(el, "bgColor"),
-      panes: attrExpr(el, "panes")
-    };
-  }
-  function parseTerminator(el) {
-    return {
-      type: "Terminator",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      radius: attrExpr(el, "radius"),
-      leavesPerQuadrant: attrExpr(el, "leavesPerQuadrant"),
-      incremental: attrExpr(el, "incremental"),
-      leafBorderColor: attrExpr(el, "leafBorderColor"),
-      leafFillColor: attrExpr(el, "leafFillColor"),
-      leafAnchorRadius: attrExpr(el, "leafAnchorRadius"),
-      update: attrExpr(el, "update"),
-      updateOffset: attrExpr(el, "updateOffset"),
-      phaseAngle: attrExpr(el, "phaseAngle"),
-      rotation: attrExpr(el, "rotation")
-    };
-  }
-  function parseAnalemma(el) {
-    return {
-      type: "Analemma",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      radius: attrExpr(el, "radius"),
-      sunRadius: attrExpr(el, "sunRadius"),
-      sunFillColor: attrExpr(el, "sunFillColor"),
-      sunStrokeColor: attrExpr(el, "sunStrokeColor"),
-      channelColor: attrExpr(el, "channelColor"),
-      channelWidth: attrExpr(el, "channelWidth"),
-      bgSrc: attr(el, "bgSrc"),
-      bgRotates: attrExpr(el, "bgRotates"),
-      update: attrExpr(el, "update")
-    };
-  }
-  function parseEotDial(el) {
-    return {
-      type: "EotDial",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      radius: attrExpr(el, "radius"),
-      arcSpan: attrExpr(el, "arcSpan"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      fontSize: attrExpr(el, "fontSize"),
-      titleFontSize: attrExpr(el, "titleFontSize"),
-      labelText: attr(el, "labelText"),
-      titleYOffset: attrExpr(el, "titleYOffset")
-    };
-  }
-  function parseQWedge(el) {
-    return {
-      type: "QWedge",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      outerRadius: attrExpr(el, "outerRadius"),
-      innerRadius: attrExpr(el, "innerRadius"),
-      angleSpan: attrExpr(el, "angleSpan"),
-      angle: attrExpr(el, "angle"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      fillColor: attrExpr(el, "fillColor"),
-      opaque: el.getAttribute("opaque") ? Number(el.getAttribute("opaque")) : void 0,
-      update: attrExpr(el, "update"),
-      offsetRadius: attrExpr(el, "offsetRadius"),
-      offsetAngle: attrExpr(el, "offsetAngle"),
-      animSpeed: attrExpr(el, "animSpeed"),
-      dragAnimationType: attr(el, "dragAnimationType")
-    };
-  }
-  function parseQDayNightRing(el) {
-    return {
-      type: "QDayNightRing",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      outerRadius: attrExpr(el, "outerRadius"),
-      innerRadius: attrExpr(el, "innerRadius"),
-      numWedges: attrExpr(el, "numWedges"),
-      planetNumber: attrExpr(el, "planetNumber"),
-      masterOffset: attrExpr(el, "masterOffset"),
-      strokeColor: attrExpr(el, "strokeColor"),
-      fillColor: attrExpr(el, "fillColor"),
-      update: attrExpr(el, "update"),
-      timeBase: attr(el, "timeBase"),
-      envSlot: attrExpr(el, "envSlot"),
-      sunsetAngle: attrExpr(el, "sunsetAngle"),
-      sunriseAngle: attrExpr(el, "sunriseAngle"),
-      slideDistance: attrExpr(el, "slideDistance"),
-      slideAnimSpeed: attrExpr(el, "slideAnimSpeed")
-    };
-  }
-  function parseCalendarRowCover(el) {
-    return {
-      type: "CalendarRowCover",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      coverType: attr(el, "coverType"),
-      fontName: attr(el, "fontName"),
-      fontSize: attrExpr(el, "fontSize"),
-      fontColor: attrExpr(el, "fontColor"),
-      bgColor: attrExpr(el, "bgColor"),
-      calendarRadius: attrExpr(el, "calendarRadius"),
-      update: attrExpr(el, "update"),
-      animSpeed: attrExpr(el, "animSpeed"),
-      z: attrExpr(el, "z")
-    };
-  }
-  function parseCalendarHeader(el) {
-    return {
-      type: "CalendarHeader",
-      name: partName(el),
-      x: attrExpr(el, "x"),
-      y: attrExpr(el, "y"),
-      modes: attr(el, "modes"),
-      weekdayStart: attr(el, "weekdayStart"),
-      weekdayColor: attrExpr(el, "weekdayColor"),
-      weekendColor: attrExpr(el, "weekendColor"),
-      bodyFontSize: attrExpr(el, "bodyFontSize"),
-      bodyFontName: attr(el, "bodyFontName"),
-      fontSize: attrExpr(el, "fontSize"),
-      fontName: attr(el, "fontName"),
-      parkX: attrExpr(el, "parkX"),
-      parkY: attrExpr(el, "parkY")
-    };
-  }
-  function attr(el, name) {
-    const val = el.getAttribute(name);
-    return val !== null ? val.trim() : void 0;
-  }
-  function attrExpr(el, name) {
-    const val = attr(el, name);
-    if (!val) return void 0;
-    try {
-      return parse(val);
-    } catch (e) {
-      console.warn(`[xml-parser] Failed to parse AST for attribute: ${name}="${val}"`, e);
-      return void 0;
-    }
-  }
-  function partName(el) {
-    return attr(el, "name") ?? attr(el, "refName") ?? "";
-  }
-  function matchesMode(el, desiredMode) {
-    const modesAttr = attr(el, "modes");
-    if (modesAttr === void 0) {
-      return desiredMode === "front";
-    }
-    const lower = modesAttr.toLowerCase();
-    if (lower === "all") return true;
-    return lower.split("|").some((m) => m.trim() === desiredMode);
-  }
-
   // src/expr/evaluator.ts
   function createDefaultEnvironment() {
     const variables = /* @__PURE__ */ new Map();
@@ -988,19 +467,19 @@
       this.name = "EvalError";
     }
   };
-  function evaluate(node, env) {
+  function evaluate(node, env2) {
     switch (node.kind) {
       case "NumberLiteral":
         return node.value;
       case "Identifier": {
-        const val = env.variables.get(node.name);
+        const val = env2.variables.get(node.name);
         if (val === void 0) {
           throw new EvalError(`Undefined variable: ${node.name}`);
         }
         return val;
       }
       case "UnaryOp": {
-        const operand = evaluate(node.operand, env);
+        const operand = evaluate(node.operand, env2);
         switch (node.operator) {
           case "+":
             return operand;
@@ -1014,74 +493,74 @@
         break;
       }
       case "BinaryOp":
-        return evaluateBinaryOp(node.operator, node.left, node.right, env);
+        return evaluateBinaryOp(node.operator, node.left, node.right, env2);
       case "Ternary": {
-        const cond = evaluate(node.condition, env);
-        return cond ? evaluate(node.consequent, env) : evaluate(node.alternate, env);
+        const cond = evaluate(node.condition, env2);
+        return cond ? evaluate(node.consequent, env2) : evaluate(node.alternate, env2);
       }
       case "Assignment": {
-        const value = evaluate(node.value, env);
+        const value = evaluate(node.value, env2);
         const name = node.name;
         switch (node.operator) {
           case "=":
-            env.variables.set(name, value);
+            env2.variables.set(name, value);
             return value;
           case "+=": {
-            const cur = env.variables.get(name) ?? 0;
+            const cur = env2.variables.get(name) ?? 0;
             const result = cur + value;
-            env.variables.set(name, result);
+            env2.variables.set(name, result);
             return result;
           }
           case "-=": {
-            const cur = env.variables.get(name) ?? 0;
+            const cur = env2.variables.get(name) ?? 0;
             const result = cur - value;
-            env.variables.set(name, result);
+            env2.variables.set(name, result);
             return result;
           }
           case "*=": {
-            const cur = env.variables.get(name) ?? 0;
+            const cur = env2.variables.get(name) ?? 0;
             const result = cur * value;
-            env.variables.set(name, result);
+            env2.variables.set(name, result);
             return result;
           }
           case "/=": {
-            const cur = env.variables.get(name) ?? 0;
+            const cur = env2.variables.get(name) ?? 0;
             const result = cur / value;
-            env.variables.set(name, result);
+            env2.variables.set(name, result);
             return result;
           }
         }
         break;
       }
       case "FunctionCall": {
-        const fn = env.functions.get(node.name);
+        const fn = env2.functions.get(node.name);
         if (!fn) {
           throw new EvalError(`Undefined function: ${node.name}`);
         }
-        const args = node.args.map((arg) => evaluate(arg, env));
+        const args = node.args.map((arg) => evaluate(arg, env2));
         return fn(...args);
       }
       case "ExpressionList": {
         let result = 0;
         for (const expr of node.expressions) {
-          result = evaluate(expr, env);
+          result = evaluate(expr, env2);
         }
         return result;
       }
     }
     throw new EvalError(`Unknown node kind: ${node.kind}`);
   }
-  function evaluateBinaryOp(operator, left, right, env) {
+  function evaluateBinaryOp(operator, left, right, env2) {
     if (operator === "&&") {
-      const l2 = evaluate(left, env);
-      return l2 ? evaluate(right, env) : 0;
+      const l2 = evaluate(left, env2);
+      return l2 ? evaluate(right, env2) : 0;
     }
     if (operator === "||") {
-      const l2 = evaluate(left, env);
-      return l2 ? l2 : evaluate(right, env);
+      const l2 = evaluate(left, env2);
+      return l2 ? l2 : evaluate(right, env2);
     }
-    const l = evaluate(left, env);
-    const r = evaluate(right, env);
+    const l = evaluate(left, env2);
+    const r = evaluate(right, env2);
     switch (operator) {
       case "+":
         return l + r;
@@ -1443,9 +922,6 @@
   function dateToDateInterval(date) {
     return date.getTime() / 1e3 - 978307200;
   }
-  function dateIntervalToDate(dateInterval) {
-    return new Date((dateInterval + 978307200) * 1e3);
-  }
 
   // src/astronomy/es-calendar.ts
   var kECJulianDayOf1990Epoch = 24478915e-1;
@@ -1558,71 +1034,11 @@
   function localComponentsFromTimeInterval(timeInterval, tzOffsetSeconds) {
     return utcComponentsFromTimeInterval(timeInterval + tzOffsetSeconds);
   }
-  function timeIntervalFromLocalComponents(tzOffsetSeconds, era, year, month, day, hour, minute, seconds) {
-    const localT = timeIntervalFromUTCComponents(era, year, month, day, hour, minute, seconds);
-    return localT - tzOffsetSeconds;
-  }
   function weekdayFromTimeInterval(dateInterval, tzOffsetSeconds) {
     const localNow = dateInterval + tzOffsetSeconds;
     const localNowDays = localNow / (24 * 3600);
     const weekday = ((localNowDays + 1) % 7 + 7) % 7;
     return Math.floor(weekday);
-  }
-  function addMonthsToTimeInterval(now, tzOffsetSeconds, months) {
-    const cs = localComponentsFromTimeInterval(now, tzOffsetSeconds);
-    const signedYearNow = cs.era === 0 ? 1 - cs.year : cs.year;
-    const zeroMonthNow = cs.month - 1;
-    const yearMonthThen = signedYearNow + (zeroMonthNow + months) / 12;
-    const signedYearThen = Math.floor(yearMonthThen);
-    const zeroMonthThen = Math.round((yearMonthThen - signedYearThen) * 12);
-    const monthThen = zeroMonthThen + 1;
-    let eraThen;
-    let yearThen;
-    if (signedYearThen <= 0) {
-      eraThen = 0;
-      yearThen = 1 - signedYearThen;
-    } else {
-      eraThen = 1;
-      yearThen = signedYearThen;
-    }
-    const daysInMonthThen = daysInMonth(eraThen, yearThen, monthThen);
-    const dayThen = Math.min(cs.day, daysInMonthThen);
-    return timeIntervalFromLocalComponents(
-      tzOffsetSeconds,
-      eraThen,
-      yearThen,
-      monthThen,
-      dayThen,
-      cs.hour,
-      cs.minute,
-      cs.seconds
-    );
-  }
-  function addYearsToTimeInterval(now, tzOffsetSeconds, years) {
-    const cs = localComponentsFromTimeInterval(now, tzOffsetSeconds);
-    const signedYearNow = cs.era === 0 ? 1 - cs.year : cs.year;
-    const signedYearThen = signedYearNow + years;
-    let eraThen;
-    let yearThen;
-    if (signedYearThen <= 0) {
-      eraThen = 0;
-      yearThen = 1 - signedYearThen;
-    } else {
-      eraThen = 1;
-      yearThen = signedYearThen;
-    }
-    const daysInTargetMonth = daysInMonth(eraThen, yearThen, cs.month);
-    const dayThen = Math.min(cs.day, daysInTargetMonth);
-    return timeIntervalFromLocalComponents(
-      tzOffsetSeconds,
-      eraThen,
-      yearThen,
-      cs.month,
-      dayThen,
-      cs.hour,
-      cs.minute,
-      cs.seconds
-    );
   }
 
   // src/astronomy/es-sidereal.ts
@@ -10771,442 +10187,8 @@
     }
   }
 
-  // src/astronomy/es-astro.ts
-  var TWO_PI3 = Math.PI * 2;
-  function planetAltAz(planetNumber, calculationDateInterval, observerLatitude, observerLongitude, correctForParallax, altNotAz, cache) {
-    const altSlotBase = 381 /* planetAltitude */;
-    const azSlotBase = 391 /* planetAzimuth */;
-    const slotBase = altNotAz ? altSlotBase : azSlotBase;
-    if (cache && cache.isValid(slotBase + planetNumber)) {
-      return cache.get(slotBase + planetNumber);
-    }
-    if (observerLatitude > kECLimitingAzimuthLatitude) {
-      observerLatitude = kECLimitingAzimuthLatitude;
-    } else if (observerLatitude < -kECLimitingAzimuthLatitude) {
-      observerLatitude = -kECLimitingAzimuthLatitude;
-    }
-    let planetRightAscension;
-    let planetDeclination;
-    let planetGeocentricDistance2;
-    if (planetNumber === 0 /* Sun */) {
-      const sunResult = sunRAandDecl(calculationDateInterval, cache);
-      planetRightAscension = sunResult.rightAscension;
-      planetDeclination = sunResult.declination;
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
-      planetGeocentricDistance2 = distanceOfPlanetInAU(
-        0 /* Sun */,
-        julianCenturiesSince2000Epoch,
-        cache
-      );
-    } else if (planetNumber === 1 /* Moon */) {
-      const moonResult = moonRAAndDecl(calculationDateInterval, cache);
-      planetRightAscension = moonResult.rightAscension;
-      planetDeclination = moonResult.declination;
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
-      planetGeocentricDistance2 = distanceOfPlanetInAU(
-        1 /* Moon */,
-        julianCenturiesSince2000Epoch,
-        cache
-      );
-    } else {
-      if (cache && cache.isValid(401 /* planetRA */ + planetNumber)) {
-        planetRightAscension = cache.get(401 /* planetRA */ + planetNumber);
-        planetDeclination = cache.get(411 /* planetDecl */ + planetNumber);
-        planetGeocentricDistance2 = cache.get(108 /* planetGeocentricDistance */ + planetNumber);
-      } else {
-        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
-        const U = julianCenturiesSince2000Epoch / 100;
-        const pos = WB_planetApparentPosition(planetNumber, U);
-        planetRightAscension = pos.apparentRightAscension;
-        planetDeclination = pos.apparentDeclination;
-        planetGeocentricDistance2 = distanceOfPlanetInAU(
-          planetNumber,
-          julianCenturiesSince2000Epoch,
-          cache
-        );
-        if (cache) {
-          cache.set(401 /* planetRA */ + planetNumber, planetRightAscension);
-          cache.set(411 /* planetDecl */ + planetNumber, planetDeclination);
-          cache.set(108 /* planetGeocentricDistance */ + planetNumber, planetGeocentricDistance2);
-        }
-      }
-    }
-    const gst = convertUTToGSTP03(calculationDateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    let planetHourAngle = lst - planetRightAscension;
-    if (correctForParallax) {
-      const { Hprime, declPrime } = topocentricParallax(
-        planetRightAscension,
-        planetDeclination,
-        planetHourAngle,
-        planetGeocentricDistance2,
-        observerLatitude,
-        0
-      );
-      planetDeclination = declPrime;
-      planetHourAngle = Hprime;
-    }
-    const sinAlt = Math.sin(planetDeclination) * Math.sin(observerLatitude) + Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.cos(planetHourAngle);
-    const planetAzimuth = Math.atan2(
-      -Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.sin(planetHourAngle),
-      Math.sin(planetDeclination) - Math.sin(observerLatitude) * sinAlt
-    );
-    const planetAltitude = Math.asin(sinAlt);
-    if (cache) {
-      cache.set(381 /* planetAltitude */ + planetNumber, planetAltitude);
-      cache.set(391 /* planetAzimuth */ + planetNumber, planetAzimuth);
-    }
-    return altNotAz ? planetAltitude : planetAzimuth;
-  }
-  function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
-  }
-  function sunAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, false, cache);
-  }
-  function moonAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
-  }
-  function moonAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, false, cache);
-  }
-  function moonAge(dateInterval, cache) {
-    if (cache && cache.isValid(15 /* moonAge */)) {
-      return {
-        age: cache.get(15 /* moonAge */),
-        phase: cache.get(16 /* moonPhase */)
-      };
-    }
-    const { moonEclipticLongitude } = moonRAAndDecl(dateInterval, cache);
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const sunEclipticLong = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
-    let age = moonEclipticLongitude - sunEclipticLong;
-    if (age < 0) {
-      age += TWO_PI3;
-    }
-    const phase = (1 - Math.cos(age)) / 2;
-    if (cache) {
-      cache.set(15 /* moonAge */, age);
-      cache.set(16 /* moonPhase */, phase);
-    }
-    return { age, phase };
-  }
-  function EOTSeconds(dateInterval, cache) {
-    if (cache && cache.isValid(14 /* eotForDay */)) {
-      return cache.get(14 /* eotForDay */);
-    }
-    const noonD = Math.floor(dateInterval / 86400) * 86400 + 43200;
-    const noonUT = noonD - dateInterval > 43200 ? noonD - 86400 : noonD;
-    const secondsFromNoon = dateInterval - noonUT;
-    const longitudeOfMeanSun = -secondsFromNoon * Math.PI / (12 * 3600);
-    const { rightAscension: sunRA } = sunRAandDecl(dateInterval, cache);
-    const gast = sunRA - longitudeOfMeanSun;
-    const utDate = convertGSTtoUTclosest(gast, dateInterval, null);
-    const eotAsSeconds = dateInterval - utDate;
-    if (cache) {
-      cache.set(14 /* eotForDay */, eotAsSeconds);
-    }
-    return eotAsSeconds;
-  }
-  function localSiderealTime(dateInterval, observerLongitude, cache) {
-    if (cache && cache.isValid(166 /* lst */)) {
-      return cache.get(166 /* lst */);
-    }
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    if (cache) {
-      cache.set(166 /* lst */, lst);
-    }
-    return lst;
-  }
-  function positionAngle(sunRA, sunDecl, objRA, objDecl) {
-    return Math.atan2(
-      Math.cos(sunDecl) * Math.sin(sunRA - objRA),
-      Math.cos(objDecl) * Math.sin(sunDecl) - Math.sin(objDecl) * Math.cos(sunDecl) * Math.cos(sunRA - objRA)
-    );
-  }
-  function greatCircleCourse(lat1, lon1, lat2, lon2) {
-    return Math.atan2(
-      Math.sin(lon1 - lon2) * Math.cos(lat2),
-      Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2)
-    );
-  }
-  function northAngleForObject(altitude, azimuth, observerLatitude) {
-    return greatCircleCourse(altitude, azimuth, observerLatitude, 0);
-  }
-  function moonRelativePositionAngle(dateInterval, observerLatitude, observerLongitude, cache) {
-    const sunResult = sunRAandDecl(dateInterval, cache);
-    const sunRA = sunResult.rightAscension;
-    const sunDecl = sunResult.declination;
-    const moonResult = moonRAAndDecl(dateInterval, cache);
-    const moonRA = moonResult.rightAscension;
-    const moonDecl = moonResult.declination;
-    let posAngle = positionAngle(sunRA, sunDecl, moonRA, moonDecl);
-    const { age: moonAgeAngle } = moonAge(dateInterval, cache);
-    if (moonAgeAngle > Math.PI) {
-      if (posAngle > Math.PI) {
-        posAngle -= Math.PI;
-      } else {
-        posAngle += Math.PI;
-      }
-    }
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const moonHourAngle = lst - moonRA;
-    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
-    const moonAz = Math.atan2(
-      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
-      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
-    );
-    const moonAlt = Math.asin(sinAlt);
-    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
-    let angle = -northAngle - posAngle - Math.PI / 2;
-    if (angle < 0) {
-      angle += TWO_PI3;
-    } else if (angle > TWO_PI3) {
-      angle -= TWO_PI3;
-    }
-    return angle;
-  }
-  var kECsinMoonEquatorEclipticAngle = 0.026917056028711;
-  var kECcosMoonEquatorEclipticAngle = 0.999637670406006;
-  function moonRelativeAngle(dateInterval, observerLatitude, observerLongitude, cache) {
-    const moonResult = moonRAAndDecl(dateInterval, cache);
-    const moonRA = moonResult.rightAscension;
-    const moonDecl = moonResult.declination;
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const moonHourAngle = lst - moonRA;
-    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
-    const moonAz = Math.atan2(
-      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
-      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
-    );
-    const moonAlt = Math.asin(sinAlt);
-    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
-    const apparentGeocentricLongitude = moonRA - gst;
-    const apparentGeocentricLatitude = moonDecl;
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const eclipticTrueObliquity = generalObliquity(julianCenturiesSince2000Epoch);
-    const longitudeOfAscendingNode = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch, cache ?? void 0);
-    const W = apparentGeocentricLongitude - longitudeOfAscendingNode;
-    const b = Math.asin(
-      -Math.sin(W) * Math.cos(apparentGeocentricLatitude) * kECsinMoonEquatorEclipticAngle - Math.sin(apparentGeocentricLatitude) * kECcosMoonEquatorEclipticAngle
-    );
-    const V = longitudeOfAscendingNode;
-    const X = kECsinMoonEquatorEclipticAngle * Math.sin(V);
-    const Y = kECsinMoonEquatorEclipticAngle * Math.cos(V) * Math.cos(eclipticTrueObliquity) - kECcosMoonEquatorEclipticAngle * Math.sin(eclipticTrueObliquity);
-    const omega = Math.atan2(X, Y);
-    const sinP = Math.sqrt(X * X + Y * Y) * Math.cos(moonRA - omega) / Math.cos(b);
-    const posAngle = Math.asin(sinP);
-    let angle = -northAngle - posAngle;
-    if (angle < 0) {
-      angle += TWO_PI3;
-    } else if (angle > TWO_PI3) {
-      angle -= TWO_PI3;
-    }
-    return angle;
-  }
-  function sunSkyOrientationAngle(dateInterval, observerLatitude, observerLongitude, cache) {
-    const sunResult = sunRAandDecl(dateInterval, cache);
-    const sunRA = sunResult.rightAscension;
-    const sunDecl = sunResult.declination;
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const sunHourAngle = lst - sunRA;
-    const sinAlt = Math.sin(sunDecl) * Math.sin(observerLatitude) + Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.cos(sunHourAngle);
-    const sunAz = Math.atan2(
-      -Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.sin(sunHourAngle),
-      Math.sin(sunDecl) - Math.sin(observerLatitude) * sinAlt
-    );
-    const sunAlt = Math.asin(sinAlt);
-    const northAngle = northAngleForObject(sunAlt, sunAz, observerLatitude);
-    const kAnalemmaOrientationOffset = 0;
-    let angle = -northAngle + kAnalemmaOrientationOffset;
-    if (angle < 0) angle += TWO_PI3;
-    else if (angle > TWO_PI3) angle -= TWO_PI3;
-    return angle;
-  }
-  function angularSeparation(ra1, decl1, ra2, decl2) {
-    const sinDecl1 = Math.sin(decl1);
-    const cosDecl1 = Math.cos(decl1);
-    const sinDecl2 = Math.sin(decl2);
-    const cosDecl2 = Math.cos(decl2);
-    const sinRADelta = Math.sin(ra2 - ra1);
-    const cosRADelta = Math.cos(ra2 - ra1);
-    const x = cosDecl1 * sinDecl2 - sinDecl1 * cosDecl2 * cosRADelta;
-    const y = cosDecl2 * sinRADelta;
-    const z = sinDecl1 * sinDecl2 + cosDecl1 * cosDecl2 * cosRADelta;
-    return Math.atan2(Math.sqrt(x * x + y * y), z);
-  }
-  function umbralAngularRadius(moonParallax, sunAngularRadius, sunParallax) {
-    return 1.01 * moonParallax - sunAngularRadius + sunParallax;
-  }
-  function calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache) {
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const sunResult = sunRAandDecl(dateInterval, cache);
-    const sunRA = sunResult.rightAscension;
-    const sunDecl = sunResult.declination;
-    const sunDistAU = distanceOfPlanetInAU(0 /* Sun */, julianCenturiesSince2000Epoch, cache);
-    const sunSizeParallax = planetSizeAndParallax(0 /* Sun */, sunDistAU);
-    const sunAngularSize = sunSizeParallax.angularSize;
-    const sunParallax = sunSizeParallax.parallax;
-    const moonResult = moonRAAndDecl(dateInterval, cache);
-    const moonRA = moonResult.rightAscension;
-    const moonDecl = moonResult.declination;
-    const moonDistAU = distanceOfPlanetInAU(1 /* Moon */, julianCenturiesSince2000Epoch, cache);
-    const moonSizeParallax = planetSizeAndParallax(1 /* Moon */, moonDistAU);
-    const moonAngularSize = moonSizeParallax.angularSize;
-    const moonParallax = moonSizeParallax.parallax;
-    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI3);
-    let physicalSeparation;
-    let separationAtPartialEclipse;
-    let separationAtTotalEclipse;
-    let eclipseKind;
-    let solarNotLunar;
-    let shadowAngularSize = 0;
-    if (raDelta < Math.PI / 2) {
-      const sunH = lst - sunRA;
-      const sunTopo = topocentricParallax(sunRA, sunDecl, sunH, sunDistAU, observerLatitude, 0);
-      const sunTopoRA = lst - sunTopo.Hprime;
-      const moonH = lst - moonRA;
-      const moonTopo = topocentricParallax(moonRA, moonDecl, moonH, moonDistAU, observerLatitude, 0);
-      const moonTopoRA = lst - moonTopo.Hprime;
-      physicalSeparation = angularSeparation(sunTopoRA, sunTopo.declPrime, moonTopoRA, moonTopo.declPrime);
-      separationAtPartialEclipse = sunAngularSize / 2 + moonAngularSize / 2;
-      separationAtTotalEclipse = moonAngularSize / 2 - sunAngularSize / 2;
-      const separationAtAnnularEclipse = sunAngularSize / 2 - moonAngularSize / 2;
-      const sunAlt = planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
-      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 0 /* Sun */, false, cache);
-      if (sunAlt < altAtRS) {
-        eclipseKind = 2 /* SolarNotUp */;
-      } else if (physicalSeparation > separationAtPartialEclipse) {
-        eclipseKind = 0 /* NoneSolar */;
-      } else if (physicalSeparation < separationAtAnnularEclipse) {
-        eclipseKind = 4 /* AnnularSolar */;
-      } else if (physicalSeparation > separationAtTotalEclipse) {
-        eclipseKind = 3 /* PartialSolar */;
-      } else {
-        eclipseKind = 5 /* TotalSolar */;
-      }
-      solarNotLunar = true;
-    } else {
-      shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
-      let shadowRA = sunRA + Math.PI;
-      if (shadowRA > TWO_PI3) shadowRA -= TWO_PI3;
-      const shadowDecl = -sunDecl;
-      physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
-      separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
-      separationAtTotalEclipse = shadowAngularSize / 2 - moonAngularSize / 2;
-      const moonAlt = planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
-      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 1 /* Moon */, false, cache);
-      if (moonAlt < altAtRS) {
-        eclipseKind = 6 /* LunarNotUp */;
-      } else if (physicalSeparation > separationAtPartialEclipse) {
-        eclipseKind = 1 /* NoneLunar */;
-      } else if (physicalSeparation > separationAtTotalEclipse) {
-        eclipseKind = 7 /* PartialLunar */;
-      } else {
-        eclipseKind = 8 /* TotalLunar */;
-      }
-      solarNotLunar = false;
-    }
-    let abstractSeparation = 1 + (physicalSeparation - separationAtTotalEclipse) / (separationAtPartialEclipse - separationAtTotalEclipse);
-    if (abstractSeparation < 0) {
-      abstractSeparation = 0;
-    } else if (abstractSeparation > 3) {
-      abstractSeparation = 3;
-      eclipseKind = solarNotLunar ? 0 /* NoneSolar */ : 1 /* NoneLunar */;
-    }
-    return {
-      abstractSeparation,
-      angularSeparation: physicalSeparation,
-      shadowAngularSize,
-      eclipseKind
-    };
-  }
-  function eclipseKindIsMoreSolarThanLunar(kind) {
-    switch (kind) {
-      case 0 /* NoneSolar */:
-      case 2 /* SolarNotUp */:
-      case 3 /* PartialSolar */:
-      case 4 /* AnnularSolar */:
-      case 5 /* TotalSolar */:
-        return true;
-      default:
-        return false;
-    }
-  }
-  function moonElongation(dateInterval, observerLatitude, observerLongitude, cache) {
-    const eclipse = calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache);
-    if (eclipseKindIsMoreSolarThanLunar(eclipse.eclipseKind)) {
-      return eclipse.angularSeparation;
-    } else {
-      return Math.PI - eclipse.angularSeparation;
-    }
-  }
-  var LUNAR_CYCLE_SECONDS = 29.530589 * 86400;
-  function stepRefineMoonAgeTarget(dateInterval, targetAge, cache) {
-    const { age } = moonAge(dateInterval, cache);
-    let deltaAge = targetAge - age;
-    if (deltaAge > Math.PI) {
-      deltaAge -= TWO_PI3;
-    } else if (deltaAge < -Math.PI) {
-      deltaAge += TWO_PI3;
-    }
-    return dateInterval + deltaAge / TWO_PI3 * LUNAR_CYCLE_SECONDS;
-  }
-  function refineMoonAgeTargetForDate(dateInterval, targetAge) {
-    let tryDate = dateInterval;
-    for (let i = 0; i < 5; i++) {
-      const newDate = stepRefineMoonAgeTarget(tryDate, targetAge, null);
-      if (Math.abs(newDate - tryDate) < 0.1) {
-        return newDate;
-      }
-      tryDate = newDate;
-    }
-    return tryDate;
-  }
-  function closestQuarterPhaseTime(quarterAngle, dateInterval) {
-    const { age } = moonAge(dateInterval, null);
-    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI3);
-    const closestIsBack = ageSinceQuarter < Math.PI - 0.01;
-    const guessDate = closestIsBack ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI3 : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI3 - ageSinceQuarter) / TWO_PI3;
-    return refineMoonAgeTargetForDate(guessDate, quarterAngle);
-  }
-  function closestPhaseDayNumber(targetPhase, dateInterval) {
-    const phaseTime = closestQuarterPhaseTime(targetPhase, dateInterval);
-    const phaseDate = new Date((phaseTime + kECUnixToAppleEpochOffset) * 1e3);
-    return phaseDate.getDate();
-  }
-  function planetEclipticLongitude(planetNumber, dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const U = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
-    return pos.geocentricApparentLongitude;
-  }
-  function planetEclipticLatitude(planetNumber, dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const U = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
-    return pos.geocentricApparentLatitude;
-  }
-  function planetGeocentricDistance(planetNumber, dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const U = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
-    return pos.geocentricDistance;
-  }
-  function lunarAscendingNodeLongitude(dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch: T } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const omegaDeg = 125.0445479 - 1934.1362891 * T + 20754e-7 * T * T + T * T * T / 467441 - T * T * T * T / 60616e3;
-    return fmod(omegaDeg * Math.PI / 180, TWO_PI3);
-  }
-
   // src/astronomy/es-riseset.ts
-  var TWO_PI4 = Math.PI * 2;
+  var TWO_PI3 = Math.PI * 2;
   function riseSetTime(riseNotSet, rightAscension, declination, observerLatitude, observerLongitude, altAtRiseSet, calculationDateInterval, cachePool) {
     const cosH = (Math.sin(altAtRiseSet) - Math.sin(observerLatitude) * Math.sin(declination)) / (Math.cos(observerLatitude) * Math.cos(declination));
     if (cosH < -1) {
@@ -11215,9 +10197,9 @@
       return ALWAYS_BELOW_HORIZON;
     }
     const H = Math.acos(cosH);
-    let LST_rs = rightAscension + (riseNotSet ? TWO_PI4 - H : H);
-    if (LST_rs > TWO_PI4) {
-      LST_rs -= TWO_PI4;
+    let LST_rs = rightAscension + (riseNotSet ? TWO_PI3 - H : H);
+    if (LST_rs > TWO_PI3) {
+      LST_rs -= TWO_PI3;
     }
     const { gst: GST_rs } = convertLSTtoGST(LST_rs, observerLongitude);
     const riseSetDate = convertGSTtoUTclosest(GST_rs, calculationDateInterval, cachePool);
@@ -11229,11 +10211,11 @@
     if (!wantHighTransit) {
       ra += Math.PI;
     }
-    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI4);
+    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI3);
     if (hourAngle > Math.PI) {
-      hourAngle -= TWO_PI4;
+      hourAngle -= TWO_PI3;
     } else if (hourAngle < -Math.PI) {
-      hourAngle += TWO_PI4;
+      hourAngle += TWO_PI3;
     }
     return dateInterval - hourAngle * (12 * 3600) / Math.PI;
   }
@@ -11440,30 +10422,461 @@
     return tryDate;
   }
 
+  // src/shared/animation.ts
+  var kECGLFrameRate = 1 / 240;
+  var EC_UPDATE_NEXT_SUNRISE = -1001;
+  var EC_UPDATE_NEXT_SUNSET = -1002;
+  var EC_UPDATE_NEXT_MOONRISE = -1003;
+  var EC_UPDATE_NEXT_MOONSET = -1004;
+  var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
+  var EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT = -1006;
+  var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
+  var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
+  var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
+  var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
+  var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
+  var SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
+
+  // src/astronomy/es-astro.ts
+  var TWO_PI4 = Math.PI * 2;
+  function planetAltAz(planetNumber, calculationDateInterval, observerLatitude, observerLongitude, correctForParallax, altNotAz, cache) {
+    const altSlotBase = 381 /* planetAltitude */;
+    const azSlotBase = 391 /* planetAzimuth */;
+    const slotBase = altNotAz ? altSlotBase : azSlotBase;
+    if (cache && cache.isValid(slotBase + planetNumber)) {
+      return cache.get(slotBase + planetNumber);
+    }
+    if (observerLatitude > kECLimitingAzimuthLatitude) {
+      observerLatitude = kECLimitingAzimuthLatitude;
+    } else if (observerLatitude < -kECLimitingAzimuthLatitude) {
+      observerLatitude = -kECLimitingAzimuthLatitude;
+    }
+    let planetRightAscension;
+    let planetDeclination;
+    let planetGeocentricDistance2;
+    if (planetNumber === 0 /* Sun */) {
+      const sunResult = sunRAandDecl(calculationDateInterval, cache);
+      planetRightAscension = sunResult.rightAscension;
+      planetDeclination = sunResult.declination;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+      planetGeocentricDistance2 = distanceOfPlanetInAU(
+        0 /* Sun */,
+        julianCenturiesSince2000Epoch,
+        cache
+      );
+    } else if (planetNumber === 1 /* Moon */) {
+      const moonResult = moonRAAndDecl(calculationDateInterval, cache);
+      planetRightAscension = moonResult.rightAscension;
+      planetDeclination = moonResult.declination;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+      planetGeocentricDistance2 = distanceOfPlanetInAU(
+        1 /* Moon */,
+        julianCenturiesSince2000Epoch,
+        cache
+      );
+    } else {
+      if (cache && cache.isValid(401 /* planetRA */ + planetNumber)) {
+        planetRightAscension = cache.get(401 /* planetRA */ + planetNumber);
+        planetDeclination = cache.get(411 /* planetDecl */ + planetNumber);
+        planetGeocentricDistance2 = cache.get(108 /* planetGeocentricDistance */ + planetNumber);
+      } else {
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+        const U = julianCenturiesSince2000Epoch / 100;
+        const pos = WB_planetApparentPosition(planetNumber, U);
+        planetRightAscension = pos.apparentRightAscension;
+        planetDeclination = pos.apparentDeclination;
+        planetGeocentricDistance2 = distanceOfPlanetInAU(
+          planetNumber,
+          julianCenturiesSince2000Epoch,
+          cache
+        );
+        if (cache) {
+          cache.set(401 /* planetRA */ + planetNumber, planetRightAscension);
+          cache.set(411 /* planetDecl */ + planetNumber, planetDeclination);
+          cache.set(108 /* planetGeocentricDistance */ + planetNumber, planetGeocentricDistance2);
+        }
+      }
+    }
+    const gst = convertUTToGSTP03(calculationDateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    let planetHourAngle = lst - planetRightAscension;
+    if (correctForParallax) {
+      const { Hprime, declPrime } = topocentricParallax(
+        planetRightAscension,
+        planetDeclination,
+        planetHourAngle,
+        planetGeocentricDistance2,
+        observerLatitude,
+        0
+      );
+      planetDeclination = declPrime;
+      planetHourAngle = Hprime;
+    }
+    const sinAlt = Math.sin(planetDeclination) * Math.sin(observerLatitude) + Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.cos(planetHourAngle);
+    const planetAzimuth = Math.atan2(
+      -Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.sin(planetHourAngle),
+      Math.sin(planetDeclination) - Math.sin(observerLatitude) * sinAlt
+    );
+    const planetAltitude = Math.asin(sinAlt);
+    if (cache) {
+      cache.set(381 /* planetAltitude */ + planetNumber, planetAltitude);
+      cache.set(391 /* planetAzimuth */ + planetNumber, planetAzimuth);
+    }
+    return altNotAz ? planetAltitude : planetAzimuth;
+  }
+  function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
+  }
+  function sunAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, false, cache);
+  }
+  function moonAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+  }
+  function moonAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, false, cache);
+  }
+  function moonAge(dateInterval, cache) {
+    if (cache && cache.isValid(15 /* moonAge */)) {
+      return {
+        age: cache.get(15 /* moonAge */),
+        phase: cache.get(16 /* moonPhase */)
+      };
+    }
+    const { moonEclipticLongitude } = moonRAAndDecl(dateInterval, cache);
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const sunEclipticLong = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+    let age = moonEclipticLongitude - sunEclipticLong;
+    if (age < 0) {
+      age += TWO_PI4;
+    }
+    const phase = (1 - Math.cos(age)) / 2;
+    if (cache) {
+      cache.set(15 /* moonAge */, age);
+      cache.set(16 /* moonPhase */, phase);
+    }
+    return { age, phase };
+  }
+  function EOTSeconds(dateInterval, cache) {
+    if (cache && cache.isValid(14 /* eotForDay */)) {
+      return cache.get(14 /* eotForDay */);
+    }
+    const noonD = Math.floor(dateInterval / 86400) * 86400 + 43200;
+    const noonUT = noonD - dateInterval > 43200 ? noonD - 86400 : noonD;
+    const secondsFromNoon = dateInterval - noonUT;
+    const longitudeOfMeanSun = -secondsFromNoon * Math.PI / (12 * 3600);
+    const { rightAscension: sunRA } = sunRAandDecl(dateInterval, cache);
+    const gast = sunRA - longitudeOfMeanSun;
+    const utDate = convertGSTtoUTclosest(gast, dateInterval, null);
+    const eotAsSeconds = dateInterval - utDate;
+    if (cache) {
+      cache.set(14 /* eotForDay */, eotAsSeconds);
+    }
+    return eotAsSeconds;
+  }
+  function localSiderealTime(dateInterval, observerLongitude, cache) {
+    if (cache && cache.isValid(166 /* lst */)) {
+      return cache.get(166 /* lst */);
+    }
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    if (cache) {
+      cache.set(166 /* lst */, lst);
+    }
+    return lst;
+  }
+  function positionAngle(sunRA, sunDecl, objRA, objDecl) {
+    return Math.atan2(
+      Math.cos(sunDecl) * Math.sin(sunRA - objRA),
+      Math.cos(objDecl) * Math.sin(sunDecl) - Math.sin(objDecl) * Math.cos(sunDecl) * Math.cos(sunRA - objRA)
+    );
+  }
+  function greatCircleCourse(lat1, lon1, lat2, lon2) {
+    return Math.atan2(
+      Math.sin(lon1 - lon2) * Math.cos(lat2),
+      Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2)
+    );
+  }
+  function northAngleForObject(altitude, azimuth, observerLatitude) {
+    return greatCircleCourse(altitude, azimuth, observerLatitude, 0);
+  }
+  function moonRelativePositionAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    let posAngle = positionAngle(sunRA, sunDecl, moonRA, moonDecl);
+    const { age: moonAgeAngle } = moonAge(dateInterval, cache);
+    if (moonAgeAngle > Math.PI) {
+      if (posAngle > Math.PI) {
+        posAngle -= Math.PI;
+      } else {
+        posAngle += Math.PI;
+      }
+    }
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const moonHourAngle = lst - moonRA;
+    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
+    const moonAz = Math.atan2(
+      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
+      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const moonAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
+    let angle = -northAngle - posAngle - Math.PI / 2;
+    if (angle < 0) {
+      angle += TWO_PI4;
+    } else if (angle > TWO_PI4) {
+      angle -= TWO_PI4;
+    }
+    return angle;
+  }
+  var kECsinMoonEquatorEclipticAngle = 0.026917056028711;
+  var kECcosMoonEquatorEclipticAngle = 0.999637670406006;
+  function moonRelativeAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const moonHourAngle = lst - moonRA;
+    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
+    const moonAz = Math.atan2(
+      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
+      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const moonAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
+    const apparentGeocentricLongitude = moonRA - gst;
+    const apparentGeocentricLatitude = moonDecl;
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const eclipticTrueObliquity = generalObliquity(julianCenturiesSince2000Epoch);
+    const longitudeOfAscendingNode = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch, cache ?? void 0);
+    const W = apparentGeocentricLongitude - longitudeOfAscendingNode;
+    const b = Math.asin(
+      -Math.sin(W) * Math.cos(apparentGeocentricLatitude) * kECsinMoonEquatorEclipticAngle - Math.sin(apparentGeocentricLatitude) * kECcosMoonEquatorEclipticAngle
+    );
+    const V = longitudeOfAscendingNode;
+    const X = kECsinMoonEquatorEclipticAngle * Math.sin(V);
+    const Y = kECsinMoonEquatorEclipticAngle * Math.cos(V) * Math.cos(eclipticTrueObliquity) - kECcosMoonEquatorEclipticAngle * Math.sin(eclipticTrueObliquity);
+    const omega = Math.atan2(X, Y);
+    const sinP = Math.sqrt(X * X + Y * Y) * Math.cos(moonRA - omega) / Math.cos(b);
+    const posAngle = Math.asin(sinP);
+    let angle = -northAngle - posAngle;
+    if (angle < 0) {
+      angle += TWO_PI4;
+    } else if (angle > TWO_PI4) {
+      angle -= TWO_PI4;
+    }
+    return angle;
+  }
+  function sunSkyOrientationAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const sunHourAngle = lst - sunRA;
+    const sinAlt = Math.sin(sunDecl) * Math.sin(observerLatitude) + Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.cos(sunHourAngle);
+    const sunAz = Math.atan2(
+      -Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.sin(sunHourAngle),
+      Math.sin(sunDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const sunAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(sunAlt, sunAz, observerLatitude);
+    const kAnalemmaOrientationOffset = 0;
+    let angle = -northAngle + kAnalemmaOrientationOffset;
+    if (angle < 0) angle += TWO_PI4;
+    else if (angle > TWO_PI4) angle -= TWO_PI4;
+    return angle;
+  }
+  function angularSeparation(ra1, decl1, ra2, decl2) {
+    const sinDecl1 = Math.sin(decl1);
+    const cosDecl1 = Math.cos(decl1);
+    const sinDecl2 = Math.sin(decl2);
+    const cosDecl2 = Math.cos(decl2);
+    const sinRADelta = Math.sin(ra2 - ra1);
+    const cosRADelta = Math.cos(ra2 - ra1);
+    const x = cosDecl1 * sinDecl2 - sinDecl1 * cosDecl2 * cosRADelta;
+    const y = cosDecl2 * sinRADelta;
+    const z = sinDecl1 * sinDecl2 + cosDecl1 * cosDecl2 * cosRADelta;
+    return Math.atan2(Math.sqrt(x * x + y * y), z);
+  }
+  function umbralAngularRadius(moonParallax, sunAngularRadius, sunParallax) {
+    return 1.01 * moonParallax - sunAngularRadius + sunParallax;
+  }
+  function calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache) {
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const sunDistAU = distanceOfPlanetInAU(0 /* Sun */, julianCenturiesSince2000Epoch, cache);
+    const sunSizeParallax = planetSizeAndParallax(0 /* Sun */, sunDistAU);
+    const sunAngularSize = sunSizeParallax.angularSize;
+    const sunParallax = sunSizeParallax.parallax;
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    const moonDistAU = distanceOfPlanetInAU(1 /* Moon */, julianCenturiesSince2000Epoch, cache);
+    const moonSizeParallax = planetSizeAndParallax(1 /* Moon */, moonDistAU);
+    const moonAngularSize = moonSizeParallax.angularSize;
+    const moonParallax = moonSizeParallax.parallax;
+    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI4);
+    let physicalSeparation;
+    let separationAtPartialEclipse;
+    let separationAtTotalEclipse;
+    let eclipseKind;
+    let solarNotLunar;
+    let shadowAngularSize = 0;
+    if (raDelta < Math.PI / 2) {
+      const sunH = lst - sunRA;
+      const sunTopo = topocentricParallax(sunRA, sunDecl, sunH, sunDistAU, observerLatitude, 0);
+      const sunTopoRA = lst - sunTopo.Hprime;
+      const moonH = lst - moonRA;
+      const moonTopo = topocentricParallax(moonRA, moonDecl, moonH, moonDistAU, observerLatitude, 0);
+      const moonTopoRA = lst - moonTopo.Hprime;
+      physicalSeparation = angularSeparation(sunTopoRA, sunTopo.declPrime, moonTopoRA, moonTopo.declPrime);
+      separationAtPartialEclipse = sunAngularSize / 2 + moonAngularSize / 2;
+      separationAtTotalEclipse = moonAngularSize / 2 - sunAngularSize / 2;
+      const separationAtAnnularEclipse = sunAngularSize / 2 - moonAngularSize / 2;
+      const sunAlt = planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 0 /* Sun */, false, cache);
+      if (sunAlt < altAtRS) {
+        eclipseKind = 2 /* SolarNotUp */;
+      } else if (physicalSeparation > separationAtPartialEclipse) {
+        eclipseKind = 0 /* NoneSolar */;
+      } else if (physicalSeparation < separationAtAnnularEclipse) {
+        eclipseKind = 4 /* AnnularSolar */;
+      } else if (physicalSeparation > separationAtTotalEclipse) {
+        eclipseKind = 3 /* PartialSolar */;
+      } else {
+        eclipseKind = 5 /* TotalSolar */;
+      }
+      solarNotLunar = true;
+    } else {
+      shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
+      let shadowRA = sunRA + Math.PI;
+      if (shadowRA > TWO_PI4) shadowRA -= TWO_PI4;
+      const shadowDecl = -sunDecl;
+      physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
+      separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
+      separationAtTotalEclipse = shadowAngularSize / 2 - moonAngularSize / 2;
+      const moonAlt = planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 1 /* Moon */, false, cache);
+      if (moonAlt < altAtRS) {
+        eclipseKind = 6 /* LunarNotUp */;
+      } else if (physicalSeparation > separationAtPartialEclipse) {
+        eclipseKind = 1 /* NoneLunar */;
+      } else if (physicalSeparation > separationAtTotalEclipse) {
+        eclipseKind = 7 /* PartialLunar */;
+      } else {
+        eclipseKind = 8 /* TotalLunar */;
+      }
+      solarNotLunar = false;
+    }
+    let abstractSeparation = 1 + (physicalSeparation - separationAtTotalEclipse) / (separationAtPartialEclipse - separationAtTotalEclipse);
+    if (abstractSeparation < 0) {
+      abstractSeparation = 0;
+    } else if (abstractSeparation > 3) {
+      abstractSeparation = 3;
+      eclipseKind = solarNotLunar ? 0 /* NoneSolar */ : 1 /* NoneLunar */;
+    }
+    return {
+      abstractSeparation,
+      angularSeparation: physicalSeparation,
+      shadowAngularSize,
+      eclipseKind
+    };
+  }
+  function eclipseKindIsMoreSolarThanLunar(kind) {
+    switch (kind) {
+      case 0 /* NoneSolar */:
+      case 2 /* SolarNotUp */:
+      case 3 /* PartialSolar */:
+      case 4 /* AnnularSolar */:
+      case 5 /* TotalSolar */:
+        return true;
+      default:
+        return false;
+    }
+  }
+  function moonElongation(dateInterval, observerLatitude, observerLongitude, cache) {
+    const eclipse = calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache);
+    if (eclipseKindIsMoreSolarThanLunar(eclipse.eclipseKind)) {
+      return eclipse.angularSeparation;
+    } else {
+      return Math.PI - eclipse.angularSeparation;
+    }
+  }
+  var LUNAR_CYCLE_SECONDS = 29.530589 * 86400;
+  function stepRefineMoonAgeTarget(dateInterval, targetAge, cache) {
+    const { age } = moonAge(dateInterval, cache);
+    let deltaAge = targetAge - age;
+    if (deltaAge > Math.PI) {
+      deltaAge -= TWO_PI4;
+    } else if (deltaAge < -Math.PI) {
+      deltaAge += TWO_PI4;
+    }
+    return dateInterval + deltaAge / TWO_PI4 * LUNAR_CYCLE_SECONDS;
+  }
+  function refineMoonAgeTargetForDate(dateInterval, targetAge) {
+    let tryDate = dateInterval;
+    for (let i = 0; i < 5; i++) {
+      const newDate = stepRefineMoonAgeTarget(tryDate, targetAge, null);
+      if (Math.abs(newDate - tryDate) < 0.1) {
+        return newDate;
+      }
+      tryDate = newDate;
+    }
+    return tryDate;
+  }
+  function closestQuarterPhaseTime(quarterAngle, dateInterval) {
+    const { age } = moonAge(dateInterval, null);
+    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI4);
+    const closestIsBack = ageSinceQuarter < Math.PI - 0.01;
+    const guessDate = closestIsBack ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI4 : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI4 - ageSinceQuarter) / TWO_PI4;
+    return refineMoonAgeTargetForDate(guessDate, quarterAngle);
+  }
+  function closestPhaseDayNumber(targetPhase, dateInterval) {
+    const phaseTime = closestQuarterPhaseTime(targetPhase, dateInterval);
+    const phaseDate = new Date((phaseTime + kECUnixToAppleEpochOffset) * 1e3);
+    return phaseDate.getDate();
+  }
+  function planetEclipticLongitude(planetNumber, dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
+    return pos.geocentricApparentLongitude;
+  }
+  function planetEclipticLatitude(planetNumber, dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
+    return pos.geocentricApparentLatitude;
+  }
+  function planetGeocentricDistance(planetNumber, dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
+    return pos.geocentricDistance;
+  }
+  function lunarAscendingNodeLongitude(dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch: T } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const omegaDeg = 125.0445479 - 1934.1362891 * T + 20754e-7 * T * T + T * T * T / 467441 - T * T * T * T / 60616e3;
+    return fmod(omegaDeg * Math.PI / 180, TWO_PI4);
+  }
+
   // src/watch/terminator.ts
   function isLeft(q) {
     return q === 0 /* UpperLeft */ || q === 1 /* LowerLeft */;
   }
   function isRight(q) {
     return q === 3 /* UpperRight */ || q === 2 /* LowerRight */;
-  }
-  function isUpper(q) {
-    return q === 0 /* UpperLeft */ || q === 3 /* UpperRight */;
-  }
-  var EVEN_ORDER = [
-    1 /* LowerLeft */,
-    0 /* UpperLeft */,
-    3 /* UpperRight */,
-    2 /* LowerRight */
-  ];
-  var ODD_ORDER = [
-    0 /* UpperLeft */,
-    1 /* LowerLeft */,
-    2 /* LowerRight */,
-    3 /* UpperRight */
-  ];
-  function quadrantOrder(leafIndex, q) {
-    return leafIndex % 2 === 0 ? EVEN_ORDER[q] : ODD_ORDER[q];
   }
   function phaseAngleForInnerEdge(forceLowerRight, quadrant, indexWithinQuadrant, leavesPerQuadrant) {
     if (!forceLowerRight && isLeft(quadrant)) {
@@ -11542,263 +10955,25 @@
     }
     return returnAngle;
   }
-  function expandTerminatorToLeaves(part, env) {
-    const radius = part.radius ? evaluate(part.radius, env) : 20;
-    const leavesPerQuadrant = part.leavesPerQuadrant ? Math.round(evaluate(part.leavesPerQuadrant, env)) : 6;
-    const incremental = part.incremental ? evaluate(part.incremental, env) !== 0 : false;
-    const anchorEdgeRadius = part.leafAnchorRadius ? evaluate(part.leafAnchorRadius, env) : 0;
-    const leafFillColor = part.leafFillColor ? hexToCSS(evaluate(part.leafFillColor, env)) : "#080808";
-    const leafBorderColor = part.leafBorderColor ? hexToCSS(evaluate(part.leafBorderColor, env)) : "#383838";
-    const centerX = part.x ? evaluate(part.x, env) : 0;
-    const centerY = part.y ? evaluate(part.y, env) : 0;
-    const offsetRadius = radius + anchorEdgeRadius;
-    const updateIntervalSec = part.update ? evaluate(part.update, env) : 60;
-    const leaves = [];
-    for (let i = 0; i < leavesPerQuadrant; i++) {
-      for (let q = 0; q < 4; q++) {
-        const quadrant = quadrantOrder(i, q);
-        const baseOffsetAngle = isUpper(quadrant) ? 0 : Math.PI;
-        const initialPhase = part.phaseAngle ? evaluate(part.phaseAngle, env) : 0;
-        const initialRotation = part.rotation ? evaluate(part.rotation, env) : 0;
-        let initialAngle = terminatorAngle(
-          initialPhase,
-          quadrant,
-          i,
-          leavesPerQuadrant,
-          incremental ? 1 : 0
-        );
-        if (!isUpper(quadrant)) initialAngle += Math.PI;
-        const now = performance.now();
-        leaves.push({
-          quadrant,
-          indexWithinQuadrant: i,
-          leavesPerQuadrant,
-          radius,
-          incremental,
-          anchorEdgeRadius,
-          leafFillColor,
-          leafBorderColor,
-          centerX,
-          centerY,
-          baseOffsetAngle,
-          offsetRadius,
-          currentAngle: initialAngle,
-          currentRotation: initialRotation,
-          phaseExpr: part.phaseAngle,
-          rotationExpr: part.rotation,
-          updateIntervalSec,
-          angleAnim: makeAnimatingValue(initialAngle, now),
-          rotationAnim: makeAnimatingValue(initialRotation, now),
-          nextUpdateTime: 0
-          // Force immediate evaluation on first frame
-        });
-      }
-    }
-    return leaves;
-  }
-  function updateLeafAngles(leaves, env) {
-    if (leaves.length === 0) return;
-    const phase = leaves[0].phaseExpr ? evaluate(leaves[0].phaseExpr, env) : 0;
-    const rotation = leaves[0].rotationExpr ? evaluate(leaves[0].rotationExpr, env) : 0;
-    for (const leaf of leaves) {
-      let angle = terminatorAngle(
-        phase,
-        leaf.quadrant,
-        leaf.indexWithinQuadrant,
-        leaf.leavesPerQuadrant,
-        leaf.incremental ? 1 : 0
-      );
-      if (!isUpper(leaf.quadrant)) {
-        angle += Math.PI;
-      }
-      leaf.currentAngle = angle;
-      leaf.currentRotation = rotation;
-    }
-  }
-  var kECGLAngleAnimationSpeed = 2;
-  function tickLeafAnimations(leaves, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0) {
-    if (leaves.length === 0) return;
-    let phase = null;
-    let rotation = null;
-    for (const leaf of leaves) {
-      if (now >= leaf.nextUpdateTime) {
-        if (phase === null) {
-          phase = leaf.phaseExpr ? evaluate(leaf.phaseExpr, env) : 0;
-          rotation = leaf.rotationExpr ? evaluate(leaf.rotationExpr, env) : 0;
-        }
-        let newAngle = terminatorAngle(
-          phase,
-          leaf.quadrant,
-          leaf.indexWithinQuadrant,
-          leaf.leavesPerQuadrant,
-          leaf.incremental ? 1 : 0
-        );
-        if (!isUpper(leaf.quadrant)) newAngle += Math.PI;
-        const newRotation = rotation;
-        if (tickIntervalMs !== null && tickIntervalMs > 0) {
-          let ticksUntilUpdate = 1;
-          if (displayDeltaPerTickSec > 0 && leaf.updateIntervalSec > 0) {
-            ticksUntilUpdate = Math.max(1, Math.ceil(leaf.updateIntervalSec / displayDeltaPerTickSec));
-          }
-          const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
-          const angleDelta = shortestPathDelta(leaf.angleAnim.currentValue, newAngle);
-          const angleNormalDur = angleDelta / kECGLAngleAnimationSpeed * 1e3;
-          if (angleNormalDur > timeUntilNextUpdateMs) {
-            startAnimationRaw(leaf.angleAnim, newAngle, now, 1, timeUntilNextUpdateMs);
-          } else {
-            startAnimationRaw(leaf.angleAnim, newAngle, now);
-          }
-          const rotDelta = shortestPathDelta(leaf.rotationAnim.currentValue, newRotation);
-          const rotNormalDur = rotDelta / kECGLAngleAnimationSpeed * 1e3;
-          if (rotNormalDur > timeUntilNextUpdateMs) {
-            startAnimationRaw(leaf.rotationAnim, newRotation, now, 1, timeUntilNextUpdateMs);
-          } else {
-            startAnimationRaw(leaf.rotationAnim, newRotation, now);
-          }
-          leaf.nextUpdateTime = now + timeUntilNextUpdateMs;
-        } else {
-          startAnimationRaw(leaf.angleAnim, newAngle, now);
-          startAnimationRaw(leaf.rotationAnim, newRotation, now);
-          leaf.nextUpdateTime = now + leaf.updateIntervalSec * 1e3;
-        }
-      }
-      leaf.currentAngle = interpolateRaw(leaf.angleAnim, now);
-      leaf.currentRotation = interpolateRaw(leaf.rotationAnim, now);
-    }
-  }
-  function shortestPathDelta(current, target) {
-    const a = fmod2(current, 2 * Math.PI);
-    const b = fmod2(target, 2 * Math.PI);
-    let d = Math.abs(b - a);
-    if (d > Math.PI) d = 2 * Math.PI - d;
-    return d;
-  }
-  function finishLeafAnimations(leaves) {
-    for (const leaf of leaves) {
-      if (leaf.angleAnim.animating) {
-        leaf.angleAnim.currentValue = fmod2(leaf.angleAnim.targetValue, 2 * Math.PI);
-        leaf.angleAnim.animating = false;
-      }
-      if (leaf.rotationAnim.animating) {
-        leaf.rotationAnim.currentValue = fmod2(leaf.rotationAnim.targetValue, 2 * Math.PI);
-        leaf.rotationAnim.animating = false;
-      }
-      leaf.currentAngle = leaf.angleAnim.currentValue;
-      leaf.currentRotation = leaf.rotationAnim.currentValue;
-      leaf.nextUpdateTime = Infinity;
-    }
-  }
-  function resetLeafSchedules(leaves) {
-    for (const leaf of leaves) {
-      leaf.nextUpdateTime = 0;
-    }
-  }
-  function anyLeafAnimating(leaves) {
-    for (const leaf of leaves) {
-      if (leaf.angleAnim.animating || leaf.rotationAnim.animating) return true;
-    }
-    return false;
-  }
-  function terminatorArcPoint(i, n, xsign, ysign, xcenter, ycenter, radius, phase) {
-    const th = Math.PI / 2 * (i / n);
-    const x = xcenter + xsign * Math.abs(Math.cos(phase) * Math.cos(th) * radius);
-    const y = ycenter + ysign * Math.sin(th) * radius;
-    return [x, y];
-  }
-  function drawTerminatorLeaf(ctx, leaf) {
-    const { quadrant, indexWithinQuadrant, leavesPerQuadrant, radius } = leaf;
-    ctx.fillStyle = leaf.leafFillColor;
-    ctx.strokeStyle = leaf.leafBorderColor;
-    ctx.lineWidth = 0.5;
-    let xsign;
-    let ysign;
-    const xcenter = 0;
-    let ycenter;
-    let clockwiseEndArc;
-    switch (quadrant) {
-      case 0 /* UpperLeft */:
-        xsign = -1;
-        ysign = 1;
-        ycenter = -radius;
-        clockwiseEndArc = true;
-        break;
-      case 1 /* LowerLeft */:
-        xsign = -1;
-        ysign = -1;
-        ycenter = radius;
-        clockwiseEndArc = false;
-        break;
-      case 3 /* UpperRight */:
-        xsign = 1;
-        ysign = 1;
-        ycenter = -radius;
-        clockwiseEndArc = false;
-        break;
-      case 2 /* LowerRight */:
-        xsign = 1;
-        ysign = -1;
-        ycenter = radius;
-        clockwiseEndArc = true;
-        break;
-    }
-    const paInner = fmod2(phaseAngleForInnerEdge(false, quadrant, indexWithinQuadrant, leavesPerQuadrant), 2 * Math.PI);
-    const paOuter = fmod2(phaseAngleForOuterEdge(false, quadrant, indexWithinQuadrant, leavesPerQuadrant), 2 * Math.PI);
-    const n = 30;
-    const overlap = leaf.incremental ? 1 : 0;
-    ctx.beginPath();
-    ctx.moveTo(xcenter, ycenter + ysign * radius);
-    let x, y;
-    for (let i = n - 1; i >= -overlap; i--) {
-      [x, y] = terminatorArcPoint(i, n, xsign, ysign, xcenter, ycenter, radius, paInner);
-      ctx.lineTo(x, y);
-    }
-    let [nextX, nextY] = terminatorArcPoint(-overlap, n, xsign, ysign, xcenter, ycenter, radius, paOuter);
-    const midX = (x + nextX) / 2;
-    const midY = (y + nextY) / 2;
-    const deltaX = x - nextX;
-    const deltaY = y - nextY;
-    const endRadius = Math.sqrt(deltaX * deltaX + deltaY * deltaY) / 2;
-    const startAngle = Math.atan2(y - midY, x - midX);
-    const endAngle = Math.atan2(nextY - midY, nextX - midX);
-    ctx.arc(midX, midY, endRadius, startAngle, endAngle, clockwiseEndArc);
-    for (let i = -overlap; i <= n; i++) {
-      [x, y] = terminatorArcPoint(i, n, xsign, ysign, xcenter, ycenter, radius, paOuter);
-      ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-  function drawTerminator(ctx, leaves, scale = 1) {
-    if (leaves.length === 0) return;
-    for (const leaf of leaves) {
-      ctx.save();
-      ctx.translate(leaf.centerX * scale, -leaf.centerY * scale);
-      const offsetAngle = leaf.baseOffsetAngle + leaf.currentRotation;
-      const xoff = leaf.offsetRadius * Math.sin(offsetAngle) * scale;
-      const yoff = -leaf.offsetRadius * Math.cos(offsetAngle) * scale;
-      ctx.translate(xoff, yoff);
-      const angleValue = offsetAngle + leaf.currentAngle;
-      ctx.rotate(angleValue);
-      ctx.scale(scale, -scale);
-      drawTerminatorLeaf(ctx, leaf);
-      ctx.restore();
-    }
-  }
-  function hexToCSS(value) {
-    const v = value >>> 0;
-    const a = (v >> 24 & 255) / 255;
-    const r = v >> 16 & 255;
-    const g = v >> 8 & 255;
-    const b = v & 255;
-    if (a >= 0.999) {
-      return `rgb(${r},${g},${b})`;
-    }
-    return `rgba(${r},${g},${b},${a.toFixed(3)})`;
-  }
 
   // src/shared/astro-env.ts
+  var DEFAULT_LAT_DEG = 37.205;
+  var DEFAULT_LON_DEG = -121.954;
   var cachedBatteryLevel = 1;
+  var batteryInitialized = false;
+  function initBatteryState() {
+    if (batteryInitialized) return;
+    if (typeof navigator !== "undefined" && "getBattery" in navigator) {
+      batteryInitialized = true;
+      navigator.getBattery().then((battery) => {
+        cachedBatteryLevel = battery.level;
+        battery.addEventListener("levelchange", () => {
+          cachedBatteryLevel = battery.level;
+        });
+      }).catch(() => {
+      });
+    }
+  }
   function computeTzDeltaMs(olsonTimezone, referenceDate) {
     if (!olsonTimezone) return 0;
     const ref = referenceDate || /* @__PURE__ */ new Date();
@@ -11827,34 +11002,57 @@
     }
     return (targetOffsetSec - browserOffsetSec) * 1e3;
   }
-  function evalAttr(expr, env) {
-    if (!expr) return 0;
-    return evaluate(expr, env);
+  function createAstroEnvironment(observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow2 = () => /* @__PURE__ */ new Date(), olsonTimezone) {
+    const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
+    const OBSERVER_LON = observerLonDeg * Math.PI / 180;
+    initBatteryState();
+    const env2 = createDefaultEnvironment();
+    env2.observerLatRad = OBSERVER_LAT;
+    env2.observerLonRad = OBSERVER_LON;
+    env2.getNow = getNow2;
+    env2.variables.set("updateAtNextSunrise", EC_UPDATE_NEXT_SUNRISE);
+    env2.variables.set("updateAtNextSunset", EC_UPDATE_NEXT_SUNSET);
+    env2.variables.set("updateAtNextMoonrise", EC_UPDATE_NEXT_MOONRISE);
+    env2.variables.set("updateAtNextMoonset", EC_UPDATE_NEXT_MOONSET);
+    env2.variables.set("updateAtNextSunriseOrMidnight", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
+    env2.variables.set("updateAtNextSunsetOrMidnight", EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
+    env2.variables.set("updateAtNextMoonriseOrMidnight", EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
+    env2.variables.set("updateAtNextMoonsetOrMidnight", EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
+    env2.variables.set("updateAtEnvChangeOnly", EC_UPDATE_ENV_CHANGE_ONLY);
+    env2.variables.set("updateAtNextSunriseOrSunset", EC_UPDATE_NEXT_SUNRISE_OR_SUNSET);
+    env2.variables.set("updateAtNextMoonriseOrMoonset", EC_UPDATE_NEXT_MOONRISE_OR_MOONSET);
+    env2.variables.set("updateForTimeSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
+    env2.variables.set("updateForLocSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
+    env2.variables.set("planetSun", 0 /* Sun */);
+    env2.variables.set("planetMoon", 1 /* Moon */);
+    env2.variables.set("planetMercury", 2 /* Mercury */);
+    env2.variables.set("planetVenus", 3 /* Venus */);
+    env2.variables.set("planetEarth", 4 /* Earth */);
+    env2.variables.set("planetMars", 5 /* Mars */);
+    env2.variables.set("planetJupiter", 6 /* Jupiter */);
+    env2.variables.set("planetSaturn", 7 /* Saturn */);
+    env2.variables.set("planetUranus", 8 /* Uranus */);
+    env2.variables.set("planetNeptune", 9 /* Neptune */);
+    env2.variables.set("planetMidnightSun", 11 /* MidnightSun */);
+    env2.variables.set("topAnchorClockNoon", 0);
+    env2.variables.set("topAnchorClockMidnight", 1);
+    env2.variables.set("topAnchorSolarNoon", 2);
+    env2.variables.set("topAnchorSolarMidnight", 3);
+    const internals = registerAstroFunctions(env2, OBSERVER_LAT, OBSERVER_LON, getNow2, olsonTimezone);
+    releaseCachePool(internals.pool);
+    return env2;
   }
-  function evalColor(expr, env) {
-    if (!expr) return "rgba(0,0,0,0)";
-    const val = evaluate(expr, env);
-    return argbToCSS(val);
-  }
-  function argbToCSS(argb) {
-    const v = argb >>> 0;
-    const a = (v >>> 24 & 255) / 255;
-    const r = v >>> 16 & 255;
-    const g = v >>> 8 & 255;
-    const b = v & 255;
-    return `rgba(${r},${g},${b},${a.toFixed(3)})`;
-  }
-  function registerAstroFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone) {
-    const { functions } = env;
-    const now = getNow();
+  function registerAstroFunctions(env2, OBSERVER_LAT, OBSERVER_LON, getNow2 = () => /* @__PURE__ */ new Date(), olsonTimezone) {
+    const { functions } = env2;
+    const now = getNow2();
     const dateInterval = dateToDateInterval(now);
-    const tzDeltaMs = computeTzDeltaMs(olsonTimezone, now);
+    const tzDeltaMs2 = computeTzDeltaMs(olsonTimezone, now);
     const browserOffsetSec = -now.getTimezoneOffset() * 60;
-    const tzOffsetSeconds = browserOffsetSec + tzDeltaMs / 1e3;
-    env.tzOffsetSec = tzOffsetSeconds;
+    const tzOffsetSeconds = browserOffsetSec + tzDeltaMs2 / 1e3;
+    env2.tzOffsetSec = tzOffsetSeconds;
     const liveDate = () => {
-      const raw = getNow();
-      return tzDeltaMs !== 0 ? new Date(raw.getTime() + tzDeltaMs) : raw;
+      const raw = getNow2();
+      return tzDeltaMs2 !== 0 ? new Date(raw.getTime() + tzDeltaMs2) : raw;
     };
     const liveTime = () => {
       const t = liveDate();
@@ -11881,7 +11079,7 @@
       return tzOffsetSeconds * Math.PI / (3600 * 12);
     });
     const getLocalComponents = () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return localComponentsFromTimeInterval(di, tzOffsetSeconds);
     };
     functions.set("dayNumber", () => getLocalComponents().day - 1);
@@ -11892,11 +11090,11 @@
     functions.set("monthNumber", () => getLocalComponents().month - 1);
     functions.set("monthNumberAngle", () => (getLocalComponents().month - 1) * 2 * Math.PI / 12);
     functions.set("weekdayNumberAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return weekdayFromTimeInterval(di, tzOffsetSeconds) * 2 * Math.PI / 7;
     });
     functions.set("weekdayNumber", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return weekdayFromTimeInterval(di, tzOffsetSeconds);
     });
     functions.set("yearNumber", () => {
@@ -11905,19 +11103,19 @@
     });
     functions.set("eraNumber", () => getLocalComponents().era);
     functions.set("GregorianEra", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return di > kECJulianGregorianSwitchoverTimeInterval ? 1 : 0;
     });
     functions.set("DSTNumber", () => {
       if (olsonTimezone) {
-        const now3 = getNow();
+        const now3 = getNow2();
         const yr = liveDate().getFullYear();
         const janDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 0, 1));
         const julDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 6, 1));
         const stdDelta = Math.min(janDelta, julDelta);
-        return tzDeltaMs > stdDelta ? 1 : 0;
+        return tzDeltaMs2 > stdDelta ? 1 : 0;
       }
-      const now2 = getNow();
+      const now2 = getNow2();
       const jan = new Date(now2.getFullYear(), 0, 1);
       const jul = new Date(now2.getFullYear(), 6, 1);
       const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
@@ -11946,7 +11144,7 @@
     });
     functions.set("season", () => {
       const north = OBSERVER_LAT >= 0;
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const sunLong = planetEclipticLongitude(0 /* Sun */, di, null);
       if (sunLong > Math.PI * 3 / 2) return north ? 3 : 1;
       else if (sunLong > Math.PI) return north ? 2 : 0;
@@ -11954,7 +11152,7 @@
       else return north ? 0 : 2;
     });
     functions.set("offsetOfWinterSolsticeFromDec31Midnight", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const todaysLongitude = planetEclipticLongitude(0 /* Sun */, di, null);
       const cs = utcComponentsFromTimeInterval(di);
       const thisDay2001 = timeIntervalFromUTCComponents(1, 2001, cs.month, cs.day, cs.hour, cs.minute, cs.seconds);
@@ -11972,19 +11170,19 @@
     const pool = new AstroCachePool();
     initializeCachePool(pool, dateInterval, OBSERVER_LAT, OBSERVER_LON, false, tzOffsetSeconds);
     functions.set("sunAltitude", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("sunAzimuth", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("sunSkyOrientationAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return sunSkyOrientationAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     function riseSetForDay(riseNotSet, planetNumber) {
-      const now2 = getNow();
+      const now2 = getNow2();
       const calcDate = dateToDateInterval(now2);
       const ld = liveDate();
       const localNoon = new Date(
@@ -11995,7 +11193,7 @@
         0,
         0
       );
-      const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
+      const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs2));
       const fwdResult = planetaryRiseSetTimeRefined(
         noonDI,
         OBSERVER_LAT,
@@ -12023,12 +11221,12 @@
       return NaN;
     }
     function isSameLocalDay(di1, di2) {
-      const d1 = new Date((di1 + 978307200) * 1e3 + tzDeltaMs);
-      const d2 = new Date((di2 + 978307200) * 1e3 + tzDeltaMs);
+      const d1 = new Date((di1 + 978307200) * 1e3 + tzDeltaMs2);
+      const d2 = new Date((di2 + 978307200) * 1e3 + tzDeltaMs2);
       return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
     }
     function riseSetAngles(di) {
-      const d = new Date((di + 978307200) * 1e3 + tzDeltaMs);
+      const d = new Date((di + 978307200) * 1e3 + tzDeltaMs2);
       return {
         hour12: d.getHours() % 12 + d.getMinutes() / 60 + d.getSeconds() / 3600,
         minute: d.getMinutes() + d.getSeconds() / 60,
@@ -12058,78 +11256,78 @@
       return isNaN(ss) ? 0 : riseSetAngles(ss).minute * 2 * Math.PI / 60;
     });
     functions.set("moonAltitude", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("moonAzimuth", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("moonAgeAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonAge(di, null).age;
     });
     functions.set("moonRelativePositionAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("moonRelativeAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonRelativeAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("realMoonAgeAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const ageRadians = moonAge(di, null).age;
       const kECLunarCycleInDays = 29.530588;
       return ageRadians / (2 * Math.PI) * kECLunarCycleInDays;
     });
     functions.set("moonElongation", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonElongation(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
     functions.set("closestNewMoonDayNumber", () => {
-      return closestPhaseDayNumber(0, dateToDateInterval(getNow())) - 1;
+      return closestPhaseDayNumber(0, dateToDateInterval(getNow2())) - 1;
     });
     functions.set("closestFirstQuarterDayNumber", () => {
-      return closestPhaseDayNumber(Math.PI / 2, dateToDateInterval(getNow())) - 1;
+      return closestPhaseDayNumber(Math.PI / 2, dateToDateInterval(getNow2())) - 1;
     });
     functions.set("closestFullMoonDayNumber", () => {
-      return closestPhaseDayNumber(Math.PI, dateToDateInterval(getNow())) - 1;
+      return closestPhaseDayNumber(Math.PI, dateToDateInterval(getNow2())) - 1;
     });
     functions.set("closestThirdQuarterDayNumber", () => {
-      return closestPhaseDayNumber(3 * Math.PI / 2, dateToDateInterval(getNow())) - 1;
+      return closestPhaseDayNumber(3 * Math.PI / 2, dateToDateInterval(getNow2())) - 1;
     });
     functions.set("ELongitudeOfPlanet", (n) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return planetEclipticLongitude(n, di, null);
     });
     functions.set("HLongitudeOfPlanet", (n) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
       return WB_planetHeliocentricLongitude(n, julianCenturiesSince2000Epoch / 100);
     });
     functions.set("ELatitudeOfPlanet", (n) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return planetEclipticLatitude(n, di, null);
     });
     functions.set("distanceFromEarthOfPlanet", (n) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return planetGeocentricDistance(n, di, null);
     });
     functions.set("azimuthOfPlanet", (planetNumber) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       if (planetNumber === 0 /* Sun */) return sunAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
       if (planetNumber === 1 /* Moon */) return moonAzimuth(di, OBSERVER_LAT, OBSERVER_LON, null);
       return planetAltAz(planetNumber, di, OBSERVER_LAT, OBSERVER_LON, true, false, null);
     });
     functions.set("altitudeOfPlanet", (planetNumber) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       if (planetNumber === 0 /* Sun */) return sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
       if (planetNumber === 1 /* Moon */) return moonAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
       return planetAltAz(planetNumber, di, OBSERVER_LAT, OBSERVER_LON, true, true, null);
     });
     functions.set("RAOfPlanet", (planetNumber) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
       if (planetNumber === 0 /* Sun */) {
         return sunRAandDecl(di, null).rightAscension;
@@ -12141,7 +11339,7 @@
       return pos.apparentRightAscension;
     });
     function transitForDay(planetNumber) {
-      const now2 = getNow();
+      const now2 = getNow2();
       const di = dateToDateInterval(now2);
       const utcNowSec = di + 978307200;
       const localNowSec = utcNowSec + tzOffsetSeconds;
@@ -12199,7 +11397,7 @@
       return isNaN(s) ? 0 : riseSetAngles(s).hour24;
     });
     functions.set("planetMoonAgeAngle", (planetNumber) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       if (planetNumber === 0 /* Sun */) return Math.PI;
       if (planetNumber === 1 /* Moon */) return moonAge(di, null).age;
       const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
@@ -12220,7 +11418,7 @@
       return moonAgeVal;
     });
     functions.set("planetRelativePositionAngle", (planetNumber) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       if (planetNumber === 1 /* Moon */) {
         return moonRelativePositionAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
       }
@@ -12264,29 +11462,29 @@
     functions.set("VeneziaTapsEnabled", () => 0);
     functions.set("saveBody", (_n) => 0);
     functions.set("lunarAscendingNodeLongitude", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return lunarAscendingNodeLongitude(di, null);
     });
     functions.set("moonDeltaEclipticLongitudeAtDeltaDay", (n) => {
       const nowDate = liveDate();
       const targetMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + n);
-      const requestedDI = dateToDateInterval(new Date(targetMidnight.getTime() - tzDeltaMs));
+      const requestedDI = dateToDateInterval(new Date(targetMidnight.getTime() - tzDeltaMs2));
       return moonAge(requestedDI, null).age;
     });
     const MS_PER_DAY = 864e5;
     const tzOffsetMs = tzOffsetSeconds * 1e3;
-    const localDayNum = () => Math.floor((getNow().getTime() + tzOffsetMs) / MS_PER_DAY);
+    const localDayNum = () => Math.floor((getNow2().getTime() + tzOffsetMs) / MS_PER_DAY);
     functions.set("delOnDayTintColor", (n) => {
-      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayTintColorA") : env.variables.get("delOnDayTintColorB");
+      return (localDayNum() + n) % 2 === 0 ? env2.variables.get("delOnDayTintColorA") : env2.variables.get("delOnDayTintColorB");
     });
     functions.set("delOnDayStrokeColor", (n) => {
-      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayStrokeColorA") : env.variables.get("delOnDayStrokeColorB");
+      return (localDayNum() + n) % 2 === 0 ? env2.variables.get("delOnDayStrokeColorA") : env2.variables.get("delOnDayStrokeColorB");
     });
     functions.set("delOnDayTintNColor", (n) => {
-      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayTintNColorA") : env.variables.get("delOnDayTintNColorB");
+      return (localDayNum() + n) % 2 === 0 ? env2.variables.get("delOnDayTintNColorA") : env2.variables.get("delOnDayTintNColorB");
     });
     functions.set("delOnDayStrokeNColor", (n) => {
-      return (localDayNum() + n) % 2 === 0 ? env.variables.get("delOnDayStrokeNColorA") : env.variables.get("delOnDayStrokeNColorB");
+      return (localDayNum() + n) % 2 === 0 ? env2.variables.get("delOnDayStrokeNColorA") : env2.variables.get("delOnDayStrokeNColorB");
     });
     functions.set("moonriseForDayValid", () => {
       return isNaN(riseSetForDay(true, 1 /* Moon */)) ? 0 : 1;
@@ -12358,10 +11556,10 @@
       }
     } catch {
     }
-    env.variables.set("calendarWeekdayStart", calendarWeekdayStart);
+    env2.variables.set("calendarWeekdayStart", calendarWeekdayStart);
     functions.set("calendarWeekdayStart", () => calendarWeekdayStart);
     const weekdayNumber = () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return weekdayFromTimeInterval(di, tzOffsetSeconds);
     };
     const weekdayNumberAsCalendarColumn = () => {
@@ -12411,17 +11609,17 @@
     });
     functions.set("terminatorAngle", terminatorAngle);
     functions.set("EOTAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const eotSec = EOTSeconds(di, null);
       return eotSec * Math.PI / (12 * 3600);
     });
-    functions.set("EOTSeconds", () => EOTSeconds(dateToDateInterval(getNow()), null));
+    functions.set("EOTSeconds", () => EOTSeconds(dateToDateInterval(getNow2()), null));
     functions.set("vernalEquinoxAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return GSTDifferenceForDate(di, null);
     });
     functions.set("J2000RAofVernalEquinoxOfDateAngle", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
       return -generalPrecessionSinceJ2000(julianCenturiesSince2000Epoch);
     });
@@ -12430,7 +11628,7 @@
         0 /* Sun */,
         0,
         0,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12442,7 +11640,7 @@
         0 /* Sun */,
         1,
         0,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12454,7 +11652,7 @@
         0 /* Sun */,
         2,
         0,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12466,7 +11664,7 @@
         0 /* Sun */,
         3,
         0,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12480,7 +11678,7 @@
       return isNaN(riseSetForDay(false, 0 /* Sun */)) ? 0 : 1;
     });
     functions.set("planetIsUp", (n) => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
       return alt > 0 ? 1 : 0;
     });
@@ -12489,7 +11687,7 @@
       if (isNaN(sr)) {
         return 6;
       }
-      const d = new Date((sr + 978307200) * 1e3 + tzDeltaMs);
+      const d = new Date((sr + 978307200) * 1e3 + tzDeltaMs2);
       return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     }
     function sunsetHour24ForDay() {
@@ -12497,11 +11695,11 @@
       if (isNaN(ss)) {
         return 18;
       }
-      const d = new Date((ss + 978307200) * 1e3 + tzDeltaMs);
+      const d = new Date((ss + 978307200) * 1e3 + tzDeltaMs2);
       return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
     }
     function sunriseSunsetBracketing() {
-      const calcDate = dateToDateInterval(getNow());
+      const calcDate = dateToDateInterval(getNow2());
       const fudgeFactorSeconds = 5;
       const lookahead = 3600 * 13.2;
       const planetIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, OBSERVER_LAT, OBSERVER_LON);
@@ -12530,7 +11728,7 @@
       const riseDI = riseResult.eventTime;
       const setDI = setResult.eventTime;
       function diToHour24(di) {
-        const d = new Date((di + 978307200) * 1e3 + tzDeltaMs);
+        const d = new Date((di + 978307200) * 1e3 + tzDeltaMs2);
         return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
       }
       if (isNoRiseSet(riseDI) && isNoRiseSet(setDI)) {
@@ -12598,7 +11796,7 @@
       }
     });
     functions.set("solarNoonAngle", () => {
-      const calcDate = dateToDateInterval(getNow());
+      const calcDate = dateToDateInterval(getNow2());
       const transitDI = planettransitTimeRefined(
         calcDate,
         OBSERVER_LAT,
@@ -12676,11 +11874,11 @@
     functions.set("locationIndicatorColor", () => 0);
     functions.set("skew", () => 0);
     functions.set("sunRA", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return sunRAandDecl(di, null).rightAscension;
     });
     functions.set("moonRA", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return moonRAAndDecl(di, null).rightAscension;
     });
     functions.set("minuteValue", () => {
@@ -12694,12 +11892,12 @@
       return fmod(secSinceMidnight / 60, 60) * 2 * Math.PI / 60;
     });
     functions.set("lstValue", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const lstRadians = localSiderealTime(di, OBSERVER_LON, null);
       return lstRadians * (12 * 3600) / Math.PI;
     });
     functions.set("lunarAscendingNodeRA", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
       const longitude = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch);
       const { nutation, obliquity } = WB_nutationObliquity(julianCenturiesSince2000Epoch / 100);
@@ -12709,17 +11907,17 @@
       return ra;
     });
     functions.set("eclipseSeparation", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).abstractSeparation;
     });
     functions.set("eclipseKind", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
       if (value > 0) value--;
       return value;
     });
     functions.set("legacyEclipseKind", () => {
-      const di = dateToDateInterval(getNow());
+      const di = dateToDateInterval(getNow2());
       let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
       if (value > 0) value--;
       return value;
@@ -12728,14 +11926,14 @@
       return computeYear366IndicatorFraction(liveDate()) * 2 * Math.PI;
     });
     functions.set("closestSunEclipticLongitudeQuarter366IndicatorAngle", (quarterNumber) => {
-      return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow(), tzDeltaMs);
+      return computeClosestSunEclipticLongQuarter366Angle(quarterNumber, getNow2(), tzDeltaMs2);
     });
     functions.set("planetrise24HourIndicatorAngleLST", (planetNumber) => {
       return computeDayNightLeafAngleLST(
         planetNumber,
         0,
         0,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12747,7 +11945,7 @@
         planetNumber,
         1,
         0,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12759,7 +11957,7 @@
         planetNumber,
         leafNumber,
         numLeaves,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12771,7 +11969,7 @@
         planetNumber,
         leafNumber,
         numLeaves,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
@@ -12779,19 +11977,19 @@
       );
     });
     functions.set("planettransit24HourIndicatorAngle", (planetNumber, numLeaves) => {
-      const nl = numLeaves != null && numLeaves > 0 ? numLeaves : env.variables.get("planNumWedges") || 24;
+      const nl = numLeaves != null && numLeaves > 0 ? numLeaves : env2.variables.get("planNumWedges") || 24;
       return computeDayNightLeafAngle(
         planetNumber,
         nl / 2,
         nl,
-        getNow,
+        getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
       );
     });
-    return { pool, tzDeltaMs, tzOffsetSeconds };
+    return { pool, tzDeltaMs: tzDeltaMs2, tzOffsetSeconds };
   }
   function angle24HourForDate(dateInterval, tzOffsetSeconds) {
     const utcSeconds = dateInterval + 978307200;
@@ -12854,8 +12052,8 @@
     );
     return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
   }
-  function computeDayNightLeafAngle(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
-    const calcDate = dateToDateInterval(getNow());
+  function computeDayNightLeafAngle(planetNumber, leafNumber, numLeaves, getNow2, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow2());
     const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
     const nightTime = planetNumber === 11 /* MidnightSun */;
@@ -13010,22 +12208,22 @@
     const kECSecondsInTropicalYear = 3600 * 24 * 365.2422;
     return tryDate + deltaAngleToTarget * kECSecondsInTropicalYear / (2 * Math.PI);
   }
-  function computeClosestSunEclipticLongQuarter366Angle(quarterNumber, nowDate, tzDeltaMs) {
+  function computeClosestSunEclipticLongQuarter366Angle(quarterNumber, nowDate, tzDeltaMs2) {
     const calcDate = dateToDateInterval(nowDate);
     const targetSunLong = quarterNumber * Math.PI / 2;
     let tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, calcDate);
     tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     tryDate = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
     const targetTime = timeOfClosestSunEclipticLongitude(targetSunLong, tryDate);
-    const targetDate = new Date((targetTime + 978307200) * 1e3 + tzDeltaMs);
+    const targetDate = new Date((targetTime + 978307200) * 1e3 + tzDeltaMs2);
     return computeYear366IndicatorFraction(targetDate) * 2 * Math.PI;
   }
   function angle24HourLSTForDate(dateInterval, observerLon) {
     const lstRadians = localSiderealTime(dateInterval, observerLon, null);
     return fmod(lstRadians, 2 * Math.PI);
   }
-  function computeDayNightLeafAngleLST(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
-    const calcDate = dateToDateInterval(getNow());
+  function computeDayNightLeafAngleLST(planetNumber, leafNumber, numLeaves, getNow2, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const calcDate = dateToDateInterval(getNow2());
     const fudgeFactorSeconds = 5;
     const lookahead = 3600 * 13.2;
     const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
@@ -13124,4502 +12322,13 @@
     return leafCenterAngle;
   }
 
-  // src/shared/animation.ts
-  var SCHEDULER_LOOKAHEAD_MS = 50;
-  var kECGLAngleAnimationSpeed2 = 2;
-  var kECGLFrameRate = 1 / 240;
-  var kECGLLinearAnimationSpeed = 60;
-  var EC_UPDATE_NEXT_SUNRISE = -1001;
-  var EC_UPDATE_NEXT_SUNSET = -1002;
-  var EC_UPDATE_NEXT_MOONRISE = -1003;
-  var EC_UPDATE_NEXT_MOONSET = -1004;
-  var EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT = -1005;
-  var EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT = -1006;
-  var EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT = -1007;
-  var EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT = -1008;
-  var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
-  var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
-  var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
-  function makeAnimatingValue(initial, now) {
-    return {
-      currentValue: initial,
-      targetValue: initial,
-      lastAnimationTime: now,
-      animationStopTime: now,
-      animating: false
-    };
-  }
-  function initHandStates(watch, env, now, getNow, rawGetNow) {
-    const states = [];
-    const effectiveGetNow = getNow || (() => /* @__PURE__ */ new Date());
-    const effectiveRawGetNow = rawGetNow || effectiveGetNow;
-    collectDynamicParts(watch.parts, env, now, states, effectiveGetNow, effectiveRawGetNow);
-    return states;
-  }
-  function collectDynamicParts(parts, env, now, out, getNow, rawGetNow) {
-    for (const part of parts) {
-      if (part.type === "QHand" || part.type === "Wheel" || part.type === "QWedge") {
-        out.push(createHandState(part, env, now, getNow, rawGetNow));
-      } else if (part.type === "QDial" && part.animSpeed) {
-        out.push(createHandState(part, env, now, getNow, rawGetNow));
-      } else if (part.type === "QDayNightRing") {
-        out.push(createHandState(part, env, now, getNow, rawGetNow));
-      } else if (part.type === "CalendarRowCover") {
-        out.push(createCalendarCoverState(part, env, now, getNow, rawGetNow));
-      } else if (part.type === "Static") {
-        collectDynamicParts(part.children, env, now, out, getNow, rawGetNow);
-      }
-    }
-  }
-  function createHandState(part, env, now, getNow, rawGetNow) {
-    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 1;
-    const updateIntervalMs = updateIntervalSec * 1e3;
-    const animSpeed = "animSpeed" in part && part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
-    const initialAngle = part.type === "QDayNightRing" ? part.masterOffset ? evalAttr(part.masterOffset, env) : 0 : part.angle ? evalAttr(part.angle, env) : 0;
-    const hasOffsetAngle = (part.type === "QHand" || part.type === "QWedge") && part.offsetAngle;
-    const initialOffsetAngle = hasOffsetAngle ? evalAttr(part.offsetAngle, env) : 0;
-    part.dynamicState = {
-      currentAngle: initialAngle,
-      ...hasOffsetAngle ? { currentOffsetAngle: initialOffsetAngle } : {}
-    };
-    const hasXMotion = part.type === "QHand" && part.xMotion;
-    const hasYMotion = part.type === "QHand" && part.yMotion;
-    const initialXMotion = hasXMotion ? evalAttr(part.xMotion, env) : 0;
-    const initialYMotion = hasYMotion ? evalAttr(part.yMotion, env) : 0;
-    if (hasXMotion || hasYMotion) {
-      part.dynamicState.currentXMotion = initialXMotion;
-      part.dynamicState.currentYMotion = initialYMotion;
-    }
-    const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
-    let angleAnim;
-    if (part.type === "QDayNightRing") {
-      if (!part._masterOffsetAnim) {
-        part._masterOffsetAnim = makeAnimatingValue(initialAngle, now);
-      } else {
-        if (!part._masterOffsetAnim.animating) {
-          part._masterOffsetAnim.currentValue = initialAngle;
-          part._masterOffsetAnim.targetValue = initialAngle;
-        }
-      }
-      angleAnim = part._masterOffsetAnim;
-    } else {
-      angleAnim = {
-        currentValue: initialAngle,
-        targetValue: initialAngle,
-        lastAnimationTime: now,
-        animationStopTime: now,
-        animating: false
-      };
-    }
-    return {
-      part,
-      angle: angleAnim,
-      offsetAngle: hasOffsetAngle ? {
-        currentValue: initialOffsetAngle,
-        targetValue: initialOffsetAngle,
-        lastAnimationTime: now,
-        animationStopTime: now,
-        animating: false
-      } : null,
-      xMotion: hasXMotion ? makeAnimatingValue(initialXMotion, now) : null,
-      yMotion: hasYMotion ? makeAnimatingValue(initialYMotion, now) : null,
-      updateIntervalMs,
-      nextUpdateDisplayTime: nextDisplayMs,
-      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, rawGetNow),
-      animSpeed,
-      getNow,
-      rawGetNow
-    };
-  }
-  function computeCalendarCoverOffset(part, env) {
-    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
-    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
-    const monthNum = (env.functions.get("monthNumber")?.() ?? 0) + 1;
-    const yearNum = env.functions.get("yearNumber")?.() ?? 2024;
-    const era = env.functions.get("eraNumber")?.() ?? 1;
-    const absYear = yearNum;
-    const firstOfMonthDI = timeIntervalFromUTCComponents(era, absYear, monthNum, 1, 12, 0, 0);
-    const thisMonthStartCol = (7 + weekdayFromTimeInterval(firstOfMonthDI, 0) - calendarWeekdayStart) % 7;
-    const dim = daysInMonth(era, absYear, monthNum);
-    let prevEra = era;
-    let prevYear = absYear;
-    let prevMonth = monthNum - 1;
-    if (prevMonth < 1) {
-      prevMonth = 12;
-      if (era === 1 && absYear === 1) {
-        prevEra = 0;
-        prevYear = 1;
-      } else if (era === 0) {
-        prevYear = absYear + 1;
-      } else {
-        prevYear = absYear - 1;
-      }
-    }
-    const daysInPrevMonth = daysInMonth(prevEra, prevYear, prevMonth);
-    let nextEra = era;
-    let nextYear = absYear;
-    let nextMonth = monthNum + 1;
-    if (nextMonth > 12) {
-      nextMonth = 1;
-      if (era === 0 && absYear === 1) {
-        nextEra = 1;
-        nextYear = 1;
-      } else if (era === 0) {
-        nextYear = absYear - 1;
-      } else {
-        nextYear = absYear + 1;
-      }
-    }
-    const nextMonthFirstDI = timeIntervalFromUTCComponents(nextEra, nextYear, nextMonth, 1, 12, 0, 0);
-    const nextMonthStartCol = (7 + weekdayFromTimeInterval(nextMonthFirstDI, 0) - calendarWeekdayStart) % 7;
-    const nextMonthStartRow = Math.floor((dim + thisMonthStartCol) / 7);
-    const coverType = part.coverType || "";
-    let columnMotion = 7;
-    if (coverType === "row1Left") {
-      columnMotion = thisMonthStartCol + 22 - daysInPrevMonth;
-      if (columnMotion < -4) columnMotion = -4;
-    } else if (coverType === "row1Right") {
-      columnMotion = thisMonthStartCol + 26 - daysInPrevMonth;
-      if (columnMotion < -5) columnMotion = -5;
-    } else if (coverType === "row56Right") {
-      columnMotion = nextMonthStartRow === 4 ? nextMonthStartCol : 7;
-    } else if (coverType === "row6Left") {
-      if (nextMonthStartRow === 5) {
-        columnMotion = nextMonthStartCol;
-      } else if (nextMonthStartRow === 4) {
-        columnMotion = nextMonthStartCol - 7;
-      } else {
-        columnMotion = 7;
-      }
-    }
-    return Math.round(columnMotion * cellWidth);
-  }
-  function createCalendarCoverState(part, env, now, getNow, rawGetNow) {
-    const updateIntervalSec = part.update ? evalAttr(part.update, env) : 3600;
-    const updateIntervalMs = updateIntervalSec * 1e3;
-    const animSpeed = part.animSpeed ? evalAttr(part.animSpeed, env) : 1;
-    const initialXOffset = computeCalendarCoverOffset(part, env);
-    part.dynamicState = {
-      currentAngle: 0,
-      currentXMotion: initialXOffset
-    };
-    const nextDisplayMs = computeNextBoundary(updateIntervalMs, rawGetNow, 1, env);
-    return {
-      part,
-      angle: makeAnimatingValue(0, now),
-      offsetAngle: null,
-      xMotion: makeAnimatingValue(initialXOffset, now),
-      yMotion: null,
-      updateIntervalMs,
-      nextUpdateDisplayTime: nextDisplayMs,
-      nextUpdateTime: displayTimeToPerfNow(nextDisplayMs, rawGetNow),
-      animSpeed,
-      getNow,
-      rawGetNow
-    };
-  }
-  function tickAnimations(states, env, now, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
-    for (const state of states) {
-      if (now >= state.nextUpdateTime) {
-        const newTarget = state.part.type === "QDayNightRing" ? state.part.masterOffset ? evalAttr(state.part.masterOffset, env) : 0 : "angle" in state.part && state.part.angle ? evalAttr(state.part.angle, env) : 0;
-        const newOffsetTarget = state.offsetAngle && (state.part.type === "QHand" || state.part.type === "QWedge") && state.part.offsetAngle ? evalAttr(state.part.offsetAngle, env) : null;
-        const nextDisplayMs = computeNextBoundary(state.updateIntervalMs, state.rawGetNow, timeDirection, env);
-        if (tickIntervalMs !== null && tickIntervalMs > 0) {
-          const displayNowMs = state.getNow().getTime();
-          const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
-          const displayDeltaPerTickMs = displayDeltaPerTickSec * 1e3;
-          const ticksUntilUpdate = displayDeltaPerTickMs > 0 ? Math.max(1, Math.ceil(displayDeltaMs / displayDeltaPerTickMs)) : 1;
-          const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
-          const animateSpeed = kECGLAngleAnimationSpeed2 * state.animSpeed;
-          const normalizedTarget = fmod3(newTarget, 2 * Math.PI);
-          const normalizedCurrent = fmod3(state.angle.currentValue, 2 * Math.PI);
-          let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
-          if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta;
-          const angleDurationMs = animateSpeed > 0 ? angleDelta / animateSpeed * 1e3 : 0;
-          if (angleDurationMs > timeUntilNextUpdateMs) {
-            startAnimation(state, newTarget, now, timeUntilNextUpdateMs);
-          } else {
-            startAnimation(state, newTarget, now);
-          }
-          if (newOffsetTarget !== null && state.offsetAngle) {
-            const normOffTarget = fmod3(newOffsetTarget, 2 * Math.PI);
-            const normOffCurrent = fmod3(state.offsetAngle.currentValue, 2 * Math.PI);
-            let offDelta = Math.abs(normOffTarget - normOffCurrent);
-            if (offDelta > Math.PI) offDelta = 2 * Math.PI - offDelta;
-            const offsetDurationMs = animateSpeed > 0 ? offDelta / animateSpeed * 1e3 : 0;
-            if (offsetDurationMs > timeUntilNextUpdateMs) {
-              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed, timeUntilNextUpdateMs);
-            } else {
-              startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
-            }
-          }
-          compressLinearMotions(state, env, now, timeUntilNextUpdateMs);
-          state.nextUpdateDisplayTime = nextDisplayMs;
-          state.nextUpdateTime = now + timeUntilNextUpdateMs;
-        } else {
-          startAnimation(state, newTarget, now);
-          if (newOffsetTarget !== null && state.offsetAngle) {
-            startAnimationRaw(state.offsetAngle, newOffsetTarget, now, state.animSpeed);
-          }
-          evaluateLinearMotions(state, env, now);
-          state.nextUpdateDisplayTime = nextDisplayMs;
-          state.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, state.rawGetNow);
-        }
-      }
-      const rawAngle = interpolateValue(state.angle, now);
-      const angle = state.angle.animating ? rawAngle : fmod3(rawAngle, 2 * Math.PI);
-      if (!state.part.dynamicState) {
-        state.part.dynamicState = { currentAngle: angle };
-      } else {
-        state.part.dynamicState.currentAngle = angle;
-      }
-      if (state.offsetAngle) {
-        const rawOA = interpolateValue(state.offsetAngle, now);
-        const oa = state.offsetAngle.animating ? rawOA : fmod3(rawOA, 2 * Math.PI);
-        if (state.part.dynamicState) {
-          state.part.dynamicState.currentOffsetAngle = oa;
-        }
-      }
-      if (state.xMotion) {
-        const xm = interpolateValue(state.xMotion, now);
-        if (state.part.dynamicState) {
-          state.part.dynamicState.currentXMotion = xm;
-        }
-      }
-      if (state.yMotion) {
-        const ym = interpolateValue(state.yMotion, now);
-        if (state.part.dynamicState) {
-          state.part.dynamicState.currentYMotion = ym;
-        }
-      }
-    }
-  }
-  function nextWakeupTime(states) {
-    let earliest = Infinity;
-    for (const s of states) {
-      if (s.nextUpdateTime < earliest) earliest = s.nextUpdateTime;
-    }
-    return earliest;
-  }
-  function anyAnimating(states) {
-    for (const s of states) {
-      if (s.angle.animating) return true;
-      if (s.offsetAngle && s.offsetAngle.animating) return true;
-      if (s.xMotion && s.xMotion.animating) return true;
-      if (s.yMotion && s.yMotion.animating) return true;
-    }
-    return false;
-  }
-  function finishAnimations(states) {
-    for (const s of states) {
-      const val = s.angle;
-      if (val.animating) {
-        val.currentValue = fmod3(val.targetValue, 2 * Math.PI);
-        val.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentAngle = val.currentValue;
-        }
-      }
-      if (s.offsetAngle && s.offsetAngle.animating) {
-        s.offsetAngle.currentValue = fmod3(s.offsetAngle.targetValue, 2 * Math.PI);
-        s.offsetAngle.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentOffsetAngle = s.offsetAngle.currentValue;
-        }
-      }
-      if (s.xMotion && s.xMotion.animating) {
-        s.xMotion.currentValue = s.xMotion.targetValue;
-        s.xMotion.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentXMotion = s.xMotion.currentValue;
-        }
-      }
-      if (s.yMotion && s.yMotion.animating) {
-        s.yMotion.currentValue = s.yMotion.targetValue;
-        s.yMotion.animating = false;
-        if (s.part.dynamicState) {
-          s.part.dynamicState.currentYMotion = s.yMotion.currentValue;
-        }
-      }
-      s.nextUpdateDisplayTime = Infinity;
-      s.nextUpdateTime = Infinity;
-    }
-  }
-  function resetHandSchedules(states) {
-    for (const s of states) {
-      s.nextUpdateDisplayTime = 0;
-      s.nextUpdateTime = 0;
-    }
-  }
-  function startAnimation(state, newTarget, now, durationOverrideMs) {
-    startAnimationRaw(state.angle, newTarget, now, state.animSpeed, durationOverrideMs);
-  }
-  function startValueAnimation(val, newTarget, now, speed, durationOverrideMs) {
-    if (speed === 0) {
-      val.currentValue = newTarget;
-      val.targetValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    if (val.animating && val.targetValue === newTarget) return;
-    if (val.animating) {
-      interpolateValue(val, now);
-    }
-    if (val.currentValue === newTarget) {
-      val.animating = false;
-      return;
-    }
-    val.targetValue = newTarget;
-    const delta = Math.abs(newTarget - val.currentValue);
-    const durationMs = durationOverrideMs ?? delta / speed * 1e3;
-    if (durationMs < kECGLFrameRate * 1e3) {
-      val.currentValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    val.lastAnimationTime = now;
-    val.animating = true;
-    val.animationStopTime = now + durationMs;
-  }
-  function interpolateValue(val, now) {
-    if (!val.animating) {
-      return val.currentValue;
-    }
-    if (now >= val.animationStopTime) {
-      val.animating = false;
-      val.currentValue = val.targetValue;
-      return val.currentValue;
-    }
-    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
-    val.currentValue += (val.targetValue - val.currentValue) * fraction;
-    val.lastAnimationTime = now;
-    return val.currentValue;
-  }
-  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
-    const speed = kECGLAngleAnimationSpeed2 * animSpeed;
-    newTarget = fmod3(newTarget, 2 * Math.PI);
-    if (speed === 0) {
-      val.currentValue = newTarget;
-      val.targetValue = newTarget;
-      val.animating = false;
-      return;
-    }
-    if (val.animating && val.targetValue === newTarget) return;
-    if (val.animating) {
-      interpolateValue(val, now);
-    }
-    if (val.currentValue === newTarget) {
-      val.animating = false;
-      return;
-    }
-    const TWO_PI6 = 2 * Math.PI;
-    let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI6 * Math.round(delta / TWO_PI6);
-    val.currentValue = newTarget - delta;
-    startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
-  }
-  function interpolateRaw(val, now) {
-    const result = interpolateValue(val, now);
-    return val.animating ? result : fmod3(result, 2 * Math.PI);
-  }
-  function computeNextBoundary(updateIntervalMs, getNow, timeDirection, env) {
-    if (updateIntervalMs > 0) {
-      const tzOffsetMs = (env.tzOffsetSec ?? 0) * 1e3;
-      const displayNowMs = getNow().getTime();
-      const localNowMs = displayNowMs + tzOffsetMs;
-      if (timeDirection === -1) {
-        const localBoundary = Math.floor(localNowMs / updateIntervalMs) * updateIntervalMs;
-        const boundary = (localBoundary === localNowMs ? localBoundary - updateIntervalMs : localBoundary) - tzOffsetMs;
-        return boundary;
-      } else {
-        const localBoundary = Math.ceil(localNowMs / updateIntervalMs) * updateIntervalMs;
-        return localBoundary - tzOffsetMs;
-      }
-    }
-    const sentinel = updateIntervalMs / 1e3;
-    const eventDI = resolveSentinel(sentinel, getNow, env, timeDirection);
-    if (!isFinite(eventDI)) {
-      return Infinity;
-    }
-    return (eventDI + 978307200) * 1e3;
-  }
-  function displayTimeToPerfNow(displayTimeMs, getNow) {
-    if (!isFinite(displayTimeMs)) return Infinity;
-    const deltaMs = Math.abs(displayTimeMs - getNow().getTime());
-    return performance.now() + deltaMs;
-  }
-  var SENTINEL_FUDGE_SECONDS = 5;
-  var SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
-  function nextPlanetRiseSet(riseNotSet, planetNumber, getNow, lat, lon, timeDirection) {
-    const calculationDI = dateToDateInterval(getNow());
-    const searchForward = timeDirection === 1;
-    const fudge = searchForward ? SENTINEL_FUDGE_SECONDS : -SENTINEL_FUDGE_SECONDS;
-    const lookahead = searchForward ? SENTINEL_LOOKAHEAD_SECONDS : -SENTINEL_LOOKAHEAD_SECONDS;
-    const fudgeDate = calculationDI + fudge;
-    const pool = new AstroCachePool();
-    initializeCachePool(pool, fudgeDate, lat, lon, !searchForward);
-    try {
-      const result = planetaryRiseSetTimeRefined(
-        fudgeDate,
-        lat,
-        lon,
-        riseNotSet,
-        planetNumber,
-        NaN,
-        pool
-      );
-      if (isNoRiseSet(result.riseSetTime)) {
-        return NaN;
-      }
-      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
-      if (inRightDirection) {
-        return result.riseSetTime;
-      }
-      const tryDate = fudgeDate + lookahead;
-      releaseCachePool(pool);
-      initializeCachePool(pool, tryDate, lat, lon, !searchForward);
-      const result2 = planetaryRiseSetTimeRefined(
-        tryDate,
-        lat,
-        lon,
-        riseNotSet,
-        planetNumber,
-        NaN,
-        pool
-      );
-      if (isNoRiseSet(result2.riseSetTime)) {
-        return NaN;
-      }
-      return result2.riseSetTime;
-    } finally {
-      releaseCachePool(pool);
-    }
-  }
-  function nextOrMidnight(eventDI, getNow, tzOffsetSec, timeDirection) {
-    if (isNaN(eventDI)) {
-      return nextMidnightDI(getNow, tzOffsetSec, timeDirection);
-    }
-    const nowDI = dateToDateInterval(getNow());
-    const localNowSec = nowDI + tzOffsetSec;
-    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
-    const todayMidnightDI = dayStartLocal - tzOffsetSec;
-    if (timeDirection === -1) {
-      if (eventDI < todayMidnightDI) {
-        return todayMidnightDI;
-      }
-    } else {
-      const tomorrowMidnightDI = todayMidnightDI + 86400;
-      if (eventDI > tomorrowMidnightDI) {
-        return tomorrowMidnightDI;
-      }
-    }
-    return eventDI;
-  }
-  function nextMidnightDI(getNow, tzOffsetSec, timeDirection) {
-    const nowDI = dateToDateInterval(getNow());
-    const localNowSec = nowDI + tzOffsetSec;
-    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
-    const todayMidnightDI = dayStartLocal - tzOffsetSec;
-    if (timeDirection === -1) {
-      return todayMidnightDI;
-    } else {
-      return todayMidnightDI + 86400;
-    }
-  }
-  function resolveSentinel(sentinel, getNow, env, timeDirection) {
-    const lat = env.observerLatRad ?? 0;
-    const lon = env.observerLonRad ?? 0;
-    const tzOff = env.tzOffsetSec ?? 0;
-    switch (sentinel) {
-      // Bare rise/set (no midnight clamp)
-      case EC_UPDATE_NEXT_SUNRISE:
-        return nextPlanetRiseSet(true, 0 /* Sun */, getNow, lat, lon, timeDirection);
-      case EC_UPDATE_NEXT_SUNSET:
-        return nextPlanetRiseSet(false, 0 /* Sun */, getNow, lat, lon, timeDirection);
-      case EC_UPDATE_NEXT_MOONRISE:
-        return nextPlanetRiseSet(true, 1 /* Moon */, getNow, lat, lon, timeDirection);
-      case EC_UPDATE_NEXT_MOONSET:
-        return nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection);
-      // Rise/set clamped to midnight
-      case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
-        return nextOrMidnight(
-          nextPlanetRiseSet(true, 0 /* Sun */, getNow, lat, lon, timeDirection),
-          getNow,
-          tzOff,
-          timeDirection
-        );
-      case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
-        return nextOrMidnight(
-          nextPlanetRiseSet(false, 0 /* Sun */, getNow, lat, lon, timeDirection),
-          getNow,
-          tzOff,
-          timeDirection
-        );
-      case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
-        return nextOrMidnight(
-          nextPlanetRiseSet(true, 1 /* Moon */, getNow, lat, lon, timeDirection),
-          getNow,
-          tzOff,
-          timeDirection
-        );
-      case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
-        return nextOrMidnight(
-          nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection),
-          getNow,
-          tzOff,
-          timeDirection
-        );
-      // Combined: whichever comes first in the direction of flow
-      case EC_UPDATE_NEXT_SUNRISE_OR_SUNSET: {
-        const rise = nextPlanetRiseSet(true, 0 /* Sun */, getNow, lat, lon, timeDirection);
-        const set = nextPlanetRiseSet(false, 0 /* Sun */, getNow, lat, lon, timeDirection);
-        return closerInTimeDirection(rise, set, timeDirection);
-      }
-      case EC_UPDATE_NEXT_MOONRISE_OR_MOONSET: {
-        const rise = nextPlanetRiseSet(true, 1 /* Moon */, getNow, lat, lon, timeDirection);
-        const set = nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection);
-        return closerInTimeDirection(rise, set, timeDirection);
-      }
-      // Environment change only — effectively never (only explicit reset)
-      case 0:
-      case EC_UPDATE_ENV_CHANGE_ONLY:
-        return Infinity;
-      default:
-        console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
-        return nextMidnightDI(getNow, tzOff, timeDirection);
-    }
-  }
-  function closerInTimeDirection(a, b, timeDirection) {
-    if (isNaN(a)) return b;
-    if (isNaN(b)) return a;
-    return timeDirection === 1 ? Math.min(a, b) : Math.max(a, b);
-  }
-  function fmod3(value, modulus) {
-    const result = value % modulus;
-    return result < 0 ? result + modulus : result;
-  }
-  function startLinearAnimation(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
-    startValueAnimation(val, newTarget, now, kECGLLinearAnimationSpeed * animSpeed, durationOverrideMs);
-  }
-  function evaluateLinearMotions(state, env, now) {
-    if (state.part.type === "QHand") {
-      const qhand = state.part;
-      if (state.xMotion && qhand.xMotion) {
-        startLinearAnimation(state.xMotion, evalAttr(qhand.xMotion, env), now, state.animSpeed);
-      }
-      if (state.yMotion && qhand.yMotion) {
-        startLinearAnimation(state.yMotion, evalAttr(qhand.yMotion, env), now, state.animSpeed);
-      }
-    }
-    if (state.part.type === "CalendarRowCover" && state.xMotion) {
-      const newXM = computeCalendarCoverOffset(state.part, env);
-      startLinearAnimation(state.xMotion, newXM, now, state.animSpeed);
-    }
-  }
-  function compressLinearMotions(state, env, now, timeUntilNextUpdateMs) {
-    const linearSpeed = kECGLLinearAnimationSpeed * state.animSpeed;
-    const compressLinear = (val, newTarget) => {
-      const naturalMs = linearSpeed > 0 ? Math.abs(newTarget - val.currentValue) / linearSpeed * 1e3 : 0;
-      const overrideMs = naturalMs > timeUntilNextUpdateMs ? timeUntilNextUpdateMs : void 0;
-      startLinearAnimation(val, newTarget, now, state.animSpeed, overrideMs);
-    };
-    if (state.part.type === "QHand") {
-      const qhand = state.part;
-      if (state.xMotion && qhand.xMotion) {
-        compressLinear(state.xMotion, evalAttr(qhand.xMotion, env));
-      }
-      if (state.yMotion && qhand.yMotion) {
-        compressLinear(state.yMotion, evalAttr(qhand.yMotion, env));
-      }
-    }
-    if (state.part.type === "CalendarRowCover" && state.xMotion) {
-      compressLinear(state.xMotion, computeCalendarCoverOffset(state.part, env));
-    }
-  }
-  function finishDayNightSlides(watch) {
-    for (const part of watch.parts) {
-      if (part.type === "QDayNightRing") {
-        if (part._wedgeSlides) {
-          for (const slide of part._wedgeSlides) {
-            if (slide.animating) {
-              slide.currentValue = slide.targetValue;
-              slide.animating = false;
-            }
-          }
-        }
-        if (part._wedgeAngleAnims) {
-          for (const anim of part._wedgeAngleAnims) {
-            if (anim.animating) {
-              anim.currentValue = anim.targetValue;
-              anim.animating = false;
-            }
-          }
-        }
-        part._cacheNextUpdate = 0;
-        part._cacheStart = void 0;
-      }
-    }
-  }
-  function resetDayNightSlides(watch) {
-    for (const part of watch.parts) {
-      if (part.type === "QDayNightRing") {
-        part._cacheNextUpdate = 0;
-        part._cacheStart = void 0;
-      }
-    }
-  }
-
-  // src/watch/watch-env.ts
-  var DEFAULT_LAT_DEG = 37.205;
-  var DEFAULT_LON_DEG = -121.954;
-  var cachedBatteryLevel2 = 1;
-  var batteryInitialized = false;
-  function initBatteryState() {
-    if (batteryInitialized) return;
-    if (typeof navigator !== "undefined" && "getBattery" in navigator) {
-      batteryInitialized = true;
-      navigator.getBattery().then((battery) => {
-        cachedBatteryLevel2 = battery.level;
-        battery.addEventListener("levelchange", () => {
-          cachedBatteryLevel2 = battery.level;
-        });
-      }).catch(() => {
-      });
-    }
-  }
-  var TERRA_RING_DEFAULTS = {
-    1: { cityName: "Pago Pago", olsonId: "Pacific/Pago_Pago", lat: -14.27806, lon: -170.7025 },
-    2: { cityName: "Honolulu", olsonId: "Pacific/Honolulu", lat: 21.30694, lon: -157.85834 },
-    3: { cityName: "Anchorage", olsonId: "America/Juneau", lat: 61.21806, lon: -149.90028 },
-    4: { cityName: "Los Angeles", olsonId: "America/Los_Angeles", lat: 34.05223, lon: -118.24368 },
-    5: { cityName: "Denver", olsonId: "America/Denver", lat: 39.73915, lon: -104.9847 },
-    6: { cityName: "Chicago", olsonId: "America/Chicago", lat: 41.85003, lon: -87.65005 },
-    7: { cityName: "New York", olsonId: "America/New_York", lat: 40.71427, lon: -74.00597 },
-    8: { cityName: "Santiago", olsonId: "America/Santiago", lat: -33.42628, lon: -70.56655 },
-    9: { cityName: "Rio de Janeiro", olsonId: "America/Sao_Paulo", lat: -22.90278, lon: -43.2075 },
-    10: { cityName: "Grytviken", olsonId: "Atlantic/South_Georgia", lat: -54.27667, lon: -36.51167 },
-    11: { cityName: "Dakar", olsonId: "Africa/Dakar", lat: 14.74208, lon: -17.43978 },
-    12: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
-    13: { cityName: "Paris", olsonId: "Europe/Paris", lat: 48.85341, lon: 2.3488 },
-    14: { cityName: "Cairo", olsonId: "Africa/Cairo", lat: 30.05, lon: 31.25 },
-    15: { cityName: "Moscow", olsonId: "Europe/Moscow", lat: 55.75222, lon: 37.61555 },
-    16: { cityName: "Dubai", olsonId: "Asia/Dubai", lat: 25.25222, lon: 55.28 },
-    17: { cityName: "Delhi", olsonId: "Asia/Kolkata", lat: 28.66667, lon: 77.21666 },
-    18: { cityName: "Dhaka", olsonId: "Asia/Dhaka", lat: 23.72305, lon: 90.40861 },
-    19: { cityName: "Bangkok", olsonId: "Asia/Bangkok", lat: 13.75, lon: 100.51667 },
-    20: { cityName: "Hong Kong", olsonId: "Asia/Hong_Kong", lat: 22.28401, lon: 114.15007 },
-    21: { cityName: "Tokyo", olsonId: "Asia/Tokyo", lat: 35.68953, lon: 139.69168 },
-    22: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 },
-    23: { cityName: "Noum\xE9a", olsonId: "Pacific/Noumea", lat: -22.26667, lon: 166.45 },
-    24: { cityName: "Auckland", olsonId: "Pacific/Auckland", lat: -36.86666, lon: 174.76666 }
-  };
-  var GAIA_SUBDIAL_DEFAULTS = {
-    2: { cityName: "New York", olsonId: "America/New_York", lat: 40.71427, lon: -74.00597 },
-    3: { cityName: "London", olsonId: "Europe/London", lat: 51.50842, lon: -0.12553 },
-    4: { cityName: "Sydney", olsonId: "Australia/Sydney", lat: -33.86785, lon: 151.20732 }
-  };
-  function createWatchEnvironment(watch, observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow = () => /* @__PURE__ */ new Date(), olsonTimezone, slotOverrides, globalLocationSlot) {
-    const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
-    const OBSERVER_LON = observerLonDeg * Math.PI / 180;
-    initBatteryState();
-    const env = createDefaultEnvironment();
-    env.observerLatRad = OBSERVER_LAT;
-    env.observerLonRad = OBSERVER_LON;
-    env.getNow = getNow;
-    env.variables.set("updateAtNextSunrise", EC_UPDATE_NEXT_SUNRISE);
-    env.variables.set("updateAtNextSunset", EC_UPDATE_NEXT_SUNSET);
-    env.variables.set("updateAtNextMoonrise", EC_UPDATE_NEXT_MOONRISE);
-    env.variables.set("updateAtNextMoonset", EC_UPDATE_NEXT_MOONSET);
-    env.variables.set("updateAtNextSunriseOrMidnight", EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT);
-    env.variables.set("updateAtNextSunsetOrMidnight", EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT);
-    env.variables.set("updateAtNextMoonriseOrMidnight", EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT);
-    env.variables.set("updateAtNextMoonsetOrMidnight", EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT);
-    env.variables.set("updateAtEnvChangeOnly", EC_UPDATE_ENV_CHANGE_ONLY);
-    env.variables.set("updateAtNextSunriseOrSunset", EC_UPDATE_NEXT_SUNRISE_OR_SUNSET);
-    env.variables.set("updateAtNextMoonriseOrMoonset", EC_UPDATE_NEXT_MOONRISE_OR_MOONSET);
-    env.variables.set("updateForTimeSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
-    env.variables.set("updateForLocSyncIndicator", EC_UPDATE_ENV_CHANGE_ONLY);
-    env.variables.set("planetSun", 0 /* Sun */);
-    env.variables.set("planetMoon", 1 /* Moon */);
-    env.variables.set("planetMercury", 2 /* Mercury */);
-    env.variables.set("planetVenus", 3 /* Venus */);
-    env.variables.set("planetEarth", 4 /* Earth */);
-    env.variables.set("planetMars", 5 /* Mars */);
-    env.variables.set("planetJupiter", 6 /* Jupiter */);
-    env.variables.set("planetSaturn", 7 /* Saturn */);
-    env.variables.set("planetUranus", 8 /* Uranus */);
-    env.variables.set("planetNeptune", 9 /* Neptune */);
-    env.variables.set("planetMidnightSun", 11 /* MidnightSun */);
-    env.variables.set("topAnchorClockNoon", 0);
-    env.variables.set("topAnchorClockMidnight", 1);
-    env.variables.set("topAnchorSolarNoon", 2);
-    env.variables.set("topAnchorSolarMidnight", 3);
-    const { pool, tzDeltaMs, tzOffsetSeconds } = registerAstroFunctions(
-      env,
-      OBSERVER_LAT,
-      OBSERVER_LON,
-      getNow,
-      olsonTimezone
-    );
-    for (const expr of watch.initExprs) {
-      evaluate(expr, env);
-    }
-    env.kyHandMode = 0;
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const bodyParam = params.get("body");
-      if (bodyParam) {
-        const bodyMap = {
-          sun: 0 /* Sun */,
-          moon: 1 /* Moon */,
-          mercury: 2 /* Mercury */,
-          venus: 3 /* Venus */,
-          earth: 4 /* Earth */,
-          mars: 5 /* Mars */,
-          jupiter: 6 /* Jupiter */,
-          saturn: 7 /* Saturn */,
-          uranus: 8 /* Uranus */,
-          neptune: 9 /* Neptune */
-        };
-        const planet = bodyMap[bodyParam.toLowerCase()];
-        if (planet !== void 0) {
-          env.variables.set("body", planet);
-          const body = planet;
-          const bodySlot = body === 1 /* Moon */ ? 0 : body === 2 /* Mercury */ ? 1 : body === 3 /* Venus */ ? 2 : body === 5 /* Mars */ ? 3 : body === 6 /* Jupiter */ ? 4 : body === 7 /* Saturn */ ? 5 : body === 8 /* Uranus */ ? 6 : body === 9 /* Neptune */ ? 7 : body === 0 /* Sun */ ? 8 : 0.5;
-          env.variables.set("bodySlot", bodySlot);
-        }
-      }
-      const vnoonParam = params.get("vnoon");
-      if (vnoonParam === "1" || vnoonParam === "0") {
-        const noonOnTop = parseInt(vnoonParam, 10);
-        env.variables.set("noonOnTop", noonOnTop);
-        env.variables.set("dialFlip", noonOnTop ? Math.PI : 0);
-      }
-      const kmodeParam = params.get("kmode");
-      if (kmodeParam === "1" || kmodeParam === "0") {
-        env.variables.set("kyMode", parseInt(kmodeParam, 10));
-      }
-      const kyhandParam = params.get("kyhand");
-      if (kyhandParam === "1") {
-        env.kyHandMode = 1;
-      }
-    }
-    env.functions.set("kyotoHandMode", () => env.kyHandMode);
-    env.functions.set("kyotoMasterRotation", () => {
-      if (env.kyHandMode === 0) {
-        return 0;
-      }
-      const kmode = env.variables.get("kyMode") || 0;
-      if (kmode === 0) {
-        const h24 = env.functions.get("hour24ValueAngle")?.() || 0;
-        const sn = env.functions.get("solarNoonAngle")?.() || 0;
-        return h24 + Math.PI - sn;
-      } else {
-        return env.functions.get("japanHourValueAngle")?.() || 0;
-      }
-    });
-    function wadokeiDNAngles() {
-      const leafAngleFn = env.functions.get("dayNightLeafAngle");
-      if (!leafAngleFn) return null;
-      const kyMode = env.variables.get("kyMode") ?? 0;
-      if (kyMode === 1) {
-        return { sunsetAngle: 3 * Math.PI / 2, sunriseAngle: Math.PI / 2 };
-      }
-      const ECPlanetMidnightSun = env.variables.get("planetMidnightSun") ?? 10;
-      const isPolarSummer = leafAngleFn(ECPlanetMidnightSun, 2, 0) > 0.5;
-      const isPolarWinter = leafAngleFn(ECPlanetMidnightSun, 3, 0) > 0.5;
-      if (isPolarSummer) {
-        return { sunsetAngle: 0, sunriseAngle: 0 };
-      }
-      if (isPolarWinter) {
-        return { sunsetAngle: 0, sunriseAngle: 2 * Math.PI - 1e-3 };
-      }
-      const sunriseAngle = leafAngleFn(ECPlanetMidnightSun, 0, 0);
-      const sunsetAngle = leafAngleFn(ECPlanetMidnightSun, 1, 0);
-      return { sunsetAngle, sunriseAngle };
-    }
-    env.functions.set("wadokeiDNNumVisible", (numWedges) => {
-      if (numWedges <= 0) return 0;
-      const angles = wadokeiDNAngles();
-      if (!angles) return 0;
-      let nightArc = angles.sunriseAngle - angles.sunsetAngle;
-      if (nightArc < 0) nightArc += 2 * Math.PI;
-      if (nightArc < 0.01) return 0;
-      if (nightArc > 2 * Math.PI - 0.01) return numWedges;
-      const wedgeSpan = 2 * Math.PI / numWedges;
-      return Math.min(numWedges, Math.max(1, Math.ceil(nightArc / wedgeSpan)));
-    });
-    env.functions.set("wadokeiDNSunsetAngle", () => {
-      return wadokeiDNAngles()?.sunsetAngle ?? 0;
-    });
-    env.functions.set("wadokeiDNSunriseAngle", () => {
-      return wadokeiDNAngles()?.sunriseAngle ?? 0;
-    });
-    registerTerraFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, pool, tzOffsetSeconds, slotOverrides, globalLocationSlot, olsonTimezone);
-    releaseCachePool(pool);
-    return env;
-  }
-  function registerTerraFunctions(env, OBSERVER_LAT, OBSERVER_LON, getNow, pool, tzOffsetSeconds, slotOverrides, globalLocationSlot, olsonTimezone) {
-    const { functions } = env;
-    const terraRingDefaults = {};
-    for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
-      terraRingDefaults[Number(k)] = { ...v };
-    }
-    if (slotOverrides) {
-      for (const [k, v] of Object.entries(slotOverrides)) {
-        terraRingDefaults[Number(k)] = { ...v };
-      }
-    }
-    env._terraSlots = terraRingDefaults;
-    env._getNow = getNow;
-    env._getDSTRange = (slotNum) => {
-      const slot = terraRingDefaults[slotNum];
-      if (!slot) return null;
-      const now = getNow();
-      const jan = new Date(now.getFullYear(), 0, 1);
-      const jul = new Date(now.getFullYear(), 6, 1);
-      const janOff = getTzOffsetSeconds(slot.olsonId, jan);
-      const julOff = getTzOffsetSeconds(slot.olsonId, jul);
-      if (janOff === julOff) return null;
-      return {
-        lowHours: Math.min(janOff, julOff) / 3600,
-        highHours: Math.max(janOff, julOff) / 3600
-      };
-    };
-    const UTCSectorNumber = 11;
-    function getTzOffsetSeconds(olsonId, date) {
-      try {
-        const fmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonId,
-          timeZoneName: "longOffset"
-        });
-        const parts = fmt.formatToParts(date);
-        const tzPart = parts.find((p) => p.type === "timeZoneName");
-        if (!tzPart) return 0;
-        const tzStr = tzPart.value;
-        if (tzStr === "GMT" || tzStr === "UTC") return 0;
-        const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
-        if (!m) return 0;
-        const sign = m[1] === "+" ? 1 : -1;
-        const hours = parseInt(m[2], 10);
-        const minutes = m[3] ? parseInt(m[3], 10) : 0;
-        return sign * (hours * 3600 + minutes * 60);
-      } catch {
-        return 0;
-      }
-    }
-    function getLocalTimeInZone(olsonId, date) {
-      try {
-        const fmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonId,
-          hour: "numeric",
-          minute: "numeric",
-          second: "numeric",
-          day: "numeric",
-          month: "numeric",
-          weekday: "short",
-          hour12: false
-        });
-        const parts = fmt.formatToParts(date);
-        let h24 = 0, min = 0, sec = 0, day = 1, month = 0, weekday = 0;
-        for (const p of parts) {
-          if (p.type === "hour") h24 = parseInt(p.value, 10);
-          else if (p.type === "minute") min = parseInt(p.value, 10);
-          else if (p.type === "second") sec = parseInt(p.value, 10);
-          else if (p.type === "day") day = parseInt(p.value, 10);
-          else if (p.type === "month") month = parseInt(p.value, 10) - 1;
-          else if (p.type === "weekday") {
-            const wdMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-            weekday = wdMap[p.value] ?? 0;
-          }
-        }
-        if (h24 === 24) h24 = 0;
-        return { h24, min, sec, day, month, weekday };
-      } catch {
-        return {
-          h24: date.getHours(),
-          min: date.getMinutes(),
-          sec: date.getSeconds(),
-          day: date.getDate(),
-          month: date.getMonth(),
-          weekday: date.getDay()
-        };
-      }
-    }
-    let detectedTopSlot = 12;
-    if (globalLocationSlot !== void 0) {
-      detectedTopSlot = globalLocationSlot;
-    } else {
-      try {
-        const targetTz = olsonTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-        for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-          if (data.olsonId === targetTz) {
-            detectedTopSlot = parseInt(slotStr, 10);
-            break;
-          }
-        }
-        if (detectedTopSlot === 12 && targetTz !== "Europe/London" && targetTz !== "UTC") {
-          const nowDate = getNow();
-          const targetOffset = getTzOffsetSeconds(targetTz, nowDate);
-          let bestDiff = Infinity;
-          for (const [slotStr, data] of Object.entries(terraRingDefaults)) {
-            const slotOffset = getTzOffsetSeconds(data.olsonId, nowDate);
-            const diff = Math.abs(slotOffset - targetOffset);
-            if (diff < bestDiff) {
-              bestDiff = diff;
-              detectedTopSlot = parseInt(slotStr, 10);
-            }
-          }
-        }
-      } catch {
-      }
-    }
-    functions.set("terraIDeviceSlot", () => detectedTopSlot);
-    functions.set("overrideTerraITopSlot", (_n) => 0);
-    functions.set("sectorAngle", (slot, topSlot) => {
-      return (slot - topSlot) * Math.PI / 12;
-    });
-    functions.set("UTCSectorOffset", () => UTCSectorNumber - 0.5);
-    functions.set("cityIndicatorOffset", (_topSlot, _firstRingSlot) => 0);
-    functions.set("city24HrDialOffset", (topSlot, firstRingSlot) => {
-      const slot = terraRingDefaults[topSlot];
-      if (!slot) return 0;
-      const offsetSec = getTzOffsetSeconds(slot.olsonId, getNow());
-      return offsetSec * Math.PI / (12 * 3600) + (firstRingSlot - topSlot + UTCSectorNumber - 0.5) * Math.PI / 12;
-    });
-    functions.set("tzOffsetAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const offsetSec = getTzOffsetSeconds(data.olsonId, getNow());
-      return offsetSec * Math.PI / (12 * 3600);
-    });
-    functions.set("isDST", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const nowDate = getNow();
-      const currentOffset = getTzOffsetSeconds(data.olsonId, nowDate);
-      const jan = new Date(nowDate.getFullYear(), 0, 1);
-      const janOffset = getTzOffsetSeconds(data.olsonId, jan);
-      const jul = new Date(nowDate.getFullYear(), 6, 1);
-      const julOffset = getTzOffsetSeconds(data.olsonId, jul);
-      const stdOffset = Math.min(janOffset, julOffset);
-      return currentOffset !== stdOffset ? 1 : 0;
-    });
-    functions.set("moreDay", (slot, topSlot) => {
-      const slotData = terraRingDefaults[slot];
-      const topData = terraRingDefaults[topSlot];
-      if (!slotData || !topData) return 0;
-      const nowDate = getNow();
-      const slotTime = getLocalTimeInZone(slotData.olsonId, nowDate);
-      const topTime = getLocalTimeInZone(topData.olsonId, nowDate);
-      if (slotTime.month !== topTime.month) {
-        const slotM = slotTime.month;
-        const topM = topTime.month;
-        if (slotM === 0 && topM === 11) return 1;
-        if (slotM === 11 && topM === 0) return 0;
-        return slotM > topM ? 1 : 0;
-      }
-      return slotTime.day > topTime.day ? 1 : 0;
-    });
-    functions.set("lessDay", (slot, topSlot) => {
-      const slotData = terraRingDefaults[slot];
-      const topData = terraRingDefaults[topSlot];
-      if (!slotData || !topData) return 0;
-      const nowDate = getNow();
-      const slotTime = getLocalTimeInZone(slotData.olsonId, nowDate);
-      const topTime = getLocalTimeInZone(topData.olsonId, nowDate);
-      if (slotTime.month !== topTime.month) {
-        const slotM = slotTime.month;
-        const topM = topTime.month;
-        if (slotM === 0 && topM === 11) return 0;
-        if (slotM === 11 && topM === 0) return 1;
-        return slotM < topM ? 1 : 0;
-      }
-      return slotTime.day < topTime.day ? 1 : 0;
-    });
-    functions.set("hour12ValueAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      const ms = getNow().getMilliseconds();
-      const s = t.sec + ms / 1e3;
-      const m = t.min + s / 60;
-      const h = t.h24 % 12 + m / 60;
-      return h * 2 * Math.PI / 12;
-    });
-    functions.set("minuteValueAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      const ms = getNow().getMilliseconds();
-      const s = t.sec + ms / 1e3;
-      const m = t.min + s / 60;
-      return m * 2 * Math.PI / 60;
-    });
-    functions.set("secondValueAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      const ms = getNow().getMilliseconds();
-      const s = t.sec + ms / 1e3;
-      return s * 2 * Math.PI / 60;
-    });
-    functions.set("dayNumberN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      return t.day - 1;
-    });
-    functions.set("monthNumberAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      return t.month * 2 * Math.PI / 12;
-    });
-    functions.set("weekdayNumberAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      return t.weekday * 2 * Math.PI / 7;
-    });
-    functions.set("weekdayNumberN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      return getLocalTimeInZone(data.olsonId, getNow()).weekday;
-    });
-    functions.set("hour24NumberN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      return getLocalTimeInZone(data.olsonId, getNow()).h24;
-    });
-    functions.set("hour24ValueAngleN", (slot) => {
-      const data = terraRingDefaults[slot];
-      if (!data) return 0;
-      const t = getLocalTimeInZone(data.olsonId, getNow());
-      const ms = getNow().getMilliseconds();
-      const s = t.sec + ms / 1e3;
-      const m = t.min + s / 60;
-      const h = t.h24 + m / 60;
-      return h * 2 * Math.PI / 24;
-    });
-    functions.set(
-      "dayNightLeafAngleForSlot",
-      (planetNumber, leafNumber, numLeaves, slotNumber) => {
-        const slot = terraRingDefaults[slotNumber];
-        if (!slot) {
-          return computeDayNightLeafAngle(
-            planetNumber,
-            leafNumber,
-            numLeaves,
-            getNow,
-            OBSERVER_LAT,
-            OBSERVER_LON,
-            pool,
-            tzOffsetSeconds
-          );
-        }
-        const slotLat = slot.lat * Math.PI / 180;
-        const slotLon = slot.lon * Math.PI / 180;
-        const slotTzOffset = getTzOffsetSeconds(slot.olsonId, getNow());
-        return computeDayNightLeafAngle(
-          planetNumber,
-          leafNumber,
-          numLeaves,
-          getNow,
-          slotLat,
-          slotLon,
-          pool,
-          slotTzOffset
-        );
-      }
-    );
-  }
-
-  // src/watch/terra-slots.ts
-  var FIRST_ENV_SLOT = 1;
-  var UTC_SECTOR_NUMBER = 11;
-  function getSlotOffsetHour(envSlot) {
-    return envSlot - FIRST_ENV_SLOT - UTC_SECTOR_NUMBER;
-  }
-  function computeTzCenter(olsonId) {
-    try {
-      const now = /* @__PURE__ */ new Date();
-      const jan = new Date(now.getFullYear(), 0, 1);
-      const jul = new Date(now.getFullYear(), 6, 1);
-      const janOff = getTzOffsetMinutes(olsonId, jan);
-      const julOff = getTzOffsetMinutes(olsonId, jul);
-      if (janOff === julOff) {
-        return janOff;
-      }
-      return (janOff + julOff) / 2;
-    } catch {
-      return 0;
-    }
-  }
-  function getTzOffsetMinutes(olsonId, date) {
-    try {
-      const fmt = new Intl.DateTimeFormat("en-US", {
-        timeZone: olsonId,
-        timeZoneName: "longOffset"
-      });
-      const parts = fmt.formatToParts(date);
-      const tzPart = parts.find((p) => p.type === "timeZoneName");
-      if (!tzPart) return 0;
-      const tzStr = tzPart.value;
-      if (tzStr === "GMT" || tzStr === "UTC") return 0;
-      const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
-      if (!m) return 0;
-      const sign = m[1] === "+" ? 1 : -1;
-      const hours = parseInt(m[2], 10);
-      const minutes = m[3] ? parseInt(m[3], 10) : 0;
-      return sign * (hours * 60 + minutes);
-    } catch {
-      return 0;
-    }
-  }
-  function validTZCenteredAt(tzCenter, offsetHours) {
-    const centerSlotMinutes = offsetHours * 60 + 30;
-    let distance = centerSlotMinutes - tzCenter;
-    if (distance > 12 * 60) {
-      distance -= 24 * 60;
-    } else if (distance < -12 * 60) {
-      distance += 24 * 60;
-    }
-    return Math.abs(distance) <= 30;
-  }
-  function validSlotsForTz(olsonId) {
-    const tzCenter = computeTzCenter(olsonId);
-    const result = [];
-    for (let slot = 1; slot <= 24; slot++) {
-      const offsetHour = getSlotOffsetHour(slot);
-      if (validTZCenteredAt(tzCenter, offsetHour)) {
-        result.push(slot);
-      }
-    }
-    return result;
-  }
-  function formatSlotOffset(envSlot) {
-    const h = getSlotOffsetHour(envSlot);
-    if (h === 0) return "UTC\xB10";
-    const sign = h > 0 ? "+" : "";
-    return `UTC${sign}${h}`;
-  }
-  function getStandardOffsetMinutes(olsonId) {
-    try {
-      const now = /* @__PURE__ */ new Date();
-      const jan = new Date(now.getFullYear(), 0, 1);
-      const jul = new Date(now.getFullYear(), 6, 1);
-      const janOff = getTzOffsetMinutes(olsonId, jan);
-      const julOff = getTzOffsetMinutes(olsonId, jul);
-      return Math.min(janOff, julOff);
-    } catch {
-      return 0;
-    }
-  }
-  function olsonIdToCityName(olsonId) {
-    const parts = olsonId.split("/");
-    const city = parts[parts.length - 1];
-    return city.replace(/_/g, " ");
-  }
-
-  // src/watch/analemma.ts
-  var REF_LAT_RAD = 45 * Math.PI / 180;
-  var REF_LON_RAD = 0;
-  var REF_EPOCH_SECONDS = (() => {
-    const d = new Date(Date.UTC(2024, 2, 20, 12, 0, 0));
-    return d.getTime() / 1e3 - 978307200;
-  })();
-  var PATH_DAYS = 365;
-  var DEFAULT_UPDATE_SEC = 300;
-  var PATH_MARGIN_FRACTION = 0.15;
-  function normalizeAngleDelta(delta) {
-    while (delta > Math.PI) delta -= 2 * Math.PI;
-    while (delta < -Math.PI) delta += 2 * Math.PI;
-    return delta;
-  }
-  function computeAnalemmaPath() {
-    const refAlt = sunAltitude(REF_EPOCH_SECONDS, REF_LAT_RAD, REF_LON_RAD, null);
-    const refAz = sunAzimuth(REF_EPOCH_SECONDS, REF_LAT_RAD, REF_LON_RAD, null);
-    const path = [];
-    for (let d = 0; d < PATH_DAYS; d++) {
-      const di = REF_EPOCH_SECONDS + d * 86400;
-      const alt = sunAltitude(di, REF_LAT_RAD, REF_LON_RAD, null);
-      const az = sunAzimuth(di, REF_LAT_RAD, REF_LON_RAD, null);
-      path.push({
-        dayOfYear: d,
-        deltaAz: normalizeAngleDelta(az - refAz),
-        deltaAlt: alt - refAlt
-      });
-    }
-    return { path, refAlt, refAz };
-  }
-  function expandAnalemma(part, env, images) {
-    const centerX = evalAttr(part.x, env);
-    const centerY = evalAttr(part.y, env);
-    const radius = evalAttr(part.radius, env) || 40;
-    const sunRadius = evalAttr(part.sunRadius, env) || 2.5;
-    const sunFillColor = part.sunFillColor ? evalColor(part.sunFillColor, env) : "rgba(242,228,7,1)";
-    const sunStrokeColor = part.sunStrokeColor ? evalColor(part.sunStrokeColor, env) : "rgba(139,129,75,1)";
-    const channelColor = part.channelColor ? evalColor(part.channelColor, env) : "rgba(0,0,0,1)";
-    const channelWidth = evalAttr(part.channelWidth, env) || 0.8;
-    const bgRotates = (evalAttr(part.bgRotates, env) || 0) !== 0;
-    const updateIntervalSec = evalAttr(part.update, env) || DEFAULT_UPDATE_SEC;
-    const { path, refAlt, refAz } = computeAnalemmaPath();
-    const usableRadius = radius * (1 - PATH_MARGIN_FRACTION);
-    let maxAbsX = 0;
-    let maxAbsY = 0;
-    for (const pt of path) {
-      const correctedAz = pt.deltaAz * Math.cos(refAlt + pt.deltaAlt);
-      const absX = Math.abs(correctedAz);
-      const absY = Math.abs(pt.deltaAlt);
-      if (absX > maxAbsX) maxAbsX = absX;
-      if (absY > maxAbsY) maxAbsY = absY;
-    }
-    const maxExtent = Math.max(maxAbsX, maxAbsY);
-    const scaleFactor = maxExtent > 0 ? usableRadius / maxExtent : 1;
-    const pathScaled = path.map((pt) => [
-      pt.deltaAz * Math.cos(refAlt + pt.deltaAlt) * scaleFactor,
-      pt.deltaAlt * scaleFactor
-    ]);
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const [px, py] of pathScaled) {
-      if (px < minX) minX = px;
-      if (px > maxX) maxX = px;
-      if (py < minY) minY = py;
-      if (py > maxY) maxY = py;
-    }
-    const pathOffsetX = (minX + maxX) / 2;
-    const pathOffsetY = (minY + maxY) / 2;
-    for (let i = 0; i < pathScaled.length; i++) {
-      pathScaled[i][0] -= pathOffsetX;
-      pathScaled[i][1] -= pathOffsetY;
-    }
-    let bgBitmap = null;
-    if (part.bgSrc) {
-      const loaded2 = images.get(part.bgSrc);
-      if (loaded2) {
-        bgBitmap = createDiscBackground(loaded2.bitmap, loaded2.scale, radius);
-      }
-    }
-    if (!bgBitmap) {
-      bgBitmap = createFallbackDiscBackground(radius);
-    }
-    const { bitmap: sunBitmap, anchorX: sunAnchorX, anchorY: sunAnchorY, w: sunW, h: sunH } = buildSunBitmap(sunRadius, sunFillColor, sunStrokeColor);
-    const channelBitmap = buildChannelBitmap(
-      pathScaled,
-      radius,
-      channelColor,
-      channelWidth
-    );
-    const state = {
-      path,
-      pathScaled,
-      scaleFactor,
-      pathOffsetX,
-      pathOffsetY,
-      refAlt,
-      refAz,
-      centerX,
-      centerY,
-      radius,
-      sunRadius,
-      sunFillColor,
-      sunStrokeColor,
-      channelColor,
-      channelWidth,
-      bgRotates,
-      currentSunX: 0,
-      currentSunY: 0,
-      currentRotation: 0,
-      updateIntervalSec,
-      nextUpdateTime: 0,
-      channelBitmap,
-      bgBitmap,
-      sunBitmap,
-      sunBitmapAnchorX: sunAnchorX,
-      sunBitmapAnchorY: sunAnchorY,
-      sunBitmapW: sunW,
-      sunBitmapH: sunH
-    };
-    updateAnalemmaValues(state, env);
-    return state;
-  }
-  function buildChannelPath2D(pathScaled) {
-    const p = new Path2D();
-    if (pathScaled.length === 0) return p;
-    p.moveTo(pathScaled[0][0], -pathScaled[0][1]);
-    for (let i = 1; i < pathScaled.length; i++) {
-      p.lineTo(pathScaled[i][0], -pathScaled[i][1]);
-    }
-    p.closePath();
-    return p;
-  }
-  function buildChannelBitmap(pathScaled, radius, channelColor, channelWidth) {
-    const scale = 4;
-    const size = radius * 2;
-    const pxSize = Math.ceil(size * scale);
-    const canvas = new OffscreenCanvas(pxSize, pxSize);
-    const ctx = canvas.getContext("2d");
-    ctx.scale(scale, scale);
-    ctx.translate(radius, radius);
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.09)";
-    ctx.fill();
-    const channelPath = buildChannelPath2D(pathScaled);
-    ctx.strokeStyle = channelColor;
-    ctx.lineWidth = channelWidth;
-    ctx.lineJoin = "round";
-    ctx.stroke(channelPath);
-    const tickLen = 2;
-    const tickAlong = 0.5;
-    const gap = channelWidth / 2;
-    for (const { dayIndex, color } of SEASON_TICKS) {
-      const idx = dayIndex % pathScaled.length;
-      const [px, py] = pathScaled[idx];
-      const prev = (idx - 1 + pathScaled.length) % pathScaled.length;
-      const next = (idx + 1) % pathScaled.length;
-      const dx = pathScaled[next][0] - pathScaled[prev][0];
-      const dy = pathScaled[next][1] - pathScaled[prev][1];
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len === 0) continue;
-      const tx = dx / len;
-      const ty = dy / len;
-      const nx = -ty;
-      const ny = tx;
-      ctx.fillStyle = color;
-      for (const side of [1, -1]) {
-        const innerX = px + side * nx * gap;
-        const innerY = py + side * ny * gap;
-        const outerX = px + side * nx * (gap + tickLen);
-        const outerY = py + side * ny * (gap + tickLen);
-        const midX = (innerX + outerX) / 2;
-        const midY = (innerY + outerY) / 2;
-        ctx.save();
-        ctx.translate(midX, -midY);
-        ctx.rotate(-Math.atan2(ty, tx));
-        ctx.fillRect(-tickAlong, -tickLen / 2, tickAlong * 2, tickLen);
-        ctx.restore();
-      }
-    }
-    return canvas;
-  }
-  function buildSunBitmap(sunRadius, fillColor, strokeColor) {
-    const shadowBlur = 1.5;
-    const shadowOffsetX = 0.5;
-    const shadowOffsetY = 0.5;
-    const shadowPad = shadowBlur * 3 + Math.max(Math.abs(shadowOffsetX), Math.abs(shadowOffsetY));
-    const extent = sunRadius + 0.5 + shadowPad;
-    const w = extent * 2;
-    const h = extent * 2;
-    const scale = 8;
-    const pxW = Math.ceil(w * scale);
-    const pxH = Math.ceil(h * scale);
-    const canvas = new OffscreenCanvas(pxW, pxH);
-    const ctx = canvas.getContext("2d");
-    ctx.scale(scale, scale);
-    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-    ctx.shadowBlur = shadowBlur * scale;
-    ctx.shadowOffsetX = shadowOffsetX * scale;
-    ctx.shadowOffsetY = shadowOffsetY * scale;
-    drawSunGlyph(ctx, extent, extent, sunRadius, fillColor, strokeColor);
-    return {
-      bitmap: canvas,
-      anchorX: extent,
-      // pivot is at center
-      anchorY: extent,
-      w,
-      h
-    };
-  }
-  function createDiscBackground(faceImage, faceImageScale, discRadius) {
-    const size = Math.ceil(discRadius * 2);
-    const pxSize = Math.ceil(size * 4);
-    const canvas = new OffscreenCanvas(pxSize, pxSize);
-    const ctx = canvas.getContext("2d");
-    ctx.beginPath();
-    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2, 0, Math.PI * 2);
-    ctx.clip();
-    const imgW = faceImage.width * faceImageScale;
-    const imgH = faceImage.height * faceImageScale;
-    const drawScale = pxSize / (discRadius * 2);
-    ctx.save();
-    ctx.translate(pxSize / 2, pxSize / 2);
-    ctx.scale(drawScale, drawScale);
-    ctx.drawImage(faceImage, -imgW / 2, -imgH / 2, imgW, imgH);
-    ctx.restore();
-    ctx.beginPath();
-    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2 - 1, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(0,0,0,0.8)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    return canvas;
-  }
-  function createFallbackDiscBackground(discRadius) {
-    const size = Math.ceil(discRadius * 2);
-    const pxSize = Math.ceil(size * 4);
-    const canvas = new OffscreenCanvas(pxSize, pxSize);
-    const ctx = canvas.getContext("2d");
-    ctx.beginPath();
-    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(pxSize / 2, pxSize / 2, pxSize / 2 - 1, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(0,0,0,0.8)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    return canvas;
-  }
-  function updateAnalemmaValues(state, env) {
-    const getNow = env.getNow;
-    if (!getNow) return;
-    const now = getNow();
-    const di = dateToDateInterval(now);
-    const nowUTC = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(),
-      12,
-      0,
-      0
-    ));
-    const noonDI = dateToDateInterval(nowUTC);
-    const alt = sunAltitude(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
-    const az = sunAzimuth(noonDI, REF_LAT_RAD, REF_LON_RAD, null);
-    state.currentSunX = normalizeAngleDelta(az - state.refAz) * Math.cos(alt) * state.scaleFactor - state.pathOffsetX;
-    state.currentSunY = (alt - state.refAlt) * state.scaleFactor - state.pathOffsetY;
-    const obsLat = env.observerLatRad ?? 0;
-    const obsLon = env.observerLonRad ?? 0;
-    state.currentRotation = sunSkyOrientationAngle(di, obsLat, obsLon, null);
-  }
-  function tickAnalemma(state, env, now) {
-    if (now >= state.nextUpdateTime) {
-      updateAnalemmaValues(state, env);
-      state.nextUpdateTime = now + state.updateIntervalSec * 1e3;
-    }
-  }
-  function resetAnalemmaSchedule(state) {
-    state.nextUpdateTime = 0;
-  }
-  function drawSunGlyph(ctx, cx, cy, radius, fillColor, strokeColor, nRays = 8) {
-    const innerRadius = radius * 0.5;
-    const rayTip = radius;
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    for (let i = 0; i < nRays; i++) {
-      const theta = 2 * Math.PI * i / nRays;
-      const tipX = cx + rayTip * Math.cos(theta);
-      const tipY = cy + rayTip * Math.sin(theta);
-      const cwX = cx + innerRadius * Math.cos(theta + Math.PI / nRays);
-      const cwY = cy + innerRadius * Math.sin(theta + Math.PI / nRays);
-      const ccwX = cx + innerRadius * Math.cos(theta - Math.PI / nRays);
-      const ccwY = cy + innerRadius * Math.sin(theta - Math.PI / nRays);
-      ctx.moveTo(tipX, tipY);
-      ctx.lineTo(cwX, cwY);
-      ctx.lineTo(ccwX, ccwY);
-      ctx.closePath();
-    }
-    ctx.arc(cx, cy, innerRadius, 0, 2 * Math.PI);
-    ctx.fill();
-  }
-  var SEASON_TICKS = [
-    { dayIndex: 0, color: "#22aa22" },
-    // Vernal equinox — green
-    { dayIndex: 93, color: "#ddcc00" },
-    // Summer solstice — yellow
-    { dayIndex: 184, color: "#ee7722" },
-    // Autumnal equinox — orange
-    { dayIndex: 275, color: "#2266cc" }
-    // Winter solstice — blue
-  ];
-  function drawAnalemma(ctx, state) {
-    const { centerX, centerY, radius, currentRotation, bgRotates } = state;
-    ctx.save();
-    ctx.translate(centerX, -centerY);
-    if (state.bgBitmap) {
-      if (bgRotates) {
-        ctx.save();
-        ctx.rotate(currentRotation);
-        drawBackground(ctx, state);
-        ctx.restore();
-      } else {
-        drawBackground(ctx, state);
-      }
-    }
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.rotate(currentRotation);
-    if (state.channelBitmap) {
-      ctx.drawImage(state.channelBitmap, -radius, -radius, radius * 2, radius * 2);
-    }
-    if (state.sunBitmap) {
-      ctx.drawImage(
-        state.sunBitmap,
-        state.currentSunX - state.sunBitmapAnchorX,
-        -state.currentSunY - state.sunBitmapAnchorY,
-        state.sunBitmapW,
-        state.sunBitmapH
-      );
-    }
-    ctx.restore();
-    ctx.restore();
-  }
-  function drawBackground(ctx, state) {
-    if (!state.bgBitmap) return;
-    const { radius } = state;
-    const bmp = state.bgBitmap;
-    ctx.drawImage(bmp, -radius, -radius, radius * 2, radius * 2);
-  }
-
-  // src/watch/renderer.ts
-  function isTransparent(cssColor) {
-    const m = cssColor.match(/,([\d.]+)\)$/);
-    return m !== null && parseFloat(m[1]) === 0;
-  }
-  var BEZEL_THICKNESS_XML = 10;
-  function buildStaticBlockCaches(watch, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves) {
-    const pendingWindows = [];
-    for (const part of watch.parts) {
-      if (part.type === "Window") {
-        pendingWindows.push(part);
-      } else if (part.type === "Static") {
-        part.precedingWindows = pendingWindows.slice();
-        pendingWindows.length = 0;
-        let cache = part.cachedCanvas;
-        if (!cache || cache.width !== canvasWidth || cache.height !== canvasHeight) {
-          cache = new OffscreenCanvas(canvasWidth, canvasHeight);
-        } else {
-          const cCtx = cache.getContext("2d");
-          cCtx.resetTransform();
-          cCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-        }
-        const ctx = cache.getContext("2d");
-        ctx.translate(canvasWidth / 2, canvasHeight / 2);
-        ctx.scale(scale, scale);
-        renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, true);
-        for (const win of part.precedingWindows) {
-          drawWindowBorder(ctx, win, env);
-        }
-        for (const win of part.precedingWindows) {
-          cutWindowHole(ctx, win, env);
-        }
-        for (const win of part.precedingWindows) {
-          drawWindowInnerShadow(ctx, win, env);
-        }
-        part.cachedCanvas = cache;
-      } else {
-        pendingWindows.length = 0;
-      }
-    }
-  }
-  function invalidateDayNightCaches(watch) {
-    for (const part of watch.parts) {
-      if (part.type === "QDayNightRing") {
-        part._cacheNextUpdate = 0;
-        part._cacheStart = void 0;
-      }
-    }
-  }
-  function buildHandShadowCaches(watch, env, scale, images) {
-    function processPartList(parts) {
-      for (const part of parts) {
-        if (part.type === "QHand") {
-          buildSingleHandShadow(part, env, scale, images);
-        } else if (part.type === "Static") {
-          processPartList(part.children);
-        }
-      }
-    }
-    processPartList(watch.parts);
-  }
-  function buildSingleHandShadow(part, env, scale, images) {
-    const z = evalAttr(part.z, env);
-    if (!z || z === 0) {
-      part._shadowBitmap = void 0;
-      return;
-    }
-    const handType = part.handType || "tri";
-    if (handType === "spoke") return;
-    if (part.src && images) {
-      buildImageHandShadow(part, env, scale, images);
-      return;
-    }
-    const length = evalAttr(part.length, env);
-    if (length <= 0) return;
-    const width = evalAttr(part.width, env);
-    const tail = evalAttr(part.tail, env);
-    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
-    const oLength = evalAttr(part.oLength, env);
-    const oWidth = evalAttr(part.oWidth, env) || width;
-    const oRadius = evalAttr(part.oRadius, env);
-    const oCenter = evalAttr(part.oCenter, env);
-    const oTail = evalAttr(part.oTail, env);
-    const length2 = evalAttr(part.length2, env);
-    const thick = evalAttr(part.thick, env) || 3;
-    let sigma = (z + 2) / 2;
-    let percentOpacity = 40;
-    if (thick < 3) {
-      sigma *= 1.25;
-      percentOpacity *= thick / 3;
-    }
-    const shadowPad = sigma * 3;
-    const shadowDx = z / 4.3;
-    const shadowDy = z / 2.15;
-    let halfW;
-    let tipExtent;
-    let tailExtent;
-    if (handType === "sun") {
-      const rayRad = (length - length2) / 2;
-      const raysRad = (length - length2) / 3;
-      const cen = length2 + rayRad;
-      const sunCenter = oCenter > 0 ? oCenter : raysRad / 2;
-      halfW = Math.max(rayRad, sunCenter) + lineWidth;
-      tipExtent = cen + rayRad + lineWidth;
-      tailExtent = lineWidth;
-    } else if (handType === "breguet") {
-      const widthScaler = width / (length * 0.16);
-      const lengthScaler = (length - 81) / 10;
-      const breOuterRadius = length * 0.075 * widthScaler;
-      const centerRadius = length * 0.08 * widthScaler;
-      const tipWidth = length * 0.045 * widthScaler;
-      halfW = Math.max(breOuterRadius, centerRadius, tipWidth / 2, width / 2) + lineWidth;
-      tipExtent = length + oLength + lineWidth;
-      tailExtent = Math.max(tail, 0) + lineWidth;
-    } else {
-      halfW = Math.max(width / 2, oWidth / 2) + lineWidth;
-      tipExtent = length + (oLength > 0 ? oLength + lineWidth * 3 : 0) + lineWidth;
-      tailExtent = Math.max(tail, 0) + lineWidth;
-    }
-    halfW = Math.max(halfW, oCenter || 0, oRadius || 0);
-    if (oRadius > 0) {
-      tailExtent = Math.max(tailExtent, Math.max(tail, 0) + 2 * oRadius + lineWidth);
-    }
-    const xMin = -halfW - shadowPad;
-    const xMax = halfW + shadowPad + shadowDx;
-    const yMin = -tipExtent - shadowPad;
-    const yMax = tailExtent + shadowPad + shadowDy;
-    const bboxW = xMax - xMin;
-    const bboxH = yMax - yMin;
-    const anchorX = -xMin;
-    const anchorY = -yMin;
-    const pxW = Math.ceil(bboxW * scale) + 2;
-    const pxH = Math.ceil(bboxH * scale) + 2;
-    if (pxW <= 0 || pxH <= 0) return;
-    const bitmap = new OffscreenCanvas(pxW, pxH);
-    const bctx = bitmap.getContext("2d");
-    bctx.translate(anchorX * scale + 1, anchorY * scale + 1);
-    bctx.scale(scale, scale);
-    bctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
-    bctx.shadowBlur = sigma * scale;
-    bctx.shadowOffsetX = shadowDx * scale;
-    bctx.shadowOffsetY = shadowDy * scale;
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
-    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
-    if (handType === "quad") {
-      drawQuadHandBody(bctx, part, env, length, strokeColor, fillColor, lineWidth);
-    } else if (handType === "sun") {
-      drawSunHandBody(bctx, part, env, length, length2, oCenter, strokeColor, fillColor, lineWidth);
-    } else if (handType === "breguet") {
-      drawBreguetHandBody(bctx, length, width, tail, oLength, strokeColor, fillColor, lineWidth);
-    } else {
-      drawHandShape(bctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
-    }
-    if (handType !== "quad" && handType !== "sun" && handType !== "breguet" && oLength > 0) {
-      const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
-      const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-      const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-      drawHandOrnament(bctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor);
-    }
-    if (oRadius > 0) {
-      const tLW = evalAttr(part.tLineWidth, env) || evalAttr(part.oLineWidth, env) || lineWidth;
-      const tSC = part.tStrokeColor ? evalColor(part.tStrokeColor, env) : part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-      const tFC = part.tFillColor ? evalColor(part.tFillColor, env) : part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-      drawTailCircle(bctx, tail, oRadius, tLW, tSC, tFC);
-    }
-    if (oCenter > 0 && handType !== "sun") {
-      const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-      drawCenterDot(bctx, oCenter, osc);
-    }
-    part._shadowBitmap = bitmap;
-    part._shadowAnchorX = anchorX;
-    part._shadowAnchorY = anchorY;
-    part._shadowBitmapW = bboxW;
-    part._shadowBitmapH = bboxH;
-  }
-  function drawQuadHandBody(ctx, part, env, length, strokeColor, fillColor, lineWidth) {
-    const oLength = evalAttr(part.oLength, env);
-    const oWidth = evalAttr(part.oWidth, env);
-    const oCenter2 = evalAttr(part.oCenter, env);
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    ctx.moveTo(-oWidth / 12, -oCenter2);
-    ctx.quadraticCurveTo(-oWidth * 0.45, -oLength / 2, -oWidth / 4, -oLength);
-    ctx.moveTo(oWidth / 4, -oLength);
-    ctx.quadraticCurveTo(oWidth * 0.45, -oLength / 2, oWidth / 12, -oCenter2);
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-    const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-    ctx.fillStyle = oStrokeColor;
-    ctx.lineWidth = 0;
-    ctx.beginPath();
-    ctx.moveTo(oWidth / 4 + lineWidth / 2, -oLength);
-    ctx.lineTo(0, -length);
-    ctx.lineTo(-oWidth / 4 - lineWidth / 2, -oLength);
-    ctx.lineTo(-oWidth / 4 + lineWidth / 2, -oLength);
-    ctx.lineTo(0, -oLength * 1.2);
-    ctx.lineTo(oWidth / 4 - lineWidth / 2, -oLength);
-    ctx.closePath();
-    ctx.fill();
-    if (oCenter2 > 0) {
-      const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-      drawCenterDot(ctx, oCenter2, osc);
-    }
-  }
-  function drawSunHandBody(ctx, part, env, length, length2, oCenter, strokeColor, fillColor, lineWidth) {
-    const nRays = evalAttr(part.nRays, env) || 8;
-    let rayRad = (length - length2) / 2;
-    const raysRad = (length - length2) / 3;
-    const cen = length2 + rayRad;
-    const sunCenter = oCenter > 0 ? oCenter : raysRad / 2;
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    for (let i = 0; i < nRays; i++) {
-      const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
-      const farX = rayRad * Math.cos(theta);
-      const farYIOS = cen + rayRad * Math.sin(theta);
-      const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
-      const cwYIOS = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
-      const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
-      const ccwYIOS = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
-      ctx.moveTo(farX, -farYIOS);
-      ctx.lineTo(cwX, -cwYIOS);
-      ctx.lineTo(ccwX, -ccwYIOS);
-      ctx.lineTo(farX, -farYIOS);
-      rayRad = raysRad;
-    }
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = fillColor;
-    ctx.strokeStyle = fillColor;
-    ctx.beginPath();
-    ctx.arc(0, -cen, sunCenter, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.stroke();
-  }
-  function drawBreguetHandBody(ctx, length, width, tail, oLength, strokeColor, fillColor, lineWidth) {
-    const widthScaler = width / (length * 0.16);
-    const lengthScaler = (length - 81) / 10;
-    const armWidth = length * 0.04 * widthScaler;
-    const centerRadius = length * 0.08 * widthScaler;
-    const breOuterCenter = length * 0.71 + lengthScaler;
-    const breInnerCenter = length * 0.725 + lengthScaler * 0.8;
-    const breOuterRadius = length * 0.075 * widthScaler;
-    const breInnerRadius = length * 0.05 * widthScaler;
-    const breBase = breOuterCenter - breOuterRadius;
-    const tipBase = breOuterCenter + breOuterRadius;
-    const tipWidth = length * 0.045 * widthScaler;
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    ctx.arc(0, 0, centerRadius, 0, 2 * Math.PI);
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-armWidth / 2, -centerRadius);
-    ctx.lineTo(-armWidth / 10, -breBase);
-    ctx.lineTo(armWidth / 10, -breBase);
-    ctx.lineTo(armWidth / 2, -centerRadius);
-    ctx.closePath();
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, -breOuterCenter, breOuterRadius, 0, 2 * Math.PI);
-    ctx.moveTo(breInnerRadius, -breInnerCenter);
-    ctx.arc(0, -breInnerCenter, breInnerRadius, 0, 2 * Math.PI, true);
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill("evenodd");
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-tipWidth / 2, -tipBase);
-    ctx.lineTo(0, -length);
-    ctx.lineTo(tipWidth / 2, -tipBase);
-    ctx.closePath();
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-  }
-  function buildImageHandShadow(part, env, scale, images) {
-    const z = evalAttr(part.z, env);
-    if (!z || z === 0) return;
-    const loaded2 = part.src ? images.get(part.src) : void 0;
-    if (!loaded2) return;
-    const { bitmap: srcBitmap, scale: imgScale } = loaded2;
-    const drawW = srcBitmap.width * imgScale;
-    const drawH = srcBitmap.height * imgScale;
-    const thick = evalAttr(part.thick, env) || 3;
-    let sigma = (z + 2) / 2;
-    let percentOpacity = 40;
-    const shadowPad = sigma * 3;
-    const shadowDx = z / 4.3;
-    const shadowDy = z / 2.15;
-    const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
-    const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
-    const imgLeft = -xAnchor;
-    const imgTop = -yAnchor - drawH;
-    const imgRight = imgLeft + drawW;
-    const imgBottom = imgTop + drawH;
-    const xMin = imgLeft - shadowPad;
-    const xMax = imgRight + shadowPad + shadowDx;
-    const yMin = imgTop - shadowPad;
-    const yMax = imgBottom + shadowPad + shadowDy;
-    const bboxW = xMax - xMin;
-    const bboxH = yMax - yMin;
-    const anchorX = -xMin;
-    const anchorY = -yMin;
-    const pxW = Math.ceil(bboxW * scale) + 2;
-    const pxH = Math.ceil(bboxH * scale) + 2;
-    if (pxW <= 0 || pxH <= 0) return;
-    const bmp = new OffscreenCanvas(pxW, pxH);
-    const bctx = bmp.getContext("2d");
-    bctx.translate(anchorX * scale + 1, anchorY * scale + 1);
-    bctx.scale(scale, scale);
-    bctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
-    bctx.shadowBlur = sigma * scale;
-    bctx.shadowOffsetX = shadowDx * scale;
-    bctx.shadowOffsetY = shadowDy * scale;
-    bctx.drawImage(srcBitmap, imgLeft, imgTop, drawW, drawH);
-    part._shadowBitmap = bmp;
-    part._shadowAnchorX = anchorX;
-    part._shadowAnchorY = anchorY;
-    part._shadowBitmapW = bboxW;
-    part._shadowBitmapH = bboxH;
-  }
-  function renderFrame(ctx, watch, env, scale, images, terminatorLeaves, analemmaState) {
-    const w = ctx.canvas.width;
-    const h = ctx.canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(scale, scale);
-    renderPartsDocumentOrder(ctx, watch.parts, env, w, h, scale, images, terminatorLeaves, analemmaState);
-    drawBezel(ctx, watch);
-    ctx.restore();
-  }
-  function renderPartsDocumentOrder(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, analemmaState) {
-    const pendingWindows = [];
-    for (const part of parts) {
-      if (part.type === "Window") {
-        pendingWindows.push(part);
-        continue;
-      }
-      if (part.type === "Button") continue;
-      if (part.type === "Static") {
-        pendingWindows.length = 0;
-        if (part.cachedCanvas) {
-          ctx.save();
-          ctx.resetTransform();
-          ctx.drawImage(part.cachedCanvas, 0, 0);
-          ctx.restore();
-        }
-        drawQHandsInParts(ctx, part.children, env, images);
-        continue;
-      }
-      if (part.type === "QHand") {
-        for (const win of pendingWindows) {
-          drawWindowBorder(ctx, win, env);
-        }
-        pendingWindows.length = 0;
-        if (part.special === "specialWorldtime") {
-          drawTerraRingWithKnockouts(ctx, part, env, images);
-          drawTerraChannelLines(ctx, part, env);
-        } else if (part.special === "specialSubdial") {
-          drawGaiaSubdial(ctx, part, env, images);
-        } else if (part.src && images) {
-          drawImageHand(ctx, part, env, images);
-        } else {
-          drawQHand(ctx, part, env);
-        }
-        continue;
-      }
-      if (part.type === "Terminator") {
-        if (terminatorLeaves && terminatorLeaves.length > 0) {
-          drawTerminator(ctx, terminatorLeaves);
-        }
-        continue;
-      }
-      if (part.type === "Analemma") {
-        if (analemmaState) {
-          drawAnalemma(ctx, analemmaState);
-        }
-        continue;
-      }
-      if (part.type === "QDayNightRing") {
-        for (const win of pendingWindows) {
-          drawWindowBorder(ctx, win, env);
-        }
-        pendingWindows.length = 0;
-        drawQDayNightRing(ctx, part, env);
-        continue;
-      }
-      if (pendingWindows.length > 0) {
-        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
-        pendingWindows.length = 0;
-      } else {
-        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
-      }
-      if (part.special === "specialDotsMap") {
-        drawTerraCityDots(ctx, env);
-      }
-    }
-    for (const win of pendingWindows) {
-      drawWindowBorder(ctx, win, env);
-    }
-  }
-  function drawQHandsInParts(ctx, parts, env, images) {
-    for (const part of parts) {
-      if (part.type === "QHand") {
-        if (part.special === "specialWorldtime") {
-          drawTerraRingWithKnockouts(ctx, part, env, images);
-          drawTerraChannelLines(ctx, part, env);
-        } else if (part.special === "specialSubdial") {
-          drawGaiaSubdial(ctx, part, env, images);
-        } else if (part.src && images) {
-          drawImageHand(ctx, part, env, images);
-        } else {
-          drawQHand(ctx, part, env);
-        }
-      } else if (part.type === "Static") {
-        drawQHandsInParts(ctx, part.children, env, images);
-      }
-    }
-  }
-  function drawBezel(ctx, watch) {
-    if (!watch.bezelColor) return;
-    const faceRadius = watch.faceWidth / 2;
-    const outerRadius2 = faceRadius + BEZEL_THICKNESS_XML;
-    const midRadius = (faceRadius + outerRadius2) / 2;
-    ctx.save();
-    const baseGrad = ctx.createRadialGradient(0, 0, faceRadius, 0, 0, outerRadius2);
-    baseGrad.addColorStop(0, darkenColor(watch.bezelColor, 0.3));
-    baseGrad.addColorStop(0.06, darkenColor(watch.bezelColor, 0.55));
-    baseGrad.addColorStop(0.15, watch.bezelColor);
-    baseGrad.addColorStop(0.35, lightenColor(watch.bezelColor, 1.25));
-    baseGrad.addColorStop(0.5, lightenColor(watch.bezelColor, 1.3));
-    baseGrad.addColorStop(0.65, lightenColor(watch.bezelColor, 1.25));
-    baseGrad.addColorStop(0.85, watch.bezelColor);
-    baseGrad.addColorStop(0.94, darkenColor(watch.bezelColor, 0.55));
-    baseGrad.addColorStop(1, darkenColor(watch.bezelColor, 0.3));
-    ctx.beginPath();
-    ctx.arc(0, 0, outerRadius2, 0, 2 * Math.PI, false);
-    ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI, true);
-    ctx.fillStyle = baseGrad;
-    ctx.fill("evenodd");
-    ctx.beginPath();
-    ctx.arc(0, 0, outerRadius2 - 0.3, 0, 2 * Math.PI, false);
-    ctx.arc(0, 0, faceRadius + 0.3, 0, 2 * Math.PI, true);
-    const dirGrad = ctx.createLinearGradient(0, -outerRadius2, 0, outerRadius2);
-    dirGrad.addColorStop(0, "rgba(255,255,255,0.45)");
-    dirGrad.addColorStop(0.2, "rgba(255,255,255,0.20)");
-    dirGrad.addColorStop(0.45, "rgba(0,0,0,0)");
-    dirGrad.addColorStop(0.65, "rgba(0,0,0,0.10)");
-    dirGrad.addColorStop(1, "rgba(0,0,0,0.22)");
-    ctx.fillStyle = dirGrad;
-    ctx.fill("evenodd");
-    const conicGrad = ctx.createConicGradient(
-      -Math.PI * 0.72,
-      // start angle: upper-left
-      0,
-      0
-    );
-    conicGrad.addColorStop(0, "rgba(255,255,255,0)");
-    conicGrad.addColorStop(0.02, "rgba(255,255,255,0.15)");
-    conicGrad.addColorStop(0.06, "rgba(255,255,255,0.55)");
-    conicGrad.addColorStop(0.1, "rgba(255,255,255,0.60)");
-    conicGrad.addColorStop(0.14, "rgba(255,255,255,0.55)");
-    conicGrad.addColorStop(0.2, "rgba(255,255,255,0.12)");
-    conicGrad.addColorStop(0.28, "rgba(255,255,255,0)");
-    conicGrad.addColorStop(0.52, "rgba(255,255,255,0)");
-    conicGrad.addColorStop(0.57, "rgba(255,255,255,0.08)");
-    conicGrad.addColorStop(0.62, "rgba(255,255,255,0.08)");
-    conicGrad.addColorStop(0.67, "rgba(255,255,255,0)");
-    conicGrad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.beginPath();
-    ctx.arc(0, 0, outerRadius2 - 0.3, 0, 2 * Math.PI, false);
-    ctx.arc(0, 0, faceRadius + 0.3, 0, 2 * Math.PI, true);
-    ctx.globalCompositeOperation = "screen";
-    ctx.fillStyle = conicGrad;
-    ctx.fill("evenodd");
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 0.12;
-    for (let i = 1; i <= 5; i++) {
-      const r = faceRadius + BEZEL_THICKNESS_XML * (i / 6);
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, 2 * Math.PI);
-      ctx.strokeStyle = i % 2 === 0 ? "rgba(255,255,255,1)" : "rgba(0,0,0,1)";
-      ctx.lineWidth = 0.25;
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(0, 0, faceRadius, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(0,0,0,0.7)";
-    ctx.lineWidth = 0.7;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, outerRadius2, 0, 2 * Math.PI);
-    ctx.strokeStyle = "rgba(255,255,255,0.20)";
-    ctx.lineWidth = 0.4;
-    ctx.stroke();
-    if (watch.bezelNoonMark) {
-      const markInner = faceRadius;
-      const markOuter = faceRadius + BEZEL_THICKNESS_XML * 0.55;
-      ctx.beginPath();
-      ctx.moveTo(0, -markInner);
-      ctx.lineTo(0, -markOuter);
-      ctx.strokeStyle = "rgba(0,0,0,0.55)";
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0.5, -markInner);
-      ctx.lineTo(0.5, -markOuter);
-      ctx.strokeStyle = "rgba(255,255,255,0.25)";
-      ctx.lineWidth = 0.35;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  function parseColorComponents(color) {
-    const c = color.trim().toLowerCase();
-    if (c.startsWith("#")) {
-      const hex = c.slice(1);
-      if (hex.length === 3) {
-        return [
-          parseInt(hex[0] + hex[0], 16),
-          parseInt(hex[1] + hex[1], 16),
-          parseInt(hex[2] + hex[2], 16)
-        ];
-      }
-      return [
-        parseInt(hex.slice(0, 2), 16),
-        parseInt(hex.slice(2, 4), 16),
-        parseInt(hex.slice(4, 6), 16)
-      ];
-    }
-    const m = c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
-    if (m) return [+m[1], +m[2], +m[3]];
-    return [192, 192, 192];
-  }
-  function darkenColor(color, factor) {
-    const [r, g, b] = parseColorComponents(color);
-    return `rgb(${Math.round(r * factor)},${Math.round(g * factor)},${Math.round(b * factor)})`;
-  }
-  function lightenColor(color, factor) {
-    const [r, g, b] = parseColorComponents(color);
-    return `rgb(${Math.min(255, Math.round(r * factor))},${Math.min(255, Math.round(g * factor))},${Math.min(255, Math.round(b * factor))})`;
-  }
-  function renderPartsWithWindows(ctx, parts, env, canvasWidth, canvasHeight, scale, images, terminatorLeaves, applyTrailingCutouts = false) {
-    const pendingWindows = [];
-    const leadingWindows = [];
-    let seenDrawable = false;
-    for (const part of parts) {
-      if (part.type === "Window") {
-        if (!seenDrawable) {
-          leadingWindows.push(part);
-        } else {
-          pendingWindows.push(part);
-        }
-        continue;
-      }
-      if (part.type === "Button") continue;
-      if (part.type === "QHand") {
-        if (part.src && images && !part.xAnchor && !part.yAnchor) {
-          drawImageHand(ctx, part, env, images);
-        }
-        continue;
-      }
-      if (part.type === "Terminator") {
-        if (terminatorLeaves && terminatorLeaves.length > 0) {
-          drawTerminator(ctx, terminatorLeaves);
-        }
-        continue;
-      }
-      if (part.type === "Analemma") {
-        continue;
-      }
-      seenDrawable = true;
-      if (pendingWindows.length > 0) {
-        renderWithWindowCutouts(ctx, part, pendingWindows, env, canvasWidth, canvasHeight, scale, images);
-        pendingWindows.length = 0;
-      } else {
-        drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images);
-      }
-    }
-    for (const win of pendingWindows) {
-      drawWindowBorder(ctx, win, env);
-    }
-    for (const win of pendingWindows) {
-      if (applyTrailingCutouts) {
-        cutWindowHole(ctx, win, env);
-      }
-    }
-    for (const win of pendingWindows) {
-      if (applyTrailingCutouts) {
-        drawWindowInnerShadow(ctx, win, env);
-      }
-    }
-    for (const win of leadingWindows) {
-      drawWindowBorder(ctx, win, env);
-    }
-    for (const win of leadingWindows) {
-      cutWindowHole(ctx, win, env);
-    }
-    for (const win of leadingWindows) {
-      drawWindowInnerShadow(ctx, win, env);
-    }
-  }
-  var _cutoutTempCanvas = null;
-  function renderWithWindowCutouts(ctx, part, windows, env, canvasWidth, canvasHeight, scale, images) {
-    if (!_cutoutTempCanvas || _cutoutTempCanvas.width !== canvasWidth || _cutoutTempCanvas.height !== canvasHeight) {
-      _cutoutTempCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
-    }
-    const temp = _cutoutTempCanvas;
-    const tctx = temp.getContext("2d");
-    tctx.resetTransform();
-    tctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    tctx.translate(canvasWidth / 2, canvasHeight / 2);
-    tctx.scale(scale, scale);
-    drawStaticPart(tctx, part, env, canvasWidth, canvasHeight, scale, images);
-    for (const win of windows) {
-      drawWindowBorder(tctx, win, env);
-    }
-    for (const win of windows) {
-      cutWindowHole(tctx, win, env);
-    }
-    for (const win of windows) {
-      drawWindowInnerShadow(tctx, win, env);
-    }
-    ctx.save();
-    ctx.resetTransform();
-    ctx.drawImage(temp, 0, 0);
-    ctx.restore();
-  }
-  function cutWindowHole(ctx, win, env) {
-    const xVal = evalAttr(win.x, env);
-    const yVal = evalAttr(win.y, env);
-    const w = evalAttr(win.w, env);
-    const h = evalAttr(win.h, env);
-    const isPorthole = win.windowType === "porthole";
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.fillStyle = "rgba(0,0,0,1)";
-    if (isPorthole) {
-      const cx = xVal;
-      const cy = -yVal;
-      const r = Math.min(w, h) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-      ctx.fill();
-    } else {
-      const cx = xVal + w / 2;
-      const cy = -(yVal + h / 2);
-      ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
-    }
-    ctx.restore();
-  }
-  function drawStaticPart(ctx, part, env, canvasWidth, canvasHeight, scale, images) {
-    switch (part.type) {
-      case "Static":
-        drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale, images);
-        break;
-      case "QDial":
-        drawQDial(ctx, part, env);
-        break;
-      case "Wheel":
-        drawWheel(ctx, part, env);
-        break;
-      case "QText":
-        drawQText(ctx, part, env);
-        break;
-      case "Image":
-        drawImage(ctx, part, env, images);
-        break;
-      case "QRect":
-        drawQRect(ctx, part, env);
-        break;
-      case "QWedge":
-        drawQWedge(ctx, part, env);
-        break;
-      case "QDayNightRing":
-        drawQDayNightRing(ctx, part, env);
-        break;
-      case "CalendarRowCover":
-        drawCalendarRowCover(ctx, part, env);
-        break;
-      case "CalendarHeader":
-        drawCalendarHeader(ctx, part, env);
-        break;
-      case "EotDial":
-        drawEotDial(ctx, part, env);
-        break;
-      case "Window":
-        drawWindowBorder(ctx, part, env);
-        break;
-    }
-  }
-  function drawStatic(ctx, part, env, canvasWidth, canvasHeight, scale, images) {
-    renderPartsWithWindows(ctx, part.children, env, canvasWidth, canvasHeight, scale, images, void 0, true);
-  }
-  var _fontCenterCache = /* @__PURE__ */ new Map();
-  function textVisualCenterY(ctx, _text) {
-    const font = ctx.font;
-    let cached = _fontCenterCache.get(font);
-    if (cached !== void 0) return cached;
-    const m = ctx.measureText("X");
-    cached = (m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
-    _fontCenterCache.set(font, cached);
-    return cached;
-  }
-  var MARKS_NONE = 0;
-  var MARKS_OUTER = 1 << 0;
-  var MARKS_CENTER = 1 << 1;
-  var MARKS_TICK_OUT = 1 << 2;
-  var MARKS_DOT = 1 << 4;
-  var MARKS_ROSE = 1 << 5;
-  function parseMarksType(marks) {
-    if (!marks) return MARKS_NONE;
-    let result = MARKS_NONE;
-    for (const part of marks.split("|")) {
-      switch (part.trim().toLowerCase()) {
-        case "outer":
-          result |= MARKS_OUTER;
-          break;
-        case "center":
-          result |= MARKS_CENTER;
-          break;
-        case "tickout":
-          result |= MARKS_TICK_OUT;
-          break;
-        case "dot":
-          result |= MARKS_DOT;
-          break;
-        case "rose":
-          result |= MARKS_ROSE;
-          break;
-      }
-    }
-    return result;
-  }
-  function drawQDial(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const radius = evalAttr(part.radius, env);
-    if (radius <= 0) return;
-    const bgColor = evalColor(part.bgColor, env);
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
-    const markWidth = part.markWidth !== void 0 ? evalAttr(part.markWidth, env) : 1;
-    const nMarks = evalAttr(part.nMarks, env);
-    const mSize = evalAttr(part.mSize, env);
-    const angle1 = evalAttr(part.angle1, env);
-    const angle2 = part.angle2 !== void 0 ? evalAttr(part.angle2, env) : 2 * Math.PI;
-    const marks = parseMarksType(part.marks);
-    ctx.save();
-    ctx.translate(x, y);
-    if (part.dynamicState) {
-      ctx.rotate(part.dynamicState.currentAngle);
-    } else if (part.angle) {
-      ctx.rotate(evalAttr(part.angle, env));
-    }
-    if (bgColor !== "rgba(0,0,0,0)") {
-      ctx.fillStyle = bgColor;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-    if (marks & MARKS_OUTER && markWidth > 0) {
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = markWidth;
-      ctx.beginPath();
-      if (angle1 !== 0 || angle2 !== 2 * Math.PI) {
-        ctx.arc(0, 0, radius, angle1 - Math.PI / 2, angle2 - Math.PI / 2);
-      } else {
-        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-      }
-      ctx.stroke();
-    }
-    if (marks & MARKS_TICK_OUT && nMarks > 0) {
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = markWidth;
-      const ms = mSize || radius * 0.03;
-      for (let i = 0; i < nMarks; i++) {
-        const th = i / nMarks * 2 * Math.PI;
-        if (angle1 !== 0 || angle2 !== 2 * Math.PI) {
-          const normTh = th;
-          if (normTh < angle1 || normTh > angle2) continue;
-        }
-        const cosT = Math.cos(th - Math.PI / 2);
-        const sinT = Math.sin(th - Math.PI / 2);
-        const outerR = radius;
-        const innerR = Math.max(0, radius - ms);
-        ctx.beginPath();
-        ctx.moveTo(outerR * cosT, outerR * sinT);
-        ctx.lineTo(innerR * cosT, innerR * sinT);
-        ctx.stroke();
-      }
-    }
-    if (marks & MARKS_DOT && nMarks > 0) {
-      ctx.fillStyle = strokeColor;
-      const dotR = (mSize || 1.5) / 2;
-      for (let i = 0; i < nMarks; i++) {
-        const th = i / nMarks * 2 * Math.PI;
-        if (angle1 !== 0 || angle2 !== 2 * Math.PI) {
-          if (th < angle1 || th > angle2) continue;
-        }
-        const cosT = Math.cos(th - Math.PI / 2);
-        const sinT = Math.sin(th - Math.PI / 2);
-        ctx.beginPath();
-        ctx.arc(radius * cosT, radius * sinT, dotR, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    }
-    if (marks & MARKS_ROSE && nMarks > 0) {
-      const outerR = radius;
-      const innerR = part.radius2 !== void 0 ? evalAttr(part.radius2, env) : radius * 0.6;
-      const fillColor1 = part.fillColor1 ? evalColor(part.fillColor1, env) : "rgba(0,0,0,0)";
-      const fillColor2 = part.fillColor2 ? evalColor(part.fillColor2, env) : "rgba(0,0,0,0)";
-      const roseStroke = strokeColor;
-      const deltaTheta = Math.PI / nMarks;
-      for (let i = 0; i < nMarks; i++) {
-        const theta = 2 * i * deltaTheta;
-        ctx.beginPath();
-        ctx.moveTo(outerR * Math.cos(theta), outerR * Math.sin(theta));
-        ctx.lineTo(innerR * Math.cos(theta - deltaTheta), innerR * Math.sin(theta - deltaTheta));
-        ctx.lineTo(innerR * Math.cos(theta), innerR * Math.sin(theta));
-        ctx.closePath();
-        if (fillColor1 !== "rgba(0,0,0,0)") {
-          ctx.fillStyle = fillColor1;
-          ctx.fill();
-        }
-        ctx.strokeStyle = roseStroke;
-        ctx.lineWidth = markWidth;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(outerR * Math.cos(theta), outerR * Math.sin(theta));
-        ctx.lineTo(innerR * Math.cos(theta + deltaTheta), innerR * Math.sin(theta + deltaTheta));
-        ctx.lineTo(innerR * Math.cos(theta), innerR * Math.sin(theta));
-        ctx.closePath();
-        if (fillColor2 !== "rgba(0,0,0,0)") {
-          ctx.fillStyle = fillColor2;
-          ctx.fill();
-        }
-        ctx.strokeStyle = roseStroke;
-        ctx.lineWidth = markWidth;
-        ctx.stroke();
-      }
-    }
-    const EC_DIAL_RADIUS_FACTOR = 0.92;
-    const EC_DIAL_SMALL_RADIUS_CUTOFF = 45;
-    const EC_DIAL_SMALL_RADIUS_FACTOR = 0.11 / (EC_DIAL_SMALL_RADIUS_CUTOFF - 25);
-    if (part.text) {
-      const labels = part.text.split(",");
-      const n = labels.length;
-      const fontSize = evalAttr(part.fontSize, env) || 12;
-      const fontName = part.fontName || "Arial";
-      const orientation = part.orientation || "upright";
-      const hasTicks = marks !== MARKS_NONE;
-      ctx.fillStyle = strokeColor;
-      ctx.font = `${fontSize}px "${fontName}"`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      if (orientation === "upright") {
-        const radiusFactor = radius < EC_DIAL_SMALL_RADIUS_CUTOFF ? EC_DIAL_RADIUS_FACTOR + EC_DIAL_SMALL_RADIUS_FACTOR * (EC_DIAL_SMALL_RADIUS_CUTOFF - radius) : EC_DIAL_RADIUS_FACTOR;
-        for (let i = 0; i < n; i++) {
-          const label = labels[i].trim();
-          if (!label) continue;
-          const th = i / n * 2 * Math.PI - Math.PI / 2;
-          const measured = ctx.measureText(label);
-          const w = measured.width;
-          const h = fontSize;
-          const textR = radius * radiusFactor - Math.sqrt(w * w + h * h) / 2;
-          const tx = textR * Math.cos(th);
-          const ty = textR * Math.sin(th);
-          ctx.save();
-          ctx.translate(tx, ty);
-          ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-          ctx.restore();
-        }
-      } else if (orientation === "demi") {
-        const demiTweak = evalAttr(part.demiTweak, env);
-        const baseR = radius;
-        for (let i = 0; i < n; i++) {
-          const label = labels[i].trim();
-          if (!label) continue;
-          const th = i / n * 2 * Math.PI - Math.PI / 2;
-          const measured = ctx.measureText(label);
-          const textH = fontSize;
-          ctx.save();
-          if (i > n / 4 && i < 3 * n / 4) {
-            const r = baseR + demiTweak;
-            const textR = r - textH / 2;
-            const tx = textR * Math.cos(th);
-            const ty = textR * Math.sin(th);
-            ctx.translate(tx, ty);
-            ctx.rotate(th + Math.PI / 2 + Math.PI);
-            ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-          } else {
-            const textR = baseR - textH / 2;
-            const tx = textR * Math.cos(th);
-            const ty = textR * Math.sin(th);
-            ctx.translate(tx, ty);
-            ctx.rotate(th + Math.PI / 2);
-            ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-          }
-          ctx.restore();
-        }
-      } else if (orientation === "rotated") {
-        for (let i = 0; i < n; i++) {
-          const label = labels[i].trim();
-          if (!label) continue;
-          const th = i / n * 2 * Math.PI - Math.PI / 2;
-          const textH = fontSize;
-          const textR = radius * EC_DIAL_RADIUS_FACTOR - textH / 2;
-          const tx = textR * Math.cos(th);
-          const ty = textR * Math.sin(th);
-          ctx.save();
-          ctx.translate(tx, ty);
-          ctx.rotate(th);
-          ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-          ctx.restore();
-        }
-      } else {
-        ctx.save();
-        for (let i = 0; i < n; i++) {
-          const label = labels[i].trim();
-          if (label) {
-            const centerY = -(radius * EC_DIAL_RADIUS_FACTOR - fontSize / 2);
-            ctx.fillText(label, 0, centerY + textVisualCenterY(ctx, label));
-          }
-          ctx.rotate(2 * Math.PI / n);
-        }
-        ctx.restore();
-      }
-    }
-    if (marks & MARKS_CENTER) {
-      ctx.fillStyle = "rgba(0,0,0,1)";
-      ctx.beginPath();
-      ctx.arc(0, 0, markWidth, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-  function setupHandShadow(ctx, part, env, isImageHand = false) {
-    const z = evalAttr(part.z, env);
-    if (!z || z === 0) return false;
-    const thick = evalAttr(part.thick, env) || 3;
-    let sigma = (z + 2) / 2;
-    let percentOpacity = 40;
-    if (thick < 3 && !isImageHand) {
-      sigma *= 1.25;
-      percentOpacity *= thick / 3;
-    }
-    const transform = ctx.getTransform();
-    const scale = Math.abs(transform.a);
-    ctx.shadowColor = `rgba(0,0,0,${percentOpacity / 100})`;
-    ctx.shadowBlur = sigma * scale;
-    ctx.shadowOffsetX = z / 4.3 * scale;
-    ctx.shadowOffsetY = z / 2.15 * scale;
-    return true;
-  }
-  function drawQHand(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    const length = evalAttr(part.length, env);
-    const width = evalAttr(part.width, env);
-    const tail = evalAttr(part.tail, env);
-    const handType = part.handType || "tri";
-    if (handType === "spoke") {
-      const offsetRadius = evalAttr(part.offsetRadius, env);
-      const offsetAngle = part.dynamicState ? part.dynamicState.currentOffsetAngle ?? evalAttr(part.offsetAngle, env) : evalAttr(part.offsetAngle, env);
-      const fontSize = evalAttr(part.fontSize, env) || 8;
-      const fontName = part.fontName || "Arial";
-      const strokeColor2 = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(angle + offsetAngle);
-      ctx.translate(0, -offsetRadius);
-      if (part.orientation !== "radial") {
-        ctx.rotate(-(angle + offsetAngle));
-      } else {
-      }
-      ctx.translate(0, 1);
-      ctx.font = `${fontSize}px ${fontName}`;
-      ctx.fillStyle = strokeColor2;
-      ctx.textBaseline = "alphabetic";
-      if (part.text) {
-        ctx.textAlign = "left";
-        const metrics = ctx.measureText(part.text);
-        const inkCenterX = (metrics.actualBoundingBoxLeft - metrics.actualBoundingBoxRight) / 2;
-        ctx.fillText(part.text, inkCenterX, textVisualCenterY(ctx, part.text));
-      }
-      ctx.restore();
-      return;
-    }
-    if (length <= 0) return;
-    if (part._shadowBitmap) {
-      ctx.save();
-      ctx.translate(x, y);
-      if (part.dynamicState) {
-        const xm = part.dynamicState.currentXMotion ?? 0;
-        const ym = part.dynamicState.currentYMotion ?? 0;
-        if (xm !== 0 || ym !== 0) {
-          ctx.translate(xm, -ym);
-        }
-      }
-      ctx.rotate(angle);
-      ctx.drawImage(
-        part._shadowBitmap,
-        -part._shadowAnchorX,
-        -part._shadowAnchorY,
-        part._shadowBitmapW,
-        part._shadowBitmapH
-      );
-      ctx.restore();
-      return;
-    }
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
-    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "rgba(0,0,0,1)";
-    const lineWidth = evalAttr(part.lineWidth, env) || 0.5;
-    ctx.save();
-    const hasShadow = setupHandShadow(ctx, part, env);
-    ctx.translate(x, y);
-    if (part.dynamicState) {
-      const xm = part.dynamicState.currentXMotion ?? 0;
-      const ym = part.dynamicState.currentYMotion ?? 0;
-      if (xm !== 0 || ym !== 0) {
-        ctx.translate(xm, -ym);
-      }
-    }
-    ctx.rotate(angle);
-    const oTail = evalAttr(part.oTail, env);
-    const length2 = evalAttr(part.length2, env);
-    if (handType === "quad") {
-      const oLength = evalAttr(part.oLength, env);
-      const oWidth = evalAttr(part.oWidth, env);
-      const oCenter2 = evalAttr(part.oCenter, env);
-      ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = strokeColor;
-      ctx.fillStyle = fillColor;
-      ctx.beginPath();
-      ctx.moveTo(-oWidth / 12, -oCenter2);
-      ctx.quadraticCurveTo(-oWidth * 0.45, -oLength / 2, -oWidth / 4, -oLength);
-      ctx.moveTo(oWidth / 4, -oLength);
-      ctx.quadraticCurveTo(oWidth * 0.45, -oLength / 2, oWidth / 12, -oCenter2);
-      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-      const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-      ctx.fillStyle = oStrokeColor;
-      ctx.lineWidth = 0;
-      ctx.beginPath();
-      ctx.moveTo(oWidth / 4 + lineWidth / 2, -oLength);
-      ctx.lineTo(0, -length);
-      ctx.lineTo(-oWidth / 4 - lineWidth / 2, -oLength);
-      ctx.lineTo(-oWidth / 4 + lineWidth / 2, -oLength);
-      ctx.lineTo(0, -oLength * 1.2);
-      ctx.lineTo(oWidth / 4 - lineWidth / 2, -oLength);
-      ctx.closePath();
-      ctx.fill();
-      const oCenter3 = evalAttr(part.oCenter, env);
-      if (oCenter3 > 0) {
-        const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        drawCenterDot(ctx, oCenter3, osc);
-      }
-    } else if (handType === "sun") {
-      const nRays = evalAttr(part.nRays, env) || 8;
-      const oCenter2 = evalAttr(part.oCenter, env);
-      ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = strokeColor;
-      ctx.fillStyle = fillColor;
-      let rayRad = (length - length2) / 2;
-      const raysRad = (length - length2) / 3;
-      const cen = length2 + raysRad;
-      const sunCenter = oCenter2 > 0 ? oCenter2 : raysRad / 2;
-      ctx.beginPath();
-      for (let i = 0; i < nRays; i++) {
-        const theta = Math.PI / 2 + 2 * Math.PI * i / nRays;
-        const farX = rayRad * Math.cos(theta);
-        const farYIOS = cen + rayRad * Math.sin(theta);
-        const cwX = sunCenter * Math.cos(theta + Math.PI / nRays);
-        const cwYIOS = cen + sunCenter * Math.sin(theta + Math.PI / nRays);
-        const ccwX = sunCenter * Math.cos(theta - Math.PI / nRays);
-        const ccwYIOS = cen + sunCenter * Math.sin(theta - Math.PI / nRays);
-        ctx.moveTo(farX, -farYIOS);
-        ctx.lineTo(cwX, -cwYIOS);
-        ctx.lineTo(ccwX, -ccwYIOS);
-        ctx.lineTo(farX, -farYIOS);
-        rayRad = raysRad;
-      }
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = fillColor;
-      ctx.strokeStyle = fillColor;
-      ctx.beginPath();
-      ctx.arc(0, -cen, sunCenter, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail, length2);
-      const oLength = evalAttr(part.oLength, env);
-      if (oLength > 0) {
-        const oWidth = evalAttr(part.oWidth, env) || width;
-        const oLineWidth = evalAttr(part.oLineWidth, env) || lineWidth;
-        const oStrokeColor = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        const oFillColor = part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-        drawHandOrnament(ctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor);
-      }
-      const oRadius = evalAttr(part.oRadius, env);
-      if (oRadius > 0) {
-        const tLW = evalAttr(part.tLineWidth, env) || evalAttr(part.oLineWidth, env) || lineWidth;
-        const tSC = part.tStrokeColor ? evalColor(part.tStrokeColor, env) : part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        const tFC = part.tFillColor ? evalColor(part.tFillColor, env) : part.oFillColor ? evalColor(part.oFillColor, env) : fillColor;
-        drawTailCircle(ctx, tail, oRadius, tLW, tSC, tFC);
-      }
-      const oCenter2 = evalAttr(part.oCenter, env);
-      if (oCenter2 > 0) {
-        const osc = part.oStrokeColor ? evalColor(part.oStrokeColor, env) : strokeColor;
-        drawCenterDot(ctx, oCenter2, osc);
-      }
-    }
-    ctx.restore();
-  }
-  function drawHandOrnament(ctx, length, oLength, oWidth, oTail, oLineWidth, oStrokeColor, oFillColor) {
-    const baseY = -(length - oLineWidth * 3);
-    const tipY = -(length - oLineWidth * 3 + oLength);
-    const innerY = -(length - oTail);
-    ctx.beginPath();
-    ctx.lineWidth = oLineWidth;
-    ctx.strokeStyle = oStrokeColor;
-    ctx.fillStyle = oFillColor;
-    ctx.moveTo(0, tipY);
-    ctx.lineTo(oWidth / 2, baseY);
-    ctx.lineTo(0, innerY);
-    ctx.lineTo(-oWidth / 2, baseY);
-    ctx.closePath();
-    if (oFillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (oStrokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-    if (oLineWidth > 0) {
-      const extraTipY = -(length + oLength);
-      const extraBaseY = -(length + oLength - oLineWidth * 3);
-      ctx.beginPath();
-      ctx.lineWidth = 0;
-      ctx.fillStyle = oStrokeColor;
-      ctx.moveTo(oLineWidth / 2, extraBaseY);
-      ctx.lineTo(0, extraTipY);
-      ctx.lineTo(-oLineWidth / 2, extraBaseY);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-  function drawTailCircle(ctx, tail, oRadius, lineWidth, strokeColor, fillColor) {
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    ctx.arc(0, tail + oRadius, oRadius, 0, 2 * Math.PI);
-    if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-    if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-  }
-  function drawCenterDot(ctx, radius, color) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-    ctx.fill();
-  }
-  function drawHandShape(ctx, handType, length, width, tail, strokeColor, fillColor, lineWidth, oTail = 0, length2 = 0) {
-    ctx.beginPath();
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = fillColor;
-    if (handType === "wire") {
-      const hw = width / 2;
-      ctx.moveTo(-hw, -length2);
-      ctx.lineTo(-hw, -(length - (oTail < 0 ? oTail : 0)));
-      if (strokeColor !== "rgba(0,0,0,0)") {
-        ctx.stroke();
-      }
-      return;
-    } else if (handType === "rect") {
-      const hw = width / 2;
-      if (length2 > 0) {
-        ctx.rect(-hw, -length2, width, -(length - length2));
-      } else {
-        ctx.rect(-hw, tail, width, -(length + tail - oTail));
-      }
-    } else if (handType === "quad") {
-      const hw = width / 2;
-      const totalLen = length + tail;
-      const midY = -(totalLen * 0.3) + tail;
-      ctx.moveTo(0, tail);
-      ctx.lineTo(hw, midY);
-      ctx.lineTo(0, -(length - oTail));
-      ctx.lineTo(-hw, midY);
-      ctx.closePath();
-    } else if (handType === "breguet") {
-      const widthScaler = width / (length * 0.16);
-      const lengthScaler = (length - 81) / 10;
-      const armWidth = length * 0.04 * widthScaler;
-      const centerRadius = length * 0.08 * widthScaler;
-      const breOuterCenter = length * 0.71 + lengthScaler;
-      const breInnerCenter = length * 0.725 + lengthScaler * 0.8;
-      const breOuterRadius = length * 0.075 * widthScaler;
-      const breInnerRadius = length * 0.05 * widthScaler;
-      const breBase = breOuterCenter - breOuterRadius;
-      const tipBase = breOuterCenter + breOuterRadius;
-      const tipWidth = length * 0.045 * widthScaler;
-      ctx.beginPath();
-      ctx.arc(0, 0, centerRadius, 0, 2 * Math.PI);
-      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-armWidth / 2, -centerRadius);
-      ctx.lineTo(-armWidth / 10, -breBase);
-      ctx.lineTo(armWidth / 10, -breBase);
-      ctx.lineTo(armWidth / 2, -centerRadius);
-      ctx.closePath();
-      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, -breOuterCenter, breOuterRadius, 0, 2 * Math.PI);
-      ctx.moveTo(breInnerRadius, -breInnerCenter);
-      ctx.arc(0, -breInnerCenter, breInnerRadius, 0, 2 * Math.PI, true);
-      if (fillColor !== "rgba(0,0,0,0)") ctx.fill("evenodd");
-      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-tipWidth / 2, -tipBase);
-      ctx.lineTo(0, -length);
-      ctx.lineTo(tipWidth / 2, -tipBase);
-      ctx.closePath();
-      if (fillColor !== "rgba(0,0,0,0)") ctx.fill();
-      if (strokeColor !== "rgba(0,0,0,0)") ctx.stroke();
-      return;
-    } else {
-      const hw = width / 2;
-      if (length2 > 0) {
-        ctx.moveTo(-hw, -length2);
-        ctx.lineTo(0, -(length - oTail));
-        ctx.lineTo(hw, -length2);
-        ctx.lineTo(0, -(length2 - tail));
-      } else {
-        ctx.moveTo(0, -length);
-        ctx.lineTo(hw, tail);
-        ctx.lineTo(-hw, tail);
-      }
-      ctx.closePath();
-    }
-    if (fillColor !== "rgba(0,0,0,0)") {
-      ctx.fill();
-    }
-    if (strokeColor !== "rgba(0,0,0,0)") {
-      ctx.stroke();
-    }
-  }
-  function drawWheel(ctx, part, env) {
-    if (part.calendar) {
-      drawCalendarWheel(ctx, part, env);
-      return;
-    }
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const radius = evalAttr(part.radius, env);
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    if (radius <= 0) return;
-    const labels = part.text?.split(",") || [];
-    const n = labels.length;
-    if (n === 0) return;
-    const fontSize = evalAttr(part.fontSize, env) || 12;
-    const fontName = part.fontName || "Arial";
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
-    const bgColor = evalColor(part.bgColor, env);
-    const orientation = part.orientation || "twelve";
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.font = `${fontSize}px "${fontName}"`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    let maxW = 0;
-    const metrics = ctx.measureText("Xg");
-    const measuredH = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
-    const maxH = measuredH;
-    for (const lab of labels) {
-      const m = ctx.measureText(lab.trim());
-      maxW = Math.max(maxW, m.width);
-    }
-    const angle1 = part.angle1 ? evalAttr(part.angle1, env) : 0;
-    const angle2 = part.angle2 ? evalAttr(part.angle2, env) : 2 * Math.PI;
-    const arcSpan = angle2 - angle1;
-    const step = arcSpan / n;
-    const tradius = part.tradius ? evalAttr(part.tradius, env) : radius;
-    if (part.wheelVariant === "QWheel" && bgColor !== "rgba(0,0,0,0)") {
-      ctx.fillStyle = bgColor;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-    const halfAndHalf = part.halfAndHalf ? evalAttr(part.halfAndHalf, env) : 0;
-    const bgColor2 = part.bgColor2 ? evalColor(part.bgColor2, env) : bgColor;
-    const innerR = radius - fontSize - 2;
-    if (part.wheelVariant === "TWheel" && halfAndHalf) {
-      ctx.save();
-      ctx.rotate(angle);
-      ctx.fillStyle = bgColor;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, Math.PI, 2 * Math.PI);
-      ctx.arc(0, 0, innerR, 2 * Math.PI, Math.PI, true);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = bgColor2;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI);
-      ctx.arc(0, 0, innerR, Math.PI, 0, true);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    } else if (part.wheelVariant === "TWheel" && bgColor !== "rgba(0,0,0,0)") {
-      ctx.fillStyle = bgColor;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
-      ctx.arc(0, 0, innerR, 0, 2 * Math.PI, true);
-      ctx.fill("evenodd");
-    }
-    if (part.wheelVariant === "TWheel" && part.ticks) {
-      const ticksPerLabel = Math.round(evalAttr(part.ticks, env) || 0);
-      const nTotalTicks = ticksPerLabel * n;
-      const tw = part.tickWidth ? evalAttr(part.tickWidth, env) : 0.5;
-      if (nTotalTicks > 0) {
-        ctx.save();
-        ctx.rotate(angle);
-        const tickLen = 2;
-        for (let ti = 0; ti < nTotalTicks; ti++) {
-          const theta = ti / nTotalTicks * 2 * Math.PI;
-          const cosT = Math.cos(theta);
-          const sinT = Math.sin(theta);
-          if (ti % ticksPerLabel === 0) {
-            const norm = (theta % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-            const onNightHalf = norm >= Math.PI;
-            ctx.fillStyle = onNightHalf ? strokeColor : evalColor(part.bgColor, env);
-            ctx.beginPath();
-            ctx.arc(cosT * (radius - 1.5), sinT * (radius - 1.5), 1.2, 0, 2 * Math.PI);
-            ctx.fill();
-          } else {
-            const norm = (theta % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-            const onNightHalf = norm >= Math.PI;
-            ctx.strokeStyle = halfAndHalf ? onNightHalf ? strokeColor : evalColor(part.bgColor, env) : strokeColor;
-            ctx.lineWidth = tw;
-            ctx.beginPath();
-            ctx.moveTo(cosT * radius, sinT * radius);
-            ctx.lineTo(cosT * (radius - tickLen), sinT * (radius - tickLen));
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-      }
-    }
-    const isPartialArc = !!part.angle1 || !!part.angle2;
-    ctx.save();
-    if (isPartialArc) {
-      ctx.rotate(-angle + angle1);
-    } else {
-      ctx.rotate(angle + angle1);
-    }
-    for (let i = 0; i < n; i++) {
-      const label = labels[i].trim();
-      if (label) {
-        if (halfAndHalf) {
-          ctx.fillStyle = "white";
-          ctx.globalCompositeOperation = "difference";
-        } else {
-          ctx.fillStyle = strokeColor;
-        }
-        ctx.save();
-        const currentRotation = isPartialArc ? -angle + angle1 + i * step : 0;
-        switch (orientation.toLowerCase()) {
-          case "three":
-            ctx.translate(tradius - maxW / 2, 0);
-            break;
-          case "six":
-            ctx.translate(0, tradius - maxH / 2);
-            break;
-          case "twelve":
-            ctx.translate(0, -(tradius - maxH / 2));
-            break;
-          case "nine":
-            ctx.translate(-(tradius - maxW / 2), 0);
-            break;
-        }
-        if (isPartialArc) {
-          ctx.rotate(-currentRotation);
-        }
-        ctx.fillText(label, 0, textVisualCenterY(ctx, label));
-        ctx.restore();
-      }
-      ctx.rotate(isPartialArc ? step : -step);
-    }
-    ctx.restore();
-    if (part.tick && part.wheelVariant === "QWheel") {
-      const tickMatch = part.tick.match(/tick(\d+)/);
-      if (tickMatch) {
-        const nTicks = parseInt(tickMatch[1], 10);
-        const tickOuter = radius;
-        const tickGap = radius - tradius;
-        const tickLenLarge = tickGap - 2;
-        const tickLenMedium = tickGap * 0.55;
-        const tickLenSmall = tickGap * 0.3;
-        const ticksPerHour = nTicks / 24;
-        const ticksPer30Min = ticksPerHour / 2;
-        ctx.save();
-        ctx.rotate(angle);
-        ctx.strokeStyle = strokeColor;
-        for (let i = 0; i < nTicks; i++) {
-          const th = i / nTicks * 2 * Math.PI - Math.PI / 2;
-          const cosT = Math.cos(th);
-          const sinT = Math.sin(th);
-          let tickLen;
-          let lw;
-          if (i % ticksPerHour === 0) {
-            tickLen = tickLenLarge;
-            lw = 0.7;
-          } else if (i % ticksPer30Min === 0) {
-            tickLen = tickLenMedium;
-            lw = 0.5;
-          } else {
-            tickLen = tickLenSmall;
-            lw = 0.3;
-          }
-          ctx.beginPath();
-          ctx.moveTo(cosT * tickOuter, sinT * tickOuter);
-          ctx.lineTo(cosT * (tickOuter - tickLen), sinT * (tickOuter - tickLen));
-          ctx.lineWidth = lw;
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }
-    ctx.restore();
-  }
-  function drawQText(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const text = part.text || "";
-    if (!text) return;
-    const fontSize = evalAttr(part.fontSize, env) || 12;
-    const fontName = part.fontName || "Arial";
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "rgba(0,0,0,1)";
-    const radius = part.radius ? evalAttr(part.radius, env) : 0;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.fillStyle = strokeColor;
-    ctx.font = `${fontSize}px "${fontName}"`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    if (radius > 0 && part.orientation === "demi") {
-      const startAngle = part.startAngle ? evalAttr(part.startAngle, env) : 0;
-      const charWidths = [];
-      let totalWidth = 0;
-      for (let i = 0; i < text.length; i++) {
-        const w = ctx.measureText(text[i]).width;
-        charWidths.push(w);
-        totalWidth += w;
-      }
-      const totalAngle = totalWidth / radius;
-      const yOff = textVisualCenterY(ctx, text);
-      const normalizedAngle = (startAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-      const isBottomHalf = normalizedAngle > Math.PI / 2 && normalizedAngle < 3 * Math.PI / 2;
-      let currentAngle;
-      const direction = isBottomHalf ? -1 : 1;
-      if (isBottomHalf) {
-        currentAngle = startAngle + totalAngle / 2;
-      } else {
-        currentAngle = startAngle - totalAngle / 2;
-      }
-      for (let i = 0; i < text.length; i++) {
-        const charAngle = charWidths[i] / radius;
-        const midAngle = currentAngle + direction * charAngle / 2;
-        ctx.save();
-        ctx.rotate(midAngle);
-        ctx.translate(0, -radius + fontSize / 2);
-        if (isBottomHalf) {
-          ctx.rotate(Math.PI);
-        }
-        ctx.fillText(text[i], 0, yOff);
-        ctx.restore();
-        currentAngle += direction * charAngle;
-      }
-    } else {
-      ctx.fillText(text, 0, textVisualCenterY(ctx, text));
-    }
-    ctx.restore();
-  }
-  function drawImage(ctx, part, env, images) {
-    if (!part.src || !images) return;
-    const loaded2 = images.get(part.src);
-    if (!loaded2) return;
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const alpha = part.alpha !== void 0 ? evalAttr(part.alpha, env) : 1;
-    const { bitmap, scale: imgScale } = loaded2;
-    const xmlScale = part.scale ? evalAttr(part.scale, env) : 1;
-    const drawW = bitmap.width * imgScale * xmlScale;
-    const drawH = bitmap.height * imgScale * xmlScale;
-    ctx.save();
-    if (alpha < 1) {
-      ctx.globalAlpha = alpha;
-    }
-    ctx.drawImage(bitmap, x - drawW / 2, y - drawH / 2, drawW, drawH);
-    ctx.restore();
-  }
-  function drawImageHand(ctx, part, env, images) {
-    if (!part.src || !images) return;
-    const loaded2 = images.get(part.src);
-    if (!loaded2) return;
-    const alpha = part.alpha !== void 0 ? evalAttr(part.alpha, env) : 1;
-    if (alpha <= 0) return;
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    const offsetRadius = evalAttr(part.offsetRadius, env);
-    const offsetAngle = part.dynamicState && part.dynamicState.currentOffsetAngle !== void 0 ? part.dynamicState.currentOffsetAngle : evalAttr(part.offsetAngle, env);
-    const { bitmap, scale: imgScale } = loaded2;
-    const drawW = bitmap.width * imgScale;
-    const drawH = bitmap.height * imgScale;
-    if (part._shadowBitmap && offsetRadius <= 0) {
-      ctx.save();
-      ctx.translate(x, y);
-      if (angle) ctx.rotate(angle);
-      ctx.drawImage(
-        part._shadowBitmap,
-        -part._shadowAnchorX,
-        -part._shadowAnchorY,
-        part._shadowBitmapW,
-        part._shadowBitmapH
-      );
-      ctx.restore();
-      return;
-    }
-    ctx.save();
-    if (alpha < 1) ctx.globalAlpha = alpha;
-    setupHandShadow(
-      ctx,
-      part,
-      env,
-      /* isImageHand */
-      true
-    );
-    ctx.translate(x, y);
-    if (offsetRadius > 0) {
-      const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
-      const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
-      ctx.rotate(offsetAngle);
-      ctx.translate(0, -offsetRadius);
-      ctx.rotate(angle);
-      ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
-    } else if (part.xAnchor || part.yAnchor) {
-      if (angle) {
-        ctx.rotate(angle);
-      }
-      const xAnchor = part.xAnchor ? evalAttr(part.xAnchor, env) : drawW / 2;
-      const yAnchor = part.yAnchor ? -evalAttr(part.yAnchor, env) : -drawH / 2;
-      ctx.drawImage(bitmap, -xAnchor, -yAnchor - drawH, drawW, drawH);
-    } else {
-      if (angle) {
-        ctx.rotate(angle);
-      }
-      ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH);
-    }
-    ctx.restore();
-  }
-  function drawQRect(ctx, part, env) {
-    const xCorner = evalAttr(part.x, env);
-    const yCorner = evalAttr(part.y, env);
-    const w = evalAttr(part.w, env);
-    const h = evalAttr(part.h, env);
-    if (w <= 0 || h <= 0) return;
-    const cx = xCorner + w / 2;
-    const cy = -(yCorner + h / 2);
-    const bgColor = evalColor(part.bgColor, env);
-    ctx.save();
-    ctx.translate(cx, cy);
-    if (!isTransparent(bgColor)) {
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-    } else {
-      ctx.fillStyle = "white";
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-    }
-    const panes = evalAttr(part.panes, env);
-    if (panes > 1) {
-      ctx.strokeStyle = "rgba(0,0,0,0.3)";
-      ctx.lineWidth = 0.25;
-      for (let p = 1; p < panes; p++) {
-        const px = -w / 2 + w * p / panes;
-        ctx.beginPath();
-        ctx.moveTo(px, -h / 2);
-        ctx.lineTo(px, h / 2);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-  function drawQWedge(ctx, part, env) {
-    const cx = evalAttr(part.x, env);
-    const cy = -evalAttr(part.y, env);
-    const outerR = evalAttr(part.outerRadius, env);
-    const innerR = evalAttr(part.innerRadius, env);
-    const span = evalAttr(part.angleSpan, env);
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    if (outerR <= 0 || innerR <= 0 || span <= 0) return;
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
-    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "transparent";
-    ctx.save();
-    ctx.translate(cx, cy);
-    let totalAngle = angle;
-    if (part.offsetRadius && part.offsetAngle) {
-      const offR = evalAttr(part.offsetRadius, env);
-      const offA = part.dynamicState?.currentOffsetAngle !== void 0 ? part.dynamicState.currentOffsetAngle : evalAttr(part.offsetAngle, env);
-      ctx.translate(offR * Math.sin(offA), -offR * Math.cos(offA));
-      totalAngle = offA + angle;
-    }
-    ctx.rotate(totalAngle);
-    const startAngle = -Math.PI / 2 - span / 2;
-    const endAngle = -Math.PI / 2 + span / 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, outerR, startAngle, endAngle);
-    ctx.arc(0, 0, innerR, endAngle, startAngle, true);
-    ctx.closePath();
-    if (!isTransparent(fillColor)) {
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-    }
-    if (!isTransparent(strokeColor)) {
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 0.3;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  function drawQDayNightRing(ctx, part, env) {
-    const cx = evalAttr(part.x, env);
-    const cy = -evalAttr(part.y, env);
-    const outerR = evalAttr(part.outerRadius, env);
-    const innerR = evalAttr(part.innerRadius, env);
-    const numWedges = evalAttr(part.numWedges, env) || 24;
-    const planetNumber = evalAttr(part.planetNumber, env);
-    const masterOffset = part._masterOffsetAnim && part._masterOffsetAnim.animating ? part._masterOffsetAnim.currentValue : evalAttr(part.masterOffset, env);
-    if (outerR <= 0 || innerR <= 0) return;
-    const strokeColor = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
-    const fillColor = part.fillColor ? evalColor(part.fillColor, env) : "white";
-    const wedgeSpan = (2 * Math.PI + 0.2) / numWedges;
-    const slotNumber = part.envSlot ? evalAttr(part.envSlot, env) : void 0;
-    let leafAngleFn;
-    if (slotNumber != null && !isNaN(slotNumber)) {
-      const slotFn = env.functions.get("dayNightLeafAngleForSlot");
-      if (slotFn) {
-        leafAngleFn = (p, l, n) => slotFn(p, l, n, slotNumber);
-      }
-    }
-    if (!leafAngleFn) {
-      const fnName = part.timeBase === "LST" ? "dayNightLeafAngleLST" : "dayNightLeafAngle";
-      leafAngleFn = env.functions.get(fnName);
-    }
-    if (!leafAngleFn) return;
-    const updateSec = part.update ? evalAttr(part.update, env) : 5;
-    const updateMs = updateSec * 1e3;
-    const displayNowMs = env.getNow ? env.getNow().getTime() : performance.now();
-    let angles;
-    const slideDistance = part.slideDistance ? evalAttr(part.slideDistance, env) : 0;
-    const slideAnimSpeed = part.slideAnimSpeed ? evalAttr(part.slideAnimSpeed, env) : 1;
-    const perfNow = performance.now();
-    let numVis = numWedges;
-    if (slideDistance > 0) {
-      const numVisFn = env.functions.get("wadokeiDNNumVisible");
-      if (numVisFn) {
-        numVis = numVisFn(numWedges);
-      }
-    }
-    if (part._cachedAngles && part._cachedAngles.length === numWedges && part._cacheStart != null && part._cacheNextUpdate != null && displayNowMs >= part._cacheStart && displayNowMs < part._cacheNextUpdate && part._cacheNumVis === numVis) {
-      angles = part._cachedAngles;
-    } else {
-      angles = new Array(numWedges);
-      if (slideDistance > 0 && numVis > 0 && numVis < numWedges) {
-        const sunsetAngle = part.sunsetAngle ? evalAttr(part.sunsetAngle, env) : leafAngleFn(planetNumber, 1, 0);
-        const sunriseAngle = part.sunriseAngle ? evalAttr(part.sunriseAngle, env) : leafAngleFn(planetNumber, 0, 0);
-        let nightArc = sunriseAngle - sunsetAngle;
-        if (nightArc < 0) nightArc += 2 * Math.PI;
-        const adjustedStart = sunsetAngle + wedgeSpan / 2;
-        const adjustedArc = nightArc - wedgeSpan;
-        const step = numVis > 1 ? adjustedArc / (numVis - 1) : 0;
-        for (let i = 0; i < numVis; i++) {
-          const raw = adjustedStart + step * i;
-          angles[i] = (raw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-        }
-        const parkAngle = numVis > 0 ? adjustedStart + step * (numVis - 1) : sunsetAngle;
-        for (let i = numVis; i < numWedges; i++) {
-          angles[i] = parkAngle;
-        }
-      } else if (slideDistance > 0 && numVis === 0) {
-        for (let i = 0; i < numWedges; i++) {
-          angles[i] = 0;
-        }
-      } else if (slideDistance > 0 && numVis >= numWedges) {
-        for (let i = 0; i < numWedges; i++) {
-          angles[i] = 2 * Math.PI * i / numWedges;
-        }
-      } else {
-        for (let i = 0; i < numWedges; i++) {
-          angles[i] = leafAngleFn(planetNumber, i, numWedges);
-        }
-      }
-      part._cachedAngles = angles;
-      part._cacheStart = displayNowMs;
-      part._cacheNextUpdate = displayNowMs + updateMs;
-      part._cacheNumVis = numVis;
-    }
-    if (!part._wedgeAngleAnims || part._wedgeAngleAnims.length !== numWedges) {
-      part._wedgeAngleAnims = [];
-      for (let i = 0; i < numWedges; i++) {
-        part._wedgeAngleAnims.push(makeAnimatingValue(angles[i], perfNow));
-      }
-    }
-    for (let i = 0; i < numWedges; i++) {
-      startAnimationRaw(part._wedgeAngleAnims[i], angles[i], perfNow);
-    }
-    if (slideDistance > 0) {
-      if (!part._wedgeSlides || part._wedgeSlides.length !== numWedges) {
-        part._wedgeSlides = [];
-        for (let i = 0; i < numWedges; i++) {
-          part._wedgeSlides.push(makeAnimatingValue(slideDistance, perfNow));
-        }
-      }
-      for (let i = 0; i < numWedges; i++) {
-        const target = i < numVis ? 0 : slideDistance;
-        startLinearAnimation(part._wedgeSlides[i], target, perfNow, slideAnimSpeed);
-      }
-    }
-    ctx.save();
-    ctx.translate(cx, cy);
-    for (let i = 0; i < numWedges; i++) {
-      const animatedAngle = interpolateRaw(part._wedgeAngleAnims[i], perfNow);
-      const angle = masterOffset + animatedAngle;
-      let slide = 0;
-      if (part._wedgeSlides && part._wedgeSlides[i]) {
-        slide = interpolateValue(part._wedgeSlides[i], perfNow);
-      }
-      ctx.save();
-      ctx.rotate(angle);
-      if (Math.abs(slide) > 0.01) {
-        ctx.translate(0, slide);
-      }
-      const startAngle = -Math.PI / 2 - wedgeSpan / 2;
-      const endAngle = -Math.PI / 2 + wedgeSpan / 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, outerR, startAngle, endAngle);
-      ctx.arc(0, 0, innerR, endAngle, startAngle, true);
-      ctx.closePath();
-      if (!isTransparent(fillColor)) {
-        ctx.fillStyle = fillColor;
-        ctx.fill();
-      }
-      if (!isTransparent(strokeColor)) {
-        ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = fillColor === "rgba(0,0,0,0)" ? 0.5 : 0.3;
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    ctx.restore();
-  }
-  function drawWindowBorder(ctx, part, env) {
-    const xVal = evalAttr(part.x, env);
-    const yVal = evalAttr(part.y, env);
-    const w = evalAttr(part.w, env);
-    const h = evalAttr(part.h, env);
-    const border = evalAttr(part.border, env);
-    const strokeColor = evalColor(part.strokeColor, env);
-    const isPorthole = part.windowType === "porthole";
-    if (w <= 0 || h <= 0) return;
-    const cx = isPorthole ? xVal : xVal + w / 2;
-    const cy = isPorthole ? -yVal : -(yVal + h / 2);
-    if (border > 0) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = border;
-      if (isPorthole) {
-        const r = Math.min(w, h) / 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, 2 * Math.PI);
-        ctx.stroke();
-      } else {
-        ctx.strokeRect(-w / 2, -h / 2, w, h);
-      }
-      ctx.restore();
-    }
-  }
-  function drawWindowInnerShadow(ctx, part, env) {
-    const rawShadowOpacity = evalAttr(part.shadowOpacity, env);
-    if (!(rawShadowOpacity > 0)) return;
-    const shadowOpacity = rawShadowOpacity * 0.5;
-    const xVal = evalAttr(part.x, env);
-    const yVal = evalAttr(part.y, env);
-    const w = evalAttr(part.w, env);
-    const h = evalAttr(part.h, env);
-    const isPorthole = part.windowType === "porthole";
-    if (w <= 0 || h <= 0) return;
-    const cx = isPorthole ? xVal : xVal + w / 2;
-    const cy = isPorthole ? -yVal : -(yVal + h / 2);
-    const shadowSigma = evalAttr(part.shadowSigma, env) || 1;
-    const shadowOffset = evalAttr(part.shadowOffset, env);
-    const fade = shadowSigma * 4;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.beginPath();
-    if (isPorthole) {
-      const r = Math.min(w, h) / 2;
-      ctx.arc(0, 0, r, 0, 2 * Math.PI);
-    } else {
-      ctx.rect(-w / 2, -h / 2, w, h);
-    }
-    ctx.clip();
-    const offsetFactor = fade > 0 ? Math.min(Math.abs(shadowOffset) / fade, 0.8) : 0;
-    const topMul = shadowOffset > 0 ? 1 - offsetFactor : 1 + offsetFactor;
-    const bottomMul = shadowOffset > 0 ? 1 + offsetFactor : 1 - offsetFactor;
-    const shadowOffsetX = evalAttr(part.shadowOffsetX, env);
-    const offsetFactorX = fade > 0 ? Math.min(Math.abs(shadowOffsetX) / fade, 0.8) : 0;
-    const leftMul = shadowOffsetX > 0 ? 1 - offsetFactorX : 1 + offsetFactorX;
-    const rightMul = shadowOffsetX > 0 ? 1 + offsetFactorX : 1 - offsetFactorX;
-    if (isPorthole) {
-      const r = Math.min(w, h) / 2;
-      const innerR = Math.max(0, r - fade);
-      const grad = ctx.createRadialGradient(0, 0, innerR, 0, 0, r);
-      addGaussianStops(grad, shadowOpacity);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, 2 * Math.PI);
-      ctx.fill();
-    } else {
-      const hw = w / 2;
-      const hh = h / 2;
-      const topOpacity = Math.min(shadowOpacity * topMul, 1);
-      if (topOpacity > 0) {
-        const grad = ctx.createLinearGradient(0, -hh, 0, -hh + fade);
-        addGaussianStops(grad, topOpacity);
-        ctx.fillStyle = grad;
-        ctx.fillRect(-hw, -hh, w, fade);
-      }
-      const bottomOpacity = Math.min(shadowOpacity * bottomMul, 1);
-      if (bottomOpacity > 0) {
-        const grad = ctx.createLinearGradient(0, hh, 0, hh - fade);
-        addGaussianStops(grad, bottomOpacity);
-        ctx.fillStyle = grad;
-        ctx.fillRect(-hw, hh - fade, w, fade);
-      }
-      const leftOpacity = Math.min(shadowOpacity * leftMul, 1);
-      if (leftOpacity > 0) {
-        const grad = ctx.createLinearGradient(-hw, 0, -hw + fade, 0);
-        addGaussianStops(grad, leftOpacity);
-        ctx.fillStyle = grad;
-        ctx.fillRect(-hw, -hh, fade, h);
-      }
-      const rightOpacity = Math.min(shadowOpacity * rightMul, 1);
-      if (rightOpacity > 0) {
-        const grad = ctx.createLinearGradient(hw, 0, hw - fade, 0);
-        addGaussianStops(grad, rightOpacity);
-        ctx.fillStyle = grad;
-        ctx.fillRect(hw - fade, -hh, fade, h);
-      }
-    }
-    ctx.restore();
-  }
-  function addGaussianStops(grad, peakOpacity) {
-    const nStops = 8;
-    for (let i = 0; i <= nStops; i++) {
-      const t = i / nStops;
-      const x = t * 4;
-      const gaussian = Math.exp(-x * x / 2);
-      const alpha = peakOpacity * gaussian;
-      grad.addColorStop(t, `rgba(0,0,0,${alpha})`);
-    }
-  }
-  function drawTerraRingWithKnockouts(ctx, part, env, images) {
-    const terraSlots = env._terraSlots;
-    if (!terraSlots || !images || !part.src) return;
-    const loaded2 = images.get(part.src);
-    if (!loaded2) return;
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    let cache = env._terraCityKnockout;
-    if (!cache) {
-      cache = buildTerraRingKnockoutCache(loaded2, terraSlots);
-      env._terraCityKnockout = cache;
-    }
-    const { scale: imgScale } = loaded2;
-    const drawW = cache.width * imgScale;
-    const drawH = cache.height * imgScale;
-    ctx.save();
-    ctx.rotate(angle);
-    ctx.drawImage(cache, -drawW / 2, -drawH / 2, drawW, drawH);
-    ctx.restore();
-  }
-  function buildTerraRingKnockoutCache(loaded2, terraSlots) {
-    const { bitmap, scale: imgScale } = loaded2;
-    const w = bitmap.width;
-    const h = bitmap.height;
-    const offscreen = new OffscreenCanvas(w, h);
-    const oCtx = offscreen.getContext("2d");
-    oCtx.drawImage(bitmap, 0, 0);
-    oCtx.translate(w / 2, h / 2);
-    const xmlToPixel = 1 / imgScale;
-    oCtx.scale(xmlToPixel, xmlToPixel);
-    oCtx.globalCompositeOperation = "destination-out";
-    const cityFS = 8;
-    const cityRad2 = 131;
-    const cityRad1 = 127 - cityFS;
-    const sectorAngle = Math.PI / 12;
-    oCtx.font = `${cityFS}px Arial`;
-    oCtx.fillStyle = "white";
-    oCtx.textAlign = "center";
-    oCtx.textBaseline = "middle";
-    for (let i = 0; i < 24; i++) {
-      const slot = terraSlots[i + 1];
-      if (!slot) continue;
-      const slotCenterAngle = i * sectorAngle;
-      const radius = i % 2 === 0 ? cityRad1 : cityRad2;
-      const name = slot.cityName;
-      const charWidths = [];
-      let totalWidth = 0;
-      for (let c = 0; c < name.length; c++) {
-        const cw = oCtx.measureText(name[c]).width;
-        charWidths.push(cw);
-        totalWidth += cw;
-      }
-      const totalAngleSpan = totalWidth / radius;
-      let charAngle = slotCenterAngle - totalAngleSpan / 2;
-      for (let c = 0; c < name.length; c++) {
-        const charAngularWidth = charWidths[c] / radius;
-        const charCenterAngle = charAngle + charAngularWidth / 2;
-        oCtx.save();
-        oCtx.rotate(charCenterAngle);
-        oCtx.translate(0, -radius);
-        oCtx.fillText(name[c], 0, 0);
-        oCtx.restore();
-        charAngle += charAngularWidth;
-      }
-    }
-    oCtx.globalCompositeOperation = "source-over";
-    return offscreen;
-  }
-  function drawTerraChannelLines(ctx, part, env) {
-    const terraSlots = env._terraSlots;
-    if (!terraSlots) {
-      console.log("[Terra] No terraSlots");
-      return;
-    }
-    const getDSTRange = env._getDSTRange;
-    if (!getDSTRange) {
-      console.log("[Terra] No getDSTRange function");
-      return;
-    }
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    const channelRad1 = 112;
-    const channelRad2 = 125.5;
-    const channelWidth = 0.25;
-    ctx.save();
-    ctx.rotate(angle);
-    ctx.lineWidth = channelWidth;
-    ctx.strokeStyle = "black";
-    for (let i = 0; i < 24; i++) {
-      const slot = terraSlots[i + 1];
-      if (!slot) continue;
-      const channelR = i % 2 === 0 ? channelRad1 : channelRad2;
-      const slotNum = i + 1;
-      const dstRange = getDSTRange(slotNum);
-      if (dstRange) {
-        const startAngle = (4.5 + dstRange.lowHours) * Math.PI / 12;
-        const endAngle = (4.5 + dstRange.highHours) * Math.PI / 12;
-        ctx.globalAlpha = 1;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.arc(0, 0, channelR, startAngle, endAngle, false);
-        ctx.stroke();
-      } else {
-        const startAngle = (i - 6.5) * Math.PI / 12;
-        const endAngle = (i - 5.5) * Math.PI / 12;
-        ctx.globalAlpha = 1;
-        ctx.setLineDash([2, 3]);
-        ctx.beginPath();
-        ctx.arc(0, 0, channelR, startAngle, endAngle, false);
-        ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-  var robX = [
-    { c0: 1, c1: -567239e-17, c2: -715511e-10, c3: 311028e-11 },
-    { c0: 0.9986, c1: -482241e-9, c2: -24897e-9, c3: -133094e-11 },
-    { c0: 0.9954, c1: -831031e-9, c2: -44861e-9, c3: -986588e-12 },
-    { c0: 0.99, c1: -135363e-8, c2: -596598e-10, c3: 367749e-11 },
-    { c0: 0.9822, c1: -167442e-8, c2: -44975e-10, c3: -572394e-11 },
-    { c0: 0.973, c1: -214869e-8, c2: -903565e-10, c3: 188767e-13 },
-    { c0: 0.96, c1: -305084e-8, c2: -900732e-10, c3: 164869e-11 },
-    { c0: 0.9427, c1: -382792e-8, c2: -653428e-10, c3: -261493e-11 },
-    { c0: 0.9216, c1: -467747e-8, c2: -104566e-9, c3: 48122e-10 },
-    { c0: 0.8962, c1: -536222e-8, c2: -323834e-10, c3: -543445e-11 },
-    { c0: 0.8679, c1: -609364e-8, c2: -1139e-7, c3: 332521e-11 },
-    { c0: 0.835, c1: -698325e-8, c2: -640219e-10, c3: 934582e-12 },
-    { c0: 0.7986, c1: -755337e-8, c2: -500038e-10, c3: 935532e-12 },
-    { c0: 0.7597, c1: -798325e-8, c2: -359716e-10, c3: -227604e-11 },
-    { c0: 0.7186, c1: -851366e-8, c2: -70112e-9, c3: -863072e-11 },
-    { c0: 0.6732, c1: -986209e-8, c2: -199572e-9, c3: 191978e-10 },
-    { c0: 0.6213, c1: -0.010418, c2: 883948e-10, c3: 624031e-11 },
-    { c0: 0.5722, c1: -906601e-8, c2: 181999e-9, c3: 624033e-11 },
-    { c0: 0.5322, c1: 0, c2: 0, c3: 0 }
-  ];
-  var robY = [
-    { c0: 0, c1: 0.0124, c2: 372529e-15, c3: 115484e-14 },
-    { c0: 0.062, c1: 0.0124001, c2: 176951e-13, c3: -592321e-14 },
-    { c0: 0.124, c1: 0.0123998, c2: -709668e-13, c3: 225753e-13 },
-    { c0: 0.186, c1: 0.0124008, c2: 266917e-12, c3: -844523e-13 },
-    { c0: 0.248, c1: 0.0123971, c2: -999682e-12, c3: 315569e-12 },
-    { c0: 0.31, c1: 0.0124108, c2: 373349e-11, c3: -11779e-10 },
-    { c0: 0.372, c1: 0.0123598, c2: -13935e-9, c3: 439588e-11 },
-    { c0: 0.434, c1: 0.0125501, c2: 520034e-10, c3: -100051e-10 },
-    { c0: 0.4968, c1: 0.0123198, c2: -980735e-10, c3: 922397e-11 },
-    { c0: 0.5571, c1: 0.0120308, c2: 402857e-10, c3: -52901e-10 },
-    { c0: 0.6176, c1: 0.0120369, c2: -390662e-10, c3: 736117e-12 },
-    { c0: 0.6769, c1: 0.0117015, c2: -280246e-10, c3: -854283e-12 },
-    { c0: 0.7346, c1: 0.0113572, c2: -408389e-10, c3: -518524e-12 },
-    { c0: 0.7903, c1: 0.0109099, c2: -486169e-10, c3: -10718e-10 },
-    { c0: 0.8435, c1: 0.0103433, c2: -646934e-10, c3: 536384e-14 },
-    { c0: 0.8936, c1: 969679e-8, c2: -646129e-10, c3: -854894e-11 },
-    { c0: 0.9394, c1: 840949e-8, c2: -192847e-9, c3: -421023e-11 },
-    { c0: 0.9761, c1: 616525e-8, c2: -256001e-9, c3: -421021e-11 },
-    { c0: 1, c1: 0, c2: 0, c3: 0 }
-  ];
-  var ROB_FXC = 0.8487;
-  var ROB_FYC = 1.3523;
-  var ROB_C1 = 11.459155902616464;
-  var ROB_RC1 = 0.08726646259971647;
-  var ROB_NODES = 18;
-  var ROB_RFUDGE = 1.17;
-  function robV(c, z) {
-    return c.c0 + z * (c.c1 + z * (c.c2 + z * c.c3));
-  }
-  function forwardRobinson(latDeg, lngDeg) {
-    const latRad = latDeg * Math.PI / 180;
-    const dphi0 = Math.abs(latRad);
-    let i = Math.floor(dphi0 * ROB_C1);
-    if (i >= ROB_NODES) i = ROB_NODES - 1;
-    const dphi = 180 / Math.PI * (dphi0 - ROB_RC1 * i);
-    const x = ROB_RFUDGE * robV(robX[i], dphi) * ROB_FXC * lngDeg;
-    let y = ROB_RFUDGE * robV(robY[i], dphi) * ROB_FYC * (180 / Math.PI);
-    if (latDeg < 0) y = -y;
-    return { x, y };
-  }
-  function drawTerraCityDots(ctx, env) {
-    const terraSlots = env._terraSlots;
-    if (!terraSlots) return;
-    const mapWidth = 180;
-    const mapHeight = 91.25;
-    const xScale = mapWidth / 360;
-    const yScale = mapHeight / 180;
-    ctx.save();
-    ctx.fillStyle = "blue";
-    for (let slotNum = 1; slotNum <= 24; slotNum++) {
-      const slot = terraSlots[slotNum];
-      if (!slot) continue;
-      const proj = forwardRobinson(slot.lat, slot.lon);
-      const px = proj.x * xScale;
-      const py = -proj.y * yScale;
-      ctx.beginPath();
-      ctx.arc(px, py, 1.5, 0, 2 * Math.PI);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-  function drawCalendarWheel(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const radius = evalAttr(part.radius, env);
-    const angle = part.dynamicState ? part.dynamicState.currentAngle : evalAttr(part.angle, env);
-    const fontSize = evalAttr(part.fontSize, env) || 8;
-    const fontName = part.fontName || "Arial";
-    const bgColor = evalColor(part.bgColor, env);
-    const weekendColor = part.calendarWeekendColor ? evalColor(part.calendarWeekendColor, env) : "rgba(0,0,255,1)";
-    const weekdayColor = "rgba(0,0,0,1)";
-    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
-    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
-    const cellHeight = env.variables.get("calendarCellHeight") ?? 11;
-    const calHeight = env.variables.get("calendarHeight") ?? 66;
-    const calWidth = env.variables.get("calendarWidth") ?? 96;
-    const satCol = (6 - calendarWeekdayStart + 7) % 7;
-    const sunCol = (7 - calendarWeekdayStart) % 7;
-    ctx.save();
-    ctx.translate(x, y);
-    const z = evalAttr(part.z, env);
-    let shadowSigma = 0;
-    let shadowScale = 1;
-    if (z && z > 0) {
-      shadowSigma = (z + 2) / 2;
-      const transform = ctx.getTransform();
-      shadowScale = Math.abs(transform.a);
-    }
-    ctx.rotate(angle);
-    const calType = part.calendar || "";
-    const quadrants = getCalendarQuadrants(calType, calendarWeekdayStart);
-    for (let qi = 0; qi < quadrants.length; qi++) {
-      const q = quadrants[qi];
-      if (q.blank) continue;
-      ctx.save();
-      ctx.rotate(-qi * Math.PI / 2);
-      ctx.translate(0, -(radius - calHeight / 2));
-      if (z && z > 0) {
-        ctx.shadowColor = `rgba(0,0,0,0.4)`;
-        ctx.shadowBlur = shadowSigma * shadowScale;
-        ctx.shadowOffsetX = z / 4.3 * shadowScale;
-        ctx.shadowOffsetY = z / 2.15 * shadowScale;
-      }
-      ctx.fillStyle = bgColor;
-      if (q.startColumn > 0) {
-        const firstCellX = -calWidth / 2 + q.startColumn * cellWidth;
-        const top = -calHeight / 2 - 1;
-        const row1Top = top + cellHeight + 2;
-        const fullRight = calWidth / 2;
-        const fullLeft = -calWidth / 2;
-        ctx.beginPath();
-        ctx.moveTo(firstCellX, top);
-        ctx.lineTo(fullRight, top);
-        ctx.lineTo(fullRight, top + calHeight + 2);
-        ctx.lineTo(fullLeft, top + calHeight + 2);
-        ctx.lineTo(fullLeft, row1Top);
-        ctx.lineTo(firstCellX, row1Top);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        ctx.fillRect(-calWidth / 2, -calHeight / 2 - 1, calWidth, calHeight + 2);
-      }
-      if (z && z > 0) {
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-      }
-      ctx.font = `${fontSize}px "${fontName}"`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      let slot = q.startColumn;
-      let dayNumber = 1;
-      const maxDay = 31;
-      while (dayNumber <= maxDay && slot < 6 * 7) {
-        const row = Math.floor(slot / 7);
-        const col = slot % 7;
-        const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-        const cy = -calHeight / 2 + row * cellHeight + cellHeight / 2;
-        ctx.fillStyle = col === satCol || col === sunCol ? weekendColor : weekdayColor;
-        ctx.fillText(
-          String(dayNumber),
-          cx,
-          cy + textVisualCenterY(ctx, String(dayNumber))
-        );
-        dayNumber++;
-        slot++;
-        if (q.isOct1582 && dayNumber === 5) {
-          dayNumber = 15;
-          slot += 7;
-        }
-      }
-      ctx.restore();
-    }
-    ctx.restore();
-  }
-  function getCalendarQuadrants(calType, weekdayStart) {
-    switch (calType) {
-      case "calendarWheel3456":
-        return [
-          { startColumn: 3, blank: false, isOct1582: false },
-          { startColumn: 4, blank: false, isOct1582: false },
-          { startColumn: 5, blank: false, isOct1582: false },
-          { startColumn: 6, blank: false, isOct1582: false }
-        ];
-      case "calendarWheel012B":
-        return [
-          { startColumn: 0, blank: false, isOct1582: false },
-          { startColumn: 1, blank: false, isOct1582: false },
-          { startColumn: 2, blank: false, isOct1582: false },
-          { startColumn: 0, blank: true, isOct1582: false }
-          // cutout
-        ];
-      case "calendarWheelOct1582":
-        return [
-          { startColumn: (8 - weekdayStart) % 7, blank: false, isOct1582: true },
-          { startColumn: 0, blank: true, isOct1582: false },
-          // cutout
-          { startColumn: 0, blank: true, isOct1582: false },
-          { startColumn: 0, blank: true, isOct1582: false }
-        ];
-      default:
-        return [];
-    }
-  }
-  function drawCalendarRowCover(ctx, part, env) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const bgColor = evalColor(part.bgColor, env);
-    const fontColor = evalColor(part.fontColor, env);
-    const fontSize = evalAttr(part.fontSize, env) || 8;
-    const fontName = part.fontName || "Arial";
-    const calWidth = env.variables.get("calendarWidth") ?? 96;
-    const calHeight = env.variables.get("calendarHeight") ?? 66;
-    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
-    const cellHeight = env.variables.get("calendarCellHeight") ?? 11;
-    const calRadius = evalAttr(part.calendarRadius, env) || 117;
-    const coverType = part.coverType || "";
-    const xOffset = part.dynamicState?.currentXMotion ?? 0;
-    const gridTop = -(calRadius - calHeight / 2);
-    let rowY;
-    if (coverType === "row56Right" || coverType === "row6Left") {
-      rowY = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2;
-    } else {
-      rowY = gridTop - calHeight / 2 + cellHeight / 2;
-    }
-    ctx.save();
-    ctx.translate(x + xOffset, y);
-    ctx.font = `${fontSize}px "${fontName}"`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    ctx.beginPath();
-    ctx.rect(-calWidth / 2 - xOffset - 1, gridTop - calHeight / 2 - 2, calWidth + 2, calHeight + 4);
-    ctx.clip();
-    let coverX = 0, coverY = 0, coverW = 0, coverH = 0;
-    switch (coverType) {
-      case "row1Left": {
-        const cy = gridTop - calHeight / 2 + cellHeight / 2;
-        coverX = -calWidth / 2;
-        coverY = cy - cellHeight / 2;
-        coverW = 4 * cellWidth;
-        coverH = cellHeight;
-        break;
-      }
-      case "row1Right": {
-        const cy = gridTop - calHeight / 2 + cellHeight / 2;
-        coverX = -calWidth / 2;
-        coverY = cy - cellHeight / 2;
-        coverW = 5 * cellWidth;
-        coverH = cellHeight;
-        break;
-      }
-      case "row56Right": {
-        const cy4 = gridTop - calHeight / 2 + 4 * cellHeight + cellHeight / 2;
-        coverX = -calWidth / 2;
-        coverY = cy4 - cellHeight / 2;
-        coverW = 7 * cellWidth;
-        coverH = 2 * cellHeight;
-        break;
-      }
-      case "row6Left": {
-        const cy5 = gridTop - calHeight / 2 + 5 * cellHeight + cellHeight / 2;
-        coverX = -calWidth / 2;
-        coverY = cy5 - cellHeight / 2;
-        coverW = 7 * cellWidth;
-        coverH = cellHeight;
-        break;
-      }
-    }
-    const isTopUnderlay = coverType === "row1Left" || coverType === "row1Right";
-    const z = evalAttr(part.z, env);
-    if (z && z > 0 && !isTopUnderlay) {
-      const sigma = (z + 2) / 2;
-      const transform = ctx.getTransform();
-      const scale = Math.abs(transform.a);
-      ctx.shadowColor = `rgba(0,0,0,0.4)`;
-      ctx.shadowBlur = sigma * scale;
-      ctx.shadowOffsetX = z / 4.3 * scale;
-      ctx.shadowOffsetY = z / 2.15 * scale;
-    }
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(coverX, coverY, coverW, coverH);
-    ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    switch (coverType) {
-      case "row1Left": {
-        const cy = gridTop - calHeight / 2 + cellHeight / 2;
-        for (let col = 0; col < 4; col++) {
-          const day = 23 + col;
-          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-          ctx.fillStyle = fontColor;
-          ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
-        }
-        break;
-      }
-      case "row1Right": {
-        const cy = gridTop - calHeight / 2 + cellHeight / 2;
-        for (let col = 0; col < 5; col++) {
-          const day = 27 + col;
-          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-          ctx.fillStyle = fontColor;
-          ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
-        }
-        break;
-      }
-      case "row56Right": {
-        for (let row = 0; row < 2; row++) {
-          for (let col = 0; col < 7; col++) {
-            const day = row === 0 ? col + 1 : col + 8;
-            const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-            const gridRow = 4 + row;
-            const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
-            ctx.fillStyle = fontColor;
-            ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
-          }
-        }
-        break;
-      }
-      case "row6Left": {
-        for (let col = 0; col < 7; col++) {
-          const day = col + 1;
-          const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2 + 1;
-          const gridRow = 5;
-          const cy = gridTop - calHeight / 2 + gridRow * cellHeight + cellHeight / 2;
-          ctx.fillStyle = fontColor;
-          ctx.fillText(String(day), cx, cy + textVisualCenterY(ctx, String(day)));
-        }
-        break;
-      }
-    }
-    ctx.restore();
-  }
-  function drawCalendarHeader(ctx, part, env) {
-    const calendarWeekdayStart = env.functions.get("calendarWeekdayStart")?.() ?? 0;
-    const headerStart = parseInt(part.weekdayStart || "0", 10);
-    if (headerStart !== calendarWeekdayStart) return;
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    const fontSize = evalAttr(part.fontSize, env) || 8;
-    const fontName = part.fontName || "Arial";
-    const weekdayColor = evalColor(part.weekdayColor, env);
-    const weekendColor = evalColor(part.weekendColor, env);
-    const calWidth = env.variables.get("calendarWidth") ?? 96;
-    const cellWidth = env.variables.get("calendarCellWidth") ?? 13.3;
-    const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-    ctx.save();
-    ctx.translate(x, y - fontSize);
-    ctx.font = `${fontSize}px "${fontName}"`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    for (let col = 0; col < 7; col++) {
-      const dayIndex = (col + headerStart) % 7;
-      const isWeekend = dayIndex === 0 || dayIndex === 6;
-      ctx.fillStyle = isWeekend ? weekendColor : weekdayColor;
-      const cx = -calWidth / 2 + col * cellWidth + cellWidth / 2;
-      ctx.fillText(dayNames[dayIndex], cx, textVisualCenterY(ctx, dayNames[dayIndex]));
-    }
-    ctx.restore();
-  }
-  function drawEotDial(ctx, part, env) {
-    const cx = evalAttr(part.x, env);
-    const cy = evalAttr(part.y, env);
-    const radius = evalAttr(part.radius, env) || 20;
-    const arcSpanRad = evalAttr(part.arcSpan, env) || 7 * Math.PI / 6;
-    const color = part.strokeColor ? evalColor(part.strokeColor, env) : "black";
-    const fontSize = evalAttr(part.fontSize, env) || 6;
-    const labelText = part.labelText || "Equation of Time";
-    const halfArc = arcSpanRad / 2;
-    const arcStart = -Math.PI / 2 - halfArc;
-    const arcEnd = -Math.PI / 2 + halfArc;
-    const radPerMin = Math.PI / 30;
-    ctx.save();
-    ctx.translate(cx, -cy);
-    const eotMaxMin = 16.5;
-    const eotMinMin = -14.2;
-    const arcDrawStart = -Math.PI / 2 + eotMinMin * radPerMin;
-    const arcDrawEnd = -Math.PI / 2 + eotMaxMin * radPerMin;
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, arcDrawStart, arcDrawEnd);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 0.4;
-    ctx.stroke();
-    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    const luminance = rgbaMatch ? (0.299 * +rgbaMatch[1] + 0.587 * +rgbaMatch[2] + 0.114 * +rgbaMatch[3]) / 255 : 0;
-    const fadedAlpha = luminance < 0.5 ? 0.2 : 0.35;
-    const fadedArcStart = -Math.PI / 2 + -15 * radPerMin;
-    const fadedArcEnd = arcDrawStart;
-    ctx.globalAlpha = fadedAlpha;
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, fadedArcStart, fadedArcEnd);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 0.4;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    const maxTickMinPos = 16;
-    const maxTickMinNeg = -15;
-    const majorTickLen = radius * 0.15;
-    const minorTickLen = radius * 0.07;
-    for (let min = maxTickMinNeg; min <= maxTickMinPos; min++) {
-      const angle = -Math.PI / 2 + min * radPerMin;
-      const isMajor = min % 5 === 0 && Math.abs(min) <= 15;
-      const tickInner = isMajor ? radius - majorTickLen : radius - minorTickLen;
-      const tickOuter = radius;
-      const cosA = Math.cos(angle);
-      const sinA = Math.sin(angle);
-      ctx.beginPath();
-      ctx.moveTo(cosA * tickInner, sinA * tickInner);
-      ctx.lineTo(cosA * tickOuter, sinA * tickOuter);
-      ctx.lineWidth = isMajor ? 0.6 : 0.3;
-      if (min === -15) ctx.globalAlpha = fadedAlpha;
-      ctx.strokeStyle = color;
-      ctx.stroke();
-      if (min === -15) ctx.globalAlpha = 1;
-    }
-    const labelFontSize = fontSize * 1.92;
-    ctx.font = `${labelFontSize}px Arial, sans-serif`;
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const numLabelRadius = radius - majorTickLen - labelFontSize * 0.55 - 1;
-    const zeroAngle = -Math.PI / 2;
-    ctx.fillText("0", Math.cos(zeroAngle) * numLabelRadius, Math.sin(zeroAngle) * numLabelRadius);
-    for (const min of [5, 10, 15]) {
-      const label = String(min);
-      const posAngle = -Math.PI / 2 + min * radPerMin;
-      ctx.fillText(label, Math.cos(posAngle) * numLabelRadius, Math.sin(posAngle) * numLabelRadius);
-      const negAngle = -Math.PI / 2 - min * radPerMin;
-      ctx.fillText(label, Math.cos(negAngle) * numLabelRadius, Math.sin(negAngle) * numLabelRadius);
-    }
-    const symbolFontSize = fontSize * 2;
-    ctx.font = `bold ${symbolFontSize}px Arial, sans-serif`;
-    ctx.fillStyle = color;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const symbolRadius = numLabelRadius - labelFontSize * 1 - 2;
-    const negSymAngle = -Math.PI / 2 - 15 * radPerMin;
-    ctx.fillText("\u2212", Math.cos(negSymAngle) * symbolRadius, Math.sin(negSymAngle) * symbolRadius);
-    const posSymAngle = -Math.PI / 2 + 15 * radPerMin;
-    ctx.fillText("+", Math.cos(posSymAngle) * symbolRadius, Math.sin(posSymAngle) * symbolRadius);
-    const titleFSize = part.titleFontSize ? evalAttr(part.titleFontSize, env) : fontSize * 3;
-    ctx.font = `${titleFSize}px 'Arial Narrow', Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = color;
-    const titleYOff = part.titleYOffset ? evalAttr(part.titleYOffset, env) : 0;
-    const arcBottomY = Math.sin(arcDrawEnd) * radius + 2 - titleYOff;
-    ctx.fillText(labelText, 0, arcBottomY);
-    ctx.restore();
-  }
-  function drawGaiaSubdial(ctx, part, env, images) {
-    const x = evalAttr(part.x, env);
-    const y = -evalAttr(part.y, env);
-    ctx.save();
-    ctx.translate(x, y);
-    const sp = part.specialParam !== void 0 ? evalAttr(part.specialParam, env) : 0;
-    const slot = part.envSlot !== void 0 ? evalAttr(part.envSlot, env) : 0;
-    const terraSlots = env._terraSlots;
-    const slotData = terraSlots ? terraSlots[slot] : void 0;
-    const text = slotData ? slotData.cityName : "";
-    const fs = sp === 0 ? 12.5 : 11;
-    const labelR = sp === 0 ? 82.5 : 54.5;
-    const numR = sp === 0 ? 72 : 45;
-    const numFS = sp === 0 ? 9 : 7;
-    ctx.fillStyle = "black";
-    ctx.font = `${fs}px Arial`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    const charWidths = [];
-    let totalWidth = 0;
-    for (let i = 0; i < text.length; i++) {
-      const w = ctx.measureText(text[i]).width;
-      charWidths.push(w);
-      totalWidth += w;
-    }
-    const cityTotalAngle = totalWidth / labelR;
-    let currentAngle = Math.PI + cityTotalAngle / 2;
-    for (let i = 0; i < text.length; i++) {
-      const charAngle = charWidths[i] / labelR;
-      const midAngle = currentAngle - charAngle / 2;
-      ctx.save();
-      ctx.rotate(midAngle);
-      ctx.translate(0, -labelR + fs / 2);
-      ctx.rotate(Math.PI);
-      ctx.fillText(text[i], 0, 0);
-      ctx.restore();
-      currentAngle -= charAngle;
-    }
-    const cityExclusionHalf = cityTotalAngle / 2 + 10 / labelR;
-    const skipSet = new Set(
-      sp === 0 ? [15, 16] : sp === 2 ? [9, 10, 11] : sp === 3 ? [8, 9, 10, 13, 14, 15] : []
-      // sp=1 (N): no skips
-    );
-    ctx.font = `${numFS}px Arial`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (let i = 1; i < 24; i++) {
-      if (skipSet.has(i)) continue;
-      const pointAngle = Math.PI * (18 - i) / 12;
-      const angularDistFromBottom = (i < 12 ? i : 24 - i) * Math.PI / 12;
-      if (angularDistFromBottom <= cityExclusionHalf) continue;
-      if (i % 2 === 1) {
-        const dotX = numR * Math.cos(pointAngle);
-        const dotY = -numR * Math.sin(pointAngle);
-        ctx.save();
-        ctx.fillStyle = "black";
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 0.5, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        const numX = numR * Math.cos(pointAngle);
-        const numY = -numR * Math.sin(pointAngle);
-        ctx.fillStyle = "black";
-        ctx.fillText(i.toString(), numX, numY);
-      }
-    }
-    ctx.restore();
-  }
-
-  // src/shared/time-controller.ts
-  var RATE_OPTIONS = [
-    { label: "10\xD7", unit: "second" },
-    { label: "10 min/s", unit: "minute" },
-    { label: "10 hr/s", unit: "hour" },
-    { label: "10 day/s", unit: "day" },
-    { label: "10 mo/s", unit: "month" },
-    { label: "10 yr/s", unit: "year" }
-  ];
-  var TICK_INTERVAL_MS = 100;
-  function displaySecondsPerTick(unit) {
-    switch (unit) {
-      case "second":
-        return 1;
-      case "minute":
-        return 60;
-      case "hour":
-        return 3600;
-      case "day":
-        return 86400;
-      case "month":
-        return 30 * 86400;
-      // approximate
-      case "year":
-        return 365 * 86400;
-    }
-  }
-  function advanceByUnit(date, unit, direction) {
-    switch (unit) {
-      case "second":
-        return new Date(date.getTime() + direction * 1e3);
-      case "minute":
-        return new Date(date.getTime() + direction * 6e4);
-      case "hour":
-        return new Date(date.getTime() + direction * 36e5);
-      case "day":
-        return new Date(date.getTime() + direction * 864e5);
-      case "month": {
-        const di = dateToDateInterval(date);
-        const newDI = addMonthsToTimeInterval(di, 0, direction);
-        return dateIntervalToDate(newDI);
-      }
-      case "year": {
-        const di = dateToDateInterval(date);
-        const newDI = addYearsToTimeInterval(di, 0, direction);
-        return dateIntervalToDate(newDI);
-      }
-    }
-  }
-  function snapToUnit(date, unit, direction) {
-    const d = new Date(date.getTime());
-    switch (unit) {
-      case "second":
-        d.setMilliseconds(0);
-        if (direction > 0 && date.getMilliseconds() > 0) {
-          d.setSeconds(d.getSeconds() + 1);
-        }
-        break;
-      case "minute":
-        d.setMilliseconds(0);
-        d.setSeconds(0);
-        if (direction > 0 && (date.getSeconds() > 0 || date.getMilliseconds() > 0)) {
-          d.setMinutes(d.getMinutes() + 1);
-        }
-        break;
-      case "hour":
-        d.setMilliseconds(0);
-        d.setSeconds(0);
-        d.setMinutes(0);
-        if (direction > 0 && (date.getMinutes() > 0 || date.getSeconds() > 0 || date.getMilliseconds() > 0)) {
-          d.setHours(d.getHours() + 1);
-        }
-        break;
-      case "day":
-        d.setMilliseconds(0);
-        d.setSeconds(0);
-        d.setMinutes(0);
-        d.setHours(0);
-        if (direction > 0 && (date.getHours() > 0 || date.getMinutes() > 0 || date.getSeconds() > 0 || date.getMilliseconds() > 0)) {
-          d.setDate(d.getDate() + 1);
-        }
-        break;
-      case "month": {
-        const di = dateToDateInterval(date);
-        const cs = localComponentsFromTimeInterval(di, 0);
-        const needAdvance = direction > 0 && (cs.day > 1 || cs.hour > 0 || cs.minute > 0 || cs.seconds > 0);
-        let snapDI = timeIntervalFromLocalComponents(0, cs.era, cs.year, cs.month, 1, 0, 0, 0);
-        if (needAdvance) {
-          snapDI = addMonthsToTimeInterval(snapDI, 0, 1);
-        }
-        return dateIntervalToDate(snapDI);
-      }
-      case "year": {
-        const di = dateToDateInterval(date);
-        const cs = localComponentsFromTimeInterval(di, 0);
-        const needAdvance = direction > 0 && (cs.month > 1 || cs.day > 1 || cs.hour > 0 || cs.minute > 0 || cs.seconds > 0);
-        let snapDI = timeIntervalFromLocalComponents(0, cs.era, cs.year, 1, 1, 0, 0, 0);
-        if (needAdvance) {
-          snapDI = addYearsToTimeInterval(snapDI, 0, 1);
-        }
-        return dateIntervalToDate(snapDI);
-      }
-    }
-    return d;
-  }
-  var TimeController = class {
-    constructor() {
-      // --- Offset mode (1× with offset) ---
-      /** Millisecond offset from real time (used in 1× and -1× modes) */
-      this.offsetMs = 0;
-      // --- Quantized tick mode ---
-      /** Current rate option, or null for 1×/-1× */
-      this.rate = null;
-      /** Direction: 1 = forward, -1 = reverse */
-      this.direction = 1;
-      /** Whether time is stopped */
-      this.stopped = false;
-      /** The simulated time at the most recent tick boundary */
-      this.tickTime = /* @__PURE__ */ new Date();
-      /** The next tick target (for interpolation) */
-      this.nextTickTime = /* @__PURE__ */ new Date();
-      /** performance.now() of the most recent tick */
-      this.lastTickRealMs = 0;
-      /** Callback fired on each tick (engine rebuilds caches, renders) */
-      this.onTick = null;
-      /**
-       * Per-frame snapshot: when set, getDisplayTime() returns this value
-       * instead of recomputing, ensuring all parts in a single render frame
-       * see exactly the same time.
-       */
-      this.frameSnapshot = null;
-      // ========================================================================
-      // Internal helpers
-      // ========================================================================
-      /**
-       * Set up offset for -1× mode. In -1× mode, time runs backward:
-       * each real ms that passes subtracts 1ms from the simulated time.
-       * We represent this as an offset that decreases by 2× real elapsed
-       * (since Date.now() increases by 1ms per ms, we need -2ms offset
-       * per ms to get net -1ms/ms).
-       *
-       * Actually, simpler approach: we store an anchor and compute
-       * the simulated time as: anchor - (realNow - anchorReal).
-       * This is equivalent to offsetMs decreasing by 2 per real ms.
-       *
-       * For simplicity, we'll track the offset differently for -1×:
-       * simTime = 2 * anchorReal - realNow + originalOffset
-       * i.e. offsetMs is set to 2 * anchorReal + originalOffset - Date.now()
-       * but this drifts... Let's just use a stable anchor approach.
-       */
-      this.reverseAnchorRealMs = 0;
-      this.reverseAnchorSimMs = 0;
-    }
-    // ========================================================================
-    // Public getters
-    // ========================================================================
-    /** Is this running at real time with no offset? */
-    get isRealTime() {
-      return this.rate === null && this.direction === 1 && !this.stopped && this.offsetMs === 0;
-    }
-    /** Get the current rate option (null = 1×) */
-    get currentRate() {
-      return this.rate;
-    }
-    /** Get the current direction */
-    get currentDirection() {
-      return this.direction;
-    }
-    /** Is time stopped? */
-    get isStopped() {
-      return this.stopped;
-    }
-    /** Millisecond offset from real time (used in 1× mode). */
-    get timeOffset() {
-      return this.offsetMs;
-    }
-    /** Human-readable status label */
-    get statusLabel() {
-      if (this.stopped) return "Stopped";
-      if (this.rate === null) {
-        if (this.direction === -1) return "1\xD7 \u25C0";
-        if (this.offsetMs !== 0) return "1\xD7";
-        return "1\xD7 (real time)";
-      }
-      return `${this.rate.label} ${this.direction === 1 ? "\u25B6" : "\u25C0"}`;
-    }
-    // ========================================================================
-    // Core time computation
-    // ========================================================================
-    /**
-     * Get the current display time.
-     *
-     * If beginFrame() has been called, returns the frozen snapshot so all
-     * parts within a single render frame see exactly the same time.
-     *
-     * Otherwise computes the time:
-     * - In 1× mode: real time + offset
-     * - In -1× mode: time flows backward from an anchor
-     * - In stopped mode: frozen tickTime
-     * - In quantized mode: interpolation between tickTime and nextTickTime
-     */
-    getDisplayTime() {
-      if (this.frameSnapshot !== null) {
-        return this.frameSnapshot;
-      }
-      return this._computeDisplayTime();
-    }
-    /**
-     * Snapshot the current display time for the duration of a render frame.
-     * All calls to getDisplayTime() will return this exact value until
-     * endFrame() is called.
-     */
-    beginFrame() {
-      this.frameSnapshot = this._computeDisplayTime();
-    }
-    /**
-     * Release the per-frame snapshot, allowing getDisplayTime() to
-     * compute fresh values again.
-     */
-    endFrame() {
-      this.frameSnapshot = null;
-    }
-    /** Internal: compute the display time without snapshotting. */
-    _computeDisplayTime() {
-      if (this.rate === null && !this.stopped) {
-        if (this.direction === -1) {
-          const realNow = Date.now();
-          const elapsed = realNow - this.reverseAnchorRealMs;
-          return new Date(this.reverseAnchorSimMs - elapsed);
-        }
-        return new Date(Date.now() + this.offsetMs);
-      }
-      if (this.stopped) {
-        return new Date(this.tickTime.getTime());
-      }
-      return new Date(this.tickTime.getTime());
-    }
-    // ========================================================================
-    // Tick logic (called from RAF loop)
-    // ========================================================================
-    /**
-     * Called every animation frame. Checks if a tick boundary has been
-     * crossed and fires the tick if so. Returns true if a tick occurred.
-     */
-    checkTick(nowPerfMs) {
-      if (this.rate === null || this.stopped) return false;
-      if (nowPerfMs - this.lastTickRealMs >= TICK_INTERVAL_MS) {
-        this.tickTime = new Date(this.nextTickTime.getTime());
-        this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
-        this.lastTickRealMs = nowPerfMs;
-        this.onTick?.();
-        this.clampDisplayTime();
-        return true;
-      }
-      return false;
-    }
-    /**
-     * Whether the render loop should run continuously.
-     * True for quantized rates; false for stopped and 1×/-1× (which use
-     * idle-timeout scheduling with direction-aware boundary alignment).
-     */
-    get needsContinuousRender() {
-      if (this.stopped) return false;
-      if (this.rate !== null) return true;
-      return false;
-    }
-    // ========================================================================
-    // Rate / direction / time control
-    // ========================================================================
-    /**
-     * Set a quantized rate. Pass null for 1×.
-     * When activating a quantized rate, snaps time to the unit boundary.
-     */
-    setRate(rate) {
-      const prevTime = this.getDisplayTime();
-      this.stopped = false;
-      if (rate === null) {
-        this.rate = null;
-        this.offsetMs = prevTime.getTime() - Date.now();
-        if (this.direction === -1) {
-          this._setupReverseOneX(prevTime);
-        }
-        return;
-      }
-      this.rate = rate;
-      if (rate.unit === "second") {
-        this.tickTime = snapToUnit(prevTime, rate.unit, this.direction);
-      } else {
-        this.tickTime = prevTime;
-      }
-      this.nextTickTime = advanceByUnit(this.tickTime, rate.unit, this.direction);
-      this.lastTickRealMs = performance.now();
-      this.clampDisplayTime();
-      this.onTick?.();
-    }
-    /** Set direction (forward or reverse). Preserves current rate. */
-    setDirection(dir) {
-      if (dir === this.direction) return;
-      const prevTime = this.getDisplayTime();
-      this.direction = dir;
-      this.stopped = false;
-      if (this.rate === null) {
-        this._setupReverseOneX(prevTime);
-      } else {
-        this.tickTime = snapToUnit(prevTime, this.rate.unit, dir);
-        this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, dir);
-        this.lastTickRealMs = performance.now();
-      }
-      this.clampDisplayTime();
-      this.onTick?.();
-    }
-    /** Stop time. */
-    stop() {
-      if (this.stopped) return;
-      const prevTime = this.getDisplayTime();
-      this.stopped = true;
-      this.tickTime = prevTime;
-      this.nextTickTime = prevTime;
-      this.offsetMs = prevTime.getTime() - Date.now();
-    }
-    /**
-     * Step by one calendar unit. Works whether stopped or running.
-     * While running at a quantized rate, this is an additional jump
-     * on top of the tick rhythm.
-     */
-    step(unit, dir) {
-      const prevTime = this.getDisplayTime();
-      const newTime = advanceByUnit(prevTime, unit, dir);
-      if (this.stopped || this.rate === null) {
-        this.tickTime = newTime;
-        this.nextTickTime = newTime;
-        this.offsetMs = newTime.getTime() - Date.now();
-      } else {
-        this.tickTime = snapToUnit(newTime, this.rate.unit, this.direction);
-        this.nextTickTime = advanceByUnit(this.tickTime, this.rate.unit, this.direction);
-        this.lastTickRealMs = performance.now();
-      }
-      this.clampDisplayTime();
-      this.onTick?.();
-    }
-    /** Set an exact date/time. Stops the clock. */
-    setTime(date) {
-      this.stopped = true;
-      this.tickTime = date;
-      this.nextTickTime = date;
-      this.offsetMs = date.getTime() - Date.now();
-      this.clampDisplayTime();
-      this.onTick?.();
-    }
-    /** Reset to real time, 1× forward. */
-    reset() {
-      this.offsetMs = 0;
-      this.rate = null;
-      this.direction = 1;
-      this.stopped = false;
-      this.tickTime = /* @__PURE__ */ new Date();
-      this.nextTickTime = /* @__PURE__ */ new Date();
-      this.lastTickRealMs = 0;
-      this.onTick?.();
-    }
-    /** Set millisecond offset from real time, running 1× forward. */
-    setOffset(ms) {
-      this.offsetMs = ms;
-      this.rate = null;
-      this.direction = 1;
-      this.stopped = false;
-      this.tickTime = new Date(Date.now() + ms);
-      this.nextTickTime = new Date(Date.now() + ms);
-      this.lastTickRealMs = 0;
-      this.clampDisplayTime();
-      this.onTick?.();
-    }
-    // ========================================================================
-    // Date range constraint
-    // ========================================================================
-    /**
-     * Check if the current display time exceeds the supported astronomical
-     * range (4000 BCE – 2800 CE) and constrain it. Returns true if clamping
-     * occurred.
-     *
-     * Mirrors iOS ESWatchTime::checkAndConstrainAbsoluteTime:
-     * - If time is running, stop the clock at the boundary
-     * - If time is stopped, clamp the frozen value to the boundary
-     */
-    clampDisplayTime() {
-      const t = this.getDisplayTime().getTime();
-      if (t <= MIN_DISPLAY_DATE_MS) {
-        if (!this.stopped) {
-          this.stop();
-        }
-        this.tickTime = new Date(MIN_DISPLAY_DATE_MS);
-        this.nextTickTime = new Date(MIN_DISPLAY_DATE_MS);
-        this.offsetMs = MIN_DISPLAY_DATE_MS - Date.now();
-        return true;
-      }
-      if (t >= MAX_DISPLAY_DATE_MS) {
-        if (!this.stopped) {
-          this.stop();
-        }
-        this.tickTime = new Date(MAX_DISPLAY_DATE_MS);
-        this.nextTickTime = new Date(MAX_DISPLAY_DATE_MS);
-        this.offsetMs = MAX_DISPLAY_DATE_MS - Date.now();
-        return true;
-      }
-      return false;
-    }
-    _setupReverseOneX(prevTime) {
-      if (this.direction === -1) {
-        this.reverseAnchorRealMs = Date.now();
-        this.reverseAnchorSimMs = prevTime.getTime();
-        this.offsetMs = NaN;
-      } else {
-        this.offsetMs = prevTime.getTime() - Date.now();
-      }
-    }
-  };
-
   // src/shared/url-state.ts
   function readUrlState() {
     const params = new URLSearchParams(window.location.search);
     const latStr = params.get("lat");
     const lonStr = params.get("lon") || params.get("long");
-    const lat = latStr !== null ? parseFloat(latStr) : NaN;
-    const lon = lonStr !== null ? parseFloat(lonStr) : NaN;
+    const lat2 = latStr !== null ? parseFloat(latStr) : NaN;
+    const lon2 = lonStr !== null ? parseFloat(lonStr) : NaN;
     const city = params.get("city");
     const blocStr = params.get("bloc");
     const tcStr = params.get("tc");
@@ -17630,8 +12339,8 @@
     if (dirStr === "-1") dir = -1;
     else if (dirStr === "0") dir = 0;
     return {
-      lat: !isNaN(lat) ? lat : null,
-      lon: !isNaN(lon) ? lon : null,
+      lat: !isNaN(lat2) ? lat2 : null,
+      lon: !isNaN(lon2) ? lon2 : null,
       city: city || null,
       bloc: blocStr === "1",
       tc: tcStr === "1",
@@ -17769,23 +12478,6 @@
       url.search = search;
       anchor.href = url.toString();
     });
-  }
-  function initNavigationLinks() {
-    const backLink = document.getElementById("back-link");
-    if (backLink && !backLink.hasAttribute("data-base-href")) {
-      backLink.setAttribute("data-base-href", backLink.getAttribute("href") || "index.html");
-    }
-    const allFacesLink = document.getElementById("all-faces-link");
-    if (allFacesLink && !allFacesLink.hasAttribute("data-base-href")) {
-      allFacesLink.setAttribute("data-base-href", allFacesLink.getAttribute("href") || "all.html");
-    }
-    document.querySelectorAll("a.face-card").forEach((a) => {
-      const anchor = a;
-      if (!anchor.hasAttribute("data-base-href")) {
-        anchor.setAttribute("data-base-href", anchor.getAttribute("href"));
-      }
-    });
-    updateNavigationLinks();
   }
 
   // src/shared/city-search.ts
@@ -17962,16 +12654,16 @@
     });
     return results.slice(0, limit).map((r) => r.result);
   }
-  function findClosestCity(lat, lon) {
+  function findClosestCity(lat2, lon2) {
     if (!loaded || CITIES.length === 0) return null;
     let bestDist = Infinity;
     let bestIdx = -1;
-    const cosLat = Math.cos(lat * Math.PI / 180);
+    const cosLat = Math.cos(lat2 * Math.PI / 180);
     for (let i = 0; i < CITIES.length; i++) {
       const cLat = CITIES[i][C_LAT];
       const cLon = CITIES[i][C_LON];
-      const dLat = cLat - lat;
-      const dLon = (cLon - lon) * cosLat;
+      const dLat = cLat - lat2;
+      const dLon = (cLon - lon2) * cosLat;
       const dist = dLat * dLat + dLon * dLon;
       if (dist < bestDist) {
         bestDist = dist;
@@ -17996,6 +12688,18 @@
       isAirport: false,
       distanceDeg: Math.sqrt(bestDist)
     };
+  }
+
+  // src/shared/tz-resolve.ts
+  function resolveTimezone(lat2, lon2, cityTz) {
+    if (cityTz) return cityTz;
+    const closest = findClosestCity(lat2, lon2);
+    if (closest?.timezone) return closest.timezone;
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return "Etc/UTC";
+    }
   }
 
   // src/blue-marble-data.ts
@@ -18025,7 +12729,7 @@
       textureImg.src = BLUE_MARBLE;
     });
   }
-  async function renderGlobe(canvas, lat, lon) {
+  async function renderGlobe(canvas, lat2, lon2) {
     await ensureTexture();
     const ctx = canvas.getContext("2d");
     const w = canvas.width;
@@ -18039,8 +12743,8 @@
     const texData = textureCtx.getImageData(0, 0, tw, th).data;
     const imgData = ctx.createImageData(w, h);
     const pixels = imgData.data;
-    const \u03C60 = lat * Math.PI / 180;
-    const \u03BB0 = lon * Math.PI / 180;
+    const \u03C60 = lat2 * Math.PI / 180;
+    const \u03BB0 = lon2 * Math.PI / 180;
     const sin\u03C60 = Math.sin(\u03C60);
     const cos\u03C60 = Math.cos(\u03C60);
     for (let sy = 0; sy < h; sy++) {
@@ -18085,10 +12789,10 @@
     ctx.lineWidth = 1;
     ctx.stroke();
   }
-  function latLonToTile(lat, lon, zoom) {
+  function latLonToTile(lat2, lon2, zoom) {
     const n = 2 ** zoom;
-    const xf = (lon + 180) / 360 * n;
-    const latRad = lat * Math.PI / 180;
+    const xf = (lon2 + 180) / 360 * n;
+    const latRad = lat2 * Math.PI / 180;
     const yf = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
     const tileX = Math.floor(xf);
     const tileY = Math.floor(yf);
@@ -18096,8 +12800,8 @@
     const py = (yf - tileY) * 256;
     return { tileX, tileY, px, py };
   }
-  function loadOSMTile(container, _img, markerEl, lat, lon, zoom = 8) {
-    const { tileX, tileY, px, py } = latLonToTile(lat, lon, zoom);
+  function loadOSMTile(container, _img, markerEl, lat2, lon2, zoom = 8) {
+    const { tileX, tileY, px, py } = latLonToTile(lat2, lon2, zoom);
     const startX = px >= 128 ? tileX : tileX - 1;
     const startY = py >= 128 ? tileY : tileY - 1;
     const markerX = px + (tileX - startX) * 256;
@@ -18138,218 +12842,7 @@
     return Promise.all(promises).then((results) => results.some((ok) => ok));
   }
 
-  // src/shared/tz-resolve.ts
-  function resolveTimezone(lat, lon, cityTz) {
-    if (cityTz) return cityTz;
-    const closest = findClosestCity(lat, lon);
-    if (closest?.timezone) return closest.timezone;
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return "Etc/UTC";
-    }
-  }
-
-  // src/shared/dst-detect.ts
-  function getTimezoneOffsetMinutes(olsonId, date) {
-    try {
-      const fmt = new Intl.DateTimeFormat("en-US", {
-        timeZone: olsonId,
-        timeZoneName: "longOffset"
-      });
-      const parts = fmt.formatToParts(date);
-      const tzStr = parts.find((p) => p.type === "timeZoneName")?.value || "";
-      if (tzStr === "GMT" || tzStr === "UTC" || !tzStr) {
-        return 0;
-      }
-      const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
-      if (m) {
-        const sign = m[1] === "+" ? 1 : -1;
-        return sign * (parseInt(m[2], 10) * 60 + (m[3] ? parseInt(m[3], 10) : 0));
-      }
-      return 0;
-    } catch {
-      return 0;
-    }
-  }
-  function findNextDstTransition(olsonId, from) {
-    const startMs = from.getTime();
-    const currentOffset = getTimezoneOffsetMinutes(olsonId, from);
-    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1e3;
-    const MAX_PROBES = 30;
-    let loMs = startMs;
-    for (let i = 1; i <= MAX_PROBES; i++) {
-      const hiMs = startMs + i * FOURTEEN_DAYS_MS;
-      const hiOffset = getTimezoneOffsetMinutes(olsonId, new Date(hiMs));
-      if (hiOffset !== currentOffset) {
-        return binarySearchTransition(olsonId, loMs, hiMs, currentOffset);
-      }
-      loMs = hiMs;
-    }
-    return null;
-  }
-  function findPrevDstTransition(olsonId, from) {
-    const startMs = from.getTime();
-    const currentOffset = getTimezoneOffsetMinutes(olsonId, from);
-    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1e3;
-    const MAX_PROBES = 30;
-    let hiMs = startMs;
-    for (let i = 1; i <= MAX_PROBES; i++) {
-      const loMs = startMs - i * FOURTEEN_DAYS_MS;
-      const loOffset = getTimezoneOffsetMinutes(olsonId, new Date(loMs));
-      if (loOffset !== currentOffset) {
-        return binarySearchTransition(olsonId, loMs, hiMs, loOffset);
-      }
-      hiMs = loMs;
-    }
-    return null;
-  }
-  function binarySearchTransition(olsonId, loMs, hiMs, baseOffset) {
-    const ONE_MINUTE_MS = 6e4;
-    while (hiMs - loMs > ONE_MINUTE_MS) {
-      const midMs = Math.floor((loMs + hiMs) / 2);
-      const midOffset = getTimezoneOffsetMinutes(olsonId, new Date(midMs));
-      if (midOffset === baseOffset) {
-        loMs = midMs;
-      } else {
-        hiMs = midMs;
-      }
-    }
-    const snapped = Math.floor(hiMs / ONE_MINUTE_MS) * ONE_MINUTE_MS;
-    return new Date(snapped);
-  }
-
-  // src/watch/astro-stepper.ts
-  var FUDGE_SECONDS = 5;
-  var TRANSIT_FUDGE_SECONDS = 12 * 3600;
-  var LOOKAHEAD_SECONDS = 3600 * 13.2;
-  var TWO_PI5 = 2 * Math.PI;
-  var HALF_PI = Math.PI / 2;
-  function findNextRiseSet(riseNotSet, planetNumber, displayTime, direction, lat, lon) {
-    const calculationDI = dateToDateInterval(displayTime);
-    const searchForward = direction === 1;
-    const fudge = searchForward ? FUDGE_SECONDS : -FUDGE_SECONDS;
-    const lookahead = searchForward ? LOOKAHEAD_SECONDS : -LOOKAHEAD_SECONDS;
-    const fudgeDate = calculationDI + fudge;
-    const pool = new AstroCachePool();
-    initializeCachePool(pool, fudgeDate, lat, lon, !searchForward);
-    try {
-      const result = planetaryRiseSetTimeRefined(
-        fudgeDate,
-        lat,
-        lon,
-        riseNotSet,
-        planetNumber,
-        NaN,
-        pool
-      );
-      if (isNoRiseSet(result.riseSetTime)) {
-        return null;
-      }
-      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
-      if (inRightDirection) {
-        return dateIntervalToDate(result.riseSetTime);
-      }
-      const tryDate = fudgeDate + lookahead;
-      releaseCachePool(pool);
-      initializeCachePool(pool, tryDate, lat, lon, !searchForward);
-      const result2 = planetaryRiseSetTimeRefined(
-        tryDate,
-        lat,
-        lon,
-        riseNotSet,
-        planetNumber,
-        NaN,
-        pool
-      );
-      if (isNoRiseSet(result2.riseSetTime)) {
-        return null;
-      }
-      return dateIntervalToDate(result2.riseSetTime);
-    } finally {
-      releaseCachePool(pool);
-    }
-  }
-  function findNextQuarterPhase(displayTime, direction) {
-    const di = dateToDateInterval(displayTime);
-    const { age } = moonAge(di, null);
-    const runningBackward = direction === -1;
-    const fudgeFactor = runningBackward ? -0.01 : 0.01;
-    const ageSinceQuarter = fmod(age + fudgeFactor, HALF_PI);
-    const ageAtLastQuarter = age + fudgeFactor - ageSinceQuarter;
-    let targetAge = runningBackward ? ageAtLastQuarter : ageAtLastQuarter + HALF_PI;
-    if (targetAge > 15 / 8 * Math.PI) {
-      targetAge -= TWO_PI5;
-    }
-    const phaseDI = refineMoonAgeTargetForDate(di, targetAge);
-    return dateIntervalToDate(phaseDI);
-  }
-  function findNextTransit(planetNumber, displayTime, direction, lat, lon) {
-    const di = dateToDateInterval(displayTime);
-    const fudgeDate = di + direction * TRANSIT_FUDGE_SECONDS;
-    const pool = new AstroCachePool();
-    initializeCachePool(pool, fudgeDate, lat, lon, direction === -1);
-    try {
-      const result = planettransitTimeRefined(
-        fudgeDate,
-        lat,
-        lon,
-        true,
-        planetNumber,
-        pool
-      );
-      const delta = result - di;
-      const inRightDirection = direction === 1 ? delta > 60 : delta < -60;
-      if (inRightDirection) {
-        return dateIntervalToDate(result);
-      }
-      releaseCachePool(pool);
-      const retryDate = di + direction * 86400;
-      initializeCachePool(pool, retryDate, lat, lon, direction === -1);
-      const result2 = planettransitTimeRefined(
-        retryDate,
-        lat,
-        lon,
-        true,
-        planetNumber,
-        pool
-      );
-      return dateIntervalToDate(result2);
-    } finally {
-      releaseCachePool(pool);
-    }
-  }
-  function computeAstroTarget(eventType, direction, displayTime, lat, lon, bodyPlanetNumber) {
-    switch (eventType) {
-      case "sunrise":
-        return findNextRiseSet(true, 0 /* Sun */, displayTime, direction, lat, lon);
-      case "sunset":
-        return findNextRiseSet(false, 0 /* Sun */, displayTime, direction, lat, lon);
-      case "moonrise":
-        return findNextRiseSet(true, 1 /* Moon */, displayTime, direction, lat, lon);
-      case "moonset":
-        return findNextRiseSet(false, 1 /* Moon */, displayTime, direction, lat, lon);
-      case "moonphase":
-        return findNextQuarterPhase(displayTime, direction);
-      case "sun-transit":
-        return findNextTransit(0 /* Sun */, displayTime, direction, lat, lon);
-      case "moon-transit":
-        return findNextTransit(1 /* Moon */, displayTime, direction, lat, lon);
-      case "body-rise":
-        if (bodyPlanetNumber === void 0) return null;
-        return findNextRiseSet(true, bodyPlanetNumber, displayTime, direction, lat, lon);
-      case "body-set":
-        if (bodyPlanetNumber === void 0) return null;
-        return findNextRiseSet(false, bodyPlanetNumber, displayTime, direction, lat, lon);
-      case "body-transit":
-        if (bodyPlanetNumber === void 0) return null;
-        return findNextTransit(bodyPlanetNumber, displayTime, direction, lat, lon);
-      default:
-        return null;
-    }
-  }
-
-  // src/engine-entry.ts
+  // src/shared/location-dialog.ts
   function requestBrowserLocation(timeoutMs) {
     if (!navigator.geolocation) return Promise.resolve({ status: "unavailable" });
     return new Promise((resolve) => {
@@ -18366,76 +12859,49 @@
       );
     });
   }
-  function optimizeGrid(count, containerW, containerH, gap, padding) {
-    if (count <= 0) return { cols: 1, rows: 1, size: 0 };
-    let bestCols = 1, bestRows = count, bestSize = 0;
-    for (let c = 1; c <= count; c++) {
-      const r = Math.ceil(count / c);
-      const usableW = containerW - 2 * padding - gap * (c - 1);
-      const usableH = containerH - 2 * padding - gap * (r - 1);
-      const size = Math.floor(Math.min(usableW / c, usableH / r));
-      const isBetter = size > bestSize;
-      const isTie = size === bestSize && c + r < bestCols + bestRows;
-      if (isBetter || isTie) {
-        bestSize = size;
-        bestCols = c;
-        bestRows = r;
-      }
-    }
-    return { cols: bestCols, rows: bestRows, size: bestSize };
+  function useImperial() {
+    const locale = navigator.language || "en-US";
+    const region = locale.split("-")[1]?.toUpperCase() || "";
+    return ["US", "GB", "MM", "LR"].includes(region);
   }
-  async function loadImagesFromFaceData(imageMap) {
-    const result = /* @__PURE__ */ new Map();
-    const entries = Object.entries(imageMap);
-    const loadPromises = entries.map(async ([src, { dataUrl, scale }]) => {
-      try {
-        const response = await fetch(dataUrl);
-        const blob = await response.blob();
-        const bitmap = await createImageBitmap(blob);
-        result.set(src, { bitmap, scale });
-      } catch (e) {
-        console.warn(`Failed to load image: ${src}`, e);
-      }
-    });
-    await Promise.all(loadPromises);
-    return result;
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
-  async function main() {
-    let faceDataArray = window.ChronometerFaces || [];
-    if (faceDataArray.length === 0) {
-      console.error("No face data registered. Include at least one face-*.js script.");
-      return;
-    }
-    const isSelectedPage = window.location.pathname.endsWith("selected.html");
-    if (isSelectedPage) {
-      const picksParam = new URLSearchParams(window.location.search).get("picks");
-      if (picksParam && picksParam.length >= 2) {
-        const abbrevs = [];
-        for (let i = 0; i + 1 < picksParam.length; i += 2) {
-          abbrevs.push(picksParam.substring(i, i + 2));
-        }
-        const byAbbrev = new Map(faceDataArray.map((f) => [f.urlAbbrev, f]));
-        const filtered = [];
-        for (const abbrev of abbrevs) {
-          const face = byAbbrev.get(abbrev);
-          if (face) filtered.push(face);
-        }
-        if (filtered.length > 0) {
-          faceDataArray = filtered;
-        }
-      } else {
-        const url = new URL("pick.html", window.location.href);
-        url.search = window.location.search;
-        window.location.replace(url.toString());
-        return;
-      }
-    }
-    const grid = document.getElementById("watch-grid");
-    const locationDisplay = document.getElementById("location-display");
-    const sourceLabel = document.getElementById("location-source");
-    const locationTzLabel = document.getElementById("location-tz");
-    const setLocationBtn = document.getElementById("set-location-btn");
-    const locationPrompt = document.getElementById("location-prompt");
+  function compassBearing(lat1, lon1, lat2, lon2) {
+    const toRad = Math.PI / 180;
+    const dLon = (lon2 - lon1) * toRad;
+    const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+    const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+    let bearing = Math.atan2(y, x) * 180 / Math.PI;
+    bearing = (bearing + 360) % 360;
+    const dirs = [
+      "N",
+      "NNE",
+      "NE",
+      "ENE",
+      "E",
+      "ESE",
+      "SE",
+      "SSE",
+      "S",
+      "SSW",
+      "SW",
+      "WSW",
+      "W",
+      "WNW",
+      "NW",
+      "NNW"
+    ];
+    return dirs[Math.round(bearing / 22.5) % 16];
+  }
+  function initLocationDialog(config) {
+    const maybeLp = document.getElementById("location-prompt");
+    if (!maybeLp) return null;
+    const locationPrompt = maybeLp;
     const lpLatInput = document.getElementById("lp-lat");
     const lpLonInput = document.getElementById("lp-lon");
     const lpUseCoords = document.getElementById("lp-use-coords");
@@ -18456,1238 +12922,29 @@
     const lpOsmAttribution = document.getElementById("lp-osm-attribution");
     const lpDoneBtn = document.getElementById("lp-done");
     const lpDialogFooter = lpDoneBtn.parentElement;
-    initNavigationLinks();
-    const urlState = readUrlState();
-    const isEmbedMode = urlState.embed;
-    if (isEmbedMode) {
-      document.body.classList.add("embed-mode");
-    }
-    if (!isEmbedMode) {
-      loadCityData().then(() => {
-        updateLocationDisplay();
-        for (const face of faces) {
-          if (face.watch.worldTimeSubdials && face.terraSlotOverrides?.[1]?.cityName === "Observer") {
-            const closest = findClosestCity(lat, lon);
-            if (closest) {
-              face.terraSlotOverrides[1].cityName = closest.shortLabel;
-            }
-          }
-          if (face.watch.worldTimeRing && face.globalLocationSlot !== void 0) {
-            const glSlot = face.terraSlotOverrides?.[face.globalLocationSlot];
-            if (glSlot && !locationSource && (lat !== 0 || lon !== 0)) {
-              const closest = findClosestCity(lat, lon);
-              if (closest) {
-                glSlot.cityName = closest.shortLabel;
-              }
-            }
-          }
-        }
-      }).catch(() => {
-      });
-    }
-    let lat, lon;
+    const isFileProtocol = window.location.protocol === "file:";
+    let currentLat = config.initialLat ?? 0;
+    let currentLon = config.initialLon ?? 0;
     let locationSource = "";
     let locationFullLabel = "";
     let locationSourceType = "none";
-    let needsPrompt = false;
-    let locationTimezone = urlState.tz || void 0;
-    let tzDeltaMs = computeTzDeltaMs(locationTimezone);
-    let geoPermission = "unknown";
-    if (isEmbedMode) {
-      lat = 0;
-      lon = 0;
-      locationSource = "";
-      locationTimezone = urlState.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
-      tzDeltaMs = computeTzDeltaMs(locationTimezone);
-      needsPrompt = false;
-    } else if (urlState.lat !== null && urlState.lon !== null) {
-      lat = urlState.lat;
-      lon = urlState.lon;
-      locationSource = urlState.city || "";
-      locationSourceType = urlState.city ? "url-city" : "manual";
-      if (!locationTimezone) {
-        locationTimezone = resolveTimezone(lat, lon, null);
-        tzDeltaMs = computeTzDeltaMs(locationTimezone);
-        writeUrlState({ tz: locationTimezone });
-      }
-      if (navigator.permissions) {
-        try {
-          const status = await navigator.permissions.query({ name: "geolocation" });
-          geoPermission = status.state === "granted" ? "granted" : status.state === "denied" ? "denied" : "unknown";
-        } catch {
-        }
-      }
-    } else if (urlState.bloc) {
-      const result = await requestBrowserLocation(1e4);
-      if (result.status === "success") {
-        lat = result.lat;
-        lon = result.lon;
-        locationSource = "";
-        locationSourceType = "browser";
-        geoPermission = "granted";
-        locationTimezone = resolveTimezone(lat, lon, null);
-        tzDeltaMs = computeTzDeltaMs(locationTimezone);
-      } else if (result.status === "denied") {
-        lat = 0;
-        lon = 0;
-        locationSource = "";
-        locationSourceType = "none";
-        needsPrompt = true;
-        geoPermission = "denied";
-      } else {
-        lat = 0;
-        lon = 0;
-        locationSource = "";
-        locationSourceType = "none";
-        needsPrompt = true;
-        geoPermission = "unknown";
-      }
-    } else {
-      lat = 0;
-      lon = 0;
-      locationSource = "";
-      locationSourceType = "none";
-      needsPrompt = true;
-      geoPermission = "unknown";
-    }
-    function updateLocationDisplay() {
-      locationDisplay.innerHTML = `Latitude&nbsp;<span style="font-family:monospace">${lat.toFixed(3)}</span>&nbsp;&ensp;Longitude&nbsp;<span style="font-family:monospace">${lon.toFixed(3)}</span>`;
-      if (locationSource) {
-        sourceLabel.textContent = locationSource;
-      } else if (isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
-        const closest = findClosestCity(lat, lon);
-        if (closest) {
-          const distKm = haversineKm(lat, lon, closest.lat, closest.lon);
-          const THRESHOLD_KM = 16;
-          if (distKm > THRESHOLD_KM) {
-            const dir = compassBearing(closest.lat, closest.lon, lat, lon);
-            if (useImperial()) {
-              sourceLabel.textContent = `${Math.round(distKm * 0.621371)}\xA0mi ${dir} of ${closest.shortLabel}`;
-            } else {
-              sourceLabel.textContent = `${Math.round(distKm)}\xA0km ${dir} of ${closest.shortLabel}`;
-            }
-          } else {
-            sourceLabel.textContent = closest.shortLabel;
-          }
-        } else {
-          sourceLabel.textContent = "";
-        }
-      } else {
-        sourceLabel.textContent = "";
-      }
-    }
-    updateLocationDisplay();
-    const parsedWatches = [];
-    const allImages = [];
-    const planetIconDataUrls = /* @__PURE__ */ new Map();
-    const planetIconKeys = [
-      "moon",
-      "mercury",
-      "venus",
-      "mars",
-      "jupiter",
-      "saturn",
-      "uranus",
-      "neptune",
-      "sun"
-    ];
-    const planetIconSrcMap = {
-      moon: "../partsBin/moonES36.png",
-      mercury: "../partsBin/planets/mercury36.png",
-      venus: "../partsBin/planets/venus36.png",
-      mars: "../partsBin/planets/mars36.png",
-      jupiter: "../partsBin/planets/jupiter36.png",
-      saturn: "../partsBin/planets/saturn36.png",
-      uranus: "../partsBin/planets/uranus36.png",
-      neptune: "../partsBin/planets/neptune36.png",
-      sun: "../partsBin/planets/sun36.png"
-    };
-    for (const fd of faceDataArray) {
-      parsedWatches.push(parseWatchXML(fd.xml, "front"));
-      if (fd.images) {
-        for (const [key, src] of Object.entries(planetIconSrcMap)) {
-          const entry = fd.images[src];
-          if (entry && !planetIconDataUrls.has(key)) {
-            planetIconDataUrls.set(key, entry.dataUrl);
-          }
-        }
-      }
-      allImages.push(await loadImagesFromFaceData(fd.images));
-      fd.images = null;
-    }
-    delete window.ChronometerFaces;
-    const timeController = new TimeController();
-    if (urlState.off !== null && !isNaN(urlState.off)) {
-      timeController.setOffset(urlState.off);
-    } else if (urlState.t !== null && !isNaN(urlState.t)) {
-      timeController.setTime(new Date(urlState.t));
-      if (urlState.dir === 1) {
-        timeController.setDirection(1);
-        timeController.setRate(null);
-      } else if (urlState.dir === -1) {
-        timeController.setDirection(-1);
-        timeController.setRate(null);
-      }
-    }
-    const rawGetNow = () => timeController.getDisplayTime();
-    function makeGetNow(bps) {
-      if (bps <= 0) return rawGetNow;
-      return () => {
-        const d = rawGetNow();
-        const ms = d.getTime();
-        const quantizedMs = Math.round(ms / 1e3 * bps) / bps * 1e3;
-        return new Date(quantizedMs);
-      };
-    }
-    function buildSlotOverrides(watch) {
-      const params = new URLSearchParams(window.location.search);
-      if (watch.worldTimeRing) {
-        const userOverrides = {};
-        for (let slot = 1; slot <= 24; slot++) {
-          const name = params.get(`r${slot}`);
-          const tz = params.get(`r${slot}tz`);
-          const latStr = params.get(`r${slot}lat`);
-          const lonStr = params.get(`r${slot}lon`);
-          if (name && tz) {
-            userOverrides[slot] = {
-              cityName: name,
-              olsonId: tz,
-              lat: latStr ? parseFloat(latStr) : 0,
-              lon: lonStr ? parseFloat(lonStr) : 0
-            };
-          }
-        }
-        const overrides = { ...userOverrides };
-        let globalSlot;
-        if (locationTimezone && (lat !== 0 || lon !== 0)) {
-          const validSlots = validSlotsForTz(locationTimezone);
-          if (validSlots.length === 1) {
-            globalSlot = validSlots[0];
-          } else if (validSlots.length > 1) {
-            const nonOverridden = validSlots.filter((s) => !(s in userOverrides));
-            const overridden = validSlots.filter((s) => s in userOverrides);
-            if (nonOverridden.length >= 1 && overridden.length >= 1) {
-              globalSlot = nonOverridden[0];
-            } else {
-              const globalStdOff = getStandardOffsetMinutes(locationTimezone);
-              let bestSlot = validSlots[0];
-              let bestDiff = Infinity;
-              for (const s of validSlots) {
-                const slotCity = userOverrides[s] || TERRA_RING_DEFAULTS[s];
-                if (!slotCity) continue;
-                const slotStdOff = getStandardOffsetMinutes(slotCity.olsonId);
-                const diff = Math.abs(slotStdOff - globalStdOff);
-                if (diff < bestDiff) {
-                  bestDiff = diff;
-                  bestSlot = s;
-                }
-              }
-              globalSlot = bestSlot;
-            }
-          } else if (validSlots.length === 0) {
-            console.warn(`[Terra] No valid slot for timezone ${locationTimezone}`);
-          }
-          if (globalSlot !== void 0) {
-            let cityName = locationSource;
-            if (!cityName && isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
-              const closest = findClosestCity(lat, lon);
-              if (closest) cityName = closest.shortLabel;
-            }
-            if (!cityName && locationTimezone) {
-              cityName = olsonIdToCityName(locationTimezone);
-            }
-            overrides[globalSlot] = {
-              cityName: cityName || "Local",
-              olsonId: locationTimezone,
-              lat,
-              lon
-            };
-          }
-        }
-        return {
-          overrides: Object.keys(overrides).length > 0 ? overrides : {},
-          globalLocationSlot: globalSlot
-        };
-      }
-      if (watch.worldTimeSubdials) {
-        const nSubdials = watch.maxSeparateLoc || 4;
-        const overrides = {};
-        let observerName = locationSource;
-        if (!observerName && isCityDataLoaded() && (lat !== 0 || lon !== 0)) {
-          const closest = findClosestCity(lat, lon);
-          if (closest) observerName = closest.shortLabel;
-        }
-        overrides[1] = {
-          cityName: observerName || "Observer",
-          olsonId: locationTimezone || "",
-          lat,
-          lon
-        };
-        for (let slot = 2; slot <= nSubdials; slot++) {
-          const name = params.get(`d${slot}`);
-          const tz = params.get(`d${slot}tz`);
-          const latStr = params.get(`d${slot}lat`);
-          const lonStr = params.get(`d${slot}lon`);
-          if (name && tz) {
-            overrides[slot] = {
-              cityName: name,
-              olsonId: tz,
-              lat: latStr ? parseFloat(latStr) : 0,
-              lon: lonStr ? parseFloat(lonStr) : 0
-            };
-          } else {
-            const def = GAIA_SUBDIAL_DEFAULTS[slot];
-            if (def) overrides[slot] = { ...def };
-          }
-        }
-        return { overrides };
-      }
-      return void 0;
-    }
-    let cols = 1, rows = 1;
-    const faces = [];
-    function restoreKyotoState(face) {
-      if (!face.watch.wadokei) return;
-      const s = readUrlState();
-      if (s.kyhand === "1") face.env.kyHandMode = 1;
-      if (s.kmode === "1") face.env.variables.set("kyMode", 1);
-    }
-    for (let i = 0; i < parsedWatches.length; i++) {
-      const cell = document.createElement("div");
-      cell.className = "face-cell";
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      cell.appendChild(canvas);
-      grid.appendChild(cell);
-      const watch = parsedWatches[i];
-      const slotResult = buildSlotOverrides(watch);
-      const faceOverrides = slotResult?.overrides;
-      const faceGetNow = makeGetNow(watch.beatsPerSecond);
-      const env = createWatchEnvironment(watch, lat, lon, faceGetNow, locationTimezone, faceOverrides, slotResult?.globalLocationSlot);
-      const face = {
-        watch,
-        env,
-        cachesBuilt: false,
-        handStates: [],
-        canvas,
-        ctx,
-        sizePx: 0,
-        images: allImages[i],
-        enabled: true,
-        scale: 1,
-        terminatorLeaves: [],
-        analemmaState: null,
-        lastTerminatorRebuild: 0,
-        faceDataIndex: i,
-        terraSlotOverrides: faceOverrides,
-        globalLocationSlot: slotResult?.globalLocationSlot
-      };
-      faces.push(face);
-    }
-    const isMultiFace = faceDataArray.length > 1;
-    const isAllFacesPage = window.location.pathname.endsWith("all.html");
-    if (isMultiFace || isSelectedPage || isAllFacesPage) {
-      let faceNameToSlug2 = function(name) {
-        return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
-      };
-      var faceNameToSlug = faceNameToSlug2;
-      if (isSelectedPage) {
-        document.body.classList.add("is-selected-faces");
-      } else if (isAllFacesPage) {
-        document.body.classList.add("is-all-faces");
-      }
-      for (let i = 0; i < faces.length; i++) {
-        const face = faces[i];
-        const slug = faceNameToSlug2(faceDataArray[i].name);
-        face.canvas.style.cursor = "pointer";
-        face.canvas.addEventListener("click", () => {
-          const params = new URLSearchParams(window.location.search);
-          window.location.href = `${slug}.html${params.toString() ? "?" + params.toString() : ""}`;
-        });
-      }
-    }
-    function applySize(face, size) {
-      const dpr = window.devicePixelRatio || 1;
-      const physPx = Math.round(size * dpr);
-      face.canvas.width = physPx;
-      face.canvas.height = physPx;
-      face.canvas.style.width = `${size}px`;
-      face.canvas.style.height = `${size}px`;
-      const bezel = face.watch.bezelColor ? BEZEL_THICKNESS_XML : 0;
-      const totalDiameter = face.watch.faceWidth + 2 * bezel;
-      face.sizePx = size;
-      face.scale = physPx / totalDiameter;
-    }
-    function buildCache(face) {
-      if (!face.enabled || face.sizePx === 0) return;
-      const { canvas, watch, env, images, scale } = face;
-      face.terminatorLeaves = [];
-      for (const part of watch.parts) {
-        if (part.type === "Terminator") {
-          face.terminatorLeaves.push(...expandTerminatorToLeaves(part, env));
-        }
-      }
-      if (face.terminatorLeaves.length > 0) {
-        updateLeafAngles(face.terminatorLeaves, face.env);
-      }
-      buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-      buildHandShadowCaches(watch, env, scale, images);
-      face.cachesBuilt = true;
-      face.analemmaState = null;
-      for (const part of watch.parts) {
-        if (part.type === "Analemma") {
-          face.analemmaState = expandAnalemma(part, env, images);
-          break;
-        }
-      }
-      face.handStates = initHandStates(watch, env, performance.now(), makeGetNow(watch.beatsPerSecond), rawGetNow);
-    }
-    function buildAllCachesSequentially(facesToBuild, onDone) {
-      let idx = 0;
-      function buildNext() {
-        if (idx >= facesToBuild.length) {
-          onDone();
-          return;
-        }
-        buildCache(facesToBuild[idx++]);
-        setTimeout(buildNext, 0);
-      }
-      buildNext();
-    }
-    function rebuildEnvironments() {
-      const oldTzDeltaMs = tzDeltaMs;
-      tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
-      let tzOffsetChanged = false;
-      for (const face of faces) {
-        if (!face.enabled) continue;
-        const oldKnockout = face.env._terraCityKnockout;
-        const oldTzOffset = face.env.tzOffsetSec;
-        face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
-        restoreKyotoState(face);
-        if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
-        invalidateDayNightCaches(face.watch);
-        const { canvas, watch, env, images, scale } = face;
-        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-        if (oldTzOffset !== void 0 && face.env.tzOffsetSec !== oldTzOffset) {
-          console.log(`[rebuildEnvironments] DST transition detected (offset ${oldTzOffset} -> ${face.env.tzOffsetSec}) - resetting schedules`);
-          tzOffsetChanged = true;
-          resetHandSchedules(face.handStates);
-          resetLeafSchedules(face.terminatorLeaves);
-          resetDayNightSlides(face.watch);
-          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-        }
-      }
-      if (tzDeltaMs !== oldTzDeltaMs || tzOffsetChanged) {
-        updateTimezoneDisplay();
-      }
-      scheduleDstRebuild();
-    }
-    timeController.onTick = rebuildEnvironments;
-    let idleTimerId = null;
-    let rafId = null;
-    function stopScheduler() {
-      if (idleTimerId !== null) {
-        clearTimeout(idleTimerId);
-        idleTimerId = null;
-      }
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-    }
-    let _wasScrubbing = false;
-    let _scrubTotalExpectedTicks = 0;
-    let _scrubProcessedTicks = 0;
-    let _scrubLostTicks = 0;
-    let _intervalUpdateFrameTime = null;
-    let _intervalFrameCount = 0;
-    let _intervalLastFrameTime = null;
-    const _scrubIntervalFpsList = [];
-    let _scrubIntervalZeroFrameCount = 0;
-    let _pureAnimCount = 0;
-    let _pureAnimCpuTimeTotal = 0;
-    let _pureAnimCpuMin = Infinity;
-    let _pureAnimCpuMax = -Infinity;
-    let _pureAnimGpuTimeTotal = 0;
-    let _pureAnimGpuMin = Infinity;
-    let _pureAnimGpuMax = -Infinity;
-    let _pureAnimDeltaTotal = 0;
-    let _pureAnimDeltaCount = 0;
-    let _pureAnimDeltaMin = Infinity;
-    let _pureAnimDeltaMax = -Infinity;
-    let _lastAnimFrameTime = null;
-    function frame() {
-      rafId = null;
-      const now = performance.now();
-      const frameStart = now;
-      let stillAnimating = false;
-      const isScrubbing = timeController.currentRate !== null && !timeController.isStopped;
-      let willTick = false;
-      if (isScrubbing) {
-        if (!_wasScrubbing) {
-          _wasScrubbing = true;
-          _scrubTotalExpectedTicks = 0;
-          _scrubProcessedTicks = 0;
-          _scrubLostTicks = 0;
-          _intervalUpdateFrameTime = null;
-          _intervalFrameCount = 0;
-          _intervalLastFrameTime = null;
-          _scrubIntervalFpsList.length = 0;
-          _scrubIntervalZeroFrameCount = 0;
-          _pureAnimCount = 0;
-          _pureAnimCpuTimeTotal = 0;
-          _pureAnimCpuMin = Infinity;
-          _pureAnimCpuMax = -Infinity;
-          _pureAnimGpuTimeTotal = 0;
-          _pureAnimGpuMin = Infinity;
-          _pureAnimGpuMax = -Infinity;
-          _pureAnimDeltaTotal = 0;
-          _pureAnimDeltaCount = 0;
-          _pureAnimDeltaMin = Infinity;
-          _pureAnimDeltaMax = -Infinity;
-          _lastAnimFrameTime = null;
-          console.log("[scrub-perf] Scrubbing session started.");
-        }
-        const elapsed = now - timeController.lastTickRealMs;
-        willTick = elapsed >= TICK_INTERVAL_MS;
-        if (willTick) {
-          const expectedTicks = Math.floor(elapsed / TICK_INTERVAL_MS);
-          const lostTicks = expectedTicks - 1;
-          _scrubTotalExpectedTicks += expectedTicks;
-          _scrubProcessedTicks += 1;
-          _scrubLostTicks += lostTicks;
-          if (_intervalUpdateFrameTime !== null) {
-            if (_intervalFrameCount > 0 && _intervalLastFrameTime !== null) {
-              const duration = _intervalLastFrameTime - _intervalUpdateFrameTime;
-              const fps = _intervalFrameCount / (duration / 1e3);
-              _scrubIntervalFpsList.push(fps);
-            } else {
-              _scrubIntervalZeroFrameCount++;
-            }
-          }
-          _intervalUpdateFrameTime = now;
-          _intervalFrameCount = 0;
-          _intervalLastFrameTime = null;
-        } else {
-          if (_intervalUpdateFrameTime !== null) {
-            _intervalFrameCount++;
-            _intervalLastFrameTime = now;
-          }
-        }
-      }
-      if (!isScrubbing && _wasScrubbing) {
-        _wasScrubbing = false;
-        if (_intervalUpdateFrameTime !== null) {
-          if (_intervalFrameCount > 0 && _intervalLastFrameTime !== null) {
-            const duration = _intervalLastFrameTime - _intervalUpdateFrameTime;
-            const fps = _intervalFrameCount / (duration / 1e3);
-            _scrubIntervalFpsList.push(fps);
-          } else {
-            _scrubIntervalZeroFrameCount++;
-          }
-        }
-        const avgFps = _scrubIntervalFpsList.length > 0 ? (_scrubIntervalFpsList.reduce((a, b) => a + b, 0) / _scrubIntervalFpsList.length).toFixed(1) : "N/A";
-        const minFps = _scrubIntervalFpsList.length > 0 ? Math.min(..._scrubIntervalFpsList).toFixed(1) : "N/A";
-        const maxFps = _scrubIntervalFpsList.length > 0 ? Math.max(..._scrubIntervalFpsList).toFixed(1) : "N/A";
-        const lostPercent = _scrubTotalExpectedTicks > 0 ? (_scrubLostTicks / _scrubTotalExpectedTicks * 100).toFixed(1) : "0.0";
-        const avgCpu = _pureAnimCount > 0 ? (_pureAnimCpuTimeTotal / _pureAnimCount).toFixed(2) : "N/A";
-        const minCpu = _pureAnimCount > 0 ? _pureAnimCpuMin.toFixed(2) : "N/A";
-        const maxCpu = _pureAnimCount > 0 ? _pureAnimCpuMax.toFixed(2) : "N/A";
-        const avgGpu = _pureAnimCount > 0 ? (_pureAnimGpuTimeTotal / _pureAnimCount).toFixed(2) : "N/A";
-        const minGpu = _pureAnimCount > 0 ? _pureAnimGpuMin.toFixed(2) : "N/A";
-        const maxGpu = _pureAnimCount > 0 ? _pureAnimGpuMax.toFixed(2) : "N/A";
-        const avgDelta = _pureAnimDeltaCount > 0 ? (_pureAnimDeltaTotal / _pureAnimDeltaCount).toFixed(2) : "N/A";
-        const minDelta = _pureAnimDeltaCount > 0 ? _pureAnimDeltaMin.toFixed(2) : "N/A";
-        const maxDelta = _pureAnimDeltaCount > 0 ? _pureAnimDeltaMax.toFixed(2) : "N/A";
-        const avgAnimFps = _pureAnimDeltaCount > 0 ? (1e3 / (_pureAnimDeltaTotal / _pureAnimDeltaCount)).toFixed(1) : "N/A";
-        console.log(
-          `[scrub-perf] Scrub session ended:
-  - Total expected ticks: ${_scrubTotalExpectedTicks}
-  - Processed ticks: ${_scrubProcessedTicks}
-  - Lost/skipped ticks: ${_scrubLostTicks} (${lostPercent}%)
-  - Avg animation FPS: ${avgFps} (min: ${minFps}, max: ${maxFps} over ${_scrubIntervalFpsList.length} intervals)
-  - Intervals with zero animation frames: ${_scrubIntervalZeroFrameCount}
-  - Pure Animation Frame Stats (N = ${_pureAnimCount}):
-    - CPU execution: avg ${avgCpu}ms (min: ${minCpu}ms, max: ${maxCpu}ms)
-    - GPU flush/render: avg ${avgGpu}ms (min: ${minGpu}ms, max: ${maxGpu}ms)
-    - Inter-frame interval: avg ${avgDelta}ms (min: ${minDelta}ms, max: ${maxDelta}ms) -> equivalent to ${avgAnimFps} FPS`
-        );
-      }
-      timeController.checkTick(now);
-      timeController.beginFrame();
-      if (timeController.clampDisplayTime()) {
-        finishAllAnimations();
-        updateTimeUI();
-        writeTimeState();
-      }
-      const frameRealTime = /* @__PURE__ */ new Date();
-      const rate = timeController.currentRate;
-      const tickMs = rate !== null ? TICK_INTERVAL_MS : null;
-      const deltaSec = rate !== null ? displaySecondsPerTick(rate.unit) : 0;
-      const timeDir = timeController.currentDirection;
-      let renderMs = 0;
-      let animatingFaceCount = 0;
-      const isPureAnimFrame = isScrubbing && !willTick;
-      const animStart = isPureAnimFrame ? performance.now() : 0;
-      for (const face of faces) {
-        if (!face.enabled || !face.cachesBuilt) continue;
-        tickAnimations(face.handStates, face.env, now, tickMs, deltaSec, timeDir);
-        for (const part of face.watch.parts) {
-          if (part.type === "QDayNightRing" && part._masterOffsetAnim && part._masterOffsetAnim.animating) {
-            interpolateValue(part._masterOffsetAnim, now);
-            part._cachedAngles = void 0;
-          }
-        }
-        if (face.terminatorLeaves.length > 0) {
-          tickLeafAnimations(face.terminatorLeaves, face.env, now, tickMs, deltaSec);
-          const cacheIntervalMs = tickMs !== null ? tickMs : Math.min(...face.terminatorLeaves.map((l) => l.updateIntervalSec)) * 1e3;
-          if (now - face.lastTerminatorRebuild > cacheIntervalMs) {
-            buildStaticBlockCaches(
-              face.watch,
-              face.env,
-              face.canvas.width,
-              face.canvas.height,
-              face.scale,
-              face.images,
-              face.terminatorLeaves
-            );
-            face.lastTerminatorRebuild = now;
-          }
-        }
-        if (face.analemmaState) {
-          if (tickMs !== null) resetAnalemmaSchedule(face.analemmaState);
-          tickAnalemma(face.analemmaState, face.env, now);
-        }
-        const renderStart = performance.now();
-        renderFrame(face.ctx, face.watch, face.env, face.scale, face.images, face.terminatorLeaves, face.analemmaState);
-        renderMs += performance.now() - renderStart;
-        const ringAnimating = face.watch.parts.some(
-          (p) => p.type === "QDayNightRing" && (p._masterOffsetAnim?.animating || p._wedgeSlides?.some((s) => s.animating) || p._wedgeAngleAnims?.some((a) => a.animating))
-        );
-        const faceAnimating = anyAnimating(face.handStates) || anyLeafAnimating(face.terminatorLeaves) || ringAnimating;
-        if (faceAnimating) {
-          stillAnimating = true;
-          animatingFaceCount++;
-        }
-      }
-      if (isPureAnimFrame) {
-        const animJsEnd = performance.now();
-        const testFace = faces.find((f) => f.enabled && f.cachesBuilt);
-        if (testFace) {
-          testFace.ctx.getImageData(0, 0, 1, 1);
-        }
-        const animGpuEnd = performance.now();
-        const cpuTime = animJsEnd - animStart;
-        const gpuTime = animGpuEnd - animJsEnd;
-        _pureAnimCount++;
-        _pureAnimCpuTimeTotal += cpuTime;
-        if (cpuTime < _pureAnimCpuMin) _pureAnimCpuMin = cpuTime;
-        if (cpuTime > _pureAnimCpuMax) _pureAnimCpuMax = cpuTime;
-        _pureAnimGpuTimeTotal += gpuTime;
-        if (gpuTime < _pureAnimGpuMin) _pureAnimGpuMin = gpuTime;
-        if (gpuTime > _pureAnimGpuMax) _pureAnimGpuMax = gpuTime;
-        if (_lastAnimFrameTime !== null) {
-          const delta = now - _lastAnimFrameTime;
-          _pureAnimDeltaTotal += delta;
-          _pureAnimDeltaCount++;
-          if (delta < _pureAnimDeltaMin) _pureAnimDeltaMin = delta;
-          if (delta > _pureAnimDeltaMax) _pureAnimDeltaMax = delta;
-        }
-        _lastAnimFrameTime = now;
-      } else if (isScrubbing && willTick) {
-        _lastAnimFrameTime = null;
-      }
-      {
-        const sim = timeController.getDisplayTime();
-        timeBarDate.textContent = formatSimTime(sim);
-        if (!timeController.isRealTime) {
-          timeBarOffset.textContent = formatOffset(sim, frameRealTime);
-        }
-        const ms = sim.getTime();
-        const atLimit = ms <= MIN_DISPLAY_DATE_MS || ms >= MAX_DISPLAY_DATE_MS;
-        timeBar.classList.toggle("at-limit", atLimit);
-      }
-      timeController.endFrame();
-      if (timeController.needsContinuousRender || stillAnimating) {
-        rafId = requestAnimationFrame(frame);
-      } else {
-        armIdle();
-      }
-    }
-    function armIdle() {
-      if (idleTimerId !== null) return;
-      let earliest = Infinity;
-      for (const face of faces) {
-        if (!face.enabled || face.handStates.length === 0) continue;
-        const t = nextWakeupTime(face.handStates);
-        if (t < earliest) earliest = t;
-      }
-      if (earliest === Infinity) return;
-      const delay = Math.max(0, earliest - performance.now() - SCHEDULER_LOOKAHEAD_MS);
-      idleTimerId = setTimeout(onIdleWakeup, delay);
-    }
-    function onIdleWakeup() {
-      idleTimerId = null;
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(frame);
-    }
-    function startScheduler() {
-      stopScheduler();
-      rafId = requestAnimationFrame(frame);
-    }
-    let _dstTimerId = null;
-    function handleDstTransition() {
-      tzDeltaMs = computeTzDeltaMs(locationTimezone, rawGetNow());
-      for (const face of faces) {
-        if (!face.enabled) continue;
-        const oldKnockout = face.env._terraCityKnockout;
-        face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
-        restoreKyotoState(face);
-        if (oldKnockout) face.env._terraCityKnockout = oldKnockout;
-        invalidateDayNightCaches(face.watch);
-        if (face.terminatorLeaves.length > 0) {
-          updateLeafAngles(face.terminatorLeaves, face.env);
-          resetLeafSchedules(face.terminatorLeaves);
-          face.lastTerminatorRebuild = 0;
-        }
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-        const { canvas, watch, env, images, scale } = face;
-        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-        resetHandSchedules(face.handStates);
-      }
-      updateTimezoneDisplay();
-      stopScheduler();
-      startScheduler();
-    }
-    function scheduleDstRebuild() {
-      if (_dstTimerId !== null) {
-        clearTimeout(_dstTimerId);
-        _dstTimerId = null;
-      }
-      const displayNow = rawGetNow();
-      const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const isBackward = timeController.currentDirection === -1 && timeController.currentRate === null;
-      const findTransition = isBackward ? findPrevDstTransition : findNextDstTransition;
-      const locNext = locationTimezone ? findTransition(locationTimezone, displayNow) : null;
-      const browserNext = browserTz !== locationTimezone ? findTransition(browserTz, displayNow) : null;
-      let next = null;
-      if (locNext && browserNext) {
-        next = locNext < browserNext ? locNext : browserNext;
-      } else {
-        next = locNext || browserNext;
-      }
-      if (!next) {
-        return;
-      }
-      let delay = Math.abs(next.getTime() - displayNow.getTime());
-      const MAX_TIMEOUT = 2147483647;
-      if (delay > MAX_TIMEOUT) {
-        _dstTimerId = setTimeout(scheduleDstRebuild, MAX_TIMEOUT);
-        return;
-      }
-      delay = Math.max(0, delay) + 100;
-      _dstTimerId = setTimeout(() => {
-        _dstTimerId = null;
-        handleDstTransition();
-        scheduleDstRebuild();
-      }, delay);
-    }
-    let _cachedBrowserTzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    setInterval(() => {
-      const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (currentTz === _cachedBrowserTzName) return;
-      console.log(`[tz-detect] Browser timezone changed: ${_cachedBrowserTzName} \u2192 ${currentTz}`);
-      _cachedBrowserTzName = currentTz;
-      handleDstTransition();
-      scheduleDstRebuild();
-    }, 1e3);
-    const GAP_PX = 12;
-    const PADDING_PX = 12;
-    const POPOVER_GAP = 8;
-    let resizeDebounceTimer = null;
-    let lastContainerW = 0;
-    let lastContainerH = 0;
-    let wasShifted = false;
-    let wasAstroTab = false;
-    function computeFaceCenters(nFaces, gridCols, gridRows, size, containerW, containerH, offsetAdjustX = 0, offsetAdjustY = 0) {
-      const cellStep = size + GAP_PX;
-      const remainder = nFaces - gridCols * (gridRows - 1);
-      const canNestle = gridRows > 1 && remainder !== gridCols && (gridCols - remainder) % 2 === 1;
-      const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
-      const gridW = gridCols * size + (gridCols - 1) * GAP_PX;
-      const lastRowY = gridRows === 1 ? 0 : nestledStep + (gridRows - 2) * cellStep;
-      const totalH = lastRowY + size;
-      const offsetX = (containerW - gridW) / 2 + offsetAdjustX;
-      const offsetY = (containerH - totalH) / 2 + offsetAdjustY;
-      const centers = [];
-      for (let i = 0; i < nFaces; i++) {
-        let row, colIdx, itemsInRow;
-        if (i < remainder) {
-          row = 0;
-          colIdx = i;
-          itemsInRow = remainder;
-        } else {
-          const j = i - remainder;
-          row = 1 + Math.floor(j / gridCols);
-          colIdx = j % gridCols;
-          itemsInRow = gridCols;
-        }
-        const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
-        const rowOffsetX = (gridW - rowW) / 2;
-        const x = offsetX + rowOffsetX + colIdx * cellStep;
-        const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
-        const y = offsetY + rowY;
-        centers.push({ cx: x + size / 2, cy: y + size / 2 });
-      }
-      return centers;
-    }
-    function anyFaceOverlapsRect(centers, radius, rectLeft, rectTop, rectRight, rectBottom) {
-      for (const { cx, cy } of centers) {
-        const nearX = Math.max(rectLeft, Math.min(cx, rectRight));
-        const nearY = Math.max(rectTop, Math.min(cy, rectBottom));
-        const dx = cx - nearX;
-        const dy = cy - nearY;
-        if (dx * dx + dy * dy < (radius + POPOVER_GAP) * (radius + POPOVER_GAP)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    function onGridResize(W, H) {
-      lastContainerW = W;
-      lastContainerH = H;
-      const result = optimizeGrid(faces.length, W, H, GAP_PX, PADDING_PX);
-      if (result.size <= 0) return;
-      let size = result.size;
-      let gridShiftX = 0, gridShiftY = 0;
-      let useTopLeftAlign = false;
-      const hexColX = (col, remainder, nCols, cellStep, hasNestle) => {
-        if (!hasNestle || col < remainder) {
-          return col * cellStep;
-        }
-        const hexStep = cellStep * Math.sqrt(3) / 2;
-        return (remainder - 1) * cellStep + hexStep + (col - remainder) * cellStep;
-      };
-      if (popoverOpen) {
-        const gridRect = grid.getBoundingClientRect();
-        const popRect = timePopover.getBoundingClientRect();
-        const upperEl = document.getElementById("tp-upper");
-        const upperRect = upperEl.getBoundingClientRect();
-        const pLeft = upperRect.left - gridRect.left;
-        const pTop = popRect.top - gridRect.top;
-        const pRight = upperRect.right - gridRect.left;
-        const pBottom = popRect.bottom - gridRect.top;
-        const exclusionRects = [
-          { left: pLeft, top: pTop, right: pRight, bottom: pBottom }
-        ];
-        const lowerEl = document.getElementById("tp-lower");
-        const astroActive = lowerEl && !document.getElementById("tp-tab-astro")?.classList.contains("tp-pane-hidden");
-        if (astroActive && lowerEl) {
-          const lowerRect = lowerEl.getBoundingClientRect();
-          exclusionRects.push({
-            left: lowerRect.left - gridRect.left,
-            top: lowerRect.top - gridRect.top,
-            right: lowerRect.right - gridRect.left,
-            bottom: lowerRect.bottom - gridRect.top
-          });
-        }
-        const circleOverlapsExclusion = (cx, cy, r) => {
-          for (const rect of exclusionRects) {
-            const nearX = Math.max(rect.left, Math.min(cx, rect.right));
-            const nearY = Math.max(rect.top, Math.min(cy, rect.bottom));
-            const dx = cx - nearX;
-            const dy = cy - nearY;
-            if (dx * dx + dy * dy < (r + POPOVER_GAP) * (r + POPOVER_GAP)) {
-              return true;
-            }
-          }
-          return false;
-        };
-        const configFits = (cols2, s) => {
-          const rows2 = Math.ceil(faces.length / cols2);
-          const cellStep = s + GAP_PX;
-          const remainder = faces.length - cols2 * (rows2 - 1);
-          const r = s / 2;
-          const hasNestle = remainder > 0 && remainder < cols2;
-          const lastColX = hexColX(cols2 - 1, remainder, cols2, cellStep, hasNestle);
-          const gridW = lastColX + s + 2 * PADDING_PX;
-          const gridH = (rows2 - 1) * cellStep + s + 2 * PADDING_PX;
-          if (gridW > W || gridH > H) return false;
-          for (let i = 0; i < faces.length; i++) {
-            const row = Math.floor(i / cols2);
-            const col = i % cols2;
-            const isShortCol = col >= remainder;
-            const ny = isShortCol && hasNestle ? cellStep / 2 : 0;
-            const cx = PADDING_PX + hexColX(col, remainder, cols2, cellStep, hasNestle) + r;
-            const cy = PADDING_PX + row * cellStep + ny + r;
-            if (circleOverlapsExclusion(cx, cy, r)) {
-              return false;
-            }
-          }
-          return true;
-        };
-        const centers = computeFaceCenters(
-          faces.length,
-          result.cols,
-          result.rows,
-          size,
-          W,
-          H
-        );
-        let hasOverlap = false;
-        for (const { cx, cy } of centers) {
-          if (circleOverlapsExclusion(cx, cy, size / 2)) {
-            hasOverlap = true;
-            break;
-          }
-        }
-        if (hasOverlap) {
-          let lo = 0, hi = Math.max(W, H);
-          for (let iter = 0; iter < 25; iter++) {
-            const mid = Math.floor((lo + hi) / 2);
-            if (mid <= 0) break;
-            let anyWorks = false;
-            for (let c = 1; c <= faces.length; c++) {
-              if (configFits(c, mid)) {
-                anyWorks = true;
-                break;
-              }
-            }
-            if (anyWorks) {
-              lo = mid;
-            } else {
-              hi = mid;
-            }
-          }
-          size = lo;
-          let bestConfig = result.cols;
-          for (let c = 1; c <= faces.length; c++) {
-            if (configFits(c, size)) {
-              bestConfig = c;
-              break;
-            }
-          }
-          result.cols = bestConfig;
-          result.rows = Math.ceil(faces.length / bestConfig);
-          useTopLeftAlign = true;
-          if (size <= 0) return;
-          const cellStep = size + GAP_PX;
-          const remainder = faces.length - bestConfig * (result.rows - 1);
-          const hasNestle = remainder > 0 && remainder < bestConfig;
-          const lastColX = hexColX(bestConfig - 1, remainder, bestConfig, cellStep, hasNestle);
-          const gridW = lastColX + size;
-          const gridH = (result.rows - 1) * cellStep + size;
-          const centeredX = (W - gridW) / 2 - PADDING_PX;
-          const centeredY = (H - gridH) / 2 - PADDING_PX;
-          const r = size / 2;
-          const shiftFits = (dx, dy) => {
-            for (let i = 0; i < faces.length; i++) {
-              const row = Math.floor(i / bestConfig);
-              const col = i % bestConfig;
-              const isShort = col >= remainder;
-              const cx = PADDING_PX + dx + hexColX(col, remainder, bestConfig, cellStep, hasNestle) + r;
-              const cy = PADDING_PX + dy + row * cellStep + (isShort && hasNestle ? cellStep / 2 : 0) + r;
-              if (circleOverlapsExclusion(cx, cy, r)) {
-                return false;
-              }
-            }
-            return true;
-          };
-          let sLo = 0, sHi = Math.max(0, centeredX);
-          for (let iter = 0; iter < 20; iter++) {
-            const sMid = (sLo + sHi) / 2;
-            if (shiftFits(sMid, 0)) {
-              sLo = sMid;
-            } else {
-              sHi = sMid;
-            }
-          }
-          gridShiftX = sLo;
-          let vLo = 0, vHi = Math.max(0, centeredY);
-          for (let iter = 0; iter < 20; iter++) {
-            const vMid = (vLo + vHi) / 2;
-            if (shiftFits(gridShiftX, vMid)) {
-              vLo = vMid;
-            } else {
-              vHi = vMid;
-            }
-          }
-          gridShiftY = vLo;
-        }
-      }
-      const dpr = window.devicePixelRatio || 1;
-      const newPhys = Math.round(size * dpr);
-      const isAstroTab = popoverOpen && !document.getElementById("tp-tab-astro")?.classList.contains("tp-pane-hidden");
-      const positionChanged = useTopLeftAlign !== wasShifted || isAstroTab !== wasAstroTab;
-      if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
-      wasShifted = useTopLeftAlign;
-      wasAstroTab = isAstroTab;
-      stopScheduler();
-      cols = result.cols;
-      rows = result.rows;
-      if (useTopLeftAlign) {
-        const cellStep = size + GAP_PX;
-        const remainder = faces.length - cols * (rows - 1);
-        const hasNestle = remainder > 0 && remainder < cols;
-        for (let i = 0; i < faces.length; i++) {
-          const row = Math.floor(i / cols);
-          const col = i % cols;
-          const isShortCol = col >= remainder;
-          const x = PADDING_PX + gridShiftX + hexColX(col, remainder, cols, cellStep, hasNestle);
-          const y = PADDING_PX + gridShiftY + row * cellStep + (isShortCol && hasNestle ? cellStep / 2 : 0);
-          const cell = faces[i].canvas.parentElement;
-          cell.style.position = "absolute";
-          cell.style.left = `${x}px`;
-          cell.style.top = `${y}px`;
-          cell.style.width = `${size}px`;
-          cell.style.height = `${size}px`;
-        }
-      } else {
-        const cellStep = size + GAP_PX;
-        const remainder = faces.length - cols * (rows - 1);
-        const canNestle = rows > 1 && remainder !== cols && (cols - remainder) % 2 === 1;
-        const nestledStep = canNestle ? cellStep * Math.sqrt(3) / 2 : cellStep;
-        const gridW = cols * size + (cols - 1) * GAP_PX;
-        const lastRowY = rows === 1 ? 0 : nestledStep + (rows - 2) * cellStep;
-        const totalH = lastRowY + size;
-        const offsetX = (W - gridW) / 2 + gridShiftX;
-        const offsetY = (H - totalH) / 2 + gridShiftY;
-        for (let i = 0; i < faces.length; i++) {
-          let row, colIdx, itemsInRow;
-          if (i < remainder) {
-            row = 0;
-            colIdx = i;
-            itemsInRow = remainder;
-          } else {
-            const j = i - remainder;
-            row = 1 + Math.floor(j / cols);
-            colIdx = j % cols;
-            itemsInRow = cols;
-          }
-          const rowW = itemsInRow * size + (itemsInRow - 1) * GAP_PX;
-          const rowOffsetX = (gridW - rowW) / 2;
-          const x = offsetX + rowOffsetX + colIdx * cellStep;
-          const rowY = row === 0 ? 0 : nestledStep + (row - 1) * cellStep;
-          const y = offsetY + rowY;
-          const cell = faces[i].canvas.parentElement;
-          cell.style.position = "absolute";
-          cell.style.left = `${x}px`;
-          cell.style.top = `${y}px`;
-          cell.style.width = `${size}px`;
-          cell.style.height = `${size}px`;
-        }
-      }
-      for (const face of faces) {
-        applySize(face, size);
-        face.cachesBuilt = false;
-      }
-      buildAllCachesSequentially(faces.filter((f) => f.enabled), () => {
-        startScheduler();
-        scheduleDstRebuild();
-      });
-    }
-    function triggerManualResize() {
-      const appEl = grid.parentElement;
-      const W = appEl.clientWidth;
-      const totalH = appEl.clientHeight;
-      const locPanelH = document.getElementById("location-panel")?.offsetHeight ?? 0;
-      const tbH = document.getElementById("time-bar")?.offsetHeight ?? 0;
-      const psH = document.getElementById("planet-selector")?.offsetHeight ?? 0;
-      const ccH = document.getElementById("change-cities-btn")?.offsetHeight ?? 0;
-      const vtH = document.getElementById("vienna-noon-toggle")?.offsetHeight ?? 0;
-      const ktH = document.getElementById("kyoto-mode-toggle")?.offsetHeight ?? 0;
-      const khH = document.getElementById("kyoto-hand-toggle")?.offsetHeight ?? 0;
-      onGridResize(W, totalH - locPanelH - tbH - psH - ccH - vtH - ktH - khH);
-    }
-    const resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width } = entry.contentRect;
-      if (isEmbedMode) {
-        if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
-        resizeDebounceTimer = setTimeout(() => {
-          resizeDebounceTimer = null;
-          onGridResize(width, entry.contentRect.height);
-        }, 150);
-      } else {
-        const locationPanel = document.getElementById("location-panel");
-        const timeBarEl = document.getElementById("time-bar");
-        const planetSelectorEl = document.getElementById("planet-selector");
-        const changeCitiesBtnEl = document.getElementById("change-cities-btn");
-        const viennaToggleEl = document.getElementById("vienna-noon-toggle");
-        const panelH = locationPanel ? locationPanel.offsetHeight : 0;
-        const timeBarH = timeBarEl ? timeBarEl.offsetHeight : 0;
-        const planetSelH = planetSelectorEl ? planetSelectorEl.offsetHeight : 0;
-        const changeCitiesH = changeCitiesBtnEl ? changeCitiesBtnEl.offsetHeight : 0;
-        const viennaToggleH = viennaToggleEl ? viennaToggleEl.offsetHeight : 0;
-        const kyotoToggleEl = document.getElementById("kyoto-mode-toggle");
-        const kyotoToggleH = kyotoToggleEl ? kyotoToggleEl.offsetHeight : 0;
-        const kyotoHandToggleEl = document.getElementById("kyoto-hand-toggle");
-        const kyotoHandToggleH = kyotoHandToggleEl ? kyotoHandToggleEl.offsetHeight : 0;
-        const height = entry.contentRect.height - panelH - timeBarH - planetSelH - changeCitiesH - viennaToggleH - kyotoToggleH - kyotoHandToggleH;
-        if (resizeDebounceTimer !== null) clearTimeout(resizeDebounceTimer);
-        resizeDebounceTimer = setTimeout(() => {
-          resizeDebounceTimer = null;
-          onGridResize(width, height);
-        }, 150);
-      }
-    });
-    resizeObserver.observe(grid.parentElement);
-    function rebuildAllForLocation(newLat, newLon) {
-      lat = newLat;
-      lon = newLon;
-      for (const face of faces) {
-        if (!face.enabled) continue;
-        if (face.watch.worldTimeRing) {
-          const slotResult = buildSlotOverrides(face.watch);
-          face.terraSlotOverrides = slotResult?.overrides;
-          face.globalLocationSlot = slotResult?.globalLocationSlot;
-        }
-        if (face.watch.worldTimeSubdials && face.terraSlotOverrides) {
-          let obsName = locationSource;
-          if (!obsName && isCityDataLoaded() && (newLat !== 0 || newLon !== 0)) {
-            const closest = findClosestCity(newLat, newLon);
-            if (closest) obsName = closest.shortLabel;
-          }
-          face.terraSlotOverrides[1] = {
-            cityName: obsName || "Observer",
-            olsonId: locationTimezone || "",
-            lat: newLat,
-            lon: newLon
-          };
-        }
-        face.env = createWatchEnvironment(face.watch, newLat, newLon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
-        restoreKyotoState(face);
-        if (face.terminatorLeaves.length > 0) {
-          updateLeafAngles(face.terminatorLeaves, face.env);
-          resetLeafSchedules(face.terminatorLeaves);
-          face.lastTerminatorRebuild = 0;
-        }
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-        invalidateDayNightCaches(face.watch);
-        const { canvas, watch, env, images, scale } = face;
-        buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-        for (const hs of face.handStates) {
-          hs.nextUpdateTime = 0;
-        }
-      }
-      updateLocationDisplay();
-      updateTimezoneDisplay();
-      requestAnimationFrame(() => {
-        triggerManualResize();
-      });
-      stopScheduler();
-      startScheduler();
-    }
+    let needsPrompt2 = config.needsPrompt ?? false;
+    let geoPermission = config.geoPermission ?? "unknown";
     const browserBtnLabel = lpUseBrowser.textContent || "Use device location via browser";
-    function showLocationPrompt(blur) {
-      locationPrompt.style.display = "";
-      if (blur) grid.classList.add("blurred");
-      lpLatInput.value = lat !== 0 || lon !== 0 ? lat.toFixed(3) : "";
-      lpLonInput.value = lat !== 0 || lon !== 0 ? lon.toFixed(3) : "";
-      if (lpCityInput) {
-        lpCityInput.value = "";
-      }
-      if (lpCityResults) {
-        lpCityResults.innerHTML = "";
-      }
-      setTimeout(() => lpCityInput?.focus(), 50);
-      const hasLocation = lat !== 0 || lon !== 0;
-      if (hasLocation) {
-        lpStatusSection.classList.add("visible");
-        lpNoLocation.classList.add("hidden");
-        updateMapPreview(lat, lon);
-      } else {
-        lpStatusSection.classList.remove("visible");
-        lpNoLocation.classList.remove("hidden");
-        if (needsPrompt) {
-          lpNoLocationHint.style.display = "";
-          lpNoLocationDefault.style.display = "none";
-        } else {
-          lpNoLocationHint.style.display = "none";
-          lpNoLocationDefault.style.display = "";
-        }
-      }
-      lpDialogFooter.classList.toggle("visible", !needsPrompt || hasLocation);
-      const btn = lpUseBrowser;
-      const isFileUrl = window.location.protocol === "file:";
-      const deniedTooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
-      if (geoPermission === "denied") {
-        btn.disabled = true;
-        btn.dataset.tooltip = deniedTooltip;
-        btn.textContent = browserBtnLabel + " (unavailable)";
-      } else {
-        btn.disabled = false;
-        delete btn.dataset.tooltip;
-        btn.textContent = browserBtnLabel;
-      }
-      const coordsBtn = lpUseCoords;
-      function validateCoordInputs() {
-        const validLat = !isNaN(parseFloat(lpLatInput.value));
-        const validLon = !isNaN(parseFloat(lpLonInput.value));
-        coordsBtn.disabled = !(validLat && validLon);
-      }
-      validateCoordInputs();
-      lpLatInput.oninput = validateCoordInputs;
-      lpLonInput.oninput = validateCoordInputs;
-    }
-    function dismissLocationPrompt() {
-      locationPrompt.style.display = "none";
-      grid.classList.remove("blurred");
-    }
-    const isFileProtocol = window.location.protocol === "file:";
-    function useImperial() {
-      const locale = navigator.language || "en-US";
-      const region = locale.split("-")[1]?.toUpperCase() || "";
-      return ["US", "GB", "MM", "LR"].includes(region);
-    }
-    function haversineKm(lat1, lon1, lat2, lon2) {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-    function compassBearing(lat1, lon1, lat2, lon2) {
-      const toRad = Math.PI / 180;
-      const dLon = (lon2 - lon1) * toRad;
-      const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
-      const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) - Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
-      let bearing = Math.atan2(y, x) * 180 / Math.PI;
-      bearing = (bearing + 360) % 360;
-      const dirs = [
-        "N",
-        "NNE",
-        "NE",
-        "ENE",
-        "E",
-        "ESE",
-        "SE",
-        "SSE",
-        "S",
-        "SSW",
-        "SW",
-        "WSW",
-        "W",
-        "WNW",
-        "NW",
-        "NNW"
-      ];
-      return dirs[Math.round(bearing / 22.5) % 16];
-    }
+    loadCityData().catch(() => {
+    });
     function buildLocationNameHTML() {
       if (locationSourceType === "url-city" && locationFullLabel) {
         return `${locationFullLabel} <span class="lp-loc-source">(from cities database)</span>`;
       }
       if (locationSourceType === "browser" || locationSourceType === "manual") {
-        const closest = findClosestCity(lat, lon);
-        const sourceLabel2 = locationSourceType === "browser" ? "(from browser)" : "(manually entered)";
+        const closest = findClosestCity(currentLat, currentLon);
+        const sourceLabel = locationSourceType === "browser" ? "(from browser)" : "(manually entered)";
         if (closest) {
-          const distKm = haversineKm(lat, lon, closest.lat, closest.lon);
+          const distKm = haversineKm(currentLat, currentLon, closest.lat, closest.lon);
           const THRESHOLD_KM = 16;
           if (distKm > THRESHOLD_KM) {
-            const dir = compassBearing(closest.lat, closest.lon, lat, lon);
+            const dir = compassBearing(closest.lat, closest.lon, currentLat, currentLon);
             let distStr;
             if (useImperial()) {
               const mi = Math.round(distKm * 0.621371);
@@ -19695,13 +12952,13 @@
             } else {
               distStr = `${Math.round(distKm)}\xA0km`;
             }
-            return `${distStr} ${dir} of ${closest.label} <span class="lp-loc-source">${sourceLabel2}</span>`;
+            return `${distStr} ${dir} of ${closest.label} <span class="lp-loc-source">${sourceLabel}</span>`;
           }
-          return `${closest.label} <span class="lp-loc-source">${sourceLabel2}</span>`;
+          return `${closest.label} <span class="lp-loc-source">${sourceLabel}</span>`;
         }
-        return `${lat.toFixed(3)}, ${lon.toFixed(3)} <span class="lp-loc-source">${sourceLabel2}</span>`;
+        return `${currentLat.toFixed(3)}, ${currentLon.toFixed(3)} <span class="lp-loc-source">${sourceLabel}</span>`;
       }
-      return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      return `${currentLat.toFixed(3)}, ${currentLon.toFixed(3)}`;
     }
     function updateMapPreview(mapLat, mapLon) {
       lpStatusSection.classList.add("visible");
@@ -19724,86 +12981,123 @@
       }
       lpLocationName.innerHTML = buildLocationNameHTML();
     }
-    function applyLocation(newLat, newLon, source, fullLabel, sourceType, writeToUrl, cityTz = null) {
+    function applyLocation(newLat, newLon, source, fullLabel, sourceType, cityTz = null) {
+      currentLat = newLat;
+      currentLon = newLon;
       locationSource = source;
       locationFullLabel = fullLabel;
       locationSourceType = sourceType;
-      locationTimezone = resolveTimezone(newLat, newLon, cityTz);
-      tzDeltaMs = computeTzDeltaMs(locationTimezone);
-      rebuildAllForLocation(newLat, newLon);
-      scheduleDstRebuild();
-      if (writeToUrl) {
-        writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
-      }
+      const timezone = resolveTimezone(newLat, newLon, cityTz);
+      config.onLocationChange({
+        lat: newLat,
+        lon: newLon,
+        source,
+        fullLabel,
+        sourceType,
+        timezone,
+        cityTimezone: cityTz
+      });
       updateMapPreview(newLat, newLon);
       lpDialogFooter.classList.add("visible");
-      needsPrompt = false;
+      needsPrompt2 = false;
+    }
+    function showDialog() {
+      locationPrompt.style.display = "";
+      config.onShow?.();
+      lpLatInput.value = currentLat !== 0 || currentLon !== 0 ? currentLat.toFixed(3) : "";
+      lpLonInput.value = currentLat !== 0 || currentLon !== 0 ? currentLon.toFixed(3) : "";
+      if (lpCityInput) {
+        lpCityInput.value = "";
+      }
+      if (lpCityResults) {
+        lpCityResults.innerHTML = "";
+      }
+      setTimeout(() => lpCityInput?.focus(), 50);
+      const hasLocation = currentLat !== 0 || currentLon !== 0;
+      if (hasLocation) {
+        lpStatusSection.classList.add("visible");
+        lpNoLocation.classList.add("hidden");
+        updateMapPreview(currentLat, currentLon);
+      } else {
+        lpStatusSection.classList.remove("visible");
+        lpNoLocation.classList.remove("hidden");
+        if (needsPrompt2) {
+          lpNoLocationHint.style.display = "";
+          lpNoLocationDefault.style.display = "none";
+        } else {
+          lpNoLocationHint.style.display = "none";
+          lpNoLocationDefault.style.display = "";
+        }
+      }
+      lpDialogFooter.classList.toggle("visible", !needsPrompt2 || hasLocation);
+      const btn = lpUseBrowser;
+      const deniedTooltip = isFileProtocol ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
+      if (geoPermission === "denied") {
+        btn.disabled = true;
+        btn.dataset.tooltip = deniedTooltip;
+        btn.textContent = browserBtnLabel + " (unavailable)";
+      } else {
+        btn.disabled = false;
+        delete btn.dataset.tooltip;
+        btn.textContent = browserBtnLabel;
+      }
+      const coordsBtn = lpUseCoords;
+      function validateCoordInputs() {
+        const validLat = !isNaN(parseFloat(lpLatInput.value));
+        const validLon = !isNaN(parseFloat(lpLonInput.value));
+        coordsBtn.disabled = !(validLat && validLon);
+      }
+      validateCoordInputs();
+      lpLatInput.oninput = validateCoordInputs;
+      lpLonInput.oninput = validateCoordInputs;
+    }
+    function dismissDialog() {
+      locationPrompt.style.display = "none";
+      config.onDismiss?.();
+    }
+    function canDismiss() {
+      return !needsPrompt2 || (currentLat !== 0 || currentLon !== 0);
     }
     lpUseCoords.addEventListener("click", () => {
       const newLat = parseFloat(lpLatInput.value);
       const newLon = parseFloat(lpLonInput.value);
       if (isNaN(newLat) || isNaN(newLon)) return;
-      applyLocation(newLat, newLon, "", "", "manual", true);
+      applyLocation(newLat, newLon, "", "", "manual");
     });
     lpUseBrowser.addEventListener("click", async () => {
       lpUseBrowser.textContent = "Requesting\u2026";
       const result = await requestBrowserLocation();
       if (result.status === "success") {
         lpUseBrowser.textContent = browserBtnLabel;
-        applyLocation(result.lat, result.lon, "", "", "browser", false, null);
-        writeUrlState({ bloc: true, lat: null, lon: null, city: null });
+        geoPermission = "granted";
+        applyLocation(result.lat, result.lon, "", "", "browser");
       } else if (result.status === "denied") {
         geoPermission = "denied";
         const btn = lpUseBrowser;
         btn.disabled = true;
         btn.textContent = browserBtnLabel + " (unavailable)";
-        const isFileUrl = window.location.protocol === "file:";
-        btn.dataset.tooltip = isFileUrl ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
+        btn.dataset.tooltip = isFileProtocol ? "Not all browsers support location access from file:// URLs" : "Browser location was not granted \u2014 check your browser settings to allow it";
       } else {
         lpUseBrowser.textContent = browserBtnLabel;
       }
     });
-    setLocationBtn.addEventListener("click", () => {
-      showLocationPrompt(false);
-    });
     locationPrompt.querySelector(".lp-backdrop").addEventListener("click", () => {
-      if (!needsPrompt || (lat !== 0 || lon !== 0)) {
-        dismissLocationPrompt();
-      }
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      const confirmOverlay = document.getElementById("tc-confirm-overlay");
-      if (confirmOverlay && confirmOverlay.style.display !== "none") {
-        confirmOverlay.style.display = "none";
-        return;
-      }
-      const tcDialog = document.getElementById("terra-city-dialog");
-      if (tcDialog && tcDialog.style.display !== "none") {
-        tcDialog.style.display = "none";
-        grid.classList.remove("blurred");
-        return;
-      }
-      if (infoOverlay && infoOverlay.classList.contains("visible")) {
-        infoOverlay.classList.remove("visible");
-        return;
-      }
-      if (popoverOpen) {
-        hidePopover();
-        return;
-      }
-      if (locationPrompt.style.display !== "none") {
-        if (!needsPrompt || (lat !== 0 || lon !== 0)) {
-          dismissLocationPrompt();
-        }
-        return;
-      }
+      if (canDismiss()) dismissDialog();
     });
     lpDoneBtn.addEventListener("click", () => {
-      dismissLocationPrompt();
+      dismissDialog();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && locationPrompt.style.display !== "none") {
+        if (canDismiss()) {
+          dismissDialog();
+          e.stopPropagation();
+        }
+      }
     });
     let citySearchDebounce = null;
     let cityDataLoading = false;
+    let cityDataFailed = false;
     let selectedCityIndex = -1;
     function renderCityResults(results) {
       lpCityResults.innerHTML = "";
@@ -19819,7 +13113,7 @@
           div.textContent = r.label;
         }
         div.addEventListener("click", () => {
-          applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
+          applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", r.timezone);
           lpCityInput.value = "";
           lpCityResults.innerHTML = "";
           lpLatInput.value = r.lat.toFixed(3);
@@ -19828,7 +13122,6 @@
         lpCityResults.appendChild(div);
       }
     }
-    let cityDataFailed = false;
     async function onCityInput() {
       try {
         let query = lpCityInput.value.trim();
@@ -19902,1616 +13195,315 @@
         lpCityInput.value = "";
       }
     });
-    const timeBar = document.getElementById("time-bar");
-    const timeBarLabel = document.getElementById("time-bar-label");
-    const timeBarDate = document.getElementById("time-bar-date");
-    const timeBarOffset = document.getElementById("time-bar-offset");
-    const timeBarRate = document.getElementById("time-bar-rate");
-    const timeBarNow = document.getElementById("time-bar-now");
-    const timePopover = document.getElementById("time-popover");
-    const tpRateLabel = document.getElementById("tp-rate-label");
-    const tpTransport = document.getElementById("tp-transport");
-    const tpClose = document.getElementById("tp-close");
-    function formatTimezoneDisplay(olsonId, referenceDate) {
-      if (!olsonId) return "";
+    return {
+      show: showDialog,
+      dismiss: dismissDialog,
+      updateState(lat2, lon2, sourceType, source, fullLabel) {
+        currentLat = lat2;
+        currentLon = lon2;
+        locationSourceType = sourceType;
+        locationSource = source;
+        locationFullLabel = fullLabel;
+      },
+      setGeoPermission(state) {
+        geoPermission = state;
+      },
+      setNeedsPrompt(needs) {
+        needsPrompt2 = needs;
+      }
+    };
+  }
+
+  // src/inspector/inspector-entry.ts
+  var timeDisplay = document.getElementById("time-display");
+  var dateDisplay = document.getElementById("date-display");
+  var locationName = document.getElementById("location-name");
+  var locationDetail = document.getElementById("location-detail");
+  var setLocationBtn = document.getElementById("set-location-btn");
+  var sunriseValue = document.getElementById("sunrise-value");
+  var sunsetValue = document.getElementById("sunset-value");
+  var exprInput = document.getElementById("expr-input");
+  var exprResults = document.getElementById("expr-results");
+  var exprNumber = document.getElementById("expr-number");
+  var exprAngle = document.getElementById("expr-angle");
+  var exprDate = document.getElementById("expr-date");
+  var exprError = document.getElementById("expr-error");
+  var tzDisplay = document.getElementById("tz-display");
+  var urlState = readUrlState();
+  var hasUrlLocation = urlState.lat !== null && urlState.lon !== null;
+  var lat = urlState.lat ?? 0;
+  var lon = urlState.lon ?? 0;
+  var locationTimezone = urlState.tz || void 0;
+  var needsPrompt = !hasUrlLocation && !urlState.bloc;
+  if (!locationTimezone && hasUrlLocation) {
+    locationTimezone = resolveTimezone(lat, lon, null);
+  }
+  var tzDeltaMs = computeTzDeltaMs(locationTimezone);
+  function formatTimezoneInfo(olsonId, referenceDate) {
+    if (!olsonId) return "";
+    try {
+      const ref = referenceDate || /* @__PURE__ */ new Date();
+      const shortFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: olsonId,
+        timeZoneName: "short"
+      });
+      const shortParts = shortFmt.formatToParts(ref);
+      const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
+      const longFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: olsonId,
+        timeZoneName: "longOffset"
+      });
+      const longParts = longFmt.formatToParts(ref);
+      const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
+      let utcStr = offsetStr.replace("GMT", "UTC");
+      utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
+      return `(${abbr})\xA0${utcStr}`;
+    } catch {
+      return "";
+    }
+  }
+  function updateLocationDisplay() {
+    if (lat === 0 && lon === 0 && needsPrompt) {
+      locationName.textContent = "No location set";
+      locationDetail.textContent = "Use the Set button to choose a location";
+      return;
+    }
+    const cityName = urlState.city || null;
+    if (cityName) {
+      locationName.textContent = cityName;
+    } else {
+      const closest = findClosestCity(lat, lon);
+      if (closest) {
+        locationName.textContent = closest.shortLabel;
+      } else {
+        locationName.textContent = `${lat.toFixed(3)}\xB0, ${lon.toFixed(3)}\xB0`;
+      }
+    }
+    const tzInfo = formatTimezoneInfo(locationTimezone);
+    const tzDisplayStr = locationTimezone || "Browser TZ";
+    const detail = tzInfo ? `${lat.toFixed(3)}\xB0 ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(3)}\xB0 ${lon >= 0 ? "E" : "W"}  \xB7  ${tzDisplayStr} ${tzInfo}` : `${lat.toFixed(3)}\xB0 ${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(3)}\xB0 ${lon >= 0 ? "E" : "W"}  \xB7  ${tzDisplayStr}`;
+    locationDetail.textContent = detail;
+  }
+  updateLocationDisplay();
+  var locationDialog = initLocationDialog({
+    initialLat: lat,
+    initialLon: lon,
+    needsPrompt,
+    onLocationChange: (info) => {
+      lat = info.lat;
+      lon = info.lon;
+      locationTimezone = info.timezone;
+      tzDeltaMs = computeTzDeltaMs(locationTimezone);
+      needsPrompt = false;
+      if (info.sourceType === "browser") {
+        writeUrlState({ bloc: true, lat: null, lon: null, city: null, tz: null });
+      } else {
+        writeUrlState({ lat: info.lat, lon: info.lon, city: info.source || null, tz: info.timezone || null });
+      }
+      env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+      updateLocationDisplay();
+      lastSunUpdateMinute = -1;
+      updateSunData();
+      updateTimeDisplay();
+    }
+  });
+  if (locationDialog) {
+    setLocationBtn.addEventListener("click", () => {
+      locationDialog.show();
+    });
+    if (needsPrompt) {
+      locationDialog.show();
+    }
+    if (urlState.bloc && !hasUrlLocation) {
+      requestBrowserLocation(1e4).then((result) => {
+        if (result.status === "success") {
+          const tz = resolveTimezone(result.lat, result.lon, null);
+          lat = result.lat;
+          lon = result.lon;
+          locationTimezone = tz;
+          tzDeltaMs = computeTzDeltaMs(locationTimezone);
+          needsPrompt = false;
+          locationDialog.updateState(lat, lon, "browser", "", "");
+          env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+          updateLocationDisplay();
+          lastSunUpdateMinute = -1;
+          updateSunData();
+          updateTimeDisplay();
+        } else {
+          needsPrompt = true;
+          locationDialog.setNeedsPrompt(true);
+          if (result.status === "denied") {
+            locationDialog.setGeoPermission("denied");
+          }
+          locationDialog.show();
+        }
+      });
+    }
+  }
+  var getNow = () => /* @__PURE__ */ new Date();
+  var env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+  function formatTime(date) {
+    const h = date.getHours().toString().padStart(2, "0");
+    const m = date.getMinutes().toString().padStart(2, "0");
+    const s = date.getSeconds().toString().padStart(2, "0");
+    return `${h}:${m}:${s}`;
+  }
+  function formatDate(date) {
+    const options = {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: locationTimezone
+    };
+    return date.toLocaleDateString("en-US", options);
+  }
+  function updateTimeDisplay() {
+    const now = getNow();
+    const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
+    timeDisplay.textContent = formatTime(shifted);
+    dateDisplay.textContent = formatDate(now);
+    tzDisplay.textContent = formatTimezoneInfo(locationTimezone, now);
+  }
+  var EPOCH_2001_MS = 9783072e5;
+  function findTodayRiseSet(riseNotSet) {
+    const now = getNow();
+    const di = dateToDateInterval(now);
+    const observerLatRad = lat * Math.PI / 180;
+    const observerLonRad = lon * Math.PI / 180;
+    const tzOffsetSeconds = (/* @__PURE__ */ new Date()).getTimezoneOffset() * -60 + tzDeltaMs / 1e3;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, di, observerLatRad, observerLonRad, false, tzOffsetSeconds);
+    const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
+    const localNoon = new Date(
+      shifted.getFullYear(),
+      shifted.getMonth(),
+      shifted.getDate(),
+      12,
+      0,
+      0
+    );
+    const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
+    const fwdResult = planetaryRiseSetTimeRefined(
+      noonDI,
+      observerLatRad,
+      observerLonRad,
+      riseNotSet,
+      0 /* Sun */,
+      NaN,
+      pool
+    ).riseSetTime;
+    releaseCachePool(pool);
+    if (isNoRiseSet(fwdResult)) return null;
+    const resultDate = new Date(fwdResult * 1e3 + EPOCH_2001_MS + tzDeltaMs);
+    if (resultDate.getDate() !== shifted.getDate() || resultDate.getMonth() !== shifted.getMonth()) {
+      const pool2 = new AstroCachePool();
+      initializeCachePool(pool2, di, observerLatRad, observerLonRad, false, tzOffsetSeconds);
+      const bwdResult = planetaryRiseSetTimeRefined(
+        noonDI - 24 * 3600,
+        observerLatRad,
+        observerLonRad,
+        riseNotSet,
+        0 /* Sun */,
+        NaN,
+        pool2
+      ).riseSetTime;
+      releaseCachePool(pool2);
+      if (isNoRiseSet(bwdResult)) return null;
+      const bwdDate = new Date(bwdResult * 1e3 + EPOCH_2001_MS + tzDeltaMs);
+      if (bwdDate.getDate() !== shifted.getDate() || bwdDate.getMonth() !== shifted.getMonth()) {
+        return null;
+      }
+      return new Date(bwdResult * 1e3 + EPOCH_2001_MS);
+    }
+    return new Date(fwdResult * 1e3 + EPOCH_2001_MS);
+  }
+  function formatRiseSetTime(date) {
+    if (!date) return "\u2014";
+    const options = {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: locationTimezone,
+      hour12: false
+    };
+    return date.toLocaleTimeString("en-US", options);
+  }
+  function updateSunData() {
+    const sunrise = findTodayRiseSet(true);
+    const sunset = findTodayRiseSet(false);
+    sunriseValue.textContent = formatRiseSetTime(sunrise);
+    sunsetValue.textContent = formatRiseSetTime(sunset);
+  }
+  var lastExprText = "";
+  var lastExprAST = null;
+  var lastExprError = false;
+  function updateExpressionEvaluator() {
+    const text = exprInput.value.trim();
+    if (!text) {
+      exprResults.classList.remove("visible");
+      exprError.classList.remove("visible");
+      lastExprText = "";
+      lastExprAST = null;
+      lastExprError = false;
+      return;
+    }
+    if (text !== lastExprText) {
+      lastExprText = text;
       try {
-        const ref = referenceDate || /* @__PURE__ */ new Date();
-        const shortFmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonId,
-          timeZoneName: "short"
-        });
-        const shortParts = shortFmt.formatToParts(ref);
-        const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
-        const longFmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonId,
-          timeZoneName: "longOffset"
-        });
-        const longParts = longFmt.formatToParts(ref);
-        const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
-        let utcStr = offsetStr.replace("GMT", "UTC");
-        utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
-        return `${olsonId}\xA0(${abbr})\xA0${utcStr}`;
-      } catch {
-        return olsonId;
-      }
-    }
-    function updateTimezoneDisplay() {
-      const formatted = formatTimezoneDisplay(locationTimezone, rawGetNow());
-      locationTzLabel.innerHTML = formatted;
-      lpLocationTz.innerHTML = formatted;
-    }
-    updateTimezoneDisplay();
-    let popoverOpen = false;
-    const unitToRateIndex = {
-      "minute": 1,
-      // 10 min/s
-      "hour": 2,
-      // 10 hr/s
-      "day": 3,
-      // 10 day/s
-      "month": 4,
-      // 10 mo/s
-      "year": 5
-      // 10 yr/s
-    };
-    const stepMap = {
-      "-year": ["year", -1],
-      "-month": ["month", -1],
-      "-day": ["day", -1],
-      "-hour": ["hour", -1],
-      "-minute": ["minute", -1],
-      "+minute": ["minute", 1],
-      "+hour": ["hour", 1],
-      "+day": ["day", 1],
-      "+month": ["month", 1],
-      "+year": ["year", 1]
-    };
-    function toTzDate(d) {
-      return tzDeltaMs !== 0 ? new Date(d.getTime() + tzDeltaMs) : d;
-    }
-    function fromTzDate(d) {
-      return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
-    }
-    function targetTzOffsetSec(d) {
-      return -d.getTimezoneOffset() * 60 + tzDeltaMs / 1e3;
-    }
-    function formatSimTime(d) {
-      const di = dateToDateInterval(d);
-      const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mo = months[cs.month - 1] || "Jan";
-      const h = cs.hour.toString().padStart(2, "0");
-      const m = cs.minute.toString().padStart(2, "0");
-      const s = Math.floor(cs.seconds).toString().padStart(2, "0");
-      let suffix = "";
-      if (cs.era === 0) {
-        suffix = " BCE";
-      }
-      if (di < kECJulianGregorianSwitchoverTimeInterval) {
-        suffix += " (Julian)";
-      }
-      const ms = d.getTime();
-      if (ms <= MIN_DISPLAY_DATE_MS) {
-        suffix += " \u2014 AT LIMIT";
-      } else if (ms >= MAX_DISPLAY_DATE_MS) {
-        suffix += " \u2014 AT LIMIT";
-      }
-      return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
-    }
-    function renderTransport() {
-      tpTransport.innerHTML = "";
-      const isStopped = timeController.isStopped;
-      const topRow = document.createElement("div");
-      topRow.className = "tp-transport-row";
-      if (!timeController.isRealTime) {
-        const nowBtn = document.createElement("button");
-        nowBtn.className = "tp-btn";
-        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
-        nowBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          nowClicked();
-        });
-        topRow.appendChild(nowBtn);
-      }
-      if (!isStopped) {
-        const pauseBtn = document.createElement("button");
-        pauseBtn.className = "tp-btn active";
-        pauseBtn.textContent = "\u2016";
-        pauseBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.stop();
-          rebuildEnvironments();
-          finishAllAnimations();
-          resetAllSchedules();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        topRow.appendChild(pauseBtn);
-      }
-      if (topRow.childNodes.length > 0) {
-        tpTransport.appendChild(topRow);
-      }
-      if (isStopped) {
-        const bottomRow = document.createElement("div");
-        bottomRow.className = "tp-transport-row";
-        const revBtn = document.createElement("button");
-        revBtn.className = "tp-btn";
-        revBtn.textContent = "\u25C0";
-        revBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.setDirection(-1);
-          timeController.setRate(null);
-          resetAllSchedules();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        const fwdBtn = document.createElement("button");
-        fwdBtn.className = "tp-btn";
-        fwdBtn.textContent = "\u25B6";
-        fwdBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.setDirection(1);
-          timeController.setRate(null);
-          resetAllSchedules();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        bottomRow.appendChild(revBtn);
-        bottomRow.appendChild(fwdBtn);
-        tpTransport.appendChild(bottomRow);
-      }
-    }
-    function updateTimeUI() {
-      const isReal = timeController.isRealTime;
-      timeBar.classList.toggle("overridden", !isReal);
-      const sim = timeController.getDisplayTime();
-      timeBarDate.textContent = formatSimTime(sim);
-      const simMs = sim.getTime();
-      const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
-      timeBar.classList.toggle("at-limit", atLimit);
-      if (!isReal) {
-        timeBarRate.textContent = timeController.statusLabel;
-        timeBarOffset.textContent = formatOffset(sim, /* @__PURE__ */ new Date());
-      }
-      tpRateLabel.textContent = timeController.statusLabel;
-      renderTransport();
-      updateTimezoneDisplay();
-      const simDI = dateToDateInterval(sim);
-      const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
-      document.getElementById("tp-year").value = simCs.year.toString();
-      document.getElementById("tp-month").value = simCs.month.toString();
-      document.getElementById("tp-day").value = simCs.day.toString();
-      document.getElementById("tp-hour").value = simCs.hour.toString();
-      document.getElementById("tp-minute").value = simCs.minute.toString();
-      const bceBtn = document.getElementById("tp-bce");
-      if (bceBtn) {
-        const isBCE = simCs.era === 0;
-        bceBtn.textContent = isBCE ? "BCE" : "CE";
-        bceBtn.classList.toggle("active", isBCE);
-      }
-    }
-    function formatOffset(sim, real) {
-      const ms = sim.getTime() - real.getTime();
-      const sign = ms < 0 ? "-" : "+";
-      if (Math.abs(ms) < 2e3) return "";
-      const fromMs = (ms < 0 ? sim : real).getTime();
-      const toMs = (ms < 0 ? real : sim).getTime();
-      const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
-      const to = new Date(Math.floor(toMs / 1e3) * 1e3);
-      const fromDI = dateToDateInterval(from);
-      const toDI = dateToDateInterval(to);
-      const fromCs = localComponentsFromTimeInterval(fromDI, 0);
-      const toCs = localComponentsFromTimeInterval(toDI, 0);
-      const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
-      const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
-      let years = toSigned - fromSigned;
-      let months = toCs.month - fromCs.month;
-      if (months < 0) {
-        years--;
-        months += 12;
-      }
-      let cursorDI = fromDI;
-      if (years > 0 || months > 0) {
-        let cursorSigned = fromSigned + years;
-        let cursorMonth = fromCs.month + months;
-        if (cursorMonth > 12) {
-          cursorSigned++;
-          cursorMonth -= 12;
-        }
-        const cursorEra = cursorSigned <= 0 ? 0 : 1;
-        const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
-        cursorDI = timeIntervalFromLocalComponents(
-          0,
-          cursorEra,
-          cursorYear,
-          cursorMonth,
-          fromCs.day,
-          fromCs.hour,
-          fromCs.minute,
-          fromCs.seconds
-        );
-        if (cursorDI > toDI) {
-          months--;
-          if (months < 0) {
-            years--;
-            months += 12;
-          }
-          cursorSigned = fromSigned + years;
-          cursorMonth = fromCs.month + months;
-          if (cursorMonth > 12) {
-            cursorSigned++;
-            cursorMonth -= 12;
-          }
-          if (cursorMonth < 1) {
-            cursorSigned--;
-            cursorMonth += 12;
-          }
-          const ce = cursorSigned <= 0 ? 0 : 1;
-          const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
-          cursorDI = timeIntervalFromLocalComponents(
-            0,
-            ce,
-            cy,
-            cursorMonth,
-            fromCs.day,
-            fromCs.hour,
-            fromCs.minute,
-            fromCs.seconds
-          );
-        }
-      }
-      let remainSec = Math.round(toDI - cursorDI);
-      let days, hrs, mins, sec;
-      if (years > 0 || months > 0) {
-        remainSec = Math.round(remainSec / 3600) * 3600;
-        days = Math.floor(remainSec / 86400);
-        remainSec %= 86400;
-        hrs = Math.floor(remainSec / 3600);
-        mins = 0;
-        sec = 0;
-      } else if (remainSec >= 86400) {
-        remainSec = Math.round(remainSec / 60) * 60;
-        days = Math.floor(remainSec / 86400);
-        remainSec %= 86400;
-        hrs = Math.floor(remainSec / 3600);
-        remainSec %= 3600;
-        mins = Math.floor(remainSec / 60);
-        sec = 0;
-      } else {
-        days = 0;
-        hrs = Math.floor(remainSec / 3600);
-        remainSec %= 3600;
-        mins = Math.floor(remainSec / 60);
-        remainSec %= 60;
-        sec = remainSec;
-      }
-      if (hrs >= 24) {
-        days += Math.floor(hrs / 24);
-        hrs %= 24;
-      }
-      const parts = [];
-      if (years > 0) parts.push(`${years}y`);
-      if (months > 0) parts.push(`${months}mo`);
-      if (days > 0) parts.push(`${days}d`);
-      if (hrs > 0) parts.push(`${hrs}h`);
-      if (mins > 0) parts.push(`${mins}m`);
-      if (sec > 0) parts.push(`${sec}s`);
-      return parts.length > 0 ? `(${sign}${parts.join(" ")})` : "";
-    }
-    function showPopover() {
-      popoverOpen = true;
-      timePopover.style.display = "";
-      timeBarLabel.textContent = "\u23F1 Hide time controller";
-      timeBarLabel.classList.add("active");
-      updateTimeUI();
-      writeUrlState({ tc: true });
-      requestAnimationFrame(() => {
-        if (lastContainerW > 0) {
-          onGridResize(lastContainerW, lastContainerH);
-        }
-      });
-    }
-    function hidePopover() {
-      popoverOpen = false;
-      timePopover.style.display = "none";
-      timeBarLabel.textContent = "\u23F1 Show time controller";
-      timeBarLabel.classList.remove("active");
-      updateTimeUI();
-      writeUrlState({ tc: false });
-      if (lastContainerW > 0) {
-        onGridResize(lastContainerW, lastContainerH);
-      }
-    }
-    function ensureSchedulerRunning() {
-      if (rafId === null && idleTimerId === null) {
-        startScheduler();
-      } else if (rafId === null && timeController.needsContinuousRender) {
-        stopScheduler();
-        startScheduler();
-      }
-    }
-    function finishAllAnimations() {
-      for (const face of faces) {
-        finishAnimations(face.handStates);
-        finishLeafAnimations(face.terminatorLeaves);
-        finishDayNightSlides(face.watch);
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-      }
-    }
-    function resetAllSchedules() {
-      for (const face of faces) {
-        resetHandSchedules(face.handStates);
-        resetLeafSchedules(face.terminatorLeaves);
-        resetDayNightSlides(face.watch);
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-      }
-    }
-    function writeTimeState() {
-      if (timeController.isRealTime) {
-        writeUrlState({ t: null, off: null, dir: 1 });
-      } else if (!timeController.isStopped && timeController.currentRate === null && timeController.currentDirection === 1) {
-        writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
-      } else {
-        const dir = timeController.isStopped ? 0 : timeController.currentDirection;
-        writeUrlState({
-          t: timeController.getDisplayTime().getTime(),
-          off: null,
-          dir
-        });
-      }
-    }
-    timeBarLabel.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (popoverOpen) {
-        hidePopover();
-      } else {
-        showPopover();
-      }
-    });
-    timeBarRate.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (popoverOpen) {
-        hidePopover();
-      } else {
-        showPopover();
-      }
-    });
-    function nowClicked() {
-      timeController.reset();
-      finishAllAnimations();
-      resetAllSchedules();
-      updateTimeUI();
-      stopScheduler();
-      startScheduler();
-      writeTimeState();
-    }
-    timeBarNow.addEventListener("click", (e) => {
-      e.stopPropagation();
-      nowClicked();
-    });
-    const HOLD_DELAY_MS = 300;
-    let holdTimer = null;
-    let holdingBtn = null;
-    function startHold(btn, unit, dir) {
-      holdingBtn = btn;
-      btn.classList.add("holding");
-      timeController.setDirection(dir);
-      const rateIdx = unitToRateIndex[unit];
-      if (rateIdx !== void 0) {
-        timeController.setRate(RATE_OPTIONS[rateIdx]);
-      }
-      resetAllSchedules();
-      updateTimeUI();
-      ensureSchedulerRunning();
-    }
-    function endHold() {
-      if (holdTimer !== null) {
-        clearTimeout(holdTimer);
-        holdTimer = null;
-      }
-      if (holdingBtn) {
-        holdingBtn.classList.remove("holding");
-        holdingBtn = null;
-        timeController.stop();
-        rebuildEnvironments();
-        finishAllAnimations();
-        resetAllSchedules();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        writeTimeState();
-      }
-    }
-    timePopover.querySelectorAll("[data-step]").forEach((btn) => {
-      const el = btn;
-      const stepKey = el.dataset.step;
-      const entry = stepMap[stepKey];
-      if (!entry) return;
-      const [unit, dir] = entry;
-      const unitName = el.dataset.unit || unit;
-      el.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        timeController.stop();
-        finishAllAnimations();
-        timeController.step(unit, dir);
-        timeController.beginFrame();
-        const stepNow = performance.now();
-        for (const face of faces) {
-          if (!face.enabled || !face.cachesBuilt) continue;
-          resetHandSchedules(face.handStates);
-          resetLeafSchedules(face.terminatorLeaves);
-          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-          tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
-          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-        }
-        timeController.endFrame();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          startHold(el, unitName, dir);
-        }, HOLD_DELAY_MS);
-      });
-      el.addEventListener("mouseup", (e) => {
-        e.stopPropagation();
-        endHold();
-        writeTimeState();
-      });
-      el.addEventListener("mouseleave", () => {
-        endHold();
-      });
-      el.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        timeController.stop();
-        finishAllAnimations();
-        timeController.step(unit, dir);
-        timeController.beginFrame();
-        const stepNow = performance.now();
-        for (const face of faces) {
-          if (!face.enabled || !face.cachesBuilt) continue;
-          resetHandSchedules(face.handStates);
-          resetLeafSchedules(face.terminatorLeaves);
-          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-          tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
-          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-        }
-        timeController.endFrame();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          startHold(el, unitName, dir);
-        }, HOLD_DELAY_MS);
-      });
-      el.addEventListener("touchend", (e) => {
-        e.stopPropagation();
-        endHold();
-        writeTimeState();
-      });
-      el.addEventListener("touchcancel", () => {
-        endHold();
-      });
-    });
-    const tpTabDate = document.getElementById("tp-tab-date");
-    const tpTabAstro = document.getElementById("tp-tab-astro");
-    const tpTabs = timePopover.querySelectorAll(".tp-tab");
-    function switchTab(tabName) {
-      if (tpTabDate && tpTabAstro) {
-        const hiding = tabName === "a" ? tpTabDate : tpTabAstro;
-        const showing = tabName === "a" ? tpTabAstro : tpTabDate;
-        hiding.style.transition = "none";
-        hiding.classList.add("tp-pane-hidden");
-        void hiding.offsetHeight;
-        hiding.style.transition = "";
-        showing.classList.remove("tp-pane-hidden");
-      }
-      tpTabs.forEach((btn) => {
-        const el = btn;
-        el.classList.toggle("active", el.dataset.tab === (tabName === "a" ? "astro" : "date"));
-      });
-      writeUrlState({ tp: tabName });
-      if (popoverOpen && lastContainerW > 0) {
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            onGridResize(lastContainerW, lastContainerH);
-          });
-        }, 320);
-      }
-    }
-    const initialTab = urlState.tp;
-    if (initialTab === "a") {
-      switchTab("a");
-    }
-    tpTabs.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const el = btn;
-        switchTab(el.dataset.tab === "astro" ? "a" : "d");
-      });
-    });
-    function handleAstroStep(eventType, dir, btnEl) {
-      let bodyPlanetNumber;
-      if (eventType === "body-transit" || eventType === "body-rise" || eventType === "body-set") {
-        const bodyLabel = document.getElementById("tp-body-transit-label");
-        bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || "1", 10) : 1;
-      }
-      const targetDate = computeAstroTarget(
-        eventType,
-        dir,
-        timeController.getDisplayTime(),
-        lat * Math.PI / 180,
-        lon * Math.PI / 180,
-        bodyPlanetNumber
-      );
-      if (!targetDate || isNaN(targetDate.getTime())) {
-        btnEl.classList.add("flash-fail");
-        setTimeout(() => btnEl.classList.remove("flash-fail"), 300);
+        lastExprAST = parse(text);
+        lastExprError = false;
+      } catch (e) {
+        lastExprAST = null;
+        lastExprError = true;
+        exprResults.classList.remove("visible");
+        exprError.textContent = e.message || "Parse error";
+        exprError.classList.add("visible");
         return;
       }
-      timeController.stop();
-      finishAllAnimations();
-      timeController.setTime(targetDate);
-      timeController.beginFrame();
-      const stepNow = performance.now();
-      for (const face of faces) {
-        if (!face.enabled || !face.cachesBuilt) continue;
-        resetHandSchedules(face.handStates);
-        resetLeafSchedules(face.terminatorLeaves);
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-        tickAnimations(face.handStates, face.env, stepNow, null, 0, 1);
-        tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
+    }
+    if (lastExprError || !lastExprAST) return;
+    try {
+      const value = evaluate(lastExprAST, env);
+      exprError.classList.remove("visible");
+      exprResults.classList.add("visible");
+      if (Number.isInteger(value) && Math.abs(value) < 1e15) {
+        exprNumber.textContent = value.toString();
+      } else {
+        exprNumber.textContent = value.toPrecision(10);
       }
-      timeController.endFrame();
-      updateTimeUI();
-      ensureSchedulerRunning();
-      writeTimeState();
-    }
-    timePopover.querySelectorAll("[data-astro]").forEach((btn) => {
-      const el = btn;
-      const eventType = el.dataset.astro;
-      const dir = parseInt(el.dataset.dir || "1", 10);
-      el.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleAstroStep(eventType, dir, el);
-      });
-      el.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleAstroStep(eventType, dir, el);
-      });
-    });
-    function applyDateInputs() {
-      const yr = parseInt(document.getElementById("tp-year").value, 10);
-      const mo = parseInt(document.getElementById("tp-month").value, 10);
-      const dy = parseInt(document.getElementById("tp-day").value, 10);
-      const hr = parseInt(document.getElementById("tp-hour").value, 10);
-      const mn = parseInt(document.getElementById("tp-minute").value, 10);
-      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-      const bceBtn = document.getElementById("tp-bce");
-      const isBCE = bceBtn?.classList.contains("active") ?? false;
-      const era = isBCE ? 0 : 1;
-      const refDate = timeController.getDisplayTime();
-      const tzOff = targetTzOffsetSec(refDate);
-      const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
-      const d = dateIntervalToDate(di);
-      const clampedMs = Math.max(
-        MIN_DISPLAY_DATE_MS,
-        Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
-      );
-      timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
-      finishAllAnimations();
-      resetAllSchedules();
-      updateTimeUI();
-      stopScheduler();
-      startScheduler();
-      writeTimeState();
-    }
-    ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
-      document.getElementById(id).addEventListener("change", () => {
-        applyDateInputs();
-      });
-    });
-    const tpBce = document.getElementById("tp-bce");
-    if (tpBce) {
-      tpBce.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const isActive = tpBce.classList.toggle("active");
-        tpBce.textContent = isActive ? "BCE" : "CE";
-        applyDateInputs();
-      });
-    }
-    tpClose.addEventListener("click", (e) => {
-      e.stopPropagation();
-      hidePopover();
-    });
-    const infoBtn = document.getElementById("info-btn");
-    const infoOverlay = document.getElementById("info-overlay");
-    const infoClose = document.getElementById("info-close");
-    const helpContent = document.getElementById("help-content");
-    const helpTemplate = document.getElementById("help-template");
-    let helpLoaded = false;
-    if (infoBtn && infoOverlay && infoClose) {
-      let updatePopupHeight2 = function(targetView) {
-        if (!popup || !targetView) return;
-        const currentHeight = popup.offsetHeight;
-        popup.style.height = currentHeight + "px";
-        const targetHeight = targetView.scrollHeight;
-        popup.style.height = targetHeight + "px";
-      };
-      var updatePopupHeight = updatePopupHeight2;
-      infoBtn.addEventListener("click", () => {
-        const slider2 = document.getElementById("info-slider");
-        const popup2 = document.getElementById("info-popup");
-        if (slider2) slider2.style.transform = "translateX(0)";
-        if (popup2) popup2.style.height = "auto";
-        infoOverlay.classList.add("visible");
-        if (!helpLoaded && helpContent && helpTemplate?.content) {
-          helpLoaded = true;
-          helpContent.appendChild(helpTemplate.content.cloneNode(true));
-          helpContent.querySelectorAll('a[href^="http"]').forEach((a) => {
-            a.setAttribute("target", "_blank");
-            a.setAttribute("rel", "noopener");
-          });
-          helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
-            const face = el.dataset.face;
-            const summary = el.querySelector("summary");
-            if (summary) {
-              const img = document.createElement("img");
-              img.src = `thumb-${face}.png`;
-              img.alt = "";
-              img.style.cssText = "width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;";
-              summary.prepend(img);
-            }
-          });
-          const faceHelpSections = helpContent.querySelectorAll(".face-help-section[data-face]");
-          if (faceHelpSections.length > 0) {
-            const toSlug = (name) => name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-");
-            const activeSlugs = faceDataArray.map((f) => toSlug(f.name));
-            const slugSet = new Set(activeSlugs);
-            const bySlug = /* @__PURE__ */ new Map();
-            faceHelpSections.forEach((el) => {
-              const slug = el.dataset.face;
-              if (isSelectedPage && !slugSet.has(slug)) {
-                el.style.display = "none";
-              } else {
-                bySlug.set(slug, el);
-              }
-            });
-            for (const slug of activeSlugs) {
-              const el = bySlug.get(slug);
-              if (el) helpContent.appendChild(el);
-            }
-          }
-        }
-      });
-      infoClose.addEventListener("click", () => {
-        infoOverlay.classList.remove("visible");
-      });
-      infoOverlay.addEventListener("click", (e) => {
-        if (e.target === infoOverlay) {
-          infoOverlay.classList.remove("visible");
-        }
-      });
-      const mainView = document.getElementById("info-main-view");
-      const subView = document.getElementById("info-sub-view");
-      const subContent = document.getElementById("info-sub-content");
-      const backBtn = document.getElementById("info-back-btn");
-      const popup = document.getElementById("info-popup");
-      const slider = document.getElementById("info-slider");
-      document.querySelectorAll(".help-subpage-link").forEach((link) => {
-        const el = link;
-        el.addEventListener("click", (e) => {
-          e.preventDefault();
-          const templateId = el.dataset.template;
-          const template = document.getElementById(templateId);
-          if (template && mainView && subView && subContent && slider) {
-            subContent.innerHTML = template.innerHTML;
-            slider.style.transform = "translateX(-50%)";
-            updatePopupHeight2(subView);
-            if (helpContent) helpContent.scrollTop = 0;
-          }
-        });
-      });
-      if (backBtn) {
-        backBtn.addEventListener("click", () => {
-          if (mainView && subView && slider) {
-            slider.style.transform = "translateX(0)";
-            updatePopupHeight2(mainView);
-            if (helpContent) helpContent.scrollTop = 0;
-          }
-        });
+      const degrees = value * 180 / Math.PI;
+      exprAngle.textContent = `${degrees.toFixed(4)}\xB0`;
+      const dateMs = value * 1e3 + EPOCH_2001_MS;
+      if (isFinite(dateMs) && dateMs > -62e12 && dateMs < 25e13) {
+        const d = new Date(dateMs);
+        exprDate.textContent = d.toISOString().replace("T", " ").replace("Z", " UTC");
+      } else {
+        exprDate.textContent = "\u2014";
       }
-    }
-    const generalHelpSection = document.getElementById("general-help-section");
-    const generalHelpIframe = document.getElementById("general-help-iframe");
-    if (generalHelpSection && generalHelpIframe) {
-      generalHelpSection.addEventListener("toggle", () => {
-        if (generalHelpSection.open && !generalHelpIframe.src) {
-          generalHelpIframe.src = "help.html?embed=1";
-        }
-      });
-      window.addEventListener("message", (e) => {
-        if (e.data?.type === "help-resize" && typeof e.data.height === "number") {
-          generalHelpIframe.style.height = e.data.height + "px";
-        }
-      });
-    }
-    const fullscreenBtn = document.getElementById("fullscreen-btn");
-    if (fullscreenBtn) {
-      fullscreenBtn.addEventListener("click", () => {
-        if (document.fullscreenElement) {
-          document.exitFullscreen();
-        } else {
-          document.documentElement.requestFullscreen();
-        }
-      });
-    }
-    function tickTimeBarClock() {
-      if (timeController.isRealTime) {
-        timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
-      }
-      const msUntilNextSecond = 1e3 - Date.now() % 1e3;
-      setTimeout(tickTimeBarClock, msUntilNextSecond);
-    }
-    tickTimeBarClock();
-    setInterval(() => {
-      if (!timeController.isRealTime && !timeController.isStopped && timeController.currentRate === null) {
-        writeTimeState();
-      }
-    }, 6e4);
-    const isSingleFace = faceDataArray.length === 1;
-    const planetSelectorFace = faces.find((f) => f.watch.planetSelector);
-    if (planetSelectorFace && isSingleFace) {
-      const selectorEl = document.getElementById("planet-selector");
-      const iconsContainer = document.getElementById("planet-icons");
-      const nameLabel = document.getElementById("planet-name");
-      const prevBtn = document.getElementById("planet-prev");
-      const nextBtn = document.getElementById("planet-next");
-      if (selectorEl && iconsContainer && nameLabel && prevBtn && nextBtn) {
-        let updateBodyLabels2 = function(name, planetNum) {
-          const numStr = String(planetNum);
-          if (bodyRiseLabel) {
-            bodyRiseLabel.textContent = `${name} Rise`;
-            bodyRiseLabel.dataset.planet = numStr;
-          }
-          if (bodySetLabel) {
-            bodySetLabel.textContent = `${name} Set`;
-            bodySetLabel.dataset.planet = numStr;
-          }
-          if (bodyTransitLabel) {
-            bodyTransitLabel.textContent = `${name} Trans`;
-            bodyTransitLabel.dataset.planet = numStr;
-          }
-        }, selectPlanet2 = function(idx) {
-          selectedIdx = idx;
-          const p = planetOrder[idx];
-          iconBtns.forEach((b, i) => b.classList.toggle("selected", i === idx));
-          nameLabel.textContent = p.name;
-          updateBodyLabels2(p.name, planetNumberForIdx[idx]);
-          const url = new URL(window.location.href);
-          url.searchParams.set("body", p.param);
-          window.history.replaceState({}, "", url.toString());
-          updateNavigationLinks();
-          for (const face of faces) {
-            if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
-            restoreKyotoState(face);
-            if (face.terminatorLeaves.length > 0) {
-              updateLeafAngles(face.terminatorLeaves, face.env);
-              resetLeafSchedules(face.terminatorLeaves);
-              face.lastTerminatorRebuild = 0;
-            }
-            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-            const { canvas, watch, env, images, scale } = face;
-            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-            for (const hs of face.handStates) {
-              hs.nextUpdateTime = 0;
-            }
-          }
-          stopScheduler();
-          startScheduler();
-        };
-        var updateBodyLabels = updateBodyLabels2, selectPlanet = selectPlanet2;
-        selectorEl.style.display = "flex";
-        const planetOrder = [
-          { key: "sun", name: "Sun", param: "sun" },
-          { key: "moon", name: "Moon", param: "moon" },
-          { key: "mercury", name: "Mercury", param: "mercury" },
-          { key: "venus", name: "Venus", param: "venus" },
-          { key: "mars", name: "Mars", param: "mars" },
-          { key: "jupiter", name: "Jupiter", param: "jupiter" },
-          { key: "saturn", name: "Saturn", param: "saturn" },
-          { key: "uranus", name: "Uranus", param: "uranus" },
-          { key: "neptune", name: "Neptune", param: "neptune" }
-        ];
-        const params = new URLSearchParams(window.location.search);
-        const currentBody = (params.get("body") || "jupiter").toLowerCase();
-        let selectedIdx = planetOrder.findIndex((p) => p.param === currentBody);
-        if (selectedIdx < 0) selectedIdx = 5;
-        const iconBtns = [];
-        for (let i = 0; i < planetOrder.length; i++) {
-          const p = planetOrder[i];
-          const btn = document.createElement("button");
-          btn.className = "planet-icon-btn";
-          btn.title = p.name;
-          const imgUrl = planetIconDataUrls.get(p.key);
-          if (imgUrl) {
-            const img = document.createElement("img");
-            img.src = imgUrl;
-            img.alt = p.name;
-            btn.appendChild(img);
-          } else {
-            btn.textContent = p.name.charAt(0);
-          }
-          if (i === selectedIdx) btn.classList.add("selected");
-          btn.addEventListener("click", () => selectPlanet2(i));
-          iconsContainer.appendChild(btn);
-          iconBtns.push(btn);
-        }
-        nameLabel.textContent = planetOrder[selectedIdx].name;
-        const planetNumberForIdx = [0, 1, 2, 3, 5, 6, 7, 8, 9];
-        const moonRiseRow = document.getElementById("tp-astro-moonrise");
-        const bodyRiseRow = document.getElementById("tp-astro-body-rise");
-        const bodyRiseLabel = document.getElementById("tp-body-rise-label");
-        const moonSetRow = document.getElementById("tp-astro-moonset");
-        const bodySetRow = document.getElementById("tp-astro-body-set");
-        const bodySetLabel = document.getElementById("tp-body-set-label");
-        const moonTransitRow = document.getElementById("tp-astro-moon-transit");
-        const bodyTransitRow = document.getElementById("tp-astro-body-transit");
-        const bodyTransitLabel = document.getElementById("tp-body-transit-label");
-        if (moonRiseRow && bodyRiseRow) {
-          moonRiseRow.style.display = "none";
-          bodyRiseRow.style.display = "";
-        }
-        if (moonSetRow && bodySetRow) {
-          moonSetRow.style.display = "none";
-          bodySetRow.style.display = "";
-        }
-        if (moonTransitRow && bodyTransitRow) {
-          moonTransitRow.style.display = "none";
-          bodyTransitRow.style.display = "";
-        }
-        updateBodyLabels2(planetOrder[selectedIdx].name, planetNumberForIdx[selectedIdx]);
-        prevBtn.addEventListener("click", () => {
-          selectPlanet2((selectedIdx - 1 + planetOrder.length) % planetOrder.length);
-        });
-        nextBtn.addEventListener("click", () => {
-          selectPlanet2((selectedIdx + 1) % planetOrder.length);
-        });
-      }
-    }
-    const viennaFace = faces.find((f) => f.watch.urlAbbrev === "vi");
-    if (viennaFace && isSingleFace) {
-      const toggleContainer = document.getElementById("vienna-noon-toggle");
-      if (toggleContainer) {
-        let isNoonOnTop2 = function() {
-          return (viennaFace.env.variables.get("noonOnTop") ?? 0) !== 0;
-        }, updatePillHighlight2 = function() {
-          const noon = isNoonOnTop2();
-          midnightPill.classList.toggle("active", !noon);
-          noonPill.classList.toggle("active", noon);
-        }, setNoonOnTop2 = function(noonOnTop) {
-          const val = noonOnTop ? 1 : 0;
-          const targetFlip = noonOnTop ? Math.PI : 0;
-          const now = performance.now();
-          viennaFace.env.variables.set("noonOnTop", val);
-          viennaFace.env.variables.set("dialFlip", targetFlip);
-          invalidateDayNightCaches(viennaFace.watch);
-          const { canvas, watch, env, images, scale } = viennaFace;
-          buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, viennaFace.terminatorLeaves);
-          for (const hs of viennaFace.handStates) {
-            hs.nextUpdateTime = 0;
-          }
-          const previousFlip = noonOnTop ? 0 : Math.PI;
-          for (const part of viennaFace.watch.parts) {
-            if (part.type === "QDayNightRing") {
-              if (!part._masterOffsetAnim) {
-                part._masterOffsetAnim = makeAnimatingValue(previousFlip, now);
-              }
-              part._cachedAngles = void 0;
-              startAnimationRaw(part._masterOffsetAnim, targetFlip, now, 1);
-            }
-          }
-          if (viennaFace.terminatorLeaves.length > 0) {
-            updateLeafAngles(viennaFace.terminatorLeaves, viennaFace.env);
-            resetLeafSchedules(viennaFace.terminatorLeaves);
-            viennaFace.lastTerminatorRebuild = 0;
-          }
-          stopScheduler();
-          startScheduler();
-          const params = new URLSearchParams(window.location.search);
-          if (noonOnTop) {
-            params.set("vnoon", "1");
-          } else {
-            params.delete("vnoon");
-          }
-          const qs = params.toString();
-          history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
-          updateNavigationLinks();
-          updatePillHighlight2();
-        };
-        var isNoonOnTop = isNoonOnTop2, updatePillHighlight = updatePillHighlight2, setNoonOnTop = setNoonOnTop2;
-        toggleContainer.style.display = "flex";
-        const midnightPill = toggleContainer.querySelector('[data-mode="midnight"]');
-        const noonPill = toggleContainer.querySelector('[data-mode="noon"]');
-        updatePillHighlight2();
-        midnightPill.addEventListener("click", () => {
-          if (!isNoonOnTop2()) return;
-          setNoonOnTop2(false);
-        });
-        noonPill.addEventListener("click", () => {
-          if (isNoonOnTop2()) return;
-          setNoonOnTop2(true);
-        });
-      }
-    }
-    const kyotoFace = faces.find((f) => f.watch.wadokei);
-    if (kyotoFace && isSingleFace) {
-      const handToggle = document.getElementById("kyoto-hand-toggle");
-      const rateToggle = document.getElementById("kyoto-mode-toggle");
-      const getEnv = () => kyotoFace.env;
-      const updateUI = () => {
-        const env = getEnv();
-        if (handToggle) {
-          const isFixed = env.kyHandMode === 1;
-          handToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
-            const btn = p;
-            btn.classList.toggle("active", btn.dataset.mode === "fixed" === isFixed);
-          });
-          if (rateToggle) {
-            rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
-              const btn = p;
-              if (btn.dataset.mode === "variable") {
-                btn.textContent = isFixed ? "Variable dial rate" : "Variable hand rate";
-              } else {
-                btn.textContent = isFixed ? "Constant dial rate" : "Constant hand rate";
-              }
-            });
-          }
-        }
-        if (rateToggle) {
-          const isConstant = (env.variables.get("kyMode") || 0) === 0;
-          rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
-            const btn = p;
-            btn.classList.toggle("active", btn.dataset.mode === "constant" === isConstant);
-          });
-        }
-      };
-      const setKyotoState = (handMode, rateMode) => {
-        const env = getEnv();
-        const now = performance.now();
-        const oldMasterOffsets = /* @__PURE__ */ new Map();
-        for (const part of kyotoFace.watch.parts) {
-          if (part.type === "QDayNightRing") {
-            const oldVal = part._masterOffsetAnim && part._masterOffsetAnim.animating ? interpolateValue(part._masterOffsetAnim, now) : evalAttr(part.masterOffset, env);
-            oldMasterOffsets.set(part, oldVal);
-          }
-        }
-        let changed = false;
-        if (handMode !== null && env.kyHandMode !== handMode) {
-          env.kyHandMode = handMode;
-          writeUrlState({ kyhand: handMode === 1 ? "1" : null });
-          changed = true;
-        }
-        if (rateMode !== null && (env.variables.get("kyMode") || 0) !== rateMode) {
-          env.variables.set("kyMode", rateMode);
-          writeUrlState({ kmode: rateMode === 1 ? "1" : null });
-          changed = true;
-        }
-        if (changed) {
-          finishAnimations(kyotoFace.handStates);
-          finishDayNightSlides(kyotoFace.watch);
-          for (const hs of kyotoFace.handStates) {
-            hs.nextUpdateTime = 0;
-          }
-          for (const part of kyotoFace.watch.parts) {
-            if (part.type === "QDayNightRing") {
-              const oldVal = oldMasterOffsets.get(part) ?? 0;
-              const newVal = evalAttr(part.masterOffset, env);
-              if (!part._masterOffsetAnim) {
-                part._masterOffsetAnim = makeAnimatingValue(oldVal, now);
-              } else {
-                part._masterOffsetAnim.currentValue = oldVal;
-                part._masterOffsetAnim.animating = false;
-              }
-              startAnimationRaw(part._masterOffsetAnim, newVal, now, 1);
-            }
-          }
-          updateUI();
-          stopScheduler();
-          startScheduler();
-        }
-      };
-      if (handToggle) {
-        handToggle.style.display = "flex";
-        handToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
-          p.addEventListener("click", () => {
-            const btn = p;
-            setKyotoState(btn.dataset.mode === "fixed" ? 1 : 0, null);
-          });
-        });
-      }
-      if (rateToggle) {
-        rateToggle.style.display = "flex";
-        rateToggle.querySelectorAll(".kyoto-pill").forEach((p) => {
-          p.addEventListener("click", () => {
-            const btn = p;
-            setKyotoState(null, btn.dataset.mode === "constant" ? 0 : 1);
-          });
-        });
-      }
-      const kyState = readUrlState();
-      if (kyState.kyhand === "1") getEnv().kyHandMode = 1;
-      if (kyState.kmode === "1") getEnv().variables.set("kyMode", 1);
-      updateUI();
-    }
-    const terraFace = faces.find((f) => f.watch.worldTimeRing);
-    if (terraFace && isSingleFace) {
-      const tcDialog = document.getElementById("terra-city-dialog");
-      const tcCityInput = document.getElementById("tc-city-input");
-      const tcCityResults = document.getElementById("tc-city-results");
-      const tcSlotPicker = document.getElementById("tc-slot-picker");
-      const tcSlotChoices = document.getElementById("tc-slot-choices");
-      const tcMessage = document.getElementById("tc-message");
-      const tcNoSelection = document.getElementById("tc-no-selection");
-      const tcSelectedCity = document.getElementById("tc-selected-city");
-      const tcCityName = document.getElementById("tc-city-name");
-      const tcCityTz = document.getElementById("tc-city-tz");
-      const tcResetBtn = document.getElementById("tc-reset");
-      const tcCancelBtn = document.getElementById("tc-cancel");
-      const tcDoneBtn = document.getElementById("tc-done");
-      if (tcDialog && tcCityInput && tcCityResults && tcSlotPicker && tcSlotChoices && tcMessage && tcDoneBtn && tcResetBtn) {
-        let getCurrentSlots2 = function() {
-          const slots = {};
-          for (const [k, v] of Object.entries(TERRA_RING_DEFAULTS)) {
-            slots[Number(k)] = { ...v };
-          }
-          if (terraFace.terraSlotOverrides) {
-            for (const [k, v] of Object.entries(terraFace.terraSlotOverrides)) {
-              slots[Number(k)] = { ...v };
-            }
-          }
-          return slots;
-        }, writeTerraOverridesToUrl2 = function() {
-          const params = new URLSearchParams(window.location.search);
-          for (let slot = 1; slot <= 24; slot++) {
-            params.delete(`r${slot}`);
-            params.delete(`r${slot}tz`);
-            params.delete(`r${slot}lat`);
-            params.delete(`r${slot}lon`);
-          }
-          if (terraFace.terraSlotOverrides) {
-            for (const [slotStr, data] of Object.entries(terraFace.terraSlotOverrides)) {
-              params.set(`r${slotStr}`, data.cityName);
-              params.set(`r${slotStr}tz`, data.olsonId);
-              params.set(`r${slotStr}lat`, data.lat.toFixed(3));
-              params.set(`r${slotStr}lon`, data.lon.toFixed(3));
-            }
-          }
-          params.delete("long");
-          params.delete("loc");
-          const qs = params.toString();
-          const newUrl = window.location.pathname + (qs ? "?" + qs : "");
-          history.replaceState(null, "", newUrl);
-          updateNavigationLinks();
-        }, rebuildTerraForSlotChange2 = function() {
-          const slotResult = buildSlotOverrides(terraFace.watch);
-          if (slotResult) {
-            terraFace.terraSlotOverrides = slotResult.overrides;
-            terraFace.globalLocationSlot = slotResult.globalLocationSlot;
-          }
-          for (const face of faces) {
-            if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
-            restoreKyotoState(face);
-            if (face.terminatorLeaves.length > 0) {
-              updateLeafAngles(face.terminatorLeaves, face.env);
-              resetLeafSchedules(face.terminatorLeaves);
-              face.lastTerminatorRebuild = 0;
-            }
-            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-            face.env._terraCityKnockout = null;
-            const { canvas, watch, env, images, scale } = face;
-            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-            for (const hs of face.handStates) {
-              hs.nextUpdateTime = 0;
-            }
-          }
-          stopScheduler();
-          startScheduler();
-        }, assignCityToSlot2 = function(slot, city) {
-          const currentSlots = getCurrentSlots2();
-          const previousCity = currentSlots[slot]?.cityName || "Unknown";
-          const isGlobalSlot = slot === terraFace.globalLocationSlot;
-          if (!terraFace.terraSlotOverrides) {
-            terraFace.terraSlotOverrides = {};
-          }
-          terraFace.terraSlotOverrides[slot] = {
-            cityName: city.shortLabel,
-            olsonId: city.timezone,
-            lat: city.lat,
-            lon: city.lon
-          };
-          writeTerraOverridesToUrl2();
-          rebuildTerraForSlotChange2();
-          if (isGlobalSlot) {
-            showTcMessage2(`${city.shortLabel} saved for ${formatSlotOffset(slot)}, but your location may override this slot`, "warn");
-          } else {
-            showTcMessage2(`${city.shortLabel} replaces ${previousCity} (${formatSlotOffset(slot)})`, "info");
-          }
-        }, showTcMessage2 = function(text, type) {
-          tcMessage.textContent = text;
-          tcMessage.className = `tc-message tc-message-${type}`;
-          tcMessage.style.display = "";
-        }, hideTcMessage2 = function() {
-          tcMessage.style.display = "none";
-        }, showCityStatus2 = function(city) {
-          if (tcNoSelection) tcNoSelection.style.display = "none";
-          if (tcSelectedCity) tcSelectedCity.style.display = "";
-          if (tcCityName) tcCityName.textContent = city.shortLabel;
-          if (tcCityTz) tcCityTz.textContent = city.timezone;
-        }, resetCityStatus2 = function() {
-          if (tcNoSelection) tcNoSelection.style.display = "";
-          if (tcSelectedCity) tcSelectedCity.style.display = "none";
-        }, showTerraDialog2 = function() {
-          tcDialog.style.display = "";
-          grid.classList.add("blurred");
-          tcCityInput.value = "";
-          tcCityResults.innerHTML = "";
-          tcSlotPicker.style.display = "none";
-          hideTcMessage2();
-          resetCityStatus2();
-          setTimeout(() => tcCityInput?.focus(), 50);
-        }, hideTerraDialog2 = function() {
-          tcDialog.style.display = "none";
-          grid.classList.remove("blurred");
-        }, renderTcSearchResults2 = function(results) {
-          tcCityResults.innerHTML = "";
-          if (results.length === 0) {
-            tcCityResults.innerHTML = '<div class="tc-city-loading">No results found</div>';
-            return;
-          }
-          const max = Math.min(results.length, 50);
-          for (let i = 0; i < max; i++) {
-            const r = results[i];
-            const div = document.createElement("div");
-            div.className = "tc-city-item";
-            if (r.isAirport) {
-              div.innerHTML = `<span class="iata-tag">${r.label.split(" ")[0]}</span>${r.label.split(" ").slice(1).join(" ")}`;
-            } else {
-              div.textContent = r.label;
-            }
-            div.addEventListener("click", () => {
-              tcCityInput.value = "";
-              tcCityResults.innerHTML = "";
-              onCitySelected2(r);
-            });
-            tcCityResults.appendChild(div);
-          }
-        }, debounceTcSearch2 = function() {
-          if (tcSearchDebounce) clearTimeout(tcSearchDebounce);
-          tcSearchDebounce = setTimeout(onTcCityInput, 150);
-        }, onCitySelected2 = function(city) {
-          showCityStatus2(city);
-          hideTcMessage2();
-          tcSlotPicker.style.display = "none";
-          const validSlots = validSlotsForTz(city.timezone);
-          if (validSlots.length === 0) {
-            showTcMessage2(`${city.shortLabel}'s timezone (${city.timezone}) cannot fit on any ring slot.`, "error");
-            return;
-          }
-          if (validSlots.length === 1) {
-            if (validSlots[0] === terraFace.globalLocationSlot) {
-              showTcMessage2(`Note: this slot currently shows your location`, "warn");
-            }
-            assignCityToSlot2(validSlots[0], city);
-          } else {
-            tcSlotPicker.style.display = "";
-            tcSlotChoices.innerHTML = "";
-            const currentSlots = getCurrentSlots2();
-            for (const slot of validSlots) {
-              const currentCity = currentSlots[slot]?.cityName || "Unknown";
-              const isGlobalSlot = slot === terraFace.globalLocationSlot;
-              const btn = document.createElement("button");
-              btn.className = "tc-slot-btn";
-              const label = isGlobalSlot ? `${currentCity} \u2605` : currentCity;
-              btn.innerHTML = `<span class="tc-slot-city">${label}</span><span class="tc-slot-offset">${formatSlotOffset(slot)}${isGlobalSlot ? " (your location)" : ""}</span>`;
-              btn.addEventListener("click", () => {
-                tcSlotPicker.style.display = "none";
-                assignCityToSlot2(slot, city);
-              });
-              tcSlotChoices.appendChild(btn);
-            }
-          }
-        };
-        var getCurrentSlots = getCurrentSlots2, writeTerraOverridesToUrl = writeTerraOverridesToUrl2, rebuildTerraForSlotChange = rebuildTerraForSlotChange2, assignCityToSlot = assignCityToSlot2, showTcMessage = showTcMessage2, hideTcMessage = hideTcMessage2, showCityStatus = showCityStatus2, resetCityStatus = resetCityStatus2, showTerraDialog = showTerraDialog2, hideTerraDialog = hideTerraDialog2, renderTcSearchResults = renderTcSearchResults2, debounceTcSearch = debounceTcSearch2, onCitySelected = onCitySelected2;
-        const changeCitiesBtn = document.createElement("button");
-        changeCitiesBtn.className = "change-cities-btn";
-        changeCitiesBtn.textContent = "Change cities";
-        changeCitiesBtn.id = "change-cities-btn";
-        const timeBarEl = document.getElementById("time-bar");
-        if (timeBarEl) {
-          timeBarEl.parentElement.insertBefore(changeCitiesBtn, timeBarEl);
-        }
-        changeCitiesBtn.addEventListener("click", showTerraDialog2);
-        tcDoneBtn.addEventListener("click", hideTerraDialog2);
-        if (tcCancelBtn) tcCancelBtn.addEventListener("click", hideTerraDialog2);
-        tcDialog.querySelector(".tc-backdrop")?.addEventListener("click", hideTerraDialog2);
-        tcResetBtn.addEventListener("click", () => {
-          const overlay = document.getElementById("tc-confirm-overlay");
-          if (overlay) overlay.style.display = "";
-        });
-        const confirmYes = document.getElementById("tc-confirm-yes");
-        const confirmNo = document.getElementById("tc-confirm-no");
-        const confirmOverlay = document.getElementById("tc-confirm-overlay");
-        if (confirmYes && confirmNo && confirmOverlay) {
-          confirmNo.addEventListener("click", () => {
-            confirmOverlay.style.display = "none";
-          });
-          confirmYes.addEventListener("click", () => {
-            confirmOverlay.style.display = "none";
-            terraFace.terraSlotOverrides = void 0;
-            writeTerraOverridesToUrl2();
-            rebuildTerraForSlotChange2();
-            showTcMessage2("All cities reset to defaults", "info");
-            resetCityStatus2();
-            tcSlotPicker.style.display = "none";
-          });
-        }
-        let tcSearchDebounce = null;
-        async function onTcCityInput() {
-          const query = tcCityInput.value.trim();
-          if (query.length === 0) {
-            tcCityResults.innerHTML = "";
-            return;
-          }
-          try {
-            if (!isCityDataLoaded()) {
-              if (loadError) {
-                tcCityResults.innerHTML = `<div class="tc-city-loading">City search unavailable: ${loadError}</div>`;
-                return;
-              }
-              tcCityResults.innerHTML = '<div class="tc-city-loading">Loading city database\u2026</div>';
-              try {
-                await loadCityData();
-              } catch (err) {
-                tcCityResults.innerHTML = `<div class="tc-city-loading">Failed to load: ${err.message}</div>`;
-                return;
-              }
-              const currentQuery = tcCityInput.value.trim();
-              if (currentQuery.length === 0) {
-                tcCityResults.innerHTML = "";
-                return;
-              }
-            }
-            const results = searchCities(query, 20);
-            renderTcSearchResults2(results);
-          } catch (err) {
-            tcCityResults.innerHTML = `<div class="tc-city-loading">Error: ${err.message}</div>`;
-          }
-        }
-        tcCityInput.addEventListener("input", debounceTcSearch2);
-        tcCityInput.addEventListener("keyup", debounceTcSearch2);
-        tcCityInput.addEventListener("compositionend", debounceTcSearch2);
-        tcCityInput.addEventListener("keydown", (e) => {
-          const items = tcCityResults.querySelectorAll(".tc-city-item");
-          if (items.length === 0) return;
-          const current = tcCityResults.querySelector(".tc-city-item.selected");
-          const idx = current ? Array.from(items).indexOf(current) : -1;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            const next = idx < items.length - 1 ? idx + 1 : 0;
-            current?.classList.remove("selected");
-            items[next].classList.add("selected");
-            items[next].scrollIntoView({ block: "nearest" });
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            const prev = idx > 0 ? idx - 1 : items.length - 1;
-            current?.classList.remove("selected");
-            items[prev].classList.add("selected");
-            items[prev].scrollIntoView({ block: "nearest" });
-          } else if (e.key === "Enter" && current) {
-            current.click();
-          }
-        });
-      }
-    }
-    const gaiaFace = faces.find((f) => f.watch.worldTimeSubdials);
-    if (gaiaFace && isSingleFace && !terraFace) {
-      const tcDialog = document.getElementById("terra-city-dialog");
-      const tcCityInput = document.getElementById("tc-city-input");
-      const tcCityResults = document.getElementById("tc-city-results");
-      const tcSlotPicker = document.getElementById("tc-slot-picker");
-      const tcSlotChoices = document.getElementById("tc-slot-choices");
-      const tcMessage = document.getElementById("tc-message");
-      const tcNoSelection = document.getElementById("tc-no-selection");
-      const tcSelectedCity = document.getElementById("tc-selected-city");
-      const tcCityName = document.getElementById("tc-city-name");
-      const tcCityTz = document.getElementById("tc-city-tz");
-      const tcResetBtn = document.getElementById("tc-reset");
-      const tcCancelBtn = document.getElementById("tc-cancel");
-      const tcDoneBtn = document.getElementById("tc-done");
-      const tcTitle = tcDialog?.querySelector(".tc-title");
-      if (tcDialog && tcCityInput && tcCityResults && tcSlotPicker && tcSlotChoices && tcMessage && tcDoneBtn && tcResetBtn) {
-        let writeGaiaOverridesToUrl2 = function() {
-          const params = new URLSearchParams(window.location.search);
-          const nSubdials = gaiaFace.watch.maxSeparateLoc || 4;
-          for (let slot = 2; slot <= nSubdials; slot++) {
-            params.delete(`d${slot}`);
-            params.delete(`d${slot}tz`);
-            params.delete(`d${slot}lat`);
-            params.delete(`d${slot}lon`);
-          }
-          if (gaiaFace.terraSlotOverrides) {
-            for (const [slotStr, data] of Object.entries(gaiaFace.terraSlotOverrides)) {
-              const s = Number(slotStr);
-              if (s < 2) continue;
-              params.set(`d${slotStr}`, data.cityName);
-              params.set(`d${slotStr}tz`, data.olsonId);
-              params.set(`d${slotStr}lat`, data.lat.toFixed(3));
-              params.set(`d${slotStr}lon`, data.lon.toFixed(3));
-            }
-          }
-          params.delete("long");
-          params.delete("loc");
-          const qs = params.toString();
-          const newUrl = window.location.pathname + (qs ? "?" + qs : "");
-          history.replaceState(null, "", newUrl);
-          updateNavigationLinks();
-        }, rebuildGaiaForSlotChange2 = function() {
-          for (const face of faces) {
-            if (!face.enabled) continue;
-            face.env = createWatchEnvironment(face.watch, lat, lon, makeGetNow(face.watch.beatsPerSecond), locationTimezone, face.terraSlotOverrides, face.globalLocationSlot);
-            restoreKyotoState(face);
-            if (face.terminatorLeaves.length > 0) {
-              updateLeafAngles(face.terminatorLeaves, face.env);
-              resetLeafSchedules(face.terminatorLeaves);
-              face.lastTerminatorRebuild = 0;
-            }
-            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-            const { canvas, watch, env, images, scale } = face;
-            buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
-            for (const hs of face.handStates) {
-              hs.nextUpdateTime = 0;
-            }
-          }
-          stopScheduler();
-          startScheduler();
-        }, assignCityToGaiaSlot2 = function(slot, city) {
-          const previousCity = gaiaFace.terraSlotOverrides?.[slot]?.cityName || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || "Unknown";
-          if (!gaiaFace.terraSlotOverrides) {
-            gaiaFace.terraSlotOverrides = {};
-          }
-          gaiaFace.terraSlotOverrides[slot] = {
-            cityName: city.shortLabel,
-            olsonId: city.timezone,
-            lat: city.lat,
-            lon: city.lon
-          };
-          writeGaiaOverridesToUrl2();
-          rebuildGaiaForSlotChange2();
-          showGaiaMessage2(`${city.shortLabel} replaces ${previousCity} (${subdialLabels[slot]} subdial)`, "info");
-        }, showGaiaMessage2 = function(text, type) {
-          tcMessage.textContent = text;
-          tcMessage.className = `tc-message tc-message-${type}`;
-          tcMessage.style.display = "";
-        }, hideGaiaMessage2 = function() {
-          tcMessage.style.display = "none";
-        }, showGaiaCityStatus2 = function(city) {
-          if (tcNoSelection) tcNoSelection.style.display = "none";
-          if (tcSelectedCity) tcSelectedCity.style.display = "";
-          if (tcCityName) tcCityName.textContent = city.shortLabel;
-          if (tcCityTz) tcCityTz.textContent = city.timezone;
-        }, resetGaiaCityStatus2 = function() {
-          if (tcNoSelection) tcNoSelection.style.display = "";
-          if (tcSelectedCity) tcSelectedCity.style.display = "none";
-        }, showGaiaDialog2 = function() {
-          tcDialog.style.display = "";
-          grid.classList.add("blurred");
-          tcCityInput.value = "";
-          tcCityResults.innerHTML = "";
-          tcSlotPicker.style.display = "none";
-          hideGaiaMessage2();
-          resetGaiaCityStatus2();
-          setTimeout(() => tcCityInput?.focus(), 50);
-        }, hideGaiaDialog2 = function() {
-          tcDialog.style.display = "none";
-          grid.classList.remove("blurred");
-        }, renderGaiaSearchResults2 = function(results) {
-          tcCityResults.innerHTML = "";
-          if (results.length === 0) {
-            tcCityResults.innerHTML = '<div class="tc-city-loading">No results found</div>';
-            return;
-          }
-          const max = Math.min(results.length, 50);
-          for (let i = 0; i < max; i++) {
-            const r = results[i];
-            const div = document.createElement("div");
-            div.className = "tc-city-item";
-            if (r.isAirport) {
-              div.innerHTML = `<span class="iata-tag">${r.label.split(" ")[0]}</span>${r.label.split(" ").slice(1).join(" ")}`;
-            } else {
-              div.textContent = r.label;
-            }
-            div.addEventListener("click", () => {
-              tcCityInput.value = "";
-              tcCityResults.innerHTML = "";
-              onGaiaCitySelected2(r);
-            });
-            tcCityResults.appendChild(div);
-          }
-        }, debounceGaiaSearch2 = function() {
-          if (gaiaSearchDebounce) clearTimeout(gaiaSearchDebounce);
-          gaiaSearchDebounce = setTimeout(onGaiaCityInput, 150);
-        }, onGaiaCitySelected2 = function(city) {
-          showGaiaCityStatus2(city);
-          hideGaiaMessage2();
-          tcSlotPicker.style.display = "";
-          tcSlotChoices.innerHTML = "";
-          const slotLabel = tcSlotPicker.querySelector(".tc-slot-label");
-          if (slotLabel) slotLabel.textContent = "Which subdial should this city replace?";
-          const nSubdials = gaiaFace.watch.maxSeparateLoc || 4;
-          for (let slot = 2; slot <= nSubdials; slot++) {
-            const currentCity = gaiaFace.terraSlotOverrides?.[slot]?.cityName || GAIA_SUBDIAL_DEFAULTS[slot]?.cityName || "Unknown";
-            const btn = document.createElement("button");
-            btn.className = "tc-slot-btn";
-            btn.innerHTML = `<span class="tc-slot-city">${currentCity}</span><span class="tc-slot-offset">${subdialLabels[slot] || `Subdial ${slot}`}</span>`;
-            btn.addEventListener("click", () => {
-              tcSlotPicker.style.display = "none";
-              assignCityToGaiaSlot2(slot, city);
-            });
-            tcSlotChoices.appendChild(btn);
-          }
-        };
-        var writeGaiaOverridesToUrl = writeGaiaOverridesToUrl2, rebuildGaiaForSlotChange = rebuildGaiaForSlotChange2, assignCityToGaiaSlot = assignCityToGaiaSlot2, showGaiaMessage = showGaiaMessage2, hideGaiaMessage = hideGaiaMessage2, showGaiaCityStatus = showGaiaCityStatus2, resetGaiaCityStatus = resetGaiaCityStatus2, showGaiaDialog = showGaiaDialog2, hideGaiaDialog = hideGaiaDialog2, renderGaiaSearchResults = renderGaiaSearchResults2, debounceGaiaSearch = debounceGaiaSearch2, onGaiaCitySelected = onGaiaCitySelected2;
-        if (tcTitle) tcTitle.textContent = "Change subdial cities";
-        const subdialLabels = { 2: "Upper", 3: "Right", 4: "Lower" };
-        const changeCitiesBtn = document.createElement("button");
-        changeCitiesBtn.className = "change-cities-btn";
-        changeCitiesBtn.textContent = "Change cities";
-        changeCitiesBtn.id = "change-cities-btn";
-        const timeBarEl = document.getElementById("time-bar");
-        if (timeBarEl) {
-          timeBarEl.parentElement.insertBefore(changeCitiesBtn, timeBarEl);
-        }
-        changeCitiesBtn.addEventListener("click", showGaiaDialog2);
-        tcDoneBtn.addEventListener("click", hideGaiaDialog2);
-        if (tcCancelBtn) tcCancelBtn.addEventListener("click", hideGaiaDialog2);
-        tcDialog.querySelector(".tc-backdrop")?.addEventListener("click", hideGaiaDialog2);
-        tcResetBtn.addEventListener("click", () => {
-          const overlay = document.getElementById("tc-confirm-overlay");
-          if (overlay) overlay.style.display = "";
-        });
-        const confirmYes = document.getElementById("tc-confirm-yes");
-        const confirmNo = document.getElementById("tc-confirm-no");
-        const confirmOverlay = document.getElementById("tc-confirm-overlay");
-        if (confirmYes && confirmNo && confirmOverlay) {
-          confirmNo.addEventListener("click", () => {
-            confirmOverlay.style.display = "none";
-          });
-          confirmYes.addEventListener("click", () => {
-            confirmOverlay.style.display = "none";
-            if (gaiaFace.terraSlotOverrides) {
-              const slot1 = gaiaFace.terraSlotOverrides[1];
-              gaiaFace.terraSlotOverrides = slot1 ? { 1: slot1 } : {};
-              for (const [k, v] of Object.entries(GAIA_SUBDIAL_DEFAULTS)) {
-                gaiaFace.terraSlotOverrides[Number(k)] = { ...v };
-              }
-            }
-            writeGaiaOverridesToUrl2();
-            rebuildGaiaForSlotChange2();
-            showGaiaMessage2("All subdials reset to defaults", "info");
-            resetGaiaCityStatus2();
-            tcSlotPicker.style.display = "none";
-          });
-        }
-        let gaiaSearchDebounce = null;
-        async function onGaiaCityInput() {
-          const query = tcCityInput.value.trim();
-          if (query.length === 0) {
-            tcCityResults.innerHTML = "";
-            return;
-          }
-          try {
-            if (!isCityDataLoaded()) {
-              if (loadError) {
-                tcCityResults.innerHTML = `<div class="tc-city-loading">City search unavailable: ${loadError}</div>`;
-                return;
-              }
-              tcCityResults.innerHTML = '<div class="tc-city-loading">Loading city database\u2026</div>';
-              try {
-                await loadCityData();
-              } catch (err) {
-                tcCityResults.innerHTML = `<div class="tc-city-loading">Failed to load: ${err.message}</div>`;
-                return;
-              }
-              const currentQuery = tcCityInput.value.trim();
-              if (currentQuery.length === 0) {
-                tcCityResults.innerHTML = "";
-                return;
-              }
-            }
-            const results = searchCities(query, 20);
-            renderGaiaSearchResults2(results);
-          } catch (err) {
-            tcCityResults.innerHTML = `<div class="tc-city-loading">Error: ${err.message}</div>`;
-          }
-        }
-        tcCityInput.addEventListener("input", debounceGaiaSearch2);
-        tcCityInput.addEventListener("keyup", debounceGaiaSearch2);
-        tcCityInput.addEventListener("compositionend", debounceGaiaSearch2);
-        tcCityInput.addEventListener("keydown", (e) => {
-          const items = tcCityResults.querySelectorAll(".tc-city-item");
-          if (items.length === 0) return;
-          const current = tcCityResults.querySelector(".tc-city-item.selected");
-          const idx = current ? Array.from(items).indexOf(current) : -1;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            const next = idx < items.length - 1 ? idx + 1 : 0;
-            current?.classList.remove("selected");
-            items[next].classList.add("selected");
-            items[next].scrollIntoView({ block: "nearest" });
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            const prev = idx > 0 ? idx - 1 : items.length - 1;
-            current?.classList.remove("selected");
-            items[prev].classList.add("selected");
-            items[prev].scrollIntoView({ block: "nearest" });
-          } else if (e.key === "Enter" && current) {
-            current.click();
-          }
-        });
-      }
-    }
-    const initialRect = grid.getBoundingClientRect();
-    if (initialRect.width > 0 && initialRect.height > 0) {
-      onGridResize(initialRect.width, initialRect.height);
-    }
-    if (isEmbedMode) {
-      const removeIds = [
-        "location-panel",
-        "time-bar",
-        "back-link",
-        "all-faces-link",
-        "selected-faces-link",
-        "info-btn",
-        "fullscreen-btn",
-        "face-name",
-        "time-popover",
-        "location-prompt",
-        "planet-selector",
-        "vienna-noon-toggle",
-        "kyoto-hand-toggle",
-        "kyoto-mode-toggle",
-        "change-cities-btn",
-        "edit-picks-link",
-        "info-overlay"
-      ];
-      for (const id of removeIds) {
-        document.getElementById(id)?.remove();
-      }
-    }
-    if (!isEmbedMode) {
-      updateTimeUI();
-    }
-    if (!isEmbedMode && urlState.tc) {
-      showPopover();
-    }
-    if (!isEmbedMode && needsPrompt) {
-      showLocationPrompt(true);
+    } catch (e) {
+      exprResults.classList.remove("visible");
+      exprError.textContent = e.message || "Evaluation error";
+      exprError.classList.add("visible");
     }
   }
-  window.Chronometer = {
-    start: main
-  };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => main().catch(console.error));
-  } else {
-    main().catch(console.error);
+  exprInput.addEventListener("input", updateExpressionEvaluator);
+  var lastSunUpdateMinute = -1;
+  function tick() {
+    updateTimeDisplay();
+    if (lastExprText) {
+      updateExpressionEvaluator();
+    }
+    const now = getNow();
+    const currentMinute = now.getMinutes();
+    if (currentMinute !== lastSunUpdateMinute) {
+      lastSunUpdateMinute = currentMinute;
+      updateSunData();
+    }
+    requestAnimationFrame(tick);
   }
+  updateSunData();
+  updateTimeDisplay();
+  requestAnimationFrame(tick);
+  console.log("[Inspector] Initialized \u2014 lat:", lat, "lon:", lon, "tz:", locationTimezone);
 })();

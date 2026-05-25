@@ -20,7 +20,7 @@
 
 import type { Watch, WatchPart, QHandPart, WheelPart, QWedgePart, QDialPart, CalendarRowCoverPart, QDayNightRingPart } from '../watch/types.js';
 import type { Environment } from '../expr/evaluator.js';
-import { evalAttr } from '../watch/watch-env.js';
+import { evalAttr } from './astro-env.js';
 import {
     timeIntervalFromUTCComponents, daysInMonth as calendarDaysInMonth,
     weekdayFromTimeInterval,

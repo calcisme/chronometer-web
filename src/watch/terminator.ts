@@ -29,7 +29,7 @@ import {
     makeAnimatingValue,
     startAnimationRaw,
     interpolateRaw,
-} from './animation.js';
+} from '../shared/animation.js';
 
 // ============================================================================
 // Quadrant enum

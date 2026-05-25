@@ -39,8 +39,8 @@ import type { TerminatorLeafState } from './terminator.js';
 import { drawTerminator } from './terminator.js';
 import type { AnalemmaState } from './analemma.js';
 import { drawAnalemma } from './analemma.js';
-import type { AnimatingValue } from './animation.js';
-import { makeAnimatingValue, interpolateValue, interpolateRaw, startLinearAnimation, startAnimationRaw } from './animation.js';
+import type { AnimatingValue } from '../shared/animation.js';
+import { makeAnimatingValue, interpolateValue, interpolateRaw, startLinearAnimation, startAnimationRaw } from '../shared/animation.js';
 
 /** Returns true if a CSS color string has alpha = 0 (fully transparent). */
 function isTransparent(cssColor: string): boolean {

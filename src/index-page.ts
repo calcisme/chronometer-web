@@ -8,9 +8,9 @@
  *   - Full location dialog with city search, globe, and OSM map
  */
 
-import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './city-search.js';
-import type { CityResult } from './city-search.js';
-import { renderGlobe, loadOSMTile } from './mini-map.js';
+import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './shared/city-search.js';
+import type { CityResult } from './shared/city-search.js';
+import { renderGlobe, loadOSMTile } from './shared/mini-map.js';
 
 // ============================================================================
 // Constants

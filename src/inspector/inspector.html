@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Inspector — live astronomy data explorer for Emerald Sequoia. View sunrise, sunset, and evaluate astronomy expressions in real time." />
-    <title>Inspector (Emerald Sequoia)</title>
+    <meta name="description" content="Inspector — live astronomy data explorer. View sunrise, sunset, and evaluate astronomy expressions in real time." />
+    <title>Inspector</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
     <style>
       *,
       *::before,
@@ -24,7 +25,7 @@
           -moz-osx-font-smoothing: grayscale;
       }
 
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+      /* Fonts loaded via <link> in <head> — works from file:// (degrades to system fonts if offline) */
 
       #app {
           display: flex;
@@ -72,6 +73,14 @@
           color: #9ca3af;
           margin: 0;
           letter-spacing: 0.5px;
+      }
+
+      #tz-display {
+          font-size: 13px;
+          font-weight: 400;
+          color: #6b7280;
+          margin: 10px 0 0;
+          letter-spacing: 0.3px;
       }
 
       /* ── Location Section ─────────────────────────── */
@@ -268,6 +277,7 @@
       <section class="time-section">
         <p id="time-display">--:--:--</p>
         <p id="date-display">Loading…</p>
+        <p id="tz-display"></p>
       </section>
 
       <!-- Location -->
@@ -326,12 +336,12 @@
 
       <!-- Footer -->
       <footer class="app-footer">
-        <a href="index.html">Chronometer</a> · Emerald Sequoia
+        <a href="index.html">Chronometer</a>
       </footer>
     </div>
 
     {{LOCATION_DIALOG}}
 
-    <script type="module" src="inspector-engine.js"></script>
+    <script src="inspector-engine.js"></script>
   </body>
 </html>

@@ -7,6 +7,8 @@
 #   dist/all.html                — all faces in a grid
 #   dist/index.html              — face selector with thumbnails
 #   dist/index-page.js           — index page location dialog logic
+#   dist/inspector-engine.js     — Inspector app engine (astronomy only, no watch code)
+#   dist/inspector.html          — Inspector app page
 set -e
 
 # Version handling
@@ -103,6 +105,11 @@ echo "=== Building pick page script ==="
 $ESBUILD "$SRC/pick-page.ts" --bundle $COMMON_FLAGS \
   --outfile="$DIST/pick-page.js"
 echo "  → pick-page.js"
+
+echo "=== Building Inspector engine ==="
+$ESBUILD "$SRC/inspector/inspector-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
+  --outfile="$DIST/inspector-engine.js"
+echo "  → inspector-engine.js"
 
 echo "=== Generating HTML files ==="
 
@@ -319,6 +326,10 @@ rm -f "$COMBINED_HELP"
 # pick.html — face picker page (simple copy, no partials needed)
 cp "$SRC/pick.html" "$DIST/pick.html"
 echo "  → pick.html"
+
+# inspector.html — Inspector app page (with location dialog injection)
+inject_partials < "$SRC/inspector/inspector.html" > "$DIST/inspector.html"
+echo "  → inspector.html"
 
 # help.html — general help topics page (simple copy)
 sed "s|</body>|<div style=\"text-align:center; margin-top: 24px; color: #667; font-size: 11px;\">v$NEW_VERSION</div></body>|" "$SRC/help.html" > "$DIST/help.html"

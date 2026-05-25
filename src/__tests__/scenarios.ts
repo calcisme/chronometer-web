@@ -6,7 +6,7 @@
  * the part values at each checkpoint for comparison against golden baselines.
  */
 
-import type { TimeUnit } from '../time-controller.js';
+import type { TimeUnit } from '../shared/time-controller.js';
 
 // ============================================================================
 // Types

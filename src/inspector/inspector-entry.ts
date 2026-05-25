@@ -17,6 +17,7 @@ import type { ASTNode } from '../expr/parser.js';
 import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
 import { findClosestCity } from '../shared/city-search.js';
+import { initLocationDialog, requestBrowserLocation } from '../shared/location-dialog.js';
 import { dateToDateInterval } from '../astronomy/es-time.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
@@ -25,10 +26,6 @@ import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astron
 // ============================================================================
 // Initialization
 // ============================================================================
-
-// Default observer location (San Jose, CA)
-const DEFAULT_LAT = 37.205;
-const DEFAULT_LON = -121.954;
 
 // DOM references
 const timeDisplay = document.getElementById('time-display')!;
@@ -44,22 +41,61 @@ const exprNumber = document.getElementById('expr-number')!;
 const exprAngle = document.getElementById('expr-angle')!;
 const exprDate = document.getElementById('expr-date')!;
 const exprError = document.getElementById('expr-error')!;
+const tzDisplay = document.getElementById('tz-display')!;
 
 // --- Resolve location from URL params ---
 const urlState = readUrlState();
-let lat = urlState.lat ?? DEFAULT_LAT;
-let lon = urlState.lon ?? DEFAULT_LON;
-let locationTimezone = urlState.tz || undefined;
+const hasUrlLocation = urlState.lat !== null && urlState.lon !== null;
+let lat = urlState.lat ?? 0;
+let lon = urlState.lon ?? 0;
+let locationTimezone: string | undefined = urlState.tz || undefined;
+let needsPrompt = !hasUrlLocation && !urlState.bloc;
 
-// If no timezone in URL, resolve it from lat/lon
-if (!locationTimezone) {
+// If no timezone in URL, resolve it from lat/lon (only if we have a location)
+if (!locationTimezone && hasUrlLocation) {
     locationTimezone = resolveTimezone(lat, lon, null);
 }
 
-const tzDeltaMs = computeTzDeltaMs(locationTimezone);
+let tzDeltaMs = computeTzDeltaMs(locationTimezone);
+
+/** Format timezone abbreviation and UTC offset, e.g. "(PDT) UTC-7:00". */
+function formatTimezoneInfo(olsonId: string | undefined, referenceDate?: Date): string {
+    if (!olsonId) return '';
+    try {
+        const ref = referenceDate || new Date();
+        // Get short abbreviation like "PDT", "EST"
+        const shortFmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: olsonId,
+            timeZoneName: 'short',
+        });
+        const shortParts = shortFmt.formatToParts(ref);
+        const abbr = shortParts.find(p => p.type === 'timeZoneName')?.value || '';
+
+        // Get UTC offset like "GMT-07:00"
+        const longFmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: olsonId,
+            timeZoneName: 'longOffset',
+        });
+        const longParts = longFmt.formatToParts(ref);
+        const offsetStr = longParts.find(p => p.type === 'timeZoneName')?.value || '';
+        // Convert "GMT-07:00" to "UTC-7:00", "GMT+05:30" to "UTC+5:30", "GMT" to "UTC"
+        let utcStr = offsetStr.replace('GMT', 'UTC');
+        // Remove leading zero: UTC-07:00 → UTC-7:00, UTC+05:30 → UTC+5:30
+        utcStr = utcStr.replace(/([+-])0(\d)/, '$1$2');
+
+        return `(${abbr})\u00a0${utcStr}`;
+    } catch {
+        return '';
+    }
+}
 
 // Display location
 function updateLocationDisplay(): void {
+    if (lat === 0 && lon === 0 && needsPrompt) {
+        locationName.textContent = 'No location set';
+        locationDetail.textContent = 'Use the Set button to choose a location';
+        return;
+    }
     const cityName = urlState.city || null;
     if (cityName) {
         locationName.textContent = cityName;
@@ -72,18 +108,86 @@ function updateLocationDisplay(): void {
             locationName.textContent = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
         }
     }
-    locationDetail.textContent = `${lat.toFixed(3)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(3)}° ${lon >= 0 ? 'E' : 'W'}  ·  ${locationTimezone || 'Browser TZ'}`;
+    const tzInfo = formatTimezoneInfo(locationTimezone);
+    const tzDisplayStr = locationTimezone || 'Browser TZ';
+    const detail = tzInfo
+        ? `${lat.toFixed(3)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(3)}° ${lon >= 0 ? 'E' : 'W'}  ·  ${tzDisplayStr} ${tzInfo}`
+        : `${lat.toFixed(3)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(3)}° ${lon >= 0 ? 'E' : 'W'}  ·  ${tzDisplayStr}`;
+    locationDetail.textContent = detail;
 }
 updateLocationDisplay();
 
-// --- Location dialog (simplified — just opens Chronometer's location page) ---
-setLocationBtn.addEventListener('click', () => {
-    // Open the location prompt if it exists (injected by build.sh)
-    const prompt = document.getElementById('location-prompt');
-    if (prompt) {
-        prompt.style.display = 'flex';
-    }
+// --- Location dialog (shared module) ---
+const locationDialog = initLocationDialog({
+    initialLat: lat,
+    initialLon: lon,
+    needsPrompt,
+    onLocationChange: (info) => {
+        // Update our location state
+        lat = info.lat;
+        lon = info.lon;
+        locationTimezone = info.timezone;
+        tzDeltaMs = computeTzDeltaMs(locationTimezone);
+        needsPrompt = false;
+
+        // Write to URL so the location persists on reload
+        if (info.sourceType === 'browser') {
+            // For browser location, use bloc=1 so next reload re-asks
+            writeUrlState({ bloc: true, lat: null, lon: null, city: null, tz: null });
+        } else {
+            writeUrlState({ lat: info.lat, lon: info.lon, city: info.source || null, tz: info.timezone || null });
+        }
+
+        // Rebuild the astronomy environment with new location
+        env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+
+        // Refresh all displays
+        updateLocationDisplay();
+        lastSunUpdateMinute = -1;  // force sunrise/sunset recalc
+        updateSunData();
+        updateTimeDisplay();
+    },
 });
+
+if (locationDialog) {
+    setLocationBtn.addEventListener('click', () => {
+        locationDialog.show();
+    });
+
+    // Auto-show the location dialog on first visit (no URL location)
+    if (needsPrompt) {
+        locationDialog.show();
+    }
+
+    // Handle bloc=1: request browser location on startup
+    if (urlState.bloc && !hasUrlLocation) {
+        requestBrowserLocation(10000).then(result => {
+            if (result.status === 'success') {
+                // Apply via the same path as the dialog's onLocationChange
+                const tz = resolveTimezone(result.lat, result.lon, null);
+                lat = result.lat;
+                lon = result.lon;
+                locationTimezone = tz;
+                tzDeltaMs = computeTzDeltaMs(locationTimezone);
+                needsPrompt = false;
+                locationDialog.updateState(lat, lon, 'browser', '', '');
+                env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+                updateLocationDisplay();
+                lastSunUpdateMinute = -1;
+                updateSunData();
+                updateTimeDisplay();
+            } else {
+                // Browser denied or timed out — show location prompt
+                needsPrompt = true;
+                locationDialog.setNeedsPrompt(true);
+                if (result.status === 'denied') {
+                    locationDialog.setGeoPermission('denied');
+                }
+                locationDialog.show();
+            }
+        });
+    }
+}
 
 // --- Create the astronomy environment ---
 // getNow returns real time for now (Phase 4 will add time controller)
@@ -119,6 +223,7 @@ function updateTimeDisplay(): void {
     const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
     timeDisplay.textContent = formatTime(shifted);
     dateDisplay.textContent = formatDate(now);
+    tzDisplay.textContent = formatTimezoneInfo(locationTimezone, now);
 }
 
 // ============================================================================

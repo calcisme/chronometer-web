@@ -33,7 +33,7 @@ import {
     finishAnimations,
     resetHandSchedules,
     anyAnimating,
-} from '../watch/animation.js';
+} from '../shared/animation.js';
 import {
     type TerminatorLeafState,
     expandTerminatorToLeaves,
@@ -42,7 +42,7 @@ import {
     resetLeafSchedules,
     anyLeafAnimating,
 } from '../watch/terminator.js';
-import { TimeController, type TimeUnit, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from '../time-controller.js';
+import { TimeController, type TimeUnit, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from '../shared/time-controller.js';
 import type { TerminatorPart } from '../watch/types.js';
 
 // ============================================================================

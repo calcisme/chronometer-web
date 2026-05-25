@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { findNextDstTransition, findPrevDstTransition, getTimezoneOffsetMinutes } from '../dst-detect.js';
+import { findNextDstTransition, findPrevDstTransition, getTimezoneOffsetMinutes } from '../shared/dst-detect.js';
 
 // ============================================================================
 // getTimezoneOffsetMinutes

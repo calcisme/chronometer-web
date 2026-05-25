@@ -411,11 +411,11 @@ export interface QDayNightRingPart extends PartBase {
     /** Display-time (ms since epoch) when the cached angles expire. */
     _cacheNextUpdate?: number;
     /** Optional animation state for masterOffset (used by Vienna noon/midnight toggle). */
-    _masterOffsetAnim?: import('../watch/animation.js').AnimatingValue;
+    _masterOffsetAnim?: import('../shared/animation.js').AnimatingValue;
     /** Per-wedge slide animation state (wadokei day/night ring). */
-    _wedgeSlides?: import('../watch/animation.js').AnimatingValue[];
+    _wedgeSlides?: import('../shared/animation.js').AnimatingValue[];
     /** Per-wedge angle animation state (smooth angular transitions). */
-    _wedgeAngleAnims?: import('../watch/animation.js').AnimatingValue[];
+    _wedgeAngleAnims?: import('../shared/animation.js').AnimatingValue[];
 }
 
 // ============================================================================
