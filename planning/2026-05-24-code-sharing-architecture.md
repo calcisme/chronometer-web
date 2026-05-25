@@ -292,7 +292,7 @@ observatory-web/               # NEW app repo (future)
 
 ### Concrete first steps under Alternative A
 
-#### Phase 1: Extract shared modules
+#### Phase 1: Extract shared modules ✅ COMPLETE
 
 1. **Extract `astro-env.ts` from `watch-env.ts`.** Move the ~100 astronomy/calendar/time function registrations into `src/shared/astro-env.ts`. The remaining `watch-env.ts` imports from `astro-env.ts` and adds Chronometer-specific functions (Terra slots, Kyoto wadokei, Venezia body selector, `evalAttr`, `evalColor`).
 
@@ -300,7 +300,7 @@ observatory-web/               # NEW app repo (future)
 
 3. **Verify Chronometer still works.** Run `bash build.sh`, `npx vitest`, and manually test a few faces to confirm the refactoring is clean.
 
-#### Phase 2: Build Inspector
+#### Phase 2: Build Inspector ✅ COMPLETE
 
 4. **Create `src/inspector/inspector.html`.** A standalone page with:
    - Current simulated time display (large, at the top) — similar to the time footer on faces pages but more prominent
@@ -325,14 +325,14 @@ observatory-web/               # NEW app repo (future)
 
 7. **Verify bundle isolation.** Grep `dist/inspector-engine.js` for any `watch/` imports — there should be none. Check bundle size (should be much smaller than `chronometer-engine.js`).
 
-#### Phase 3: Help framework extraction (deferred)
+#### Phase 3: Help framework extraction (NOT STARTED)
 
 8. **Extract help popover shell** into `src/shared/help-framework/`. This includes: the ℹ button, popover structure, slide-right sub-page navigation (Privacy, Disclaimer, Support), version display, and shared CSS. Each app provides its own help content and theme color. Don't over-engineer this — if it's simpler to just have a shared CSS file and a pattern to follow, that's fine too.
 
 > [!NOTE]
 > Phase 3 is deferred until Inspector's core functionality is working. Inspector's initial version can have a minimal ℹ button implementation (or none at all), refined later when the shared help framework is extracted.
 
-#### Phase 4: Time controller for Inspector
+#### Phase 4: Time controller for Inspector (NOT STARTED)
 
 9. **Add time controller UI to Inspector.** Port the time controller bar (play/pause, step buttons, rate selector, direction toggle) from the face template into Inspector. This lets the user scrub time and validate that:
    - Sunrise/sunset values update correctly as time changes
@@ -363,16 +363,66 @@ The first version of Inspector is intentionally minimal — a proof-of-concept t
 
 ---
 
+## Implementation Status
+
+### Phase 1: Extract Shared Modules — ✅ Complete (2025-05-25)
+
+The `src/shared/` directory was created with the following modules extracted from their original locations:
+
+| Module | Moved from | Size | Notes |
+|--------|-----------|------|-------|
+| `astro-env.ts` | NEW (extracted from `watch-env.ts`) | 99 KB | ~159 astronomy/calendar/time functions + 27 time-returning functions (ForDay, Next, Prev variants for rise/set/transit of Sun, Moon, and any planet). Factory function `createAstroEnvironment()` for non-Chronometer apps |
+| `animation.ts` | `src/watch/animation.ts` | 47 KB | Full animation system (unchanged) |
+| `time-controller.ts` | `src/time-controller.ts` | 21 KB | |
+| `city-search.ts` | `src/city-search.ts` | 9 KB | |
+| `location-dialog.ts` | NEW (extracted from partials + engine-entry) | 23 KB | Self-contained: creates dialog DOM, handles geolocation, city search, mini-map. Exports `initLocationDialog()` and `requestBrowserLocation()` |
+| `mini-map.ts` | `src/mini-map.ts` | 8 KB | |
+| `url-state.ts` | `src/url-state.ts` | 10 KB | |
+| `dst-detect.ts` | `src/dst-detect.ts` | 5 KB | |
+| `tz-resolve.ts` | `src/tz-resolve.ts` | 1 KB | |
+
+**Key architectural decisions made during extraction:**
+
+- `watch-env.ts` now imports from `astro-env.ts` via `registerAstroFunctions()` and adds only Chronometer-specific functions (Terra/Gaia slots, Kyoto wadokei, Venezia body selector, `evalAttr`, `evalColor`). It re-exports `computeTzDeltaMs`, `evalAttr`, `evalColor` for backward compatibility.
+- `astro-env.ts` exports a `createAstroEnvironment()` factory that Inspector (and future apps) use directly — no dependency on `watch-env.ts` or the watch model.
+- The location dialog was extracted from the HTML partial + engine-entry.ts JS into a single self-contained TypeScript module. It programmatically creates its DOM rather than relying on build-time HTML injection. Both Chronometer and Inspector use the same module.
+- Planet name constants (`Sun=0`, `Moon=1`, `Mercury=2`, ..., `Pluto=10`) were added to the expression evaluator's default environment so expressions like `nextRiseOfPlanet(Venus)` work in any app.
+
+All 8,472 regression tests pass after the extraction. No Chronometer functionality was lost.
+
+### Phase 2: Build Inspector — ✅ Complete (2025-05-25)
+
+Inspector is a standalone astronomy data explorer at `dist/inspector.html`. It imports only from `src/shared/`, `src/expr/`, and `src/astronomy/` — never from `src/watch/`.
+
+**What was built:**
+
+| Feature | Implementation |
+|---------|---------------|
+| **Live clock** | Updates every second, shows HH:MM:SS and full date in location's timezone |
+| **Location** | Reads `lat`/`lon`/`tz` from URL params. `bloc=1` triggers browser geolocation. No params → opens location dialog automatically |
+| **Location dialog** | Uses shared `location-dialog.ts` — same city search and mini-map as Chronometer |
+| **Timezone display** | Shows timezone abbreviation and UTC offset, e.g. `(PDT) UTC-7:00` |
+| **Sunrise/Sunset** | Formatted in location's timezone. Shows "—" for polar conditions |
+| **Expression evaluator** | Parses and evaluates against full astro-env. Results shown as Number, Angle (°), and Date (in location timezone). Error messages for invalid expressions |
+| **Autocomplete** | As-you-type dropdown with 2+ character trigger. Shows name, signature, and description. Arrow/Enter/Escape keyboard navigation. Prefix matches sorted first |
+| **Reference panel** | 📖 button opens a categorized, collapsible panel of all ~159 functions + constants organized into 10 categories (Sun Times, Moon Times, Planet Times, etc.). Click any entry to insert it into the input |
+| **Expression metadata** | `expr-metadata.ts` provides curated descriptions for all functions and constants. Falls back to env keys for anything not in the curated list |
+
+**Bundle isolation verified:** `dist/inspector-engine.js` (~1.2 MB) contains no `watch/` imports. The Chronometer `chronometer-engine.js` bundle is unaffected.
+
+---
+
 ## Resolved Questions
 
 | Question | Resolution |
 |----------|-----------|
 | **Deployment URLs** | Each app gets its own URL path (`/ecweb/`, `/eoweb/`). Inspector ships inside Chronometer's dist as `inspector.html`. |
-| **Expression system** | Should be shared. iOS EO doesn't use it, but the web port should have access to it for future use. Inspector will exercise it directly via the expression evaluator textbox. |
-| **watch-env.ts decomposition** | Yes — extract astronomy function registration to `shared/astro-env.ts`. `watch-env.ts` imports from it and adds Chronometer-specific functions. |
+| **Expression system** | Should be shared. iOS EO doesn't use it, but the web port should have access to it for future use. Inspector exercises it directly via the expression evaluator textbox. |
+| **watch-env.ts decomposition** | Done — astronomy function registration extracted to `shared/astro-env.ts`. `watch-env.ts` imports from it and adds Chronometer-specific functions. |
 | **Repo naming** | Keep `chronometer-web` for now. |
 | **Help system** | Share the visual pattern (ℹ button, popover, slide-right to Privacy/Disclaimer, version number, styles). Don't share Chronometer's per-face section architecture. Share implementation where it doesn't add nontrivial complexity. |
 | **Version coordination (Alt C)** | Astronomy code is unlikely to need patches, but shared infrastructure (e.g., location dialog) will be enhanced. The multi-PR overhead of Alternative C is a real concern for actively-evolving shared code. |
 | **First new app** | Inspector (text-only astro values), not Observatory. Inspector is the minimal test case for proving the shared code boundary. |
 | **Animation system split** | Keep the full animation system unified in shared code (including XML-expression-driven scheduling), since Observatory and future apps are likely to need it. Don't split into core/watch. |
 | **Time controller in Inspector** | Added as explicit Phase 4. Useful early for validating the shared time system against sunrise/sunset, expression evaluator, and edge cases. |
+| **Location dialog sharing** | Extracted to `src/shared/location-dialog.ts` as a self-contained module with programmatic DOM creation. Both apps use the same code. |

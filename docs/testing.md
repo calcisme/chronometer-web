@@ -97,9 +97,9 @@ src/__tests__/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 14 |
-| Total vitest tests | 7,644 |
-| Individual field assertions | ~4.6 million |
+| Test files | 22 |
+| Total vitest tests | 8,472 |
+| Individual field assertions | ~5.1 million |
 | Capture/verify time | ~38 seconds |
 | Golden file storage | ~246MB (gitignored) |
 

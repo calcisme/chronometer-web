@@ -74,9 +74,15 @@ Do **not** reset on every tick during continuous scrubbing — the quantized tic
 
 Terminator leaves have their own `nextUpdateTime` and `resetLeafSchedules()` function. These must also be reset at the same transition points as hand states.
 
-## 7. Engine Bundling Awareness
+## 7. Engine Bundling and Import Discipline
 
-`watch-env.ts` is bundled into `chronometer-engine.js` (the shared engine), not into the per-face bundles. This means adding new environment functions requires rebuilding the engine, which affects all faces. After adding env functions, always do a full `bash build.sh` rebuild.
+The codebase produces multiple bundles:
+- **`chronometer-engine.js`**: Contains `src/watch/`, `src/shared/`, `src/expr/`, and `src/astronomy/`
+- **`inspector-engine.js`**: Contains `src/inspector/`, `src/shared/`, `src/expr/`, and `src/astronomy/` — but **not** `src/watch/`
+
+Adding new functions to `src/shared/astro-env.ts` requires a full `bash build.sh` rebuild and affects both bundles. Adding functions to `src/watch/watch-env.ts` affects only Chronometer.
+
+**Import discipline:** Apps in `src/inspector/` (and future `src/observatory/`) must never import from `src/watch/`. This ensures their bundles don't pull in Chronometer-specific code (XML parser, renderer, face assets). See [Architecture Overview](architecture-overview.md) for the full import boundary rules.
 
 ## 8. Interactive Controller Patterns
 

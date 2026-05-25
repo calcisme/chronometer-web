@@ -9,7 +9,7 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 ## Table of Contents
 
 ### Architecture & Design
-- [**Architecture Overview**](architecture-overview.md) — High-level design decisions, part classification, multi-face grid, energy-efficient rendering, memory budget
+- [**Architecture Overview**](architecture-overview.md) — Multi-app monorepo structure, source layout, import discipline, shared environment architecture, Chronometer-specific design decisions
 
 ### Core Systems
 - [**Rendering**](rendering.md) — Canvas rendering pipeline, static caching, window cutouts, drawing order
@@ -33,6 +33,7 @@ Permanent reference documentation for the Chronometer Web codebase, organized by
 - [**Embedding**](embedding.md) — Embedding Terra in other websites via iframe
 
 ### Development
+- [**Adding a New App**](adding-a-new-app.md) — How to add a new app to the monorepo (e.g., Observatory)
 - [**Face Porting Guide**](face-porting-guide.md) — Step-by-step procedure for porting a new watch face
 - [**Build System**](build-system.md) — Build pipeline, face registration, deployment
 - [**Testing**](testing.md) — Test framework: unit tests, regression snapshots, astronomical boundary tests

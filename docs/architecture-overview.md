@@ -1,8 +1,73 @@
 # Architecture Overview
 
-Chronometer Web is a pure client-side watch-face renderer that reads XML watch definitions and draws animated watch faces onto HTML Canvas elements. It requires no backend server — it runs entirely in the browser using only the device's clock and location.
+This repository is a monorepo containing multiple web apps that share a common astronomy and infrastructure layer. All apps are pure client-side — they contact no backend servers and run entirely in the browser (or from `file://` URLs).
 
-## Design Decision: XML-to-Canvas
+## Apps
+
+| App | Entry point | Bundle | Purpose |
+|-----|-------------|--------|---------|
+| **Chronometer** | `src/engine-entry.ts` | `chronometer-engine.js` | Canvas-rendered watch faces from XML definitions |
+| **Inspector** | `src/inspector/inspector-entry.ts` | `inspector-engine.js` | Text-based astronomy data explorer with expression evaluator |
+| **Observatory** | `src/observatory/` (future) | TBD | Port of Emerald Observatory iOS app |
+
+## Source Directory Layout
+
+```
+src/
+├── astronomy/           # Shared: astronomical computations (WB series, rise/set, etc.)
+├── expr/                # Shared: expression tokenizer, parser, evaluator
+├── shared/              # Shared: infrastructure modules used by multiple apps
+│   ├── astro-env.ts         # Astronomy function registry + createAstroEnvironment() factory
+│   ├── animation.ts         # Full animation system (AnimatingValue, HandState, scheduling)
+│   ├── time-controller.ts   # Time scrubbing, stepping, play/pause
+│   ├── city-search.ts       # City name lookup against GeoNames database
+│   ├── location-dialog.ts   # Self-contained location picker (DOM, search, mini-map)
+│   ├── mini-map.ts          # Blue Marble globe renderer
+│   ├── url-state.ts         # Read/write lat/lon/tz/time URL parameters
+│   ├── dst-detect.ts        # DST transition detection
+│   └── tz-resolve.ts        # Lat/lon → Olson timezone resolution
+├── watch/               # Chronometer-only: XML parsing, rendering, watch-specific env
+│   ├── watch-env.ts         # Imports astro-env, adds Terra/Kyoto/Venezia specifics
+│   ├── renderer.ts          # Canvas rendering of watch parts
+│   ├── xml-parser.ts        # Watch XML → part model
+│   └── ...
+├── inspector/           # Inspector app
+│   ├── inspector-entry.ts   # Entry point (imports only shared/, expr/, astronomy/)
+│   ├── inspector.html       # Self-contained HTML page
+│   └── expr-metadata.ts     # Curated function/constant descriptions for autocomplete
+├── faces/               # Per-face entry points (XML + image assets)
+├── engine-entry.ts      # Chronometer entry point
+└── ...
+```
+
+## Import Discipline
+
+Apps must follow strict import boundaries to ensure bundle isolation:
+
+| Module | May import from |
+|--------|----------------|
+| `src/astronomy/` | Standard library only |
+| `src/expr/` | Standard library only |
+| `src/shared/` | `src/astronomy/`, `src/expr/` |
+| `src/watch/` | `src/shared/`, `src/astronomy/`, `src/expr/` |
+| `src/inspector/` | `src/shared/`, `src/astronomy/`, `src/expr/` — **never** `src/watch/` |
+| `src/observatory/` | `src/shared/`, `src/astronomy/`, `src/expr/` — **never** `src/watch/` |
+
+This ensures that `inspector-engine.js` does not pull in Chronometer-specific code (XML parser, renderer, face assets). Verify with: `grep -c 'watch/' dist/inspector-engine.js` (should be 0).
+
+## Shared Environment Architecture
+
+The expression evaluation environment is built in two layers:
+
+1. **`astro-env.ts`** (`src/shared/`): Registers ~159 astronomy, calendar, and time functions into an `Environment`. Provides `createAstroEnvironment()` — a factory that creates a ready-to-use environment from lat/lon/timezone, with no dependency on the watch model. Used directly by Inspector and future apps.
+
+2. **`watch-env.ts`** (`src/watch/`): Imports `registerAstroFunctions()` from astro-env and adds Chronometer-specific functions: Terra/Gaia world-time slot system, Kyoto wadokei master rotation, Venezia body selector, and the `evalAttr`/`evalColor` helpers. Creates environments from parsed `Watch` models.
+
+---
+
+## Chronometer: Design Decisions
+
+### XML-to-Canvas
 
 The original iOS app used a two-part architecture:
 1. **Henry** (preprocessor): reads XML watch definitions, parses C expressions, renders pixel assets into texture atlases, and creates binary archive files
@@ -65,7 +130,7 @@ The app displays 20–25 watch faces simultaneously in a CSS grid:
 The renderer uses a two-state system to minimize CPU usage:
 
 | State | What's happening | Render behavior |
-|-------|-----------------|-----------------|
+|-------|-----------------|-----------------| 
 | **Idle** | All hands at rest | `setTimeout` to next boundary; zero drawing |
 | **Animating** | Hands sweeping | `requestAnimationFrame` at full monitor rate (up to 240fps) |
 
@@ -84,19 +149,10 @@ A shared scheduler tracks `min(handState.nextUpdateTime)` across all active face
 
 Well within the 100 MB budget target.
 
-## Source File Map
-
-| Directory | Purpose |
-|-----------|---------|
-| `src/watch/` | Core rendering engine: XML parsing, expression evaluation, Canvas compositing, astronomical event stepping |
-| `src/expr/` | Expression tokenizer, parser, evaluator |
-| `src/astronomy/` | Ported astronomical routines (sun/moon/planet positions, rise/set, twilight) |
-| `src/faces/` | Per-face entry points that bundle XML and image assets |
-| `src/` (root) | Engine entry point, time controller, location/URL state, city search |
-
 ## Related Docs
 
 - [Rendering](rendering.md) — Static cache and window cutout details
 - [Animation](animation.md) — Two-time-base system and scrubbing
 - [Timezone & DST](timezone-and-dst.md) — DST transition detection and timezone offset handling
 - [Build System](build-system.md) — How face bundles are built
+- [Adding a New App](adding-a-new-app.md) — How to add a new app to the monorepo

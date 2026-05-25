@@ -1,6 +1,6 @@
 # Build System
 
-The Chronometer Web build uses a bash script (`build.sh`) that invokes `esbuild` to bundle TypeScript into browser-ready JavaScript. No development server is needed — the output runs directly from `file://` URLs.
+The build uses a bash script (`build.sh`) that invokes `esbuild` to bundle TypeScript into browser-ready JavaScript. No development server is needed — the output runs directly from `file://` URLs. The build produces bundles for all apps in the monorepo (Chronometer and Inspector).
 
 ## Prerequisites
 
@@ -19,9 +19,9 @@ PATH="/usr/local/bin:$PATH" bash build.sh
 
 ## Build Architecture
 
-### Two Bundle Types
+### Three Bundle Types
 
-1. **`chronometer-engine.js`** (shared engine) — Contains the core systems shared by all faces:
+1. **`chronometer-engine.js`** (shared Chronometer engine) — Contains the core systems shared by all watch faces:
    - Expression parser and evaluator
    - XML parser
    - Renderer
@@ -36,6 +36,15 @@ PATH="/usr/local/bin:$PATH" bash build.sh
    - The face's XML definition (imported as text)
    - Image assets (imported as data URLs or file references)
    - Face registration call
+
+3. **`inspector-engine.js`** (Inspector app) — A separate bundle containing:
+   - Astronomy library
+   - Expression parser and evaluator
+   - Shared modules (`astro-env.ts`, `location-dialog.ts`, `url-state.ts`, etc.)
+   - Inspector-specific code (`inspector-entry.ts`, `expr-metadata.ts`)
+   - **Does not include** watch-specific code (XML parser, renderer, watch-env)
+
+   The Inspector bundle is built from `src/inspector/inspector-entry.ts` by esbuild. It shares the same source modules as `chronometer-engine.js` but tree-shakes out all watch-specific code.
 
 ### HTML Generation
 
@@ -96,7 +105,9 @@ dist/
 ├── mauna-kea.html               # Individual face pages
 ├── hana.html
 ├── ...
-├── chronometer-engine.js         # Shared engine bundle
+├── inspector.html               # Inspector app page
+├── chronometer-engine.js         # Shared Chronometer engine bundle
+├── inspector-engine.js           # Inspector app bundle
 ├── face-mauna-kea.js            # Per-face bundles
 ├── face-hana.js
 ├── ...
@@ -149,6 +160,8 @@ npx vitest
 | `scripts/generate-face-modules.js` | Build-time Node.js script that compiles face TypeScript modules, cards, and manifests |
 | `src/face-template.html` | HTML template for individual face pages |
 | `src/index.html` | All-faces grid page source |
+| `src/inspector/inspector.html` | Inspector app HTML (processed with partial injection) |
+| `src/inspector/inspector-entry.ts` | Inspector app entry point (bundled → `inspector-engine.js`) |
 | `src/faces/generated/` | Output directory for auto-generated face configuration modules (gitignored) |
 | `src/help/*.html` | Per-face help content fragments (injected at build time) |
 | `src/help/images/` | Help content images (copied to `dist/help/images/`) |

@@ -73,7 +73,7 @@ Watch XML can contain `<init expr>` blocks that define variables:
 
 These are:
 1. Parsed into `ASTNode[]` in `xml-parser.ts` (stored as `watch.initExprs`)
-2. Evaluated by `evaluateInit()` in `watch-env.ts` at environment creation time
+2. Evaluated by `evaluateInit()` in `watch-env.ts` (for Chronometer) or directly via `createAstroEnvironment()` in `astro-env.ts` (for Inspector and other apps) at environment creation time
 3. The resulting variable bindings are added to the environment for subsequent expression evaluation
 
 ## Key Source Files
@@ -82,13 +82,16 @@ These are:
 |------|---------|
 | `src/expr/tokenizer.ts` | Expression tokenizer |
 | `src/expr/parser.ts` | Recursive-descent parser → AST |
-| `src/expr/evaluator.ts` | AST walker / evaluator |
-| `src/watch/watch-env.ts` | `evalAttr()`, `evaluateInit()`, environment creation with function bindings |
+| `src/expr/evaluator.ts` | AST walker / evaluator. Default environment includes `pi`, planet constants (`Sun`, `Moon`, `Venus`, etc.), and math functions |
+| `src/shared/astro-env.ts` | Shared astronomy/calendar/time function registry (~159 functions). `createAstroEnvironment()` factory for non-Chronometer apps |
+| `src/watch/watch-env.ts` | Imports `astro-env.ts`, adds Chronometer-specific functions (Terra slots, Kyoto wadokei, Venezia body). `evalAttr()`, `evaluateInit()`, environment creation |
 | `src/watch/xml-parser.ts` | `attrExpr()` helper that parses attributes to `ASTNode` |
 | `src/watch/types.ts` | `ASTNode` type on part attributes |
+| `src/inspector/expr-metadata.ts` | Curated descriptions of all functions/constants for autocomplete and reference panel |
 
 ## Related Docs
 
 - [XML Parsing](xml-parsing.md) — How attributes are parsed from XML into `ASTNode`
 - [Astronomy](astronomy.md) — Astronomy functions available in the expression environment
 - [Animation](animation.md) — How `evalAttr` is called during animation ticks
+- [Architecture Overview](architecture-overview.md) — Shared environment architecture and import discipline
