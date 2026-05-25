@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Inspector — live astronomy data explorer for Emerald Sequoia. View sunrise, sunset, and evaluate astronomy expressions in real time." />
+    <title>Inspector (Emerald Sequoia)</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+      }
+
+      html, body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          background: #111827;
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          color: #d1d5db;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+      }
+
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+      #app {
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 24px 20px 40px;
+      }
+
+      /* Header with app title */
+      .app-header {
+          text-align: center;
+          margin-bottom: 8px;
+      }
+
+      .app-title {
+          font-size: 14px;
+          font-weight: 500;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          color: #6b7280;
+          margin: 0;
+      }
+
+      /* ── Time Display ─────────────────────────────── */
+      .time-section {
+          text-align: center;
+          margin-bottom: 24px;
+      }
+
+      #time-display {
+          font-family: 'JetBrains Mono', 'SF Mono', monospace;
+          font-size: 48px;
+          font-weight: 300;
+          letter-spacing: 2px;
+          color: #f9fafb;
+          margin: 0 0 4px;
+          line-height: 1.2;
+      }
+
+      #date-display {
+          font-size: 16px;
+          font-weight: 400;
+          color: #9ca3af;
+          margin: 0;
+          letter-spacing: 0.5px;
+      }
+
+      /* ── Location Section ─────────────────────────── */
+      .section-card {
+          background: rgba(31, 41, 55, 0.6);
+          border: 1px solid rgba(75, 85, 99, 0.3);
+          border-radius: 12px;
+          padding: 16px 20px;
+          margin-bottom: 16px;
+      }
+
+      .section-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+          color: #6b7280;
+          margin: 0 0 8px;
+      }
+
+      .location-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+      }
+
+      #location-name {
+          font-size: 18px;
+          font-weight: 500;
+          color: #e5e7eb;
+          margin: 0;
+      }
+
+      #location-detail {
+          font-size: 13px;
+          color: #6b7280;
+          margin: 4px 0 0;
+          font-family: 'JetBrains Mono', monospace;
+      }
+
+      #set-location-btn {
+          background: rgba(99, 102, 241, 0.12);
+          border: 1px solid rgba(99, 102, 241, 0.25);
+          border-radius: 8px;
+          color: #818cf8;
+          font-size: 13px;
+          font-weight: 500;
+          padding: 6px 14px;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s;
+          white-space: nowrap;
+      }
+
+      #set-location-btn:hover {
+          background: rgba(99, 102, 241, 0.2);
+          border-color: rgba(99, 102, 241, 0.4);
+      }
+
+      /* ── Sun Data ─────────────────────────────────── */
+      .data-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+      }
+
+      .data-item {
+          display: flex;
+          flex-direction: column;
+      }
+
+      .data-label {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          color: #6b7280;
+          margin-bottom: 4px;
+      }
+
+      .data-value {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 22px;
+          font-weight: 500;
+          color: #f9fafb;
+      }
+
+      .sunrise-value {
+          color: #fbbf24;
+      }
+
+      .sunset-value {
+          color: #f97316;
+      }
+
+      /* ── Expression Evaluator ─────────────────────── */
+      .expr-section {
+          margin-top: 8px;
+      }
+
+      #expr-input {
+          width: 100%;
+          padding: 10px 14px;
+          border: 1px solid rgba(75, 85, 99, 0.4);
+          border-radius: 8px;
+          background: rgba(17, 24, 39, 0.8);
+          color: #e5e7eb;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      #expr-input:focus {
+          border-color: rgba(99, 102, 241, 0.5);
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      #expr-input::placeholder {
+          color: #4b5563;
+      }
+
+      .expr-results {
+          margin-top: 10px;
+          display: none;
+      }
+
+      .expr-results.visible {
+          display: block;
+      }
+
+      .expr-result-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 6px 0;
+          border-bottom: 1px solid rgba(75, 85, 99, 0.15);
+      }
+
+      .expr-result-row:last-child {
+          border-bottom: none;
+      }
+
+      .expr-result-label {
+          font-size: 12px;
+          color: #6b7280;
+      }
+
+      .expr-result-value {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 13px;
+          color: #e5e7eb;
+      }
+
+      #expr-error {
+          color: #f87171;
+          font-size: 13px;
+          margin-top: 8px;
+          display: none;
+      }
+
+      #expr-error.visible {
+          display: block;
+      }
+
+      /* ── Footer ───────────────────────────────────── */
+      .app-footer {
+          margin-top: auto;
+          padding-top: 24px;
+          text-align: center;
+          font-size: 12px;
+          color: #4b5563;
+      }
+
+      .app-footer a {
+          color: #818cf8;
+          text-decoration: none;
+      }
+
+      .app-footer a:hover {
+          text-decoration: underline;
+      }
+
+      /* ── Location dialog injection ─────────────────── */
+      {{LOCATION_CSS}}
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Header -->
+      <header class="app-header">
+        <h1 class="app-title">Inspector</h1>
+      </header>
+
+      <!-- Time Display -->
+      <section class="time-section">
+        <p id="time-display">--:--:--</p>
+        <p id="date-display">Loading…</p>
+      </section>
+
+      <!-- Location -->
+      <div class="section-card">
+        <p class="section-label">Location</p>
+        <div class="location-row">
+          <div>
+            <p id="location-name">Detecting…</p>
+            <p id="location-detail">—</p>
+          </div>
+          <button id="set-location-btn">Set</button>
+        </div>
+      </div>
+
+      <!-- Sun Data -->
+      <div class="section-card">
+        <p class="section-label">Sun</p>
+        <div class="data-grid">
+          <div class="data-item">
+            <span class="data-label">Sunrise</span>
+            <span class="data-value sunrise-value" id="sunrise-value">—</span>
+          </div>
+          <div class="data-item">
+            <span class="data-label">Sunset</span>
+            <span class="data-value sunset-value" id="sunset-value">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expression Evaluator -->
+      <div class="section-card expr-section">
+        <p class="section-label">Expression Evaluator</p>
+        <input
+          type="text"
+          id="expr-input"
+          placeholder="e.g. sunAltitude() * 180 / pi"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div id="expr-results" class="expr-results">
+          <div class="expr-result-row">
+            <span class="expr-result-label">Number</span>
+            <span class="expr-result-value" id="expr-number">—</span>
+          </div>
+          <div class="expr-result-row">
+            <span class="expr-result-label">Angle (°)</span>
+            <span class="expr-result-value" id="expr-angle">—</span>
+          </div>
+          <div class="expr-result-row">
+            <span class="expr-result-label">Date</span>
+            <span class="expr-result-value" id="expr-date">—</span>
+          </div>
+        </div>
+        <p id="expr-error">—</p>
+      </div>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <a href="index.html">Chronometer</a> · Emerald Sequoia
+      </footer>
+    </div>
+
+    {{LOCATION_DIALOG}}
+
+    <script type="module" src="inspector-engine.js"></script>
+  </body>
+</html>
