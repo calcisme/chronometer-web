@@ -2,6 +2,8 @@
 .esastro-ref
 .estime-ref
 .eslocation-ref
+.observatory-ref
+.observatory-opengl-ref
 node_modules
 package-lock.json
 .DS_Store
