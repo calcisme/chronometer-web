@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Emerald Observatory — astronomical clock showing planetary positions, rise/set times, moon phase, day/night terminator, and more." />
+    <title>Emerald Observatory</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <style>
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+      }
+
+      html, body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: #000000;
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          color: #d1d5db;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* Full-viewport canvas */
+      #observatory-canvas {
+          display: block;
+          width: 100%;
+          height: 100%;
+          position: fixed;
+          top: 0;
+          left: 0;
+      }
+
+      /* Location button overlay — bottom-right corner */
+      #observatory-controls {
+          position: fixed;
+          bottom: 12px;
+          right: 12px;
+          z-index: 10;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+      }
+
+      /* Minimal location name display */
+      #location-name {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.35);
+          font-weight: 400;
+          pointer-events: none;
+      }
+
+      #set-location-btn {
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 6px;
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 11px;
+          font-weight: 500;
+          padding: 4px 10px;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s, color 0.2s;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+      }
+
+      #set-location-btn:hover {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.2);
+          color: rgba(255, 255, 255, 0.7);
+      }
+
+      /* ── Location dialog injection ─────────────────── */
+      {{LOCATION_CSS}}
+    </style>
+  </head>
+  <body>
+    <canvas id="observatory-canvas"></canvas>
+
+    <!-- Minimal overlay controls -->
+    <div id="observatory-controls">
+      <span id="location-name">Detecting…</span>
+      <button id="set-location-btn">Set Location</button>
+    </div>
+
+    {{LOCATION_DIALOG}}
+
+    <script src="observatory-engine.js"></script>
+  </body>
+</html>

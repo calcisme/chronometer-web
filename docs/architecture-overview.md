@@ -8,7 +8,7 @@ This repository is a monorepo containing multiple web apps that share a common a
 |-----|-------------|--------|---------|
 | **Chronometer** | `src/engine-entry.ts` | `chronometer-engine.js` | Canvas-rendered watch faces from XML definitions |
 | **Inspector** | `src/inspector/inspector-entry.ts` | `inspector-engine.js` | Text-based astronomy data explorer with expression evaluator |
-| **Observatory** | `src/observatory/` (future) | TBD | Port of Emerald Observatory iOS app |
+| **Observatory** | `src/observatory/observatory-entry.ts` | `observatory-engine.js` | Port of Emerald Observatory — astronomical clock with orrery, moon phase, earth map |
 
 ## Source Directory Layout
 
@@ -35,6 +35,11 @@ src/
 │   ├── inspector-entry.ts   # Entry point (imports only shared/, expr/, astronomy/)
 │   ├── inspector.html       # Self-contained HTML page
 │   └── expr-metadata.ts     # Curated function/constant descriptions for autocomplete
+├── observatory/         # Observatory app (Emerald Observatory port)
+│   ├── observatory-entry.ts # Entry point (imports only shared/, expr/, astronomy/)
+│   ├── observatory.html     # Full-viewport canvas page
+│   ├── layout.ts            # Responsive layout engine (computes all positions from viewport)
+│   └── draw-utils.ts        # Shared Canvas 2D drawing primitives (ticks, circular text, etc.)
 ├── faces/               # Per-face entry points (XML + image assets)
 ├── engine-entry.ts      # Chronometer entry point
 └── ...

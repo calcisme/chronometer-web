@@ -9,6 +9,8 @@
 #   dist/index-page.js           — index page location dialog logic
 #   dist/inspector-engine.js     — Inspector app engine (astronomy only, no watch code)
 #   dist/inspector.html          — Inspector app page
+#   dist/observatory-engine.js   — Observatory app engine (astronomy, no watch code)
+#   dist/observatory.html        — Observatory app page
 set -e
 
 # Version handling
@@ -110,6 +112,11 @@ echo "=== Building Inspector engine ==="
 $ESBUILD "$SRC/inspector/inspector-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/inspector-engine.js"
 echo "  → inspector-engine.js"
+
+echo "=== Building Observatory engine ==="
+$ESBUILD "$SRC/observatory/observatory-entry.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
+  --outfile="$DIST/observatory-engine.js"
+echo "  → observatory-engine.js"
 
 echo "=== Generating HTML files ==="
 
@@ -330,6 +337,10 @@ echo "  → pick.html"
 # inspector.html — Inspector app page (with location dialog injection)
 inject_partials < "$SRC/inspector/inspector.html" > "$DIST/inspector.html"
 echo "  → inspector.html"
+
+# observatory.html — Observatory app page (with location dialog injection)
+inject_partials < "$SRC/observatory/observatory.html" > "$DIST/observatory.html"
+echo "  → observatory.html"
 
 # help.html — general help topics page (simple copy)
 sed "s|</body>|<div style=\"text-align:center; margin-top: 24px; color: #667; font-size: 11px;\">v$NEW_VERSION</div></body>|" "$SRC/help.html" > "$DIST/help.html"

@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Emerald Observatory — astronomical clock showing planetary positions, rise/set times, moon phase, day/night terminator, and more." />
+    <title>Emerald Observatory</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <style>
+      *,
+      *::before,
+      *::after {
+          box-sizing: border-box;
+      }
+
+      html, body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: #000000;
+          font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          color: #d1d5db;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* Full-viewport canvas */
+      #observatory-canvas {
+          display: block;
+          width: 100%;
+          height: 100%;
+          position: fixed;
+          top: 0;
+          left: 0;
+      }
+
+      /* Location button overlay — bottom-right corner */
+      #observatory-controls {
+          position: fixed;
+          bottom: 12px;
+          right: 12px;
+          z-index: 10;
+          display: flex;
+          gap: 8px;
+          align-items: center;
+      }
+
+      /* Minimal location name display */
+      #location-name {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.35);
+          font-weight: 400;
+          pointer-events: none;
+      }
+
+      #set-location-btn {
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 6px;
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 11px;
+          font-weight: 500;
+          padding: 4px 10px;
+          cursor: pointer;
+          transition: background 0.2s, border-color 0.2s, color 0.2s;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+      }
+
+      #set-location-btn:hover {
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.2);
+          color: rgba(255, 255, 255, 0.7);
+      }
+
+      /* ── Location dialog injection ─────────────────── */
+              /* Location prompt overlay */
+        #location-prompt {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 40px 16px;
+        }
+
+        @media (min-height: 600px) {
+            #location-prompt {
+                align-items: center;
+                padding: 20px 16px;
+            }
+        }
+
+        #location-prompt .lp-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #location-prompt .lp-dialog {
+            position: relative;
+            background: rgba(26, 26, 46, 0.98);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid #3a3a5e;
+            border-radius: 14px;
+            padding: 28px 32px;
+            min-width: 300px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        #location-prompt .lp-title {
+            font-size: 16px;
+            color: #e0d8c8;
+            margin: 0 0 6px;
+            font-weight: 400;
+        }
+
+        #location-prompt .lp-subtitle {
+            font-size: 13px;
+            color: #776;
+            margin: 0 0 20px;
+        }
+
+        #location-prompt .lp-inputs {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        #location-prompt .lp-inputs label {
+            color: #888;
+            font-size: 13px;
+        }
+
+        #location-prompt .lp-inputs input {
+            width: 90px;
+            padding: 4px 6px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #2a2a3e;
+            color: #ddd;
+            font-size: 16px;
+            font-family: monospace;
+        }
+
+        #location-prompt .lp-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #location-prompt .lp-btn {
+            background: #2a2a4e;
+            border: 1px solid #3a3a5e;
+            border-radius: 6px;
+            color: #aac;
+            font-size: 13px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        #location-prompt .lp-btn:hover {
+            background: #3a3a6e;
+            color: #ddf;
+        }
+
+        #location-prompt .lp-btn:disabled {
+            background: #2a2a3e !important;
+            border-color: #333 !important;
+            color: #556 !important;
+            cursor: not-allowed;
+        }
+
+        #location-prompt .lp-btn:disabled:hover {
+            background: #2a2a3e !important;
+            color: #556 !important;
+        }
+
+        /* Instant tooltip on disabled buttons */
+        #location-prompt .lp-btn[data-tooltip] {
+            position: relative;
+        }
+
+        #location-prompt .lp-btn:disabled[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 2px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #111122;
+            border: 1px solid #3a3a5e;
+            border-radius: 4px;
+            padding: 5px 12px;
+            font-size: 11px;
+            color: #aa9;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* City search */
+        #location-prompt .lp-search-section {
+            margin-bottom: 12px;
+            position: relative;
+        }
+
+        #location-prompt .lp-browser-section {
+            margin-top: 12px;
+            border-top: 1px solid #2a2a3e;
+            padding-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #location-prompt .lp-manual-section {
+            margin-top: 12px;
+            border-top: 1px solid #2a2a3e;
+            padding-top: 10px;
+        }
+
+        #location-prompt .lp-search-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #776;
+            margin-bottom: 5px;
+        }
+
+        #lp-city-input {
+            width: 100%;
+            padding: 10px 12px 10px 36px;
+            background: #222240;
+            border: 1px solid #4a4a6e;
+            border-radius: 8px;
+            color: #eee;
+            font-size: 16px;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #lp-city-input:focus {
+            border-color: #6677bb;
+            box-shadow: 0 0 0 2px rgba(102, 119, 187, 0.25);
+        }
+
+        .lp-search-input-wrap {
+            position: relative;
+        }
+
+        .lp-search-input-wrap::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23778' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='16.5' y1='16.5' x2='21' y2='21'/%3E%3C/svg%3E") center/contain no-repeat;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #lp-city-input::placeholder {
+            color: #556;
+        }
+
+        #lp-city-results {
+            position: absolute;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 2px;
+            padding: 4px 0 6px;
+            background: #1e1e38;
+            border: 1px solid #3a3a5e;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        #lp-city-results:empty {
+            display: none;
+        }
+
+        .lp-city-item {
+            padding: 6px 10px;
+            color: #bbc;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.1s;
+        }
+
+        .lp-city-item:hover,
+        .lp-city-item.selected {
+            background: #2a2a4e;
+            color: #ddf;
+        }
+
+        .lp-city-item .iata-tag {
+            display: inline-block;
+            background: #3a3a5e;
+            color: #aac;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-right: 6px;
+            font-family: monospace;
+        }
+
+        .lp-city-loading {
+            color: #666;
+            font-size: 12px;
+            padding: 8px 10px;
+            font-style: italic;
+        }
+
+        /* Status section (map + location name) at top of dialog */
+        .lp-status-section {
+            max-height: 0;
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: 1px solid transparent;
+            overflow: hidden;
+            transition: max-height 0.35s ease, margin-bottom 0.35s ease, padding-bottom 0.35s ease, border-color 0.35s ease;
+        }
+
+        .lp-status-section.visible {
+            max-height: 280px;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom-color: #2a2a3e;
+        }
+
+        .lp-map-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #lp-globe {
+            border-radius: 50%;
+            flex-shrink: 0;
+            width: 100px;
+            height: 100px;
+        }
+
+        /* When globe is the only visible child in the map row, make it bigger */
+        .lp-map-row #lp-globe:only-child {
+            width: 160px;
+            height: 160px;
+        }
+
+        .lp-osm-container {
+            flex: 1;
+            height: 160px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 6px;
+            background: #0a1a2c;
+            border: 1px solid #2a2a3e;
+        }
+
+        .lp-osm-container img {
+            position: absolute;
+            width: 256px;
+            height: 256px;
+            image-rendering: auto;
+        }
+
+        .lp-map-marker {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            margin-left: -5px;
+            margin-top: -5px;
+            background: #ff4444;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            z-index: 2;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }
+
+        .lp-osm-offline {
+            position: absolute;
+            bottom: 4px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #556;
+            font-style: italic;
+        }
+
+        .lp-map-attribution {
+            font-size: 9px;
+            color: #445;
+            text-align: right;
+            margin-top: 2px;
+        }
+
+        .lp-map-attribution a {
+            color: #556;
+            text-decoration: none;
+        }
+
+        .lp-location-name {
+            font-size: 13px;
+            color: #bbc;
+            margin-top: 6px;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        .lp-location-name .lp-loc-source {
+            color: #667;
+            font-style: italic;
+            font-size: 11px;
+        }
+
+        .lp-location-tz {
+            font-size: 11px;
+            color: #778;
+            text-align: center;
+            margin-top: 2px;
+            white-space: nowrap;
+        }
+
+        /* No-location placeholder */
+        .lp-no-location {
+            margin-bottom: 14px;
+            padding: 20px 0 14px;
+            border-bottom: 1px solid #2a2a3e;
+            text-align: center;
+        }
+
+        .lp-no-location.hidden {
+            display: none;
+        }
+
+        .lp-no-location-text {
+            color: #667;
+            font-size: 14px;
+            font-style: italic;
+        }
+
+        /* First-visit instructional hint (prominent) */
+        .lp-no-location-hint {
+            background: rgba(50, 50, 90, 0.4);
+            border: 1px solid #4a4a7e;
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+
+        .lp-hint-icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+        }
+
+        .lp-hint-text {
+            color: #ddc;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .lp-hint-sub {
+            color: #998;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        /* Done button */
+        .lp-dialog-footer {
+            max-height: 0;
+            margin-top: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, margin-top 0.3s ease;
+        }
+
+        .lp-dialog-footer.visible {
+            max-height: 50px;
+            margin-top: 10px;
+        }
+
+        .lp-btn-done {
+            width: 100%;
+            padding: 8px;
+            font-size: 14px;
+        }
+
+    </style>
+  </head>
+  <body>
+    <canvas id="observatory-canvas"></canvas>
+
+    <!-- Minimal overlay controls -->
+    <div id="observatory-controls">
+      <span id="location-name">Detecting…</span>
+      <button id="set-location-btn">Set Location</button>
+    </div>
+
+    <!-- Location prompt overlay (hidden by default) -->
+<div id="location-prompt" style="display: none">
+  <div class="lp-backdrop"></div>
+  <div class="lp-dialog">
+    <h3 class="lp-title">Location</h3>
+
+    <!-- Current location status (map + name) — shown at top when we have a location -->
+    <div class="lp-status-section" id="lp-status-section">
+      <div class="lp-map-row" id="lp-map-row">
+        <canvas id="lp-globe" width="100" height="100"></canvas>
+        <div class="lp-osm-container" id="lp-osm-container">
+          <img id="lp-osm-tile" alt="" />
+          <div class="lp-map-marker" id="lp-map-marker"></div>
+          <div class="lp-osm-offline" id="lp-osm-offline" style="display: none">
+            (offline)
+          </div>
+        </div>
+      </div>
+      <div class="lp-map-attribution" id="lp-osm-attribution">
+        ©
+        <a
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noopener"
+          >OpenStreetMap</a
+        >
+        contributors
+      </div>
+      <div class="lp-location-name" id="lp-location-name"></div>
+      <div class="lp-location-tz" id="lp-location-tz"></div>
+    </div>
+
+    <!-- "No location set yet" placeholder -->
+    <div class="lp-no-location" id="lp-no-location">
+      <div
+        class="lp-no-location-hint"
+        id="lp-no-location-hint"
+        style="display: none"
+      >
+        <div class="lp-hint-icon">📍</div>
+        <div class="lp-hint-text">No location specified via URL</div>
+        <div class="lp-hint-sub">
+          To skip this dialog in the future, bookmark the page after selecting a
+          location below
+        </div>
+      </div>
+      <div class="lp-no-location-text" id="lp-no-location-default">
+        No location set yet
+      </div>
+    </div>
+
+    <div class="lp-search-section">
+      <div class="lp-search-label">City search</div>
+      <div class="lp-search-input-wrap">
+        <input
+          type="text"
+          id="lp-city-input"
+          placeholder="Search city or airport code…"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+      </div>
+      <div id="lp-city-results"></div>
+    </div>
+    <div class="lp-browser-section">
+      <button class="lp-btn" id="lp-use-browser">
+        Use device location via browser
+      </button>
+    </div>
+    <div class="lp-manual-section">
+      <div class="lp-search-label">Manual coordinates</div>
+      <div class="lp-inputs">
+        <label
+          >Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"
+        /></label>
+        <label
+          >Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"
+        /></label>
+      </div>
+      <div class="lp-buttons">
+        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
+      </div>
+    </div>
+    <div class="lp-dialog-footer">
+      <button class="lp-btn lp-btn-done" id="lp-done">Done</button>
+    </div>
+  </div>
+</div>
+
+
+    <script src="observatory-engine.js"></script>
+  </body>
+</html>
