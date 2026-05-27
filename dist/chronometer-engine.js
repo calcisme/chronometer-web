@@ -12976,12 +12976,11 @@
         tzOffsetSeconds
       );
     });
-    functions.set("planettransit24HourIndicatorAngle", (planetNumber, numLeaves) => {
-      const nl = numLeaves != null && numLeaves > 0 ? numLeaves : env.variables.get("planNumWedges") || 24;
+    functions.set("planettransit24HourIndicatorAngle", (planetNumber) => {
       return computeDayNightLeafAngle(
         planetNumber,
-        nl / 2,
-        nl,
+        4,
+        0,
         getNow,
         OBSERVER_LAT,
         OBSERVER_LON,
@@ -13105,6 +13104,16 @@
         return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
       } else if (leafNumber === 1) {
         return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
+      } else if (leafNumber === 4) {
+        const transitDI = planettransitTimeRefined(
+          calcDate,
+          observerLat,
+          observerLon,
+          true,
+          planetNumber,
+          pool
+        );
+        return angle24HourForDate(transitDI, tzOffsetSeconds);
       } else {
         isSpecial = true;
       }

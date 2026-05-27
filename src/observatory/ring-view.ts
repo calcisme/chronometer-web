@@ -28,53 +28,11 @@
 import type { LayoutParams } from './layout.js';
 import type { Environment } from '../expr/evaluator.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
-import { WB_planetApparentPosition } from '../astronomy/willmann-bell.js';
-import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
-import { convertUTToGSTP03, convertGSTtoLST } from '../astronomy/es-sidereal.js';
+import { cachelessPlanetAlt } from '../astronomy/es-astro.js';
 
 const TWO_PI = 2 * Math.PI;
 const HALF_PI = Math.PI / 2;
 
-// ---------------------------------------------------------------------------
-// Cacheless planet altitude (port of ESAstronomy.cpp L1190–1222)
-// ---------------------------------------------------------------------------
-
-/**
- * Compute planet altitude at an arbitrary time without using the cache.
- *
- * Port of: cachelessPlanetAlt(planetNumber, dateInterval, lat, lng)
- * from ESAstronomy.cpp L1190–1222.
- *
- * Uses WB_planetApparentPosition to get RA/Dec, then computes
- * altitude from hour angle, declination, and observer latitude.
- *
- * @param planetNumber  Planet enum value
- * @param dateInterval  Apple epoch time interval
- * @param lat           Observer latitude in radians
- * @param lng           Observer longitude in radians
- * @returns Altitude in radians
- */
-function cachelessPlanetAlt(
-    planetNumber: number,
-    dateInterval: number,
-    lat: number,
-    lng: number,
-): number {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
-    const tau = julianCenturiesSince2000Epoch / 100;  // Julian millennia
-
-    const pos = WB_planetApparentPosition(planetNumber, tau);
-    const planetRA = pos.apparentRightAscension;
-    const planetDecl = pos.apparentDeclination;
-
-    const gst = convertUTToGSTP03(dateInterval, null);
-    const lst = convertGSTtoLST(gst, lng);
-    const hourAngle = lst - planetRA;
-
-    const sinAlt = Math.sin(planetDecl) * Math.sin(lat)
-                 + Math.cos(planetDecl) * Math.cos(lat) * Math.cos(hourAngle);
-    return Math.asin(sinAlt);
-}
 
 // ---------------------------------------------------------------------------
 // Sky-color gradient for Sun ring

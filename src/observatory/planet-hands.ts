@@ -206,25 +206,24 @@ export function drawPlanetHands(
         ctx.translate(cx, cy);
 
         // iOS: the view's layer transform is a rotation by `angle`,
-        // and the image is drawn at (−width/2, radius−length/2).
-        // In our canvas model: rotate by angle, then draw image at (0, −orbitR)
-        // centered horizontally.
-        ctx.rotate(angle);
+        // and the image is drawn at y=+radius (downward from center in UIKit).
+        // Since we draw at +orbitR (downward), we add π to keep the planet
+        // at the same angular position on the dial while the image is right-side-up.
+        ctx.rotate(angle + Math.PI);
 
         // Image size: use natural image dimensions, scaled proportionally
         const s = L.mainR / 365;
         const imgW = img.naturalWidth * s;
         const imgH = img.naturalHeight * s;
 
-        // Draw image centered at (0, -orbitR)
         // iOS: [img drawInRect:CGRectMake(-width/2, radius-length/2, width, length)]
-        // The image extends from radius to radius+length in the +Y direction
-        // (iOS Y-up: from radius upward). In canvas Y-down coords, that's
-        // from -radius to -(radius+length) = -radius - imgH.
-        // Center of image is at -radius - imgH/2. But we want it centered
-        // ON the orbit circle, so use -orbitR.
+        // In UIKit Y-down, this draws the image centered at +radius (downward
+        // from the rotation center). Canvas is also Y-down, so we draw at
+        // +orbitR to match iOS exactly. The scale(-1,1) corrects for the
+        // tangential mirror introduced by the π rotation offset.
+        ctx.scale(-1, 1);
         ctx.globalCompositeOperation = 'lighten';
-        ctx.drawImage(img, -imgW / 2, -orbitR - imgH / 2, imgW, imgH);
+        ctx.drawImage(img, -imgW / 2, orbitR - imgH / 2, imgW, imgH);
 
         // Draw Moon sub-hand if this is Earth
         if (p.planet === ECPlanetNumber.Earth) {
@@ -264,15 +263,19 @@ function drawMoonSubHand(
 
     ctx.save();
 
-    // Move to the Earth position on its orbit
-    ctx.translate(0, -earthOrbitR);
+    // Move to the Earth position on its orbit (positive Y = downward, matching iOS)
+    ctx.translate(0, earthOrbitR);
 
-    // Rotate by the Moon's angle (relative to Earth)
-    ctx.rotate(cachedMoonAngle);
+    // Rotate by the Moon's angle (relative to Earth).
+    // Negated to compensate for the inherited scale(-1,1) from Earth's context,
+    // which mirrors the rotation direction.
+    ctx.rotate(-cachedMoonAngle);
 
-    // Draw moon image at moonOrbitRadius offset
+    // Draw moon image at moonOrbitRadius offset (positive Y, matching iOS)
+    // scale(-1,1) undoes the inherited X-flip from the Earth drawing context.
+    ctx.scale(-1, 1);
     ctx.globalCompositeOperation = 'lighten';
-    ctx.drawImage(moonImg, -moonW / 2, -moonR - moonH / 2, moonW, moonH);
+    ctx.drawImage(moonImg, -moonW / 2, moonR - moonH / 2, moonW, moonH);
 
     ctx.restore();
 }

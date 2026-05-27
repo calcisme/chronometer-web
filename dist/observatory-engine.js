@@ -10040,6 +10040,18 @@
     }
     return altNotAz ? planetAltitude : planetAzimuth;
   }
+  function cachelessPlanetAlt(planetNumber, dateInterval, observerLatitude, observerLongitude) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
+    const tau = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, tau);
+    const planetRA = pos.apparentRightAscension;
+    const planetDecl = pos.apparentDeclination;
+    const gst = convertUTToGSTP03(dateInterval, null);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const hourAngle = lst - planetRA;
+    const sinAlt = Math.sin(planetDecl) * Math.sin(observerLatitude) + Math.cos(planetDecl) * Math.cos(observerLatitude) * Math.cos(hourAngle);
+    return Math.asin(sinAlt);
+  }
   function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
     return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
   }
@@ -11679,12 +11691,11 @@
         tzOffsetSeconds
       );
     });
-    functions.set("planettransit24HourIndicatorAngle", (planetNumber, numLeaves) => {
-      const nl = numLeaves != null && numLeaves > 0 ? numLeaves : env2.variables.get("planNumWedges") || 24;
+    functions.set("planettransit24HourIndicatorAngle", (planetNumber) => {
       return computeDayNightLeafAngle(
         planetNumber,
-        nl / 2,
-        nl,
+        4,
+        0,
         getNow2,
         OBSERVER_LAT,
         OBSERVER_LON,
@@ -11808,6 +11819,16 @@
         return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
       } else if (leafNumber === 1) {
         return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
+      } else if (leafNumber === 4) {
+        const transitDI = planettransitTimeRefined(
+          calcDate,
+          observerLat,
+          observerLon,
+          true,
+          planetNumber,
+          pool
+        );
+        return angle24HourForDate(transitDI, tzOffsetSeconds);
       } else {
         isSpecial = true;
       }
@@ -13328,15 +13349,15 @@
     const zodiacFontSize = Math.max(8, 36 * s);
     const smallZodiacFontSize = Math.max(6, 11 * s);
     const subdialFontSize = Math.max(6, 10 * s);
-    const plR = mainR - mainFontSize - 1;
+    const plR = Math.max(100, 332 * s);
     const sunRingWidth = Math.max(16, 64 * s);
     const orbitInc = Math.max(10, 40 * s);
-    const subR = (orbitInc - 1) * 2 - 5;
+    const subR = Math.max(20, 73 * s);
     const subOffset = Math.max(40, 149 * s);
     const sunD = Math.max(24, 100 * s);
     const zD = Math.max(100, 526 * s);
-    const zR = plR - 60 * s;
-    const plR2 = plR - 52 * s - 26 * s;
+    const zR = Math.max(80, 272 * s);
+    const plR2 = Math.max(60, 254 * s);
     const secLen = (zR - zodiacFontSize / 2) * 1.05;
     const minLen = zR - zodiacFontSize / 2;
     const h12Len = minLen * 0.75;
@@ -13791,7 +13812,7 @@
       ctx2,
       label,
       cx,
-      cy - r / 2 + L.subdialFontSize / 2,
+      cy + r / 2 - L.subdialFontSize / 2,
       `${L.subdialFontSize + 2 * s}px 'Arial', sans-serif`,
       "#ffffff"
     );
@@ -13899,12 +13920,13 @@
       const orbitR = L.plR2 - p.orbitIndex * L.orbitInc;
       ctx2.save();
       ctx2.translate(cx, cy);
-      ctx2.rotate(angle);
+      ctx2.rotate(angle + Math.PI);
       const s = L.mainR / 365;
       const imgW = img.naturalWidth * s;
       const imgH = img.naturalHeight * s;
+      ctx2.scale(-1, 1);
       ctx2.globalCompositeOperation = "lighten";
-      ctx2.drawImage(img, -imgW / 2, -orbitR - imgH / 2, imgW, imgH);
+      ctx2.drawImage(img, -imgW / 2, orbitR - imgH / 2, imgW, imgH);
       if (p.planet === 4 /* Earth */) {
         drawMoonSubHand(ctx2, L, s, orbitR);
       }
@@ -13919,28 +13941,17 @@
     const moonW = moonImg.naturalWidth * s;
     const moonH = moonImg.naturalHeight * s;
     ctx2.save();
-    ctx2.translate(0, -earthOrbitR);
-    ctx2.rotate(cachedMoonAngle);
+    ctx2.translate(0, earthOrbitR);
+    ctx2.rotate(-cachedMoonAngle);
+    ctx2.scale(-1, 1);
     ctx2.globalCompositeOperation = "lighten";
-    ctx2.drawImage(moonImg, -moonW / 2, -moonR - moonH / 2, moonW, moonH);
+    ctx2.drawImage(moonImg, -moonW / 2, moonR - moonH / 2, moonW, moonH);
     ctx2.restore();
   }
 
   // src/observatory/ring-view.ts
   var TWO_PI8 = 2 * Math.PI;
   var HALF_PI2 = Math.PI / 2;
-  function cachelessPlanetAlt(planetNumber, dateInterval, lat2, lng) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
-    const tau = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, tau);
-    const planetRA = pos.apparentRightAscension;
-    const planetDecl = pos.apparentDeclination;
-    const gst = convertUTToGSTP03(dateInterval, null);
-    const lst = convertGSTtoLST(gst, lng);
-    const hourAngle = lst - planetRA;
-    const sinAlt = Math.sin(planetDecl) * Math.sin(lat2) + Math.cos(planetDecl) * Math.cos(lat2) * Math.cos(hourAngle);
-    return Math.asin(sinAlt);
-  }
   var GRADIENT_STEPS = [
     { alt: -90.01, r: 0.125, g: 0.125, b: 0.125, a: 0 },
     // full night

@@ -1681,14 +1681,14 @@ export function registerAstroFunctions(
         );
     });
 
-    // --- Planet transit 24-hour indicator angle (used by Miami) ---
-    // iOS: planettransit24HourIndicatorAngle(planetNumber, numLeaves)
-    //   = dayNightLeafAngle(planetNumber, numLeaves/2, numLeaves)
-    // Android XML calls with 1 arg; numLeaves defaults to env variable planNumWedges
-    functions.set('planettransit24HourIndicatorAngle', (planetNumber: number, numLeaves?: number) => {
-        const nl = (numLeaves != null && numLeaves > 0) ? numLeaves : (env.variables.get('planNumWedges') || 24);
+    // --- Planet transit 24-hour indicator angle ---
+    // iOS: planettransit24HourIndicatorAngle(planetNumber)
+    //   = dayNightLeafAngle(planetNumber, 4/*leafNumber*/, 0/*numLeaves*/)
+    // This computes the high transit directly via planettransitTimeRefined,
+    // NOT via the leaf-center approach.
+    functions.set('planettransit24HourIndicatorAngle', (planetNumber: number) => {
         return computeDayNightLeafAngle(
-            planetNumber, nl / 2.0, nl,
+            planetNumber, 4, 0,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
         );
     });
@@ -1889,6 +1889,15 @@ export function computeDayNightLeafAngle(
             return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
         } else if (leafNumber === 1) {  // set indicator angle
             return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
+        } else if (leafNumber === 4) {  // transit indicator angle
+            // iOS: ESAstronomy.cpp L5182-5190
+            // Compute high transit directly using planettransitTimeRefined,
+            // then convert to a 24-hour angle.
+            const transitDI = planettransitTimeRefined(
+                calcDate, observerLat, observerLon,
+                true /* wantHighTransit */, planetNumber, pool,
+            );
+            return angle24HourForDate(transitDI, tzOffsetSeconds);
         } else {
             // leafNumber 2 (polarSummer) or 3 (polarWinter):
             // Must fall through to the NaN resolution logic below to compute

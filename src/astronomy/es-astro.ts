@@ -156,6 +156,53 @@ export function planetAltAz(
 }
 
 // ============================================================================
+// Cacheless planet altitude (for iterative computations)
+// ============================================================================
+
+/**
+ * Compute planet altitude at an arbitrary time without using any cache.
+ *
+ * Port of: cachelessPlanetAlt(planetNumber, dateInterval, lat, lng)
+ * from ESAstronomy.cpp L1190–1222.
+ *
+ * Uses WB_planetApparentPosition to get RA/Dec, then computes altitude
+ * from hour angle, declination, and observer latitude. No parallax
+ * correction is applied (the original iOS code has a commented-out
+ * parallax section noting the difference for the Sun is ~4e-5 radians).
+ *
+ * Designed for iterative computations (e.g., Sun altitude ring) where
+ * each call is at a different time, making caching unhelpful.
+ *
+ * @param planetNumber  ECPlanetNumber enum value
+ * @param dateInterval  Apple epoch time interval
+ * @param observerLatitude   Observer latitude in radians
+ * @param observerLongitude  Observer longitude in radians (east positive)
+ * @returns Altitude in radians
+ */
+export function cachelessPlanetAlt(
+    planetNumber: number,
+    dateInterval: number,
+    observerLatitude: number,
+    observerLongitude: number,
+): number {
+    const { julianCenturiesSince2000Epoch } =
+        julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
+    const tau = julianCenturiesSince2000Epoch / 100;  // Julian millennia
+
+    const pos = WB_planetApparentPosition(planetNumber as ECPlanetNumber, tau);
+    const planetRA = pos.apparentRightAscension;
+    const planetDecl = pos.apparentDeclination;
+
+    const gst = convertUTToGSTP03(dateInterval, null);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const hourAngle = lst - planetRA;
+
+    const sinAlt = Math.sin(planetDecl) * Math.sin(observerLatitude)
+                 + Math.cos(planetDecl) * Math.cos(observerLatitude) * Math.cos(hourAngle);
+    return Math.asin(sinAlt);
+}
+
+// ============================================================================
 // Convenience functions for Sun/Moon
 // ============================================================================
 

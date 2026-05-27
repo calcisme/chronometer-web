@@ -312,8 +312,8 @@ function drawSubdialBackground(
             `${L.subdialFontSize - 3 * s}px 'Arial', sans-serif`, '#ffffff', r - L.subdialFontSize - 7 * s);
     }
 
-    // Label text
-    drawText(ctx, label, cx, cy - r / 2 + L.subdialFontSize / 2,
+    // Label text (at bottom of subdial, matching iOS)
+    drawText(ctx, label, cx, cy + r / 2 - L.subdialFontSize / 2,
         `${L.subdialFontSize + 2 * s}px 'Arial', sans-serif`, '#ffffff');
 }
 

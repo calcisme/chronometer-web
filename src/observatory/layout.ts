@@ -180,15 +180,15 @@ export function computeLayout(viewW: number, viewH: number): LayoutParams {
     const smallZodiacFontSize = Math.max(6, 11 * s);
     const subdialFontSize = Math.max(6, 10 * s);
 
-    const plR = mainR - mainFontSize - 1;     // iOS: 365-32-1=332
+    const plR = Math.max(100, 332 * s);         // iOS: mainR-mainFontSize-1 = 365-32-1=332
     const sunRingWidth = Math.max(16, 64 * s);
     const orbitInc = Math.max(10, 40 * s);
-    const subR = (orbitInc - 1) * 2 - 5;      // iOS: (40-1)*2-5=73
-    const subOffset = Math.max(40, 149 * s);   // iOS: 149
+    const subR = Math.max(20, 73 * s);           // iOS: (40-1)*2-5=73, scaled uniformly
+    const subOffset = Math.max(40, 149 * s);     // iOS: 149
     const sunD = Math.max(24, 100 * s);
     const zD = Math.max(100, 526 * s);
-    const zR = plR - 60 * s;                   // iOS: 332-60=272
-    const plR2 = plR - 52 * s - 26 * s;       // iOS: 332-52-26=254
+    const zR = Math.max(80, 272 * s);            // iOS: plR-60=332-60=272
+    const plR2 = Math.max(60, 254 * s);          // iOS: plR-52-26=332-78=254
 
     // Hand lengths
     const secLen = (zR - zodiacFontSize / 2) * 1.05;  // iOS: (272-18)*1.05≈266
