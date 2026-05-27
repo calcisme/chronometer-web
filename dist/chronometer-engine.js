@@ -18556,7 +18556,155 @@
     }
   }
 
+  // src/shared/composite-icon.ts
+  function parseColorToRgb(color) {
+    if (!color) return null;
+    const rgbMatch = color.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+    if (rgbMatch) {
+      return {
+        r: parseInt(rgbMatch[1], 10),
+        g: parseInt(rgbMatch[2], 10),
+        b: parseInt(rgbMatch[3], 10)
+      };
+    }
+    if (color.startsWith("#")) {
+      const hex = color.substring(1);
+      if (hex.length === 3) {
+        return {
+          r: parseInt(hex[0] + hex[0], 16),
+          g: parseInt(hex[1] + hex[1], 16),
+          b: parseInt(hex[2] + hex[2], 16)
+        };
+      } else if (hex.length === 6) {
+        return {
+          r: parseInt(hex.substring(0, 2), 16),
+          g: parseInt(hex.substring(2, 4), 16),
+          b: parseInt(hex.substring(4, 6), 16)
+        };
+      }
+    }
+    return null;
+  }
+  function getBezelBackgroundColor(bezelColor) {
+    const parsed = parseColorToRgb(bezelColor);
+    if (!parsed) return "#000000";
+    const newR = Math.round(parsed.r / 3);
+    const newG = Math.round(parsed.g / 3);
+    const newB = Math.round(parsed.b / 3);
+    return `rgb(${newR}, ${newG}, ${newB})`;
+  }
+  function loadImg(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load ${src}`));
+      img.src = src;
+    });
+  }
+  function drawClippedImage(ctx, img, x, y, size) {
+    ctx.save();
+    const r = size / 2;
+    ctx.beginPath();
+    ctx.arc(x + r, y + r, r - 0.5, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(img, x, y, size, size);
+    ctx.restore();
+  }
+  function getAverageBezelBackgroundColor(bezelColors) {
+    let bg = "#1a1a2e";
+    if (bezelColors) {
+      const colors = typeof bezelColors === "string" ? [bezelColors] : bezelColors;
+      let sumR = 0, sumG = 0, sumB = 0, validCount = 0;
+      for (const color of colors) {
+        if (!color || parseColorToRgb(color) === null) {
+          continue;
+        }
+        const bgColor = getBezelBackgroundColor(color);
+        const parsed = parseColorToRgb(bgColor);
+        if (parsed) {
+          sumR += parsed.r;
+          sumG += parsed.g;
+          sumB += parsed.b;
+          validCount++;
+        }
+      }
+      if (validCount > 0) {
+        bg = `rgb(${Math.round(sumR / validCount)}, ${Math.round(sumG / validCount)}, ${Math.round(sumB / validCount)})`;
+      }
+    }
+    return bg;
+  }
+  async function updateDynamicCompositeIcon(thumbDataUrls, bezelColors) {
+    if (typeof document === "undefined") return;
+    const appleLink = document.querySelector('link[rel~="apple-touch-icon"]');
+    const iconLink = document.querySelector('link[rel~="icon"]');
+    if (!appleLink && !iconLink) return;
+    const bg = getAverageBezelBackgroundColor(bezelColors);
+    if (thumbDataUrls.length === 0) {
+      updateLinks("thumb-all-faces.png", "thumb-all-faces.png");
+      return;
+    }
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 400;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      if (thumbDataUrls.length === 1) {
+        const img = await loadImg(thumbDataUrls[0]);
+        drawClippedImage(ctx, img, 0, 0, 400);
+      } else if (thumbDataUrls.length === 2) {
+        const imgs = await Promise.all(thumbDataUrls.slice(0, 2).map((url) => loadImg(url)));
+        drawClippedImage(ctx, imgs[0], 0, 0, 230);
+        drawClippedImage(ctx, imgs[1], 170, 170, 230);
+      } else if (thumbDataUrls.length === 3) {
+        const imgs = await Promise.all(thumbDataUrls.slice(0, 3).map((url) => loadImg(url)));
+        drawClippedImage(ctx, imgs[0], 87.5, 0, 225);
+        drawClippedImage(ctx, imgs[1], 0, 200, 200);
+        drawClippedImage(ctx, imgs[2], 200, 200, 200);
+      } else {
+        const imgs = await Promise.all(thumbDataUrls.slice(0, 4).map((url) => loadImg(url)));
+        drawClippedImage(ctx, imgs[0], 0, 0, 200);
+        drawClippedImage(ctx, imgs[1], 200, 0, 200);
+        drawClippedImage(ctx, imgs[2], 0, 200, 200);
+        drawClippedImage(ctx, imgs[3], 200, 200, 200);
+      }
+      const iconHref = canvas.toDataURL("image/png");
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 400, 400);
+      ctx.globalCompositeOperation = "source-over";
+      const appleHref = canvas.toDataURL("image/png");
+      updateLinks(appleHref, iconHref);
+    } catch (err) {
+      console.error("Error compositing picks icon:", err);
+    }
+    function updateLinks(appleHref, iconHref) {
+      const head = document.head;
+      const existingApple = document.querySelector('link[rel~="apple-touch-icon"]');
+      if (existingApple) {
+        head.removeChild(existingApple);
+      }
+      const newApple = document.createElement("link");
+      newApple.rel = "apple-touch-icon";
+      newApple.href = appleHref;
+      head.appendChild(newApple);
+      const existingIcon = document.querySelector('link[rel~="icon"]');
+      if (existingIcon) {
+        head.removeChild(existingIcon);
+      }
+      const newIcon = document.createElement("link");
+      newIcon.rel = "icon";
+      newIcon.type = "image/png";
+      newIcon.href = iconHref;
+      head.appendChild(newIcon);
+    }
+  }
+
   // src/engine-entry.ts
+  function faceNameToSlug(name) {
+    return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
+  }
   function requestBrowserLocation(timeoutMs) {
     if (!navigator.geolocation) return Promise.resolve({ status: "unavailable" });
     return new Promise((resolve) => {
@@ -18823,6 +18971,16 @@
       fd.images = null;
     }
     delete window.ChronometerFaces;
+    const isSingleFacePage = faceDataArray.length === 1 && !isSelectedPage;
+    const isAllFacesPage = window.location.pathname.endsWith("all.html");
+    if (isSingleFacePage && parsedWatches[0]) {
+      const bezelColor = parsedWatches[0].bezelColor;
+      updateDynamicCompositeIcon([faceDataArray[0].thumb], bezelColor);
+    } else if (isSelectedPage || isAllFacesPage) {
+      const bezelColors = parsedWatches.map((w) => w.bezelColor).filter(Boolean);
+      const thumbs = faceDataArray.map((fd) => fd.thumb);
+      updateDynamicCompositeIcon(thumbs, bezelColors);
+    }
     const timeController = new TimeController();
     if (urlState.off !== null && !isNaN(urlState.off)) {
       timeController.setOffset(urlState.off);
@@ -18992,12 +19150,7 @@
       faces.push(face);
     }
     const isMultiFace = faceDataArray.length > 1;
-    const isAllFacesPage = window.location.pathname.endsWith("all.html");
     if (isMultiFace || isSelectedPage || isAllFacesPage) {
-      let faceNameToSlug2 = function(name) {
-        return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, "-");
-      };
-      var faceNameToSlug = faceNameToSlug2;
       if (isSelectedPage) {
         document.body.classList.add("is-selected-faces");
       } else if (isAllFacesPage) {
@@ -19005,7 +19158,7 @@
       }
       for (let i = 0; i < faces.length; i++) {
         const face = faces[i];
-        const slug = faceNameToSlug2(faceDataArray[i].name);
+        const slug = faceNameToSlug(faceDataArray[i].name);
         face.canvas.style.cursor = "pointer";
         face.canvas.addEventListener("click", () => {
           const params = new URLSearchParams(window.location.search);

@@ -88,6 +88,11 @@ If the face has hands with `offsetRadius > 0` (e.g., moon orbit, subdial hands),
   ```bash
   sips -z 400 400 --out src/faces/thumb-<slug>.png <screenshot>.png
   ```
+  > [!IMPORTANT]
+  > **Transparency Requirement**: The thumbnail file **must** have transparent corners (i.e. all pixels outside the circular watch dial, which is a radius of ~198 pixels from the center of the 400×400 box, must be transparent). Do not bake the dark blue `#1a1a2e` background or any other solid color into the corners of the PNG file. This is crucial for:
+  > - Allowing browser tab favicons to render with clean transparent circular borders.
+  > - Preventing dark blue square corner outlines from showing up when the apple-touch-icon background is generated dynamically with a custom bezel-matched color.
+  
   The homepage and picker page will automatically display this thumbnail.
 - **Index card**: The index card is generated automatically at build time based on the `displayName` and `description` attributes defined in your watch XML file.
 

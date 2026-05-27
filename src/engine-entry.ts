@@ -9,6 +9,7 @@ interface FaceData {
     /** Two-letter URL abbreviation for compact picks parameter encoding. */
     urlAbbrev: string;
     xml: string;
+    thumb: string;
     images: Record<string, { dataUrl: string; scale: number }>;
 }
 
@@ -54,6 +55,15 @@ import {
     kECJulianGregorianSwitchoverTimeInterval,
 } from './astronomy/es-calendar.js';
 import { dateToDateInterval, dateIntervalToDate, MIN_DISPLAY_DATE_MS, MAX_DISPLAY_DATE_MS } from './astronomy/es-time.js';
+import { getBezelBackgroundColor, updateDynamicCompositeIcon } from './shared/composite-icon.js';
+
+/** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */
+function faceNameToSlug(name: string): string {
+    return name
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // strip diacritics
+        .toLowerCase()
+        .replace(/\s+/g, '-');
+}
 
 // ============================================================================
 // Location helpers
@@ -427,6 +437,18 @@ async function main() {
     // Also release the global so the face-*.js IIFE closures can be GC'd
     delete (window as any).ChronometerFaces;
 
+    // Apply dynamic icon updates and bezel backgrounds
+    const isSingleFacePage = faceDataArray.length === 1 && !isSelectedPage;
+    const isAllFacesPage = window.location.pathname.endsWith('all.html');
+    if (isSingleFacePage && parsedWatches[0]) {
+        const bezelColor = parsedWatches[0].bezelColor;
+        updateDynamicCompositeIcon([faceDataArray[0].thumb], bezelColor);
+    } else if (isSelectedPage || isAllFacesPage) {
+        const bezelColors = parsedWatches.map(w => w.bezelColor).filter(Boolean);
+        const thumbs = faceDataArray.map(fd => fd.thumb);
+        updateDynamicCompositeIcon(thumbs, bezelColors);
+    }
+
     // --- Time controller ---
     const timeController = new TimeController();
 
@@ -654,7 +676,6 @@ async function main() {
 
     // On multi-face pages (all.html, selected.html), make each face clickable → navigate to its page
     const isMultiFace = faceDataArray.length > 1;
-    const isAllFacesPage = window.location.pathname.endsWith('all.html');
     if (isMultiFace || isSelectedPage || isAllFacesPage) {
         // Hide the appropriate nav icon depending on which multi-face page we're on
         if (isSelectedPage) {
@@ -662,14 +683,6 @@ async function main() {
         } else if (isAllFacesPage) {
             document.body.classList.add('is-all-faces');
         }
-        /** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */
-        function faceNameToSlug(name: string): string {
-            return name
-                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // strip diacritics
-                .toLowerCase()
-                .replace(/\s+/g, '-');
-        }
-
         for (let i = 0; i < faces.length; i++) {
             const face = faces[i];
             const slug = faceNameToSlug(faceDataArray[i].name);

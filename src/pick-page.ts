@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { FACES } from './faces/generated/faces-list.js';
+import { updateDynamicCompositeIcon } from './shared/composite-icon.js';
 
 const faceByAbbrev = new Map(FACES.map(f => [f.abbrev, f]));
 
@@ -161,6 +162,15 @@ function updateUI(): void {
     const count = selectedOrder.length;
     btnReorder.disabled = count < 2;
     btnDone.disabled = count === 0;
+
+    // Update dynamic apple-touch-icon and favicon
+    const thumbs = selectedOrder
+        .map(abbrev => faceByAbbrev.get(abbrev)?.thumbDataUrl)
+        .filter((thumb): thumb is string => thumb !== undefined);
+    const bezelColors = selectedOrder
+        .map(abbrev => faceByAbbrev.get(abbrev)?.bezelColor)
+        .filter((color): color is string => !!color);
+    updateDynamicCompositeIcon(thumbs, bezelColors);
 }
 
 /** Reorder grid DOM: selected faces first (in selectedOrder), then unselected (in original order). */

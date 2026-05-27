@@ -104,7 +104,7 @@ $ESBUILD "$SRC/index-page.ts" --bundle $COMMON_FLAGS \
 echo "  → index-page.js"
 
 echo "=== Building pick page script ==="
-$ESBUILD "$SRC/pick-page.ts" --bundle $COMMON_FLAGS \
+$ESBUILD "$SRC/pick-page.ts" --bundle $LOADER_FLAGS $COMMON_FLAGS \
   --outfile="$DIST/pick-page.js"
 echo "  → pick-page.js"
 

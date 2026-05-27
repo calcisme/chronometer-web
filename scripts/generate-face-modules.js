@@ -129,6 +129,8 @@ async function main() {
       const worldTimeRing = watchNode.getAttribute('worldTimeRing') || '';
       const worldTimeSubdials = watchNode.getAttribute('worldTimeSubdials') || '';
 
+      const bezelColor = watchNode.getAttribute('bezelColor') || '';
+
       // Strictly validate displayName and description are present
       if (!displayName) {
         console.error(`ERROR: Missing required attribute 'displayName' on <watch> in "${xmlPath}".`);
@@ -153,7 +155,8 @@ async function main() {
         slug,
         name: displayName,
         thumb: `thumb-${slug}.png`,
-        abbrev: urlAbbrev || ''
+        abbrev: urlAbbrev || '',
+        bezelColor
       });
 
       // Populate cards HTML fragment
@@ -237,6 +240,7 @@ async function main() {
  * Auto-generated face data for ${displayName} — registers XML and image assets on window.ChronometerFaces.
  */
 import xml from '${xmlImportPath}';
+import thumbImg from '../thumb-${slug}.png';
 ${importStatements.join('\n')}
 
 window.ChronometerFaces = window.ChronometerFaces || [];
@@ -244,6 +248,7 @@ window.ChronometerFaces.push({
     name: '${displayName.replace(/'/g, "\\'")}',
     urlAbbrev: '${urlAbbrev}',
     xml,
+    thumb: thumbImg,
     images: {
 ${imageMappingLines.join('\n')}
     },
@@ -261,17 +266,38 @@ ${imageMappingLines.join('\n')}
     );
 
     // Write faces-list.ts
+    const facesListImports = [];
+    const facesListItems = [];
+    for (const item of facesListConfig) {
+      const varName = `thumb_${item.slug.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      facesListImports.push(`import ${varName} from '../thumb-${item.slug}.png';`);
+      facesListItems.push(`    {
+        slug: '${item.slug}',
+        name: '${item.name.replace(/'/g, "\\'")}',
+        thumb: '${item.thumb}',
+        thumbDataUrl: ${varName},
+        abbrev: '${item.abbrev}',
+        bezelColor: '${item.bezelColor}'
+    }`);
+    }
+
     const facesListTsContent = `/**
  * Auto-generated faces list configuration.
  */
+${facesListImports.join('\n')}
+
 export interface FaceInfo {
     slug: string;
     name: string;
     thumb: string;
+    thumbDataUrl: string;
     abbrev: string;
+    bezelColor: string;
 }
 
-export const FACES: FaceInfo[] = ${JSON.stringify(facesListConfig, null, 4)};
+export const FACES: FaceInfo[] = [
+${facesListItems.join(',\n')}
+];
 `;
     fs.writeFileSync(path.join(generatedDir, 'faces-list.ts'), facesListTsContent, 'utf8');
 
