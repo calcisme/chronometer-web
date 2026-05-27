@@ -1699,7 +1699,7 @@
               <div id="help-content">
                 <!-- Populated from help-template on first info click -->
               </div>
-              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.102</div>
+              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.103</div>
             </div>
 
             <div id="info-sub-view">
@@ -2563,10 +2563,10 @@ available planets.
   windows. Below the selected city, over the 24-hour dial, is a smaller clear
   indicator with a hairline center; this will be aligned with the top city's
   dot, and thus will indicate the 24-hour time of the selected city on the
-  24-hour dial. If you tap on a city name, the city ring will rotate around to
-  that position, and the main time hands will display the time for that city.
-  (To avoid confusion, the time reverts to the time of the watch device after 10
-  seconds with no taps).
+  24-hour dial. The selected city is determined by your current location, which
+  is shown in the control panel below the face. To change the selected city, use
+  the location button or search below the face to set a new location.
+  temporarily rotate the ring).
 </p>
 
 <p>
@@ -2906,10 +2906,13 @@ day.
 </details>
 <details class="face-help-section" data-face="kyoto"><summary>Kyoto</summary>
 <b>Kyoto</b>,
-<a href="http://en.m.wikipedia.org/wiki/Kyoto">the ancient capital<img src="help/images/extlink.png" /></a>
+<a href="http://en.m.wikipedia.org/wiki/Kyoto"
+  >the ancient capital<img src="help/images/extlink.png"
+/></a>
 of Japan, shows traditional Japanese time like an
-<a href="http://en.m.wikipedia.org/wiki/Japanese_clock">Edo period clock (和時計 wadokei)<img
-    src="help/images/extlink.png" /></a>.
+<a href="http://en.m.wikipedia.org/wiki/Japanese_clock"
+  >Edo period clock (和時計 wadokei)<img src="help/images/extlink.png" /></a
+>.
 <p>
   A wadokei divides day and night into six "temporal hours" each. The hours at
   sunrise and sunset are split between day and night, so each half of the day
@@ -2937,14 +2940,14 @@ of Japan, shows traditional Japanese time like an
   The gray ring around the outside of the face indicates the division between
   day and night: the lighter portion represents daytime and the darker portion
   nighttime. Its boundary aligns with the midpoints of the sunrise and sunset
-  temporal hour indicators,
-  showing how the unequal hours expand and contract with the changing length of
-  the day throughout the year.
+  temporal hour indicators, showing how the unequal hours expand and contract
+  with the changing length of the day throughout the year.
 </p>
 <p>
   A real Wadokei clock would of course have neither the 24-hour dial nor the
   day/night ring.
-</p></details>
+</p>
+</details>
 <details class="face-help-section" data-face="milano"><summary>Milano</summary>
 <p>
   <b>Milano</b> has a secular perpetual calendar with four retrograde
@@ -2960,9 +2963,10 @@ of Japan, shows traditional Japanese time like an
   The magenta hand indicates the fraction of the remaining power reserve
   (battery level on your device). This hand and its dial are automatically
   hidden if your browser or device does not support the Battery Status API.
-  (Note that some browsers support the API but hardcode the value to 1.0;
-  this app has no way of detecting this situation.)
-</p></details>
+  (Note that some browsers support the API but hardcode the value to 1.0; this
+  app has no way of detecting this situation.)
+</p>
+</details>
  </template>
       <div id="watch-grid"></div>
       <div id="planet-selector">
