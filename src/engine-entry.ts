@@ -2063,17 +2063,17 @@ async function main() {
             return;
         }
 
-        // 4. Time popover
-        if (popoverOpen) {
-            hidePopover();
-            return;
-        }
-
-        // 5. Location prompt
+        // 4. Location prompt
         if (locationPrompt.style.display !== 'none') {
             if (!needsPrompt || (lat !== 0 || lon !== 0)) {
                 dismissLocationPrompt();
             }
+            return;
+        }
+
+        // 5. Time popover
+        if (popoverOpen) {
+            hidePopover();
             return;
         }
     });

@@ -20148,14 +20148,14 @@
         infoOverlay.classList.remove("visible");
         return;
       }
-      if (popoverOpen) {
-        hidePopover();
-        return;
-      }
       if (locationPrompt.style.display !== "none") {
         if (!needsPrompt || (lat !== 0 || lon !== 0)) {
           dismissLocationPrompt();
         }
+        return;
+      }
+      if (popoverOpen) {
+        hidePopover();
         return;
       }
     });
