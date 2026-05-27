@@ -317,14 +317,54 @@ Visual verification will be done by the user after each phase.
 
 ## Implementation Order Summary
 
-| Phase | Deliverable | Estimated Complexity |
-|-------|-------------|---------------------|
-| 0 | App skeleton, entry point, build integration | Low |
-| 1 | Main orrery dial background (static) | Medium |
-| 2 | Planet hands + rise/set rings | Medium-High |
-| 3 | Central clock hands | Medium |
-| 4 | UTC/Solar/Sidereal subdials | Medium |
-| 5 | Earth map with terminator | Medium-High |
-| 6 | Moon phase display | Medium |
-| 7 | Peripheral dials (alt/az/eclipse/EOT) | High (eclipse is complex) |
-| 8 | Time controls + date display | Medium |
+| Phase | Deliverable | Estimated Complexity | Status |
+|-------|-------------|---------------------|--------|
+| 0 | App skeleton, entry point, build integration | Low | ✅ Complete |
+| 1 | Main orrery dial background (static) | Medium | ✅ Complete |
+| 2 | Planet hands + rise/set rings | Medium-High | 🔶 In progress |
+| 3 | Central clock hands | Medium | Not started |
+| 4 | UTC/Solar/Sidereal subdials (hands + constellation overlay) | Medium | Not started |
+| 5 | Earth map with terminator | Medium-High | Not started |
+| 6 | Moon phase display | Medium | Not started |
+| 7 | Peripheral dials (alt/az/eclipse/EOT) | High (eclipse is complex) | Not started |
+| 8 | Time controls + date display | Medium | Not started |
+
+---
+
+## Progress Log
+
+### Phase 0 — ✅ Complete
+- Scaffolding, entry point, build integration, `layout.ts`, `draw-utils.ts` all done.
+
+### Phase 1 — ✅ Complete
+- Main orrery dial background rendered to OffscreenCanvas cache.
+- All subdial backgrounds (UTC, Solar, Sidereal) rendered correctly.
+- 24-hour demi-radial numbers, 12-hour golden numbers, zodiac image, orbit circles, sun image.
+- Subdial labels positioned at bottom (matching iOS).
+- Fixed layout proportionality: all layout constants now scale directly from iOS reference values (e.g., `plR = 332*s` instead of `mainR - mainFontSize - 1`) to preserve geometric relationships at all canvas sizes.
+
+### Phase 2 — 🔶 In Progress
+
+#### Completed:
+- **Planet image hands** (`planet-hands.ts`): Saturn, Jupiter, Mars, Earth, Venus, Mercury rendered at heliocentric longitudes on orbit circles. Moon sub-hand orbits Earth at moon age angle. Images correctly oriented (top facing inward) using `rotate(angle + π) + scale(-1, 1)` to match iOS UIKit drawing convention.
+- **Rise/set rings** (`ring-view.ts`): All 7 rings (Sun + 6 planets) rendered with correct colors. Sun ring uses altitude-based gradient (`cachelessPlanetAlt`). Planet rings use `planetaryRiseSetTimeRefined` for rise/set times. Transit diamond markers drawn at ring midpoints.
+- **Transit angle fix** (`astro-env.ts`): Added `leafNumber === 4` special case to `computeDayNightLeafAngle` (iOS ESAstronomy.cpp L5182-5190) — computes high transit directly via `planettransitTimeRefined` instead of the old leaf-center approach. Fixed `planettransit24HourIndicatorAngle` registration to use `(planet, 4, 0)`.
+- **Shared astronomy cleanup**: Moved `cachelessPlanetAlt` from Observatory-specific `ring-view.ts` to the shared astronomy layer (`es-astro.ts`), per the project rule that astronomy knowledge belongs in shared code.
+
+#### Remaining for Phase 2:
+- **Planet name labels on rings**: iOS draws planet names at rise/set endpoints and transit point using `drawCircularText` ([EORingView.mm L408-412](file:///Users/spucci/chronometer-web/.observatory-ref/Classes/EORingView.mm#L408-L412)). Not yet implemented.
+- **Sidereal constellation abbreviations**: iOS overlays a pre-rendered PNG (`EO-Sidereal-constellation-names-0-at-top.png`, 149×149) on the sidereal subdial ([EOShuffleView.mm L212-217](file:///Users/spucci/chronometer-web/.observatory-ref/Classes/EOShuffleView.mm#L212-L217)). Not yet implemented.
+- **Sun ring**: May need verification — was reported as not visible earlier but subsequent fixes should have addressed it.
+
+### Key Technical Lessons
+
+1. **Cross-browser text rendering**: Never use `textBaseline = 'top'` — Safari positions it differently from Chrome. Always use `textBaseline = 'alphabetic'` with `textVisualCenterY(ctx, label)` as the Y-offset.
+
+2. **Canvas coordinate system for rings**: Canvas `arc()` in Y-down uses `(clockAngle - π/2)` for correct orientation where top-center is 270°. Arcs use `anticlockwise=false` for clockwise rendering.
+
+3. **Planet image orientation**: iOS draws planet images at `y=+radius` (downward from rotation center in UIKit Y-down). To match in Canvas, use `rotate(angle + π)` + `drawImage` at `+orbitR` + `scale(-1, 1)` to correct tangential mirror.
+
+4. **Layout proportionality**: All layout dimensions must scale as direct multiples of the iOS reference values × `s` (the scale factor `mainR/365`). Computing from scaled sub-components with unscaled pixel offsets (e.g., `(orbitInc-1)*2-5` where orbitInc is scaled but -1 and -5 aren't) breaks proportionality at non-reference sizes. This is because iOS draws at fixed reference sizes and then scales the entire view uniformly.
+
+5. **Astronomy in shared layer**: All astronomy knowledge belongs in `src/astronomy/` or `src/shared/astro-env.ts`. Observatory-specific code should only contain rendering logic, calling into the shared astronomy functions.
+
