@@ -21003,13 +21003,37 @@
     }
     const fullscreenBtn = document.getElementById("fullscreen-btn");
     if (fullscreenBtn) {
-      fullscreenBtn.addEventListener("click", () => {
-        if (document.fullscreenElement) {
-          document.exitFullscreen();
-        } else {
-          document.documentElement.requestFullscreen();
-        }
-      });
+      const isFullscreenSupported = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.mozFullScreenEnabled || document.msFullscreenEnabled);
+      if (!isFullscreenSupported) {
+        fullscreenBtn.style.display = "none";
+      } else {
+        fullscreenBtn.addEventListener("click", () => {
+          const doc = document;
+          const docEl = document.documentElement;
+          const fullscreenElement = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+          if (fullscreenElement) {
+            if (doc.exitFullscreen) {
+              doc.exitFullscreen();
+            } else if (doc.webkitExitFullscreen) {
+              doc.webkitExitFullscreen();
+            } else if (doc.mozCancelFullScreen) {
+              doc.mozCancelFullScreen();
+            } else if (doc.msExitFullscreen) {
+              doc.msExitFullscreen();
+            }
+          } else {
+            if (docEl.requestFullscreen) {
+              docEl.requestFullscreen();
+            } else if (docEl.webkitRequestFullscreen) {
+              docEl.webkitRequestFullscreen();
+            } else if (docEl.mozRequestFullScreen) {
+              docEl.mozRequestFullScreen();
+            } else if (docEl.msRequestFullscreen) {
+              docEl.msRequestFullscreen();
+            }
+          }
+        });
+      }
     }
     function tickTimeBarClock() {
       if (timeController.isRealTime) {
