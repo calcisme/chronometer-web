@@ -13797,6 +13797,342 @@
     );
   }
 
+  // .observatory-ref/Resources/saturn.png
+  var saturn_default = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEsAAAAiCAYAAAAXtSR4AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAEttJREFUeNrsWlmMHNd1vbVXd/XePRuHs3EkDkmRQ0iiZFILndiSJRiIHNuJAMHOVz4UIAGSn9hJYPgjcIIAdgABQWIjjpF82YYsWbKlGAlJEyZpg1QkLuKm4QyH5OzDmelleu9ac+6r6rHNWLEExbIRqGceeqnqV++ed++5595qKQgC+uDxzh7yBxC884f6yCO/Rexdvu+Trhs0tvsuSjVkiuk6eZJNHbdFkiqTqskUkEeNVoOSyRi+41Or0aKUZdGtxSJQ96k3m6FytUmFVJKa5FCy0EMXLk7R6tIKKaryi66vYTyA8dsY92EMYsQw2N2rGLewtjO+7x7X9NhU7/B+SmbypMga1SsV8pqbZBl5kpQkpTOwQaqSppnkui5heZTNJMnzOuS5NvHlG40mXb8xS47TIQkrdnBeTz5Ho0Ojwh7+rOM6pKoaVZo2Vhen1flr1GlVcVwmSdcTAizP8ygWj9PuA/soV1HIMg1y5Ta17AbJAErTFSzGpVqjSpl0IgSuWqdsMkXXbq6SBLCHevO0VqrTQC5DNYCV6R+g116/SLdXbt8JUg/Gsxh/gLHzf99PCf+aE7Oyp3ODe/7VSmdfkknerBZL5NeLlIwNYDPTlM8T+XKRdMMCGA75HlFvIQPgWuQBHE0l2qzV6PKVy9RpwwFkhWzbpsH+ftp11wTABViSQi0+VzNoo9Ym0pM0N3OO2o0ynEkhNRYzt8AyDYMMTSfDUHBRnWTJFwAxWKrOnqUAeQPHDHzHI9dwcC7e6ybJ2BndMPHeFccN7BIfU1T1DssFSH8dAfbLeUKWqbBtXBsa3384mx84LMnal2r1+j/YjcbXnLa8aZg6wOI1wwaJ14J1y5IAi21QFKxTDkiDZxk4ZpomQMG8EiBXFPGe18lgAUHyQEwaMDDtgAKcz/hInkl+oLyvnJXF+C7GV98pUPzwYfXa4lt04Sffpdmrp2CwP7hn3+TfHXj08Yv5gdHf9eBFxElKeh8461d+hTDb9mK8GvHTL18UdtZKZAV3BADL81zqdJp0c+oNWpi9SNvHdtHeBx8ffvh3fv+lucszX569OPX5wJfZ8X/zweIwDpOEJ8iVhxM4gkAVTU3glJcMw3yAw4CTiK5rIlw47M2YIcJDRbhyyHF4xOIg7J4hslJ58kHOjVoZYLWo2ajRZqVE9WqZLp34Dt24eIJ2f+jJP5948ECqeOvCHzm2ixDjNXiC4DlpCWkU/DrBwkoEMAgBF9lDgYWarGUSieQ2LZYc6y8UBmXLHE5ms/3jIzv2I1HeF4/FBUgavIUzo8LAYEgSD0kMjiUJnymKiuylhOfBy5hbxHEYzV7m2B1qNZvURmZut5qUyMnPticmD1Urazc7jr9ar7fmao3OnKqpt5pNb8Fz7NvgZJs3rwNS5wTA66B3qTHVd+o5vueTF7jiWVX1gWQ8tac3P3Agn+vZd8/++C7NiI3Aa7LI44rfXQSeVTZYkQUIGp5VHvhMVWXxuYqsJDxKDgGT8CyLzyThZdQFMgJWlk0AFqNqTSXXs8juOPC4BsVUf9LIpyeFBOjPhvPJgsoaju2sNtvtm+sb5csxQ5taWlm5slEsTbc2N9ds2xEeKL1XsBgYDinTjGUz2fTBdC79mJWwHsmkM7sURUu5cHXHhsvzlsuSyCZxUyMrrlM8zpkHWUoLPUmOPIezjsfD88KBSRxxHXhr6FvCUAZSYcCUMDTlQBLABT6O4WU+jQwsBZFHZmBwAPB8yAGXmi2EbrMNTdihdsexYMe4rpnjY8NDj+2ZGBfTVCrVpfmllXPFjcpR2/aPwFNn2CsCP6C3yxY/n9el0Is45rGIeK43/8RofvSZXG/2I5Zl5R03EAupVG2ElEvpVJz6oWVSEKlxcA/zDs/heQG0DBZcb9NarUrVegP6rEV1iMJGq01NGNJBKHWwq47jCm6DR1IimaYC5isUEpTLWJRJxShhGWJuHZugA3j2SvYwdl4/Atl14Pn83mcvDKivkIRsyAmTPZzT6dhUbbSpVG7QRrkOGzqSpinbJ+4e325Nak+1Wi2nWKyeW1opvri0uv5Cx3Zv8kbKd2AmpdMFAZCDCVXokgOPHurdmex5dmC48IdWyhjh2C5vtqhW71AMntLfk6L+3jSAiiGkVHhJIHaz0exQuVKj2xsVWl+viNdVqPlGs4HBIIFjOm1qQxDaAMpxbHzXE4tgPdQ/MELjd4/SjtE+2tafg7JOUjYdp1TCBFimuDafByPFpihRmDJIvInttk9tW6apt1bpxIkfUW9PGuvMUW8em5mIk2Fq4nscBfVGh1bXKrSwXKRSpU6JmE4DsInBqdbbrcXV4stXZ1e/sla1z63cvAgFXwFGaggWo5jp7ZXu3bfnTw5M7voi1lTQMXGt7opJC9k07bxrQOwY7yzvVrvtwnibiuUazS+s0fzSbVovVsAlDXgOAELmqkPt8+sWAGJSvTMtcWiaqBTyvQM0vnMC19hOw9sL1AdD89kEpZNxSsQBVNwQ54XZFJlTCw1n/utmUOZJBx5WLEv0+b94jm7cmsGGJrH2BObswSYM0kBfHvQQQxbmbKwAAIlKmw26em2Rbs6tYoNSAjTeSOy/OzVX+vrR48f/qlparXCYS5aVhovHks888/S/jG/LPd1p17GwBM2vwPBqgz58cC8ulkf2CHexA44qlSu0tl6iK1O3MG7QRrFMLeE5SO/IUPyaL/jT8JbwfUWMLuFrehhSphmnnm3baceOERob7oVBGWFgBiGeTCAEAVQMQJmGLrKpAEoBDzIXKuGQZey6GJjfTNIX/vIf6Z/++WvUh01IJVIIXx3hbNLIUC9N7hmjnkIO9W0CcwJwNUwoG6UGHTl5ASHt0T0TQ6CRBuZWCB+fe/77P3hqbmZqSQ1w4uOPf/RLOwayTzebNSzOouU1cAxC6DOf/ggkPjiqXKKFpVWaW1ilt2Zm8XoFHlcUIHH2ebsHg5NIxATR61qY9SRR6wVCDvBikimA01OgQi5NqVQCySEGcMyojNKQIFRiLw9BlkRBrCrQn7IXJgJB8iSSC6Ek4ee990yIDLeweAMhnKCh7SPi+9PXl+k2KOLQgV3Cy7K5nEhImurDiw361Mcfom9/7yRsXKKJ8QFsep1yln7fY4986BvfXF76uLpj7O7JyYm7P8MK2UIhLSkxOnv+DA0PpOmrX/8GTU3foKXVNaps1t+VtmOPyKHgjoGcNZENwyjkOTgbcgiyl1iJNOVSKUri2hYEawwcaYALdRgNvxF/DDFnQ7n7x9kRCUERz5KoYcFc0QVs6gVXxaDrGk2X1jfWREbVh3fAy5Kglja9eeWWCHFZqpDR10MSEprMust36MOHJumbLxyjsZEBsRlMIWNDfY898vDh+1UDtYWhq+ZmuUVnXnuDLl2dobnFRXovTUEN3pDLJAXf6AwU6yw2haWCz/0KSfxxdW9ZSbJMZFNwkQFP0xgEAKOwGsEaJL87oIXAlSRzweuFntQVtFziSkqU8l14Xihu1aiIZ+HctYePcfb1I2HN5VQgBUITBqwhoxQYBkxYmbDcQTFF6srqyqXXzpw9dfzUsSdLyGD/Fw/D0MXQlVB4Bt2SSHhVeHEP4a/pMXgzvC/qdnDm5XqQFTzzD4PAdkhCJ7B8Z7C8n6s7w3kZMCXSeiqSSguayxHaC5KH+vu2YeOsrS7GrvFBwYGJhBWKXyWsDBRc+7Wz52igvxfrCYRncldifvH20RMnjy+ozWbd/fcjR/7YdluvgkN2c2Z8rw/hN9hxtk94g+gewKO4EuB2EMBSFYjWWBLhkiQDvKIacYQlQkMxEBIYOC5xmcPELami14QDUXOXBaEUliuYH8owfC+HoC2AW5mzCoVeUEGWklZC8CNrt727R2hkex+ASiCB4HrwVE4QbejCU69dpkqtQ5O7h/C+hg03AZh//oc/Ov0533cbfHVPUrUbhVTqY/fu2/+cL7c/vbS8DK1UhOaoC3H5bkPShkxgD3JEIRu6tSsK7RAolldGLATLNDiVm0IWaFqY7dizOAGIskcApgiPYcAEaFIYdgGLUylMGqzsGTyp7dGtuRUaAUdl02mK6arIruAdGh3up0w6GRXvWsRJHk3PLtLVmWWh4/bv2Ya5OliH6b91be47x0785Ivlyua0yORsCIfKZr22uL5a/b2HHzr0sYMPHPxCOmE8yuKRFTeULV2/OYfdMECMJoiVVXEHGbMGl4cmgQpvtztCd7Eqb+GZlTWTr7CBQqBCsIAUnE3VTSzaIhPZz2CFzmGLVK7DOA1DZfGpMWghcFwysadxjShGVD6xpwXCDAZXo+Ja2Jk4MDkBzZSlbRg9hTSkQ0xkV7bVAaFvQB8urVZo5XZZVAJDgzlsmgxPsp1b8+tHz56/8pWp69dOg2/bQsyC/EMG5HDh7iJYbWnx9pGZueqRVMo8NDa6/bOFXPapsZGh7YcP3UebtRZ2wha6p5BLUh4jhXKEDfNFWQGgUI81Ady3XvgenTrzX0jdsa0ef+hVruihc/s3Bo0Vik1kQIhElheaFvb7hVQQxXZUHwr+I/GeOxaC0wRoMESQO8QymYiIZTp8cCdlMtBRuirogK/LG7myvknFUh0VSUNUHSiqaQBCO0AGqTcaV+bmii/PL2x868evv3G1iaojhrUzx3UD638U0ow8p+ny5uZp57p3+mLgf04y9YeGe3ue6M9nDudS1j0K6kZU8PC4jVBwwgMsiL4khgXwCoUsfeoTT9AbFy6L0kbwlyieUTQ73OtnHcUlSKSmjdCbRCkTJQXOWkKdcyaNWjQiDJm35PCzbleCxO0SDZsl08bGMuSIyWULLWNwQc0b7HqBSHHc+uHyxtHlYrlavzC/VvphvVk5YgbyhdWVitdoS6Ijwh4u3VFQv23XQZFDtR3YTmOjVD66WWsfvXR9SUoZ5vaMpN/fN5x5IJO27oee2onY39ZuOUYLNVeX3xiQ+/bfS8dPnhBgdrsCPhJIHAbrRiRWhTJXxTkyNwDxzGQsKaHSF17FxK2E7RspbD6EPCWFhI6AR4KwoJ+u0+vnrwqQwzs8ftjn8L0yaGO+2bGvFiuVc9Va/SzWcqnZbpcUhZsCvIGZ0Jvl7q0C6d33s8RylLBUQVUP7JyF1WJ9odipvhwoCD3JNeO6OVjIZ0fgsHel4tZ4MmGOJJzWtocfuj9/7frM4Oyt+TSHTuhdrugasMbi9nEoFTThMbKiRp4TSodAhJgakXk0SN4i9m5mlBWTrs2s0Cuvfr+0Xly/hsJ9GkBPea43jWvMrm2UFxutTiluxYNmuymKcAshxnapwkODX02nlMOBuUSAh4t2PKfd6nRmS5vV2XK1epx3WjElSmCLMnGFBeFBu2P/J76W8iOB5weSqO+4a6GJuWTBVYKPotHVP3KoPX/aD5NCQveErmdDufNhzX/5ub/5sxdefP4kckcRINHkvp2URl2YzxfIg5fxfKrYdDXyGenX04NnQxTRCY2KWRSn3BXlkKtUNs8gDD4LkJ9HiJokekyeAEGD8NM0sI3mwRAn6p4ySJAAYi5fACW6dVzSyGHrU7Tn+KanbFKlIS05vvwUvOlNlh58rq/6QoaIDCp3W9a/0bfvgy1+weMVAPVJPJeEDuu0AZgNkNsoL6BpZL5jjDJFZg/AkKKB15LsYA5bDMLw2aeYzyBgL13bOHvqzNWP4uCbHFLd6/5/+K3Df2AcwjhWrVWCeq0q0n23bOF7nNymdj3Ubp5Mtst6iIk6rAS6NacV12h1o9X6t2+f/9sXXzn9KCqQa+zV78tvHThrMOm6vitim9O76I0H3B/3sPhw8GfctuWOOz7Ae1noMlEeSSQyHZ8niwJQQgGCIfl3qv9pjCddx3nwwvlzf5rO5D6Ry2TMXNbArDrm08E/GgZe++CigDsLGoQtyhEbSvvGWuUHxy48/+Mzs3+fSIxO75rIhTooCm1XtKej0soN7fHF+l1hixfZIvGPDzxVvGeL+PbZ1j0Bj7Zu53EJxWEs7qYBHzWfz2NyLk8cyuaylEI5oLpcw9mifpKdDtcvZGqmAEsTzuiQnoIcQDbUPEO0S0R7R7R6YaAhURycFcPxTCaDKsARaTl6cPF52vOc06dOHhu7OXv9k3v37X18cu/EztHRwUyhYCgxMJui+tCNdq1UWl2efmtx6s2riyemp+eONG17baCvQH19GdEr474Xk3cqCZHMP3iINF0mi+OoOZOpFECX4KmeKJz1ji5CNaYb8GAPHMlr8yiJ0qvTwdr1APPkREXCmZr5LgQLdLCxsbEV5WpUi3Ula4hqEN11+dnbPtGxn+EHlhi+qP+j33JE3+neano7XhM3ZB2WEyrsNhKGocusrfi+CcoSJFq77WIOJmsjKlfEvUVZjTKnLMi80aiLH3ps6UQ1FLKyJEU3gSkyPNjK6lscxzU4r98Ptrz0F9XD0gc/Znvnj/8WYABdzfsLnqCeOAAAAABJRU5ErkJggg==";
+
+  // .observatory-ref/Resources/jupiter.png
+  var jupiter_default = "data:image/png;base64,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";
+
+  // .observatory-ref/Resources/mars.png
+  var mars_default = "data:image/png;base64,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";
+
+  // .observatory-ref/Resources/earth.png
+  var earth_default = "data:image/png;base64,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";
+
+  // .observatory-ref/Resources/venus.png
+  var venus_default = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEsAAAAiCAYAAAAXtSR4AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAABUJJREFUeNrsmcuLXEUUxk897qN7ElwEgjgQnCiIuoiCRjfZCG5EXPtAsnIjCMa/wb1LkSzcuXOjaBAkokTFIE7ciAsXgegwUUZnhklP31eV3zmnbvdMVm68kEvXcOf2fXVX/fo7X51TbWKMtGr/rZkVrBWsFawVrBWsu1ukavYXxdjyR5I1RvZk5RJ1XeAXa8aYZ5wzZywaGcMdu41zPxnrto1x+kwMdHePjT1J+mYjgBUxwL+3v6O2mQGUJWc9PpmhRezsefy7mOX5iz4vzljnyVqAYTgMNdI+dtdA5H2A+pxiG7TPUeEx/Owh7PLxwPpn+zq1bQ+LVUKn80n2Xjk9+arLJhAGDxYQKSlooRSojhUZG2z1VzF0b+L9fj0Oa2PEsJx7spyWHxflZMO4XMFAScZ4IDCiGiOhShJ2qascb2BX78VQvY5+fzp6WAi7R9dOTK6Wk7X7l6EWjvkbd8mYHmBSmUnAxPeojiG8hPNfKKwHscvGA2vnD3hWPSuL6eRrwDrPMKzLsBUQjEv3xePQQotznWwM1PAf/I43dH0L5vUsgN1yoqz/H5Yfatrl8HKZf3syLQQUg2mbiqipBZbzmYJgRQkUHLsJExTYrECTQlSVGB6g9vDdGJuLRMOkP4Mpa+/29VNZ3v2cFeW6KsQpsLaVPUebZVvi0JPMARsrzxa44Bi1qkfCFmYf5hTaOR6vn86mj90wphiPslxmX8jLfJ1VA78BGMCijrK8VPUk/fUtBIRe11KwVVJb7JMqTS3E2Kz3WfEy0N8YYgzDwGIYIT7PLy1mv0CNqI2BCRRWUQrVfhLslWfSTGgSIMVqRX16s3luqC/cDuNXYOT9ORk2Buh83lt4Mnn2J8+aW+ROvcYCoLZtBZFVmj3geTF8SS8kXB/BwfpolIUx5j7z91lnRFE64CCR5JzV46AmziHGvhWPpBNRQrdNIBG8zZwIiazzU4pdNcHNZa/Iez8MjYaiykUDSU1dofVpQa8qzq+sTUmmOH92JMfilGMusyUnojEe4kqg8XgWrBobO7XmUlCRhmJMvqRToVHPVj86Wu6ESssgSVRx3Z9IkmsodHWN2xszFs9Ca0IIv6i6YoLUaQcEjtO8Km1aunCYNikcU2Et6qo1dehmENoBvKy+iQtbNB5YCJSu+zL0GXnQEBSD7iGl2pAWiScrzqZzfNyJwkK9T+18B751AIFycR2+wTPtaGBpWWc/QcjtcurgskLKnGWpE/s5M4FpqU8SYqgBGgkolNQ2d6jrlkYfugYFQP3RUBn8cOVObG81VfMhwu5ShKICSp2YShkjs6A/nnz2udXiOMqxtX7pddZcyQtzTZ8by0opgOzv/AB/mZ/Oi/J759xZhKXYl3UubZlm5pI/LRb+FuVSn1fpTCnf8Z0Qqgt4h03rh1miGa7ckcK4/RMI3vB5+ZlzRSkzm+RU7SIUOfkMXdXn6Ys6UWfCVEqLIptL+BI2acA2kH55rBxq/IKuYriv4MSBLPyxb7lS1US6jsVe5rMS3lZKedRPApbvwzXEwzt4j8s9wKHaQD9YBJrtbmJCO+S6h3xRcGg+AQCXfXbiKQKE5XKyWc5+fVKaftmIobppYsPLyldUjfpNWH92PCul7Fmz3R8VlveUARaXN23b5FDSa0hQ37Jucg4qsovVU8mpNB9DSfMbQEFJ9IHzkz2pHY/BenhEsKCK5vB3STI5zHihj007cD2Izw+h4/Wax3HxAsx+w6hJoWthC9e/xU2bmAkr/eUnO2L6adZ0p5IyRwFrHG0FawVrBWsF615q/wowAPD/oXISzSQWAAAAAElFTkSuQmCC";
+
+  // .observatory-ref/Resources/mercury.png
+  var mercury_default = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEsAAAAiCAYAAAAXtSR4AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAABL9JREFUeNrsmctLZEcYxavt8d3atrHtFrXV+MBZCCoGAx2HiMEJ6ZWIbiYZhEzWWciQf8BFZFbZuXA2A6EXipDFIC2MJBpGJAgqKPRCUDRq+2jfz1Z7vl+NV0JWWTWkuAVF3ar66uo9nnPqq9KRTCaVXf5bSbMhsMGywbLBssEyszxK5Q87OztT5+fnyuFwqIyMDJWW9vFvdX19bY09kpIvO7RT+reJROJY6g07thXPc2Zmpl7HGqfTaSZYg4ODamBgQHk8HtXR0aFKSko0CALQF83Nzc/T09ODR0dHvrW1NWcgELhzu90xAev9wsLCm6urq+mCgoIkgHd1dbFGybyqrq42E6yLiwvNjIODA139fn9Ne3v7LwLCN8fHx2p7e1sdHh6qm5sbRV9KocQ8DoVC38t4ZG5u7kdpo7e3tw8sM1aGVuEjKysrn/b09ITloz0bGxvq5ORE7e/va5CoAHJ5ealb+qWlpU/b2tpmZ2Zmngn73mZnZyuqsQaPdCgtLS1fdnd3j+Xk5HhEXg8A3t3dqaysLFVTU6Nb+oxTiXO5XO7W1tbRoaGhrzo7O7WsjQULlohHefv7+1/Lc87e3p6KxWJKfEnPVVRUqPLycr0JlJWVwT49jiyRKMwTz8rq7e19Le/xx+Nxc8GCHcKol7W1tZ8iMTwMIMSztKSEOQ8souTm5iphn56HZcSzc9bV1QX6+vp+ysvLMxes4uLiT0Q+3wIU2z+7WX5+vhIP0rKDOcyREtDSZ7dkHmAAjT5zwWDwWVFRUbGxYEl6EKyvry8BKPIjWISPWbkXcmSXE1B1a/WZJx520bJefM3b2Nj4xFiw5OOakNbp6an+aDzLShVgC5Kz0gFa+owzTxzxrCPXQrZNTU2fpTJ9SGnqIB/mIg3gY2GNJKG64lGAgJnDHsAkcaUP85AewME+y+cY83q9ZYwZySw+lI/EnwALQ6+qqtK+BVjWPIABEn3GmScO32IdMiSOeWNlKP5z5vP5NGMwa1hhSXJnZ0czDkZJ8qmBBAzG8S3mKKxjPe8Rhm0aC9bKyso8wCApQKLu7u5qA4dJAIGn4UdWH5kyTxzxll8xvrS09Jexx53Z2dk/xZ+2BQQ/voMcMW5M3MqxYBKJ6j0TNXgwDGnCOmIZX15e3l1cXPzD5Ax+b3Jy8lfYJQdkDVBhYaFmCiDgR7DnPlN/2CWZJ4541sG66enpsJwnYyZ7lhoZGXm1vr6+KjuZCgQCGgjMGhOnACQgWbcKjCM5pMtRiBxMDt7rcj78+f5mwtyzoQAVGx4efiFnvSuOLjCJDJ2WFILbB0Cipc84oNAnfmtrKxEOh38QH9tCxkbflFImJibeiay6Q6EQknQjNRiEkeNP+Bh9UgQkB1iAJh51EolEvhsbG4vwHvzNWGb9M9uORqNvR0dHW+Px+AQSo8AU64rZyqd4vt89301NTX2+urr6m/UOTN/4yz/Lm4Qx0fHx8a8FpCcNDQ3PBZSggFQqDMwWRl2KPP8Wf3o/Pz//Rsz9d/GuZCrv3P9dHKk8W3Ejurm5qaxcC4nBHNgESwSMdDF8nzy7xOBPRZ4xqQli2AkxfWLxOH5vUgkuCo0E6/9e7P8b2mDZYNlg2WAZWj4IMADn7uj0TtrWrQAAAABJRU5ErkJggg==";
+
+  // .observatory-ref/Resources/moon75.png
+  var moon75_default = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEsAAAAiCAYAAAAXtSR4AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAmpJREFUeNrsl0tPE2EYhc9cOtNOO0hsqXRKq7YU0HrjGhIWrty4IWgiG36DGxN3Lv0FJm5c4IaFW9YmLE00SGwChaRtSiW0paRl6MXaufkNv4CFSRfznu23efPknPO9L+c4DkjXE0ewCBbBIlgEi2ARLIJFsAgWwSJY11epVEKz2YRpmpAkiYvHJxKBgD8simJrMBhUBEGw2ZjszQdZlr0Na3V1Fdvb25ienllZW3vxPpVKLZuGJY/cUAc+n/hDVUPvFCW0o2kaMpn0UGflh21t11GJRPLl+qv1nV63+1S/0OWTkwpyuZzEnLSi65dfO53OhuPYQ4+hOOwBlIAy8eTR44/7uV8+UZIRGYuiVCzAskwIPIexaJQvFosfbNv6NjWVKXraWXFNW2d9FB0Nh8HqChetJhLJO2DRw97uLo7Lx+j/6Y+yttjwvLN8orDA8wLu3X+AXreHTqeN+YU5/O33Ua3V4XZq9fQUoVDw4bBnHbqzorfGOddNvysVDIwBJifTEEWBxW8MLHZQVRXTMzMskgLneVimZe9xbDU4q1XROKsjf5hnfWWjz5wlSSI0LYZ06i4cOPuej+FB/uDL/NLyW8sybrqAYuMxJJO3YTCX9Xo91l1B1Kr1tiCKW553ViQcKZfLpdeTmYwzOzeLxaVFBFm5y5KfLaHSlcvOGo03waBy5HlY2WzW/e22Pm9uPjvMH32v12qWftly9y/bNK2fhULhuWVZn/z+AJ075+fnaLfb0HXd/fmEWCyWUhRlxDCMNoNUsm3H5Hke7AS6Kns6pOmQJlgEi0SwCBbBIlgEi2CRCNZ/1z8BBgCJiy7LGJZWygAAAABJRU5ErkJggg==";
+
+  // src/observatory/planet-hands.ts
+  var planets = [
+    { planet: 7 /* Saturn */, orbitIndex: 0, src: saturn_default, img: null },
+    { planet: 6 /* Jupiter */, orbitIndex: 1, src: jupiter_default, img: null },
+    { planet: 5 /* Mars */, orbitIndex: 2, src: mars_default, img: null },
+    { planet: 4 /* Earth */, orbitIndex: 3, src: earth_default, img: null },
+    { planet: 3 /* Venus */, orbitIndex: 4, src: venus_default, img: null },
+    { planet: 2 /* Mercury */, orbitIndex: 5, src: mercury_default, img: null }
+  ];
+  var moonConfig = {
+    src: moon75_default,
+    img: null,
+    moonOrbitRadius: 22
+  };
+  var imagesLoaded2 = false;
+  function loadPlanetImages() {
+    if (imagesLoaded2) return Promise.resolve();
+    const promises = [];
+    for (const p of planets) {
+      p.img = new Image();
+      const img = p.img;
+      promises.push(new Promise((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => {
+          console.warn(`[PlanetHands] Failed to load planet image: ${p.planet}`);
+          resolve();
+        };
+      }));
+      p.img.src = p.src;
+    }
+    moonConfig.img = new Image();
+    const moonImg = moonConfig.img;
+    promises.push(new Promise((resolve) => {
+      moonImg.onload = () => resolve();
+      moonImg.onerror = () => {
+        console.warn("[PlanetHands] Failed to load moon75.png");
+        resolve();
+      };
+    }));
+    moonConfig.img.src = moonConfig.src;
+    return Promise.all(promises).then(() => {
+      imagesLoaded2 = true;
+    });
+  }
+  var imageLoadPromise2 = loadPlanetImages();
+  function waitForPlanetImages() {
+    return imageLoadPromise2;
+  }
+  var cachedAngles = /* @__PURE__ */ new Map();
+  var cachedMoonAngle = 0;
+  var lastUpdateTime = 0;
+  var UPDATE_INTERVAL_MS = 3600 * 1e3;
+  function dateToDateInterval2(date) {
+    return date.getTime() / 1e3 - 978307200;
+  }
+  function updateAngles(now) {
+    const nowMs = now.getTime();
+    if (nowMs - lastUpdateTime < UPDATE_INTERVAL_MS && lastUpdateTime > 0) return;
+    lastUpdateTime = nowMs;
+    const di = dateToDateInterval2(now);
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+    const tau = julianCenturiesSince2000Epoch / 100;
+    for (const p of planets) {
+      const hLong = WB_planetHeliocentricLongitude(p.planet, tau);
+      cachedAngles.set(p.planet, -hLong);
+    }
+    const { age } = moonAge(di, null);
+    cachedMoonAngle = -age + Math.PI;
+  }
+  function drawPlanetHands(ctx2, L, now, _env) {
+    if (!imagesLoaded2) return;
+    updateAngles(now);
+    const cx = L.mainCX;
+    const cy = L.mainCY;
+    for (const p of planets) {
+      const img = p.img;
+      if (!img || !img.complete) continue;
+      const angle = cachedAngles.get(p.planet) ?? 0;
+      const orbitR = L.plR2 - p.orbitIndex * L.orbitInc;
+      ctx2.save();
+      ctx2.translate(cx, cy);
+      ctx2.rotate(angle);
+      const s = L.mainR / 365;
+      const imgW = img.naturalWidth * s;
+      const imgH = img.naturalHeight * s;
+      ctx2.globalCompositeOperation = "lighten";
+      ctx2.drawImage(img, -imgW / 2, -orbitR - imgH / 2, imgW, imgH);
+      if (p.planet === 4 /* Earth */) {
+        drawMoonSubHand(ctx2, L, s, orbitR);
+      }
+      ctx2.globalCompositeOperation = "source-over";
+      ctx2.restore();
+    }
+  }
+  function drawMoonSubHand(ctx2, L, s, earthOrbitR) {
+    const moonImg = moonConfig.img;
+    if (!moonImg || !moonImg.complete) return;
+    const moonR = moonConfig.moonOrbitRadius * s;
+    const moonW = moonImg.naturalWidth * s;
+    const moonH = moonImg.naturalHeight * s;
+    ctx2.save();
+    ctx2.translate(0, -earthOrbitR);
+    ctx2.rotate(cachedMoonAngle);
+    ctx2.globalCompositeOperation = "lighten";
+    ctx2.drawImage(moonImg, -moonW / 2, -moonR - moonH / 2, moonW, moonH);
+    ctx2.restore();
+  }
+
+  // src/observatory/ring-view.ts
+  var TWO_PI8 = 2 * Math.PI;
+  var HALF_PI2 = Math.PI / 2;
+  function cachelessPlanetAlt(planetNumber, dateInterval, lat2, lng) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
+    const tau = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, tau);
+    const planetRA = pos.apparentRightAscension;
+    const planetDecl = pos.apparentDeclination;
+    const gst = convertUTToGSTP03(dateInterval, null);
+    const lst = convertGSTtoLST(gst, lng);
+    const hourAngle = lst - planetRA;
+    const sinAlt = Math.sin(planetDecl) * Math.sin(lat2) + Math.cos(planetDecl) * Math.cos(lat2) * Math.cos(hourAngle);
+    return Math.asin(sinAlt);
+  }
+  var GRADIENT_STEPS = [
+    { alt: -90.01, r: 0.125, g: 0.125, b: 0.125, a: 0 },
+    // full night
+    { alt: -30, r: 0.125, g: 0.125, b: 0.125, a: 0 },
+    { alt: -9, r: 0, g: 0, b: 0.39, a: 1 },
+    { alt: -1, r: 0.17, g: 0.77, b: 0.84, a: 1 },
+    { alt: -0.5, r: 0.84, g: 0, b: 0, a: 1 },
+    { alt: 1, r: 0.94, g: 0.42, b: 0, a: 1 },
+    { alt: 9, r: 1, g: 1, b: 0, a: 1 },
+    { alt: 30, r: 0.9, g: 0.9, b: 1, a: 1 },
+    { alt: 90.01, r: 0.9, g: 0.9, b: 1, a: 1 }
+  ];
+  function colorForAltitude(altRad) {
+    const altDeg = altRad * 180 / Math.PI;
+    const alt = Math.max(-90, Math.min(90, altDeg));
+    let i = 0;
+    while (i < GRADIENT_STEPS.length - 1 && GRADIENT_STEPS[i].alt <= alt) {
+      i++;
+    }
+    const j = Math.max(0, i - 1);
+    const stepWidth = GRADIENT_STEPS[i].alt - GRADIENT_STEPS[j].alt;
+    const fraction = stepWidth > 0 ? (alt - GRADIENT_STEPS[j].alt) / stepWidth : 0;
+    const r = GRADIENT_STEPS[j].r + (GRADIENT_STEPS[i].r - GRADIENT_STEPS[j].r) * fraction;
+    const g = GRADIENT_STEPS[j].g + (GRADIENT_STEPS[i].g - GRADIENT_STEPS[j].g) * fraction;
+    const b = GRADIENT_STEPS[j].b + (GRADIENT_STEPS[i].b - GRADIENT_STEPS[j].b) * fraction;
+    const a = GRADIENT_STEPS[j].a + (GRADIENT_STEPS[i].a - GRADIENT_STEPS[j].a) * fraction;
+    return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${a.toFixed(3)})`;
+  }
+  var PLANET_RINGS = [
+    { planet: 7 /* Saturn */, outerOffset: 2, width: 8, dayColor: "rgba(169,252,252,1)", nightColor: null },
+    { planet: 6 /* Jupiter */, outerOffset: 12, width: 8, dayColor: "rgba(169,252,169,1)", nightColor: null },
+    { planet: 5 /* Mars */, outerOffset: 22, width: 8, dayColor: "rgba(252,169,252,1)", nightColor: null },
+    { planet: 3 /* Venus */, outerOffset: 32, width: 8, dayColor: "rgba(255,255,255,1)", nightColor: null },
+    { planet: 2 /* Mercury */, outerOffset: 42, width: 8, dayColor: "rgba(252,169,169,1)", nightColor: null },
+    { planet: 1 /* Moon */, outerOffset: 52, width: 8, dayColor: "rgba(169,169,252,1)", nightColor: null }
+  ];
+  var ringCache = /* @__PURE__ */ new Map();
+  var lastRingUpdateTime = 0;
+  var RING_UPDATE_INTERVAL_MS = 3600 * 1e3;
+  var sunRingCacheCanvas = null;
+  var sunRingCacheNoonOnTop = null;
+  function dateToDateInterval3(date) {
+    return date.getTime() / 1e3 - 978307200;
+  }
+  function secondsSinceMidnightForDateInterval(dateInterval, tzOffsetSeconds) {
+    const unixTime = dateInterval + 978307200;
+    const localTime = unixTime + tzOffsetSeconds;
+    return (localTime % 86400 + 86400) % 86400;
+  }
+  function drawSunRing(ctx2, L, now, lat2, lng, tzOffsetSeconds, noonOnTop2) {
+    const cx = L.mainCX;
+    const cy = L.mainCY;
+    const outerR = L.plR;
+    const innerR = L.plR - L.sunRingWidth;
+    const centerR = (outerR + innerR) / 2;
+    const ringWidth = outerR - innerR;
+    const noonOffset = noonOnTop2 ? Math.PI : 0;
+    const nowDI = dateToDateInterval3(now);
+    const latRad = lat2 * Math.PI / 180;
+    const lngRad = lng * Math.PI / 180;
+    ctx2.save();
+    ctx2.lineWidth = ringWidth;
+    ctx2.lineCap = "butt";
+    const angleInc = 3 / outerR;
+    const startTime = nowDI - 12 * 3600;
+    const endTime = nowDI + 12 * 3600;
+    const startSeconds = secondsSinceMidnightForDateInterval(startTime, tzOffsetSeconds);
+    let startClockAngle = startSeconds / 3600 % 24 * TWO_PI8 / 24 + noonOffset;
+    if (startClockAngle > TWO_PI8) startClockAngle -= TWO_PI8;
+    const cheat = 1 / outerR;
+    let drawAngle = startClockAngle;
+    let t = startTime;
+    let first = true;
+    while (t < endTime) {
+      const alt = cachelessPlanetAlt(0 /* Sun */, t, latRad, lngRad);
+      const color = colorForAltitude(alt);
+      const step = Math.abs(alt) < TWO_PI8 * 9 / 360 ? angleInc / 3 : angleInc * 3;
+      const nextAngle = drawAngle + step;
+      const canvasStart = drawAngle - cheat - HALF_PI2;
+      const canvasEnd = nextAngle + cheat - HALF_PI2;
+      ctx2.strokeStyle = color;
+      ctx2.beginPath();
+      ctx2.arc(cx, cy, centerR, canvasStart, canvasEnd);
+      ctx2.stroke();
+      drawAngle = nextAngle;
+      t += 86400 * step / TWO_PI8;
+      first = false;
+    }
+    ctx2.restore();
+  }
+  function updateRingCache(env2, noonOnTop2) {
+    const nowMs = Date.now();
+    if (nowMs - lastRingUpdateTime < RING_UPDATE_INTERVAL_MS && lastRingUpdateTime > 0) return;
+    lastRingUpdateTime = nowMs;
+    const dayNightLeafAngle = env2.functions.get("dayNightLeafAngle");
+    if (!dayNightLeafAngle) return;
+    const noonOffset = noonOnTop2 ? Math.PI : 0;
+    for (const ring of PLANET_RINGS) {
+      const rawRise = dayNightLeafAngle(ring.planet, 0, 0);
+      const rawSet = dayNightLeafAngle(ring.planet, 1, 0);
+      const riseAngle = rawRise + noonOffset;
+      const setAngle = rawSet + noonOffset;
+      const riseValid = isFinite(rawRise);
+      const setValid = isFinite(rawSet);
+      const transitFn = env2.functions.get("planettransit24HourIndicatorAngle");
+      const transitAngle = transitFn ? transitFn(ring.planet) + noonOffset : (riseAngle + setAngle) / 2;
+      let aboveHorizon = false;
+      if (!riseValid || !setValid) {
+        const altFn = env2.functions.get("altitudeOfPlanet");
+        if (altFn) {
+          aboveHorizon = altFn(ring.planet) > 0;
+        }
+      }
+      ringCache.set(ring.planet, {
+        riseAngle,
+        setAngle,
+        transitAngle,
+        riseValid,
+        setValid,
+        aboveHorizon
+      });
+    }
+  }
+  function drawPlanetRing(ctx2, L) {
+    const s = L.mainR / 365;
+    const cx = L.mainCX;
+    const cy = L.mainCY;
+    for (const ring of PLANET_RINGS) {
+      const outerR = L.plR - ring.outerOffset * s;
+      const innerR = outerR - ring.width * s;
+      const centerR = (outerR + innerR) / 2;
+      const lineW = outerR - innerR;
+      const cache = ringCache.get(ring.planet);
+      if (!cache) continue;
+      let riseAngle = cache.riseAngle;
+      let setAngle = cache.setAngle;
+      let drawLabelOnly = false;
+      if (!cache.riseValid || !cache.setValid) {
+        if (cache.aboveHorizon) {
+          riseAngle = ((cache.transitAngle - Math.PI + 1e-4) % TWO_PI8 + TWO_PI8) % TWO_PI8;
+          setAngle = ((cache.transitAngle + Math.PI - 1e-4) % TWO_PI8 + TWO_PI8) % TWO_PI8;
+        } else {
+          drawLabelOnly = true;
+        }
+      }
+      ctx2.save();
+      ctx2.lineWidth = lineW;
+      ctx2.lineCap = "butt";
+      if (!drawLabelOnly) {
+        const canvasRise = riseAngle - HALF_PI2;
+        const canvasSet = setAngle - HALF_PI2;
+        ctx2.strokeStyle = ring.dayColor;
+        ctx2.beginPath();
+        ctx2.arc(cx, cy, centerR, canvasRise, canvasSet);
+        ctx2.stroke();
+        if (ring.nightColor) {
+          ctx2.strokeStyle = ring.nightColor;
+          ctx2.beginPath();
+          ctx2.arc(cx, cy, centerR, canvasSet, canvasRise);
+          ctx2.stroke();
+        }
+        const canvasTransit = cache.transitAngle - HALF_PI2;
+        const dc = 9 / 20 * TWO_PI8 / 360;
+        const midR = (outerR + innerR) / 2;
+        const ct = Math.cos(canvasTransit);
+        const st = Math.sin(canvasTransit);
+        ctx2.lineWidth = 0.33 * s;
+        ctx2.strokeStyle = `rgba(50,50,50,0.5)`;
+        ctx2.fillStyle = `rgba(50,50,50,0.5)`;
+        ctx2.beginPath();
+        ctx2.moveTo(cx + innerR * ct, cy + innerR * st);
+        ctx2.lineTo(cx + midR * Math.cos(canvasTransit - dc), cy + midR * Math.sin(canvasTransit - dc));
+        ctx2.lineTo(cx + outerR * ct, cy + outerR * st);
+        ctx2.lineTo(cx + midR * Math.cos(canvasTransit + dc), cy + midR * Math.sin(canvasTransit + dc));
+        ctx2.closePath();
+        ctx2.fill();
+        ctx2.stroke();
+      }
+      ctx2.restore();
+    }
+  }
+  function drawRiseSetRings(ctx2, L, env2, noonOnTop2, now, lat2, lon2, tzOffsetSeconds) {
+    updateRingCache(env2, noonOnTop2);
+    drawSunRing(ctx2, L, now, lat2, lon2, tzOffsetSeconds, noonOnTop2);
+    drawPlanetRing(ctx2, L);
+  }
+  function invalidateRingCache() {
+    lastRingUpdateTime = 0;
+    sunRingCacheCanvas = null;
+    sunRingCacheNoonOnTop = null;
+  }
+
   // src/observatory/observatory-entry.ts
   var noonOnTop = false;
   var layout;
@@ -13832,6 +14168,7 @@
     canvas.style.height = `${h}px`;
     layout = computeLayout(w, h);
     invalidateMainDialCache();
+    invalidateRingCache();
     needsStaticRedraw = true;
   }
   var needsStaticRedraw = true;
@@ -13855,6 +14192,10 @@
     }
     ctx.save();
     ctx.scale(dpr, dpr);
+    const now = getNow();
+    const tzOffsetSec = env.tzOffsetSec ?? 0;
+    drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec);
+    drawPlanetHands(ctx, L, now, env);
     const peripherals = [
       { cx: L.altCX, cy: L.altCY, r: L.altR, label: "ALT" },
       { cx: L.azCX, cy: L.azCY, r: L.azR, label: "AZ" },
@@ -13891,7 +14232,6 @@
     ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    const now = getNow();
     const timeStr = now.toLocaleTimeString("en-US", {
       hour12: false,
       timeZone: locationTimezone
@@ -13925,6 +14265,7 @@
   function rebuildEnv() {
     tzDeltaMs = computeTzDeltaMs(locationTimezone);
     env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+    invalidateRingCache();
     needsStaticRedraw = true;
   }
   function setupLocationDialog() {
@@ -13982,9 +14323,9 @@
     updateLocationDisplay();
     timeController.onTick = () => rebuildEnv();
     console.log("[Observatory] Initialized \u2014 lat:", lat, "lon:", lon, "tz:", locationTimezone);
-    waitForImages().then(() => {
+    Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
       invalidateMainDialCache();
-      console.log("[Observatory] Images loaded");
+      console.log("[Observatory] All images loaded");
     });
     requestAnimationFrame(tick);
   }

@@ -20,6 +20,8 @@ import { initLocationDialog, requestBrowserLocation } from '../shared/location-d
 import { TimeController } from '../shared/time-controller.js';
 import { computeLayout, type LayoutParams } from './layout.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
+import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
+import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
 
 // ============================================================================
 // State
@@ -86,6 +88,7 @@ function resizeCanvas(): void {
 
     // Invalidate static caches so they rebuild at new size
     invalidateMainDialCache();
+    invalidateRingCache();
     needsStaticRedraw = true;
 }
 
@@ -130,7 +133,21 @@ function drawFrame(): void {
     ctx.scale(dpr, dpr);
 
     // ================================================================
-    // 2. Peripheral dial placeholders (Phase 7 will replace these)
+    // 2. Rise/set rings (dynamic — recomputed hourly)
+    //    Draw after static dial but before planet hands so arcs
+    //    appear between the orbit circles and the planet icons.
+    // ================================================================
+    const now = getNow();
+    const tzOffsetSec = env.tzOffsetSec ?? 0;
+    drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec);
+
+    // ================================================================
+    // 3. Planet hands (dynamic — recomputed hourly)
+    // ================================================================
+    drawPlanetHands(ctx, L, now, env);
+
+    // ================================================================
+    // 4. Peripheral dial placeholders (Phase 7 will replace these)
     // ================================================================
     const peripherals = [
         { cx: L.altCX, cy: L.altCY, r: L.altR, label: 'ALT' },
@@ -153,7 +170,7 @@ function drawFrame(): void {
     }
 
     // ================================================================
-    // 3. Header placeholders (Phase 5/6 will replace these)
+    // 5. Header placeholders (Phase 5/6 will replace these)
     // ================================================================
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
 
@@ -171,20 +188,19 @@ function drawFrame(): void {
     ctx.fillText('EARTH', L.earthCX, L.earthCY);
 
     // ================================================================
-    // 4. Logo
+    // 6. Logo
     // ================================================================
     ctx.font = '12px Inter, sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     ctx.fillText('EMERALD ✦ SEQUOIA', L.logoCX, L.logoCY);
 
     // ================================================================
-    // 5. Debug status overlay (top-left)
+    // 7. Debug status overlay (top-left)
     // ================================================================
     ctx.font = '11px "JetBrains Mono", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    const now = getNow();
     const timeStr = now.toLocaleTimeString('en-US', {
         hour12: false,
         timeZone: locationTimezone,
@@ -233,6 +249,7 @@ function updateLocationDisplay(): void {
 function rebuildEnv(): void {
     tzDeltaMs = computeTzDeltaMs(locationTimezone);
     env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+    invalidateRingCache();
     needsStaticRedraw = true;
 }
 
@@ -307,9 +324,9 @@ function init(): void {
     console.log('[Observatory] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone);
 
     // Wait for images to load, then invalidate cache so first real draw occurs
-    waitForImages().then(() => {
+    Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
         invalidateMainDialCache();
-        console.log('[Observatory] Images loaded');
+        console.log('[Observatory] All images loaded');
     });
 
     // Start render loop
