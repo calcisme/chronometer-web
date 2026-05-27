@@ -75,7 +75,7 @@ On the root `<watch>` tag of the watch face's XML file, you must define the foll
 > The build process will strictly validate that both `displayName` and `description` are present in the XML. The build will fail if either attribute is missing.
 
 ### 3. Add Thumbnail Image
-Add a thumbnail image for the new face named `thumb-<slug>.png` inside the `src/faces/` directory.
+Add a thumbnail image for the new face named `thumb-<slug>.png` inside the `src/faces/` directory. See [Face Porting Guide §9 (Thumbnails)](face-porting-guide.md#9-thumbnails) for the critical transparency requirements.
 
 ### 4. Help Content (if applicable)
 If the new face has a help file, place the HTML fragment in `src/help/<slug>.html`. The build system will automatically find and inject it by convention. See [Help System](help-system.md) for details on creating help files.

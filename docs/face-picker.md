@@ -127,6 +127,13 @@ When the user arrives at the pick page with existing `picks` in the URL, or afte
 
 Instead of hardcoding `FACES` inside `pick-page.ts`, the build-time code generator script constructs [faces-list.ts](file:///Users/spucci/chronometer-web/src/faces/generated/faces-list.ts) automatically. `pick-page.ts` imports this list dynamically to populate the picker's grid and selection layout, ensuring that the picker registration and the active faces in `faces.txt` are always kept in sync.
 
+### Dynamic Favicon and Apple Touch Icon Background
+
+The picker page (`pick.html`), selected faces page (`selected.html`), and all-faces page (`all.html`) dynamically generate their browser favicons and iOS home screen icons based on the currently selected or loaded watch faces:
+
+* The watch face thumbnails are composited dynamically into a single icon (diagonal layout for 2 faces, asymmetric triangle packing for 3, and a 2x2 grid for 4+ faces).
+* The background of the generated icon is calculated as the arithmetic average of the individual watch face bezel-matched background colors (ignoring invalid or unparsed colors), creating a harmonious backdrop on iOS home screens.
+
 ## Selected Faces Page (`selected.html`)
 
 Built from `face-template.html` with all face scripts (identical to `all.html`). The engine filters and reorders faces at runtime.
