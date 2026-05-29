@@ -156,15 +156,17 @@ fixed color.
 
 Stops 2/3 (morning) and 10/11 (evening) create an **abrupt color transition**
 at the sunrise/sunset hand. Instead of computing positions from separate
-altitude kinds, they use the actual sunrise/sunset angle ± 0.001 radians:
+altitude kinds, they use the actual sunrise/sunset angle ± ε radians, where
+ε = 0.001 rad ≈ 0.23 time-minutes (≈ 14 time-seconds):
 
 ```
-ring1BelowMorn:    sunSpecialAngle(SunRiseMorning) + pi * noonOnTop - 0.001
-ringHalfBelowMorn: sunSpecialAngle(SunRiseMorning) + pi * noonOnTop + 0.001
+ring1BelowMorn:    sunSpecialAngle(SunRiseMorning) + pi * noonOnTop - ε
+ringHalfBelowMorn: sunSpecialAngle(SunRiseMorning) + pi * noonOnTop + ε
 ```
 
-This ensures the cyan→red boundary aligns exactly with the sunrise/sunset
-hand, producing a sharp visual marker.
+This ensures the cyan→red boundary aligns closely with the sunrise/sunset
+hand, producing a visible color marker. The constant `SUNSET_EPSILON` in
+`obs-values.ts` controls this gap width.
 
 ### Noon/Midnight Anchors
 

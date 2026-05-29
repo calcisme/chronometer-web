@@ -276,12 +276,17 @@ function buildValueDefs(): {
     // Each stop represents where the sun crosses a specific altitude threshold.
     // Morning stops update at sunset; evening stops at sunrise (same as hands).
     // Noon/midnight anchors update at either event.
+    //
+    // Epsilon for the sunrise/sunset color-stop boundary.  Larger values
+    // widen the sharp cyan→red transition band around the sunrise/sunset hand.
+    // 0.001 rad ≈ 0.23 time-minutes (≈ 14 time-seconds).
+    const SUNSET_EPSILON = 0.001;
     const sunRing: ObsValueDef[] = [
         // Morning side (night → day): update at next sunset
         { name: 'ring18BelowMorn',   expr: `sunSpecialAngle(${SK.SunRing18BelowMorning}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNSET },
         { name: 'ring9BelowMorn',    expr: `sunSpecialAngle(${SK.SunRing9BelowMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
-        { name: 'ring1BelowMorn',    expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop - 0.001`,  updateInterval: EC_UPDATE_NEXT_SUNSET },
-        { name: 'ringHalfBelowMorn', expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop + 0.001`,  updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ring1BelowMorn',    expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop - ${SUNSET_EPSILON}`,  updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ringHalfBelowMorn', expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop + ${SUNSET_EPSILON}`,  updateInterval: EC_UPDATE_NEXT_SUNSET },
         { name: 'ring1AboveMorn',    expr: `sunSpecialAngle(${SK.SunRing1AboveMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
         { name: 'ring9AboveMorn',    expr: `sunSpecialAngle(${SK.SunRing9AboveMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
         { name: 'ring30AboveMorn',   expr: `sunSpecialAngle(${SK.SunRing30AboveMorning}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNSET },
@@ -289,8 +294,8 @@ function buildValueDefs(): {
         { name: 'ring30AboveEve',    expr: `sunSpecialAngle(${SK.SunRing30AboveEvening}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
         { name: 'ring9AboveEve',     expr: `sunSpecialAngle(${SK.SunRing9AboveEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
         { name: 'ring1AboveEve',     expr: `sunSpecialAngle(${SK.SunRing1AboveEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
-        { name: 'ringHalfBelowEve',  expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop - 0.001`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
-        { name: 'ring1BelowEve',     expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop + 0.001`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ringHalfBelowEve',  expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop - ${SUNSET_EPSILON}`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ring1BelowEve',     expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop + ${SUNSET_EPSILON}`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
         { name: 'ring9BelowEve',     expr: `sunSpecialAngle(${SK.SunRing9BelowEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
         { name: 'ring18BelowEve',    expr: `sunSpecialAngle(${SK.SunRing18BelowEvening}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
         // Anchor points: solar noon and midnight (positions always valid, colors computed at render time)
