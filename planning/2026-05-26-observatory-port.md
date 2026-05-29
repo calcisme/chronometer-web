@@ -321,7 +321,7 @@ Visual verification will be done by the user after each phase.
 |-------|-------------|---------------------|--------|
 | 0 | App skeleton, entry point, build integration | Low | ✅ Complete |
 | 1 | Main orrery dial background (static) | Medium | ✅ Complete |
-| 2 | Planet hands + rise/set rings | Medium-High | 🔶 In progress |
+| 2 | Planet hands + rise/set rings | Medium-High | ✅ Complete |
 | 3 | Central clock hands | Medium | Not started |
 | 4 | UTC/Solar/Sidereal subdials (hands + constellation overlay) | Medium | Not started |
 | 5 | Earth map with terminator | Medium-High | Not started |
@@ -343,18 +343,15 @@ Visual verification will be done by the user after each phase.
 - Subdial labels positioned at bottom (matching iOS).
 - Fixed layout proportionality: all layout constants now scale directly from iOS reference values (e.g., `plR = 332*s` instead of `mainR - mainFontSize - 1`) to preserve geometric relationships at all canvas sizes.
 
-### Phase 2 — 🔶 In Progress
+### Phase 2 — ✅ Complete
 
 #### Completed:
 - **Planet image hands** (`planet-hands.ts`): Saturn, Jupiter, Mars, Earth, Venus, Mercury rendered at heliocentric longitudes on orbit circles. Moon sub-hand orbits Earth at moon age angle. Images correctly oriented (top facing inward) using `rotate(angle + π) + scale(-1, 1)` to match iOS UIKit drawing convention.
 - **Rise/set rings** (`ring-view.ts`): All 7 rings (Sun + 6 planets) rendered with correct colors. Sun ring uses altitude-based gradient (`cachelessPlanetAlt`). Planet rings use `planetaryRiseSetTimeRefined` for rise/set times. Transit diamond markers drawn at ring midpoints.
 - **Transit angle fix** (`astro-env.ts`): Added `leafNumber === 4` special case to `computeDayNightLeafAngle` (iOS ESAstronomy.cpp L5182-5190) — computes high transit directly via `planettransitTimeRefined` instead of the old leaf-center approach. Fixed `planettransit24HourIndicatorAngle` registration to use `(planet, 4, 0)`.
 - **Shared astronomy cleanup**: Moved `cachelessPlanetAlt` from Observatory-specific `ring-view.ts` to the shared astronomy layer (`es-astro.ts`), per the project rule that astronomy knowledge belongs in shared code.
-
-#### Remaining for Phase 2:
-- **Planet name labels on rings**: iOS draws planet names at rise/set endpoints and transit point using `drawCircularText` ([EORingView.mm L408-412](file:///Users/spucci/chronometer-web/.observatory-ref/Classes/EORingView.mm#L408-L412)). Not yet implemented.
-- **Sidereal constellation abbreviations**: iOS overlays a pre-rendered PNG (`EO-Sidereal-constellation-names-0-at-top.png`, 149×149) on the sidereal subdial ([EOShuffleView.mm L212-217](file:///Users/spucci/chronometer-web/.observatory-ref/Classes/EOShuffleView.mm#L212-L217)). Not yet implemented.
-- **Sun ring**: May need verification — was reported as not visible earlier but subsequent fixes should have addressed it.
+- **Planet name labels on rings** (`ring-view.ts`): Port of EORingView.mm L367-412. Each planet ring displays its name at rise and set endpoints using `drawCircularText` in demi-radial mode. When the planet is below the horizon (no rise/set), the name is drawn at the transit angle in the ring's day color.
+- **Sidereal constellation abbreviations** (`main-dial.ts`): Port of EOShuffleView.mm L211-218. The pre-rendered `EO-Sidereal-constellation-names@2x.png` (308×308 @2x asset) is overlaid centered on the sidereal subdial, scaled to `149*s` to match iOS reference proportions. Drawn in the static cache (only redrawn on resize).
 
 ### Key Technical Lessons
 

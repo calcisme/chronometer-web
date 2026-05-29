@@ -314,6 +314,14 @@ export function drawCircularText(
     ctx.textBaseline = 'alphabetic';
     ctx.translate(cx, cy);
 
+    // Measure actual text bounds for the specific string (not generic font bounds).
+    // This allows per-label centering: "Moon" (no descender) vs "Jupiter" (has 'p','j').
+    const textMetrics = ctx.measureText(text);
+    const actualAsc = textMetrics.actualBoundingBoxAscent;
+    const actualDesc = textMetrics.actualBoundingBoxDescent;
+    // Offset from alphabetic baseline to the visual center of this text's glyphs
+    const visualCenterOffset = (actualAsc - actualDesc) / 2;
+
     // Compute total angular span of the text
     let totalArc = 0;
     const charWidths: number[] = [];
@@ -329,6 +337,12 @@ export function drawCircularText(
     // Determine if we need to flip (demi-radial: bottom half)
     const needFlip = demi && normAngle > Math.PI / 2 && normAngle < 3 * Math.PI / 2;
 
+    // iOS demiTweak: radius -= 0.75 for flipped text (EOClock.mm L1186)
+    let effectiveR = radius;
+    if (needFlip) {
+        effectiveR -= 0.75;
+    }
+
     let currentAngle: number;
     if (needFlip) {
         currentAngle = normAngle + Math.PI + offset + totalArc / 2;
@@ -337,20 +351,28 @@ export function drawCircularText(
     }
 
     for (let i = 0; i < n; i++) {
-        const charArc = charWidths[i] / radius;
+        const charArc = charWidths[i] / effectiveR;
 
         if (needFlip) {
+            // Flipped text (rotated π extra): +y points outward.
+            // We want the text's visual center at +effectiveR:
+            //   baseline + (actualDesc - actualAsc)/2 = effectiveR
+            //   baseline = effectiveR + visualCenterOffset
             currentAngle -= charArc / 2;
             ctx.save();
             ctx.rotate(currentAngle);
-            ctx.fillText(text[i], 0, textVisualCenterY(ctx, text[i]) + radius);
+            ctx.fillText(text[i], 0, effectiveR + visualCenterOffset);
             ctx.restore();
             currentAngle -= charArc / 2;
         } else {
+            // Normal text: -y points outward.
+            // We want the text's visual center at -effectiveR:
+            //   baseline + (actualDesc - actualAsc)/2 = -effectiveR
+            //   baseline = -effectiveR + visualCenterOffset
             currentAngle += charArc / 2;
             ctx.save();
             ctx.rotate(currentAngle);
-            ctx.fillText(text[i], 0, textVisualCenterY(ctx, text[i]) - radius);
+            ctx.fillText(text[i], 0, -effectiveR + visualCenterOffset);
             ctx.restore();
             currentAngle += charArc / 2;
         }

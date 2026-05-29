@@ -29,6 +29,7 @@ import type { LayoutParams } from './layout.js';
 import type { Environment } from '../expr/evaluator.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
 import { cachelessPlanetAlt } from '../astronomy/es-astro.js';
+import { drawCircularText } from './draw-utils.js';
 
 const TWO_PI = 2 * Math.PI;
 const HALF_PI = Math.PI / 2;
@@ -113,6 +114,19 @@ const PLANET_RINGS: PlanetRingConfig[] = [
     { planet: ECPlanetNumber.Mercury, outerOffset: 42, width: 8, dayColor: 'rgba(252,169,169,1)', nightColor: null },
     { planet: ECPlanetNumber.Moon,    outerOffset: 52, width: 8, dayColor: 'rgba(169,169,252,1)', nightColor: null },
 ];
+
+/**
+ * Planet name strings for ring labels.
+ * Port of: EORingView.mm L367-399 (switch statement)
+ */
+const PLANET_NAMES: Partial<Record<ECPlanetNumber, string>> = {
+    [ECPlanetNumber.Moon]: 'Moon',
+    [ECPlanetNumber.Mercury]: 'Mercury',
+    [ECPlanetNumber.Venus]: 'Venus',
+    [ECPlanetNumber.Mars]: 'Mars',
+    [ECPlanetNumber.Jupiter]: 'Jupiter',
+    [ECPlanetNumber.Saturn]: 'Saturn',
+};
 
 // ---------------------------------------------------------------------------
 // Caching
@@ -409,6 +423,26 @@ function drawPlanetRing(
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
+        }
+
+        // Planet name labels
+        // Port of: EORingView.mm L367-412
+        const pName = PLANET_NAMES[ring.planet];
+        if (pName) {
+            const labelFont = `${8 * s}px Arial, sans-serif`;
+            const labelRadius = centerR;  // drawCircularText centers text visually at this radius
+
+            if (drawLabelOnly) {
+                // Planet below horizon: draw name at transit angle in day color
+                drawCircularText(ctx, pName, cx, cy, labelRadius,
+                    cache.transitAngle, 0, labelFont, ring.dayColor, true);
+            } else {
+                // Draw name at rise and set endpoints
+                drawCircularText(ctx, pName, cx, cy, labelRadius,
+                    cache.riseAngle, Math.PI / 40, labelFont, '#000000', true);
+                drawCircularText(ctx, pName, cx, cy, labelRadius,
+                    cache.setAngle, -Math.PI / 40, labelFont, '#000000', true);
+            }
         }
 
         ctx.restore();

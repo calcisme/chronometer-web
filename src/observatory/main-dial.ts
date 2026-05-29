@@ -25,6 +25,7 @@ import { drawTicks, drawCircle, drawFilledCircle, drawDialNumbersDemiRadial, dra
 // Image asset imports (bundled as data URLs by esbuild)
 import zodiacPng from '../../.observatory-ref/Resources/zodiac.png';
 import sunPng from '../../.observatory-ref/Resources/sun.png';
+import siderealConstellationPng from '../../.observatory-ref/EO-Sidereal-constellation-names-0-at-top@2x.png';
 
 const TWO_PI = 2 * Math.PI;
 
@@ -34,6 +35,7 @@ const TWO_PI = 2 * Math.PI;
 
 let zodiacImg: HTMLImageElement | null = null;
 let sunImg: HTMLImageElement | null = null;
+let siderealConstellationImg: HTMLImageElement | null = null;
 let imagesLoaded = false;
 
 function loadImages(): Promise<void> {
@@ -54,6 +56,13 @@ function loadImages(): Promise<void> {
         sunImg!.onerror = () => { console.warn('[MainDial] Failed to load sun.png'); resolve(); };
     }));
     sunImg.src = sunPng;
+
+    siderealConstellationImg = new Image();
+    promises.push(new Promise<void>((resolve, reject) => {
+        siderealConstellationImg!.onload = () => resolve();
+        siderealConstellationImg!.onerror = () => { console.warn('[MainDial] Failed to load sidereal constellation image'); resolve(); };
+    }));
+    siderealConstellationImg.src = siderealConstellationPng;
 
     return Promise.all(promises).then(() => { imagesLoaded = true; });
 }
@@ -310,6 +319,14 @@ function drawSubdialBackground(
         const extraDots = ' ,▪, ,▪, ,▪, ,▪, ,▪, ,▪,  ,▪, ,▪, ,▪,  ,▪, ,▪, ,▪'.split(',');
         drawDialNumbersUpright(ctx, cx, cy, extraDots,
             `${L.subdialFontSize - 3 * s}px 'Arial', sans-serif`, '#ffffff', r - L.subdialFontSize - 7 * s);
+
+        // Constellation names overlay image
+        // Port of: EOShuffleView.mm L211-218
+        if (siderealConstellationImg && siderealConstellationImg.complete) {
+            const imgSize = 149 * s;
+            ctx.drawImage(siderealConstellationImg,
+                cx - imgSize / 2, cy - imgSize / 2, imgSize, imgSize);
+        }
     }
 
     // Label text (at bottom of subdial, matching iOS)
