@@ -108,7 +108,7 @@ polar regions) and planet rings (never-rising planets) use NaN to suppress
 rendering. Draw functions check `isNaN(value)` before drawing.
 
 Sun ring altitude stops also use NaN — if the sun never reaches a given
-altitude (e.g., -30° during polar summer), that gradient stop is skipped
+altitude (e.g., -18° during polar summer), that gradient stop is skipped
 and the conic gradient interpolates between adjacent valid stops.
 
 ## Sun Ring
@@ -134,34 +134,63 @@ stops, producing the continuous color ring with a single draw call.
 
 ### Color Stops
 
-| Index | Altitude | Color | Description |
+| Index | Position | Color | Description |
 |-------|----------|-------|-------------|
-| 0, 13 | -30° | Dark gray `(32,32,32)` | Deep night boundary |
-| 1, 12 | -9° | Dark blue `(0,0,100)` | Deep twilight |
-| 2, 11 | -1° | Light cyan `(43,196,214)` | Bright horizon glow |
-| 3, 10 | -0.5° | Red `(214,0,0)` | Sunrise/sunset (refraction zone) |
-| 4, 9 | +1° | Orange `(240,107,0)` | Just above horizon |
-| 5, 8 | +9° | Yellow `(255,255,0)` | Golden hour |
-| 6, 7 | +30° | Pale blue-white `(230,230,255)` | Full daylight |
-| 14 | noon | *computed* | Color from altitude at solar noon |
-| 15 | midnight | *computed* | Color from altitude at solar midnight |
+| 0, 13 | -18° altitude | Dark gray `(32,32,32)` | Astronomical twilight boundary (full night) |
+| 1, 12 | -9° altitude | Dark blue `(0,0,100)` | Deep twilight |
+| 2, 11 | sunrise/set − ε | Light cyan `(43,196,214)` | Night side of sunrise/sunset hand |
+| 3, 10 | sunrise/set + ε | Red `(214,0,0)` | Day side of sunrise/sunset hand |
+| 4, 9 | +1° altitude | Orange `(240,107,0)` | Just above horizon |
+| 5, 8 | +9° altitude | Yellow `(255,255,0)` | Golden hour |
+| 6, 7 | +30° altitude | Pale blue-white `(230,230,255)` | Full daylight |
+| 14 | solar noon | *computed* | Color from altitude at solar noon |
+| 15 | solar midnight | *computed* | Color from altitude at solar midnight |
 
 Indices 0–6 are the morning side (night→day), 7–13 are the evening side
-(day→night). Each morning/evening pair at the same altitude has the same
+(day→night). Each morning/evening pair at the same position has the same
 fixed color.
+
+### Sunrise/Sunset Boundary
+
+Stops 2/3 (morning) and 10/11 (evening) create an **abrupt color transition**
+at the sunrise/sunset hand. Instead of computing positions from separate
+altitude kinds, they use the actual sunrise/sunset angle ± 0.001 radians:
+
+```
+ring1BelowMorn:    sunSpecialAngle(SunRiseMorning) + pi * noonOnTop - 0.001
+ringHalfBelowMorn: sunSpecialAngle(SunRiseMorning) + pi * noonOnTop + 0.001
+```
+
+This ensures the cyan→red boundary aligns exactly with the sunrise/sunset
+hand, producing a sharp visual marker.
 
 ### Noon/Midnight Anchors
 
 The noon and midnight anchors always exist (their positions never become NaN).
 Their colors are **computed at render time** from the actual sun altitude at
-solar noon/midnight using the gradient table interpolation. This is critical
-for polar regions:
+solar noon/midnight, with alpha forced to 1 (the original iOS gradient table
+used alpha=0 for deep night, but the conic gradient ring is always opaque).
+
+This is critical for polar regions:
 
 - **Polar summer**: The midnight sun might be at +5° altitude → midnight anchor
-  gets orange-yellow. The -30° and -9° stops are NaN (skipped), so the gradient
+  gets orange-yellow. The -18° and -9° stops are NaN (skipped), so the gradient
   smoothly transitions through the computed color at midnight.
 - **Polar winter**: The noon sun might be at -15° altitude → noon anchor gets
   deep blue. The +30° and +9° stops are NaN (skipped).
+
+### Conic Gradient Wrap
+
+Canvas conic gradients clamp at the 0/1 offset boundary rather than wrapping.
+Since the first and last stops straddle this boundary (both in the deep-night
+region), the renderer computes an **interpolated boundary color** at offset
+0.0 and 1.0 to create a seamless join:
+
+```
+gapSize = (1 - lastOffset) + firstOffset
+frac = (1 - lastOffset) / gapSize
+boundaryColor = lerp(lastStop.color, firstStop.color, frac)
+```
 
 ### Update Schedule
 

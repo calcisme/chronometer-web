@@ -2092,10 +2092,7 @@ export enum SunAltitudeKind {
     SunRing18BelowEvening,
     SunRing9BelowMorning,
     SunRing9BelowEvening,
-    SunRing1BelowMorning,
-    SunRing1BelowEvening,
-    SunRingHalfBelowMorning,
-    SunRingHalfBelowEvening,
+    // SunRing1Below and SunRingHalfBelow removed: ring uses sunrise/sunset angle ± ε
     SunRing1AboveMorning,
     SunRing1AboveEvening,
     SunRing9AboveMorning,
@@ -2144,14 +2141,7 @@ function getParamsForAltitudeKind(kind: SunAltitudeKind): { altitude: number; ri
             return { altitude: -9 * Math.PI / 180, riseNotSet: true };
         case SunAltitudeKind.SunRing9BelowEvening:
             return { altitude: -9 * Math.PI / 180, riseNotSet: false };
-        case SunAltitudeKind.SunRing1BelowMorning:
-            return { altitude: -1 * Math.PI / 180, riseNotSet: true };
-        case SunAltitudeKind.SunRing1BelowEvening:
-            return { altitude: -1 * Math.PI / 180, riseNotSet: false };
-        case SunAltitudeKind.SunRingHalfBelowMorning:
-            return { altitude: -0.5 * Math.PI / 180, riseNotSet: true };
-        case SunAltitudeKind.SunRingHalfBelowEvening:
-            return { altitude: -0.5 * Math.PI / 180, riseNotSet: false };
+        // SunRing1Below and SunRingHalfBelow removed: ring uses sunrise/sunset ± ε
         case SunAltitudeKind.SunRing1AboveMorning:
             return { altitude: 1 * Math.PI / 180, riseNotSet: true };
         case SunAltitudeKind.SunRing1AboveEvening:

@@ -12470,25 +12470,18 @@
         return { altitude: -9 * Math.PI / 180, riseNotSet: true };
       case 13 /* SunRing9BelowEvening */:
         return { altitude: -9 * Math.PI / 180, riseNotSet: false };
-      case 14 /* SunRing1BelowMorning */:
-        return { altitude: -1 * Math.PI / 180, riseNotSet: true };
-      case 15 /* SunRing1BelowEvening */:
-        return { altitude: -1 * Math.PI / 180, riseNotSet: false };
-      case 16 /* SunRingHalfBelowMorning */:
-        return { altitude: -0.5 * Math.PI / 180, riseNotSet: true };
-      case 17 /* SunRingHalfBelowEvening */:
-        return { altitude: -0.5 * Math.PI / 180, riseNotSet: false };
-      case 18 /* SunRing1AboveMorning */:
+      // SunRing1Below and SunRingHalfBelow removed: ring uses sunrise/sunset ± ε
+      case 14 /* SunRing1AboveMorning */:
         return { altitude: 1 * Math.PI / 180, riseNotSet: true };
-      case 19 /* SunRing1AboveEvening */:
+      case 15 /* SunRing1AboveEvening */:
         return { altitude: 1 * Math.PI / 180, riseNotSet: false };
-      case 20 /* SunRing9AboveMorning */:
+      case 16 /* SunRing9AboveMorning */:
         return { altitude: 9 * Math.PI / 180, riseNotSet: true };
-      case 21 /* SunRing9AboveEvening */:
+      case 17 /* SunRing9AboveEvening */:
         return { altitude: 9 * Math.PI / 180, riseNotSet: false };
-      case 22 /* SunRing30AboveMorning */:
+      case 18 /* SunRing30AboveMorning */:
         return { altitude: 30 * Math.PI / 180, riseNotSet: true };
-      case 23 /* SunRing30AboveEvening */:
+      case 19 /* SunRing30AboveEvening */:
         return { altitude: 30 * Math.PI / 180, riseNotSet: false };
     }
   }

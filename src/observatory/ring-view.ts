@@ -17,7 +17,7 @@
  *
  * The Sun ring uses a conic gradient with fixed colors at animated angular
  * positions. Each position corresponds to a specific sun altitude threshold
- * (-30°, -9°, -1°, -0.5°, +1°, +9°, +30°) for both morning and evening
+ * (-18°, -9°, sunrise±ε, +1°, +9°, +30°) for both morning and evening
  * sides, plus noon/midnight anchors with computed colors. Positions are
  * ObsValues that animate smoothly and update at sunrise/sunset sentinels.
  *
@@ -151,8 +151,6 @@ interface RingCacheEntry {
 
 const ringCache = new Map<ECPlanetNumber, RingCacheEntry>();
 
-let sunRingLogOnce = false; // DEBUG
-
 // ---------------------------------------------------------------------------
 // Sun ring rendering — conic gradient with animated color stops
 // ---------------------------------------------------------------------------
@@ -169,8 +167,8 @@ const SUN_RING_COLORS: (string | null)[] = [
     // Morning (night → day): indices 0–6
     'rgba(32,32,32,1)',       // -18°: end of astronomical twilight (full night)
     'rgba(0,0,100,1)',        // -9°: dark blue
-    'rgba(43,196,214,1)',     // -1°: light cyan
-    'rgba(214,0,0,1)',        // -0.5°: red (sunrise)
+    'rgba(43,196,214,1)',     // sunrise - ε: light cyan (night side)
+    'rgba(214,0,0,1)',        // sunrise + ε: red (day side)
     'rgba(240,107,0,1)',      // +1°: orange
     'rgba(255,255,0,1)',      // +9°: yellow (golden hour)
     'rgba(230,230,255,1)',    // +30°: pale blue-white (full day)
@@ -178,8 +176,8 @@ const SUN_RING_COLORS: (string | null)[] = [
     'rgba(230,230,255,1)',    // +30°: pale blue-white
     'rgba(255,255,0,1)',      // +9°: yellow
     'rgba(240,107,0,1)',      // +1°: orange
-    'rgba(214,0,0,1)',        // -0.5°: red (sunset)
-    'rgba(43,196,214,1)',     // -1°: light cyan
+    'rgba(214,0,0,1)',        // sunset - ε: red (day side)
+    'rgba(43,196,214,1)',     // sunset + ε: light cyan (night side)
     'rgba(0,0,100,1)',        // -9°: dark blue
     'rgba(32,32,32,1)',       // -18°: end of astronomical twilight (full night)
     // Anchor points: colors computed at render time
@@ -299,20 +297,6 @@ function drawSunRingGradient(
         const boundaryColor = lerpColor(lastStop.color, firstStop.color, frac);
         grad.addColorStop(0, boundaryColor);
         grad.addColorStop(1, boundaryColor);
-    }
-
-    // DEBUG: log gradient stops once
-    if (!sunRingLogOnce) {
-        sunRingLogOnce = true;
-        console.log('[SunRing] Gradient stops (' + stops.length + '):');
-        for (const stop of stops) {
-            const offset = angleToOffset(stop.angle);
-            const hours = (offset * 24).toFixed(2);
-            const name = ringValues.find(v => Math.abs(v.currentValue - stop.angle) < 0.001)?.name ?? '?';
-            console.log(`  ${name}: angle=${stop.angle.toFixed(3)} → ${hours}h, offset=${offset.toFixed(4)}, color=${stop.color}`);
-        }
-        const nanNames = ringValues.filter(v => isNaN(v.currentValue)).map(v => v.name);
-        if (nanNames.length) console.log('[SunRing] NaN (skipped):', nanNames.join(', '));
     }
 
     ctx.save();

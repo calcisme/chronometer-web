@@ -12800,16 +12800,12 @@
     SunAltitudeKind2[SunAltitudeKind2["SunRing18BelowEvening"] = 11] = "SunRing18BelowEvening";
     SunAltitudeKind2[SunAltitudeKind2["SunRing9BelowMorning"] = 12] = "SunRing9BelowMorning";
     SunAltitudeKind2[SunAltitudeKind2["SunRing9BelowEvening"] = 13] = "SunRing9BelowEvening";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing1BelowMorning"] = 14] = "SunRing1BelowMorning";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing1BelowEvening"] = 15] = "SunRing1BelowEvening";
-    SunAltitudeKind2[SunAltitudeKind2["SunRingHalfBelowMorning"] = 16] = "SunRingHalfBelowMorning";
-    SunAltitudeKind2[SunAltitudeKind2["SunRingHalfBelowEvening"] = 17] = "SunRingHalfBelowEvening";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing1AboveMorning"] = 18] = "SunRing1AboveMorning";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing1AboveEvening"] = 19] = "SunRing1AboveEvening";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing9AboveMorning"] = 20] = "SunRing9AboveMorning";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing9AboveEvening"] = 21] = "SunRing9AboveEvening";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing30AboveMorning"] = 22] = "SunRing30AboveMorning";
-    SunAltitudeKind2[SunAltitudeKind2["SunRing30AboveEvening"] = 23] = "SunRing30AboveEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing1AboveMorning"] = 14] = "SunRing1AboveMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing1AboveEvening"] = 15] = "SunRing1AboveEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing9AboveMorning"] = 16] = "SunRing9AboveMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing9AboveEvening"] = 17] = "SunRing9AboveEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing30AboveMorning"] = 18] = "SunRing30AboveMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing30AboveEvening"] = 19] = "SunRing30AboveEvening";
     return SunAltitudeKind2;
   })(SunAltitudeKind || {});
   function getParamsForAltitudeKind(kind) {
@@ -12843,25 +12839,18 @@
         return { altitude: -9 * Math.PI / 180, riseNotSet: true };
       case 13 /* SunRing9BelowEvening */:
         return { altitude: -9 * Math.PI / 180, riseNotSet: false };
-      case 14 /* SunRing1BelowMorning */:
-        return { altitude: -1 * Math.PI / 180, riseNotSet: true };
-      case 15 /* SunRing1BelowEvening */:
-        return { altitude: -1 * Math.PI / 180, riseNotSet: false };
-      case 16 /* SunRingHalfBelowMorning */:
-        return { altitude: -0.5 * Math.PI / 180, riseNotSet: true };
-      case 17 /* SunRingHalfBelowEvening */:
-        return { altitude: -0.5 * Math.PI / 180, riseNotSet: false };
-      case 18 /* SunRing1AboveMorning */:
+      // SunRing1Below and SunRingHalfBelow removed: ring uses sunrise/sunset ± ε
+      case 14 /* SunRing1AboveMorning */:
         return { altitude: 1 * Math.PI / 180, riseNotSet: true };
-      case 19 /* SunRing1AboveEvening */:
+      case 15 /* SunRing1AboveEvening */:
         return { altitude: 1 * Math.PI / 180, riseNotSet: false };
-      case 20 /* SunRing9AboveMorning */:
+      case 16 /* SunRing9AboveMorning */:
         return { altitude: 9 * Math.PI / 180, riseNotSet: true };
-      case 21 /* SunRing9AboveEvening */:
+      case 17 /* SunRing9AboveEvening */:
         return { altitude: 9 * Math.PI / 180, riseNotSet: false };
-      case 22 /* SunRing30AboveMorning */:
+      case 18 /* SunRing30AboveMorning */:
         return { altitude: 30 * Math.PI / 180, riseNotSet: true };
-      case 23 /* SunRing30AboveEvening */:
+      case 19 /* SunRing30AboveEvening */:
         return { altitude: 30 * Math.PI / 180, riseNotSet: false };
     }
   }
@@ -15149,7 +15138,6 @@
     [7 /* Saturn */]: "Saturn"
   };
   var ringCache = /* @__PURE__ */ new Map();
-  var sunRingLogOnce = false;
   var SUN_RING_COLORS = [
     // Morning (night → day): indices 0–6
     "rgba(32,32,32,1)",
@@ -15157,9 +15145,9 @@
     "rgba(0,0,100,1)",
     // -9°: dark blue
     "rgba(43,196,214,1)",
-    // -1°: light cyan
+    // sunrise - ε: light cyan (night side)
     "rgba(214,0,0,1)",
-    // -0.5°: red (sunrise)
+    // sunrise + ε: red (day side)
     "rgba(240,107,0,1)",
     // +1°: orange
     "rgba(255,255,0,1)",
@@ -15174,9 +15162,9 @@
     "rgba(240,107,0,1)",
     // +1°: orange
     "rgba(214,0,0,1)",
-    // -0.5°: red (sunset)
+    // sunset - ε: red (day side)
     "rgba(43,196,214,1)",
-    // -1°: light cyan
+    // sunset + ε: light cyan (night side)
     "rgba(0,0,100,1)",
     // -9°: dark blue
     "rgba(32,32,32,1)",
@@ -15237,18 +15225,6 @@
       const boundaryColor = lerpColor(lastStop.color, firstStop.color, frac);
       grad.addColorStop(0, boundaryColor);
       grad.addColorStop(1, boundaryColor);
-    }
-    if (!sunRingLogOnce) {
-      sunRingLogOnce = true;
-      console.log("[SunRing] Gradient stops (" + stops.length + "):");
-      for (const stop of stops) {
-        const offset = angleToOffset(stop.angle);
-        const hours = (offset * 24).toFixed(2);
-        const name = ringValues.find((v) => Math.abs(v.currentValue - stop.angle) < 1e-3)?.name ?? "?";
-        console.log(`  ${name}: angle=${stop.angle.toFixed(3)} \u2192 ${hours}h, offset=${offset.toFixed(4)}, color=${stop.color}`);
-      }
-      const nanNames = ringValues.filter((v) => isNaN(v.currentValue)).map((v) => v.name);
-      if (nanNames.length) console.log("[SunRing] NaN (skipped):", nanNames.join(", "));
     }
     ctx2.save();
     ctx2.strokeStyle = grad;
@@ -15732,8 +15708,8 @@
       // Morning side (night → day): update at next sunset
       { name: "ring18BelowMorn", expr: `sunSpecialAngle(${SK.SunRing18BelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
       { name: "ring9BelowMorn", expr: `sunSpecialAngle(${SK.SunRing9BelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
-      { name: "ring1BelowMorn", expr: `sunSpecialAngle(${SK.SunRing1BelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
-      { name: "ringHalfBelowMorn", expr: `sunSpecialAngle(${SK.SunRingHalfBelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ring1BelowMorn", expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop - 0.001`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ringHalfBelowMorn", expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop + 0.001`, updateInterval: EC_UPDATE_NEXT_SUNSET },
       { name: "ring1AboveMorn", expr: `sunSpecialAngle(${SK.SunRing1AboveMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
       { name: "ring9AboveMorn", expr: `sunSpecialAngle(${SK.SunRing9AboveMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
       { name: "ring30AboveMorn", expr: `sunSpecialAngle(${SK.SunRing30AboveMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
@@ -15741,8 +15717,8 @@
       { name: "ring30AboveEve", expr: `sunSpecialAngle(${SK.SunRing30AboveEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
       { name: "ring9AboveEve", expr: `sunSpecialAngle(${SK.SunRing9AboveEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
       { name: "ring1AboveEve", expr: `sunSpecialAngle(${SK.SunRing1AboveEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
-      { name: "ringHalfBelowEve", expr: `sunSpecialAngle(${SK.SunRingHalfBelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
-      { name: "ring1BelowEve", expr: `sunSpecialAngle(${SK.SunRing1BelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ringHalfBelowEve", expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop - 0.001`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ring1BelowEve", expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop + 0.001`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
       { name: "ring9BelowEve", expr: `sunSpecialAngle(${SK.SunRing9BelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
       { name: "ring18BelowEve", expr: `sunSpecialAngle(${SK.SunRing18BelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
       // Anchor points: solar noon and midnight (positions always valid, colors computed at render time)
