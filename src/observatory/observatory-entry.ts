@@ -17,7 +17,7 @@ import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
 import { findClosestCity } from '../shared/city-search.js';
 import { initLocationDialog, requestBrowserLocation } from '../shared/location-dialog.js';
-import { TimeController } from '../shared/time-controller.js';
+import { TimeController, TICK_INTERVAL_MS, displaySecondsPerTick } from '../shared/time-controller.js';
 import { computeLayout, type LayoutParams } from './layout.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
@@ -253,7 +253,12 @@ function tick(): void {
 
     // Pass 1 & 2: Update + animate Observatory values
     if (obsValues) {
-        updateObsValues(obsValues, env, perfNow, getNow);
+        const rate = timeController.currentRate;
+        const tickIntervalMs = rate ? TICK_INTERVAL_MS : null;
+        const displayDelta = rate ? displaySecondsPerTick(rate.unit) : 0;
+        const timeDirection = timeController.currentDirection;
+        updateObsValues(obsValues, env, perfNow, getNow,
+            tickIntervalMs, displayDelta, timeDirection);
         animateObsValues(obsValues, perfNow);
     }
 

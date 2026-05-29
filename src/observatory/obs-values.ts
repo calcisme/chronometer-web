@@ -8,7 +8,10 @@
  * Architecture:
  *   1. **Init** — parse expression strings into ASTs, evaluate initial values.
  *   2. **Update pass** — re-evaluate any ObsValue whose timer has expired.
+ *      Three branches: scrub compression, two-phase natural-speed sweep,
+ *      or simple snap-to-target.
  *   3. **Animate pass** — interpolate every AnimatingValue toward its target.
+ *      For natural-speed values, also handles Phase 2 sweep handoff.
  *   4. **Draw pass** — renderers read `obsValue.currentValue` instead of
  *      computing inline.
  *
@@ -34,6 +37,15 @@ import {
 } from '../shared/animation.js';
 import { SunAltitudeKind } from '../shared/astro-env.js';
 
+// Base angular animation speed (must match kECGLAngleAnimationSpeed in animation.ts).
+// Used to convert ObsValue animSpeed (rad/s) to the multiplier that
+// startAnimationRaw expects.
+const K_ANGLE_ANIM_SPEED = 2.0;
+
+// Error threshold (radians) below which a natural-speed value is considered
+// "on track" and skips the catch-up phase.
+const NATURAL_ERROR_THRESHOLD = 0.002;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -52,16 +64,18 @@ export interface ObsValue {
      *  Never 0 — minimum is 1. */
     updateInterval: number;
 
-    /** Animation speed multiplier.
-     *  Multiplied by kECGLAngleAnimationSpeed (2.0 rad/s) to get actual speed.
-     *  Default 1.0 = 2 rad/s (good for large jumps like noonOnTop toggle).
-     *  Second hands use π/60 so speed = 2π/60 rad/s = exact sweep rate. */
+    /** Catch-up animation speed in rad/s.
+     *  Used for snap-to-target (naturalSpeed=0) and Phase 1 catch-up
+     *  (naturalSpeed>0).  Default 2.0 rad/s. */
     animSpeed: number;
 
-    /** When true, the animation target is projected forward to where the
-     *  value will be at the next update time.  Use for constant-velocity
-     *  values (like second hands) that animate between infrequent updates. */
-    projectTarget: boolean;
+    /** Steady-state sweep speed in rad/s.
+     *  0 = snap-to-target mode (most values).
+     *  >0 = constant-velocity sweep (e.g., second hands = 2π/60 rad/s).
+     *  When >0, the update pass uses a two-phase algorithm:
+     *    Phase 1: catch up at animSpeed to the moving target
+     *    Phase 2: sweep at naturalSpeed until next update */
+    naturalSpeed: number;
 
     /** Current computed value. NaN = "don't display this element". */
     currentValue: number;
@@ -74,6 +88,10 @@ export interface ObsValue {
 
     /** performance.now() at which the next update should fire. */
     nextUpdateTime: number;
+
+    /** Pending Phase 2 sweep animation (only for naturalSpeed > 0).
+     *  Set during update pass; consumed during animate pass when Phase 1 ends. */
+    pendingSweep: { target: number; durationMs: number } | null;
 }
 
 /**
@@ -147,8 +165,8 @@ interface ObsValueDef {
     name: string;
     expr: string;
     updateInterval: number;  // seconds
-    animSpeed?: number;      // multiplier; default 1.0
-    projectTarget?: boolean; // project animation target to next update time
+    animSpeed?: number;      // catch-up speed in rad/s; default 2.0
+    naturalSpeed?: number;   // sweep speed in rad/s; default 0 (snap-to-target)
 }
 
 /**
@@ -173,15 +191,14 @@ function buildValueDefs(): {
     // Planet numbers (matching ECPlanetNumber)
     const SATURN = 7, JUPITER = 6, MARS = 5, VENUS = 3, MERCURY = 2, MOON = 1;
 
-    // Second hands use animSpeed = π/60 so that kECGLAngleAnimationSpeed (2) * π/60 = 2π/60 rad/s,
-    // which is exactly the angular velocity of a second hand.
-    const SECOND_ANIM_SPEED = Math.PI / 60;
+    // Second hands sweep at exactly one revolution per 60 seconds.
+    const SECOND_NATURAL_SPEED = 2 * Math.PI / 60;  // rad/s
 
     const clock: ObsValueDef[] = [
         { name: 'h24',    expr: 'hour24ValueAngle() + pi * noonOnTop', updateInterval: 15 },
         { name: 'h12',    expr: 'hour12ValueAngle()',                  updateInterval: 1 },
         { name: 'minute', expr: 'minuteValueAngle()',                  updateInterval: 1 },
-        { name: 'second', expr: 'secondValueAngle()',                  updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true },
+        { name: 'second', expr: 'secondValueAngle()',                  updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED },
     ];
 
     const sunEvents: ObsValueDef[] = [
@@ -207,21 +224,21 @@ function buildValueDefs(): {
         // UTC subdial is 24h
         { name: 'utcHour',   expr: 'fmod((hour24Value() - tzOffset() / 3600), 24) * 2 * pi / 24', updateInterval: 60 },
         { name: 'utcMinute', expr: 'utcMinuteAngle()', updateInterval: 15 },
-        { name: 'utcSecond', expr: 'utcSecondAngle()', updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true },
+        { name: 'utcSecond', expr: 'utcSecondAngle()', updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED },
     ];
 
     const solar: ObsValueDef[] = [
         // Solar subdial is 12h
         { name: 'solarHour',   expr: 'fmod(solarTimeSec() / 3600, 12) * 2 * pi / 12', updateInterval: 60 },
         { name: 'solarMinute', expr: 'fmod(solarTimeSec() / 60, 60) * 2 * pi / 60',   updateInterval: 15 },
-        { name: 'solarSecond', expr: 'fmod(solarTimeSec(), 60) * 2 * pi / 60',         updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true },
+        { name: 'solarSecond', expr: 'fmod(solarTimeSec(), 60) * 2 * pi / 60',         updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED },
     ];
 
     const sidereal: ObsValueDef[] = [
         // Sidereal subdial is 24h
         { name: 'sidHour',   expr: 'fmod(lstValue() / 3600, 24) * 2 * pi / 24', updateInterval: 60 },
         { name: 'sidMinute', expr: 'fmod(lstValue() / 60, 60) * 2 * pi / 60',   updateInterval: 15 },
-        { name: 'sidSecond', expr: 'fmod(lstValue(), 60) * 2 * pi / 60',         updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true },
+        { name: 'sidSecond', expr: 'fmod(lstValue(), 60) * 2 * pi / 60',         updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED },
     ];
 
     const planets: ObsValueDef[] = [
@@ -297,14 +314,15 @@ function createObsValue(
 ): ObsValue {
     const expr = parse(def.expr);
     const initialValue = evalAttr(expr, env);
-    const animSpeed = def.animSpeed ?? 1.0;
+    const animSpeed = def.animSpeed ?? 2.0;      // rad/s
+    const naturalSpeed = def.naturalSpeed ?? 0;   // rad/s
 
     return {
         name: def.name,
         expr,
         updateInterval: def.updateInterval,
         animSpeed,
-        projectTarget: def.projectTarget ?? false,
+        naturalSpeed,
         currentValue: initialValue,
         anim: makeAnimatingValue(initialValue, perfNow),
         // Schedule immediate update on first frame so animation starts right away.
@@ -312,6 +330,7 @@ function createObsValue(
         // and compute the real next boundary.
         nextUpdateDisplayTime: 0,
         nextUpdateTime: 0,
+        pendingSweep: null,
     };
 }
 
@@ -434,47 +453,230 @@ export function getAllValues(vs: ObsValueSet): ObsValue[] {
     return all;
 }
 
+// ============================================================================
+// Update helpers
+// ============================================================================
+
+/**
+ * Update a natural-speed value (e.g., second hand) in 1×/−1× mode.
+ *
+ * Two-phase animation:
+ *   Phase 1 (catch-up): Animate at animSpeed from current position to where
+ *     the hand should be when catch-up finishes (the correct position advances
+ *     at naturalSpeed during catch-up).
+ *   Phase 2 (sweep): Sweep at naturalSpeed until the next update boundary.
+ *
+ * Phase 2 params are stored in v.pendingSweep and picked up by animateObsValues
+ * when Phase 1 completes.
+ */
+function updateNaturalSpeedValue(
+    v: ObsValue,
+    env: Environment,
+    perfNow: number,
+    getNow: () => Date,
+    timeDirection: 1 | -1,
+): void {
+    const currentCorrectAngle = evalAttr(v.expr, env);
+
+    // Schedule next update
+    const nextDisplayMs = computeNextBoundary(
+        v.updateInterval * 1000, getNow, timeDirection, env);
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
+
+    // Real time until next update
+    const dtToNextUpdateMs = v.nextUpdateTime - perfNow;
+    const dtToNextUpdateSec = dtToNextUpdateMs / 1000;
+    if (dtToNextUpdateSec <= 0 || !isFinite(dtToNextUpdateSec)) {
+        // Edge case: next update is now or in the past — snap
+        startAnimationRaw(v.anim, currentCorrectAngle, perfNow,
+            v.animSpeed / K_ANGLE_ANIM_SPEED);
+        v.pendingSweep = null;
+        return;
+    }
+
+    // Effective natural speed (clockwise forward, counter-clockwise reverse)
+    const effNaturalSpeed = v.naturalSpeed * timeDirection;
+
+    // Compute error: how far is the hand from where it should be?
+    const TWO_PI = 2 * Math.PI;
+    let error: number;
+    if (timeDirection === 1) {
+        // Normalize clockwise [0, 2π)
+        error = currentCorrectAngle - v.anim.currentValue;
+        error = ((error % TWO_PI) + TWO_PI) % TWO_PI;
+    } else {
+        // Normalize counter-clockwise
+        error = v.anim.currentValue - currentCorrectAngle;
+        error = ((error % TWO_PI) + TWO_PI) % TWO_PI;
+    }
+
+    if (error < NATURAL_ERROR_THRESHOLD) {
+        // On track — Phase 2 only (sweep at naturalSpeed)
+        const sweepAngle = effNaturalSpeed * dtToNextUpdateSec;
+        const finalTarget = currentCorrectAngle + sweepAngle;
+        startAnimationRaw(v.anim, finalTarget, perfNow,
+            v.naturalSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs);
+        v.pendingSweep = null;
+        return;
+    }
+
+    // Phase 1: Catch-up at animSpeed.
+    // The hand closes the gap at (animSpeed - naturalSpeed) rad/s.
+    // catchUpTime = error / (animSpeed - naturalSpeed)
+    const differentialSpeed = v.animSpeed - v.naturalSpeed;
+    if (differentialSpeed <= 0) {
+        // animSpeed not fast enough to close gap — compress everything
+        const sweepAngle = effNaturalSpeed * dtToNextUpdateSec;
+        const finalTarget = currentCorrectAngle + sweepAngle;
+        startAnimationRaw(v.anim, finalTarget, perfNow,
+            v.animSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs);
+        v.pendingSweep = null;
+        return;
+    }
+
+    const catchUpSec = error / differentialSpeed;
+    const catchUpMs = catchUpSec * 1000;
+
+    if (catchUpMs >= dtToNextUpdateMs) {
+        // Can't finish catch-up before next update — compress both phases
+        const sweepAngle = effNaturalSpeed * dtToNextUpdateSec;
+        const finalTarget = currentCorrectAngle + sweepAngle;
+        startAnimationRaw(v.anim, finalTarget, perfNow,
+            v.animSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs);
+        v.pendingSweep = null;
+        return;
+    }
+
+    // Phase 1 target: where the correct position will be when catch-up ends
+    const catchUpTarget = currentCorrectAngle + effNaturalSpeed * catchUpSec;
+    startAnimationRaw(v.anim, catchUpTarget, perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED, catchUpMs);
+
+    // Store Phase 2 for the animate pass to pick up
+    const remainingMs = dtToNextUpdateMs - catchUpMs;
+    const sweepAngle = effNaturalSpeed * (remainingMs / 1000);
+    v.pendingSweep = {
+        target: catchUpTarget + sweepAngle,
+        durationMs: remainingMs,
+    };
+}
+
+/**
+ * Update a value during scrub (quantized mode).
+ *
+ * Compression logic modeled after the watch-face tickAnimations:
+ * compute how many ticks until the next update boundary, use that
+ * as the real-time budget, and compress if the natural animation
+ * duration exceeds it.
+ */
+function updateObsValueScrub(
+    v: ObsValue,
+    env: Environment,
+    perfNow: number,
+    getNow: () => Date,
+    timeDirection: 1 | -1,
+    tickIntervalMs: number,
+    displayDeltaPerTickSec: number,
+): void {
+    const newTarget = evalAttr(v.expr, env);
+
+    // Compute next boundary in display time
+    const nextDisplayMs = computeNextBoundary(
+        v.updateInterval * 1000, getNow, timeDirection, env);
+    v.nextUpdateDisplayTime = nextDisplayMs;
+
+    // Compute real-time budget (same formula as tickAnimations)
+    const displayNowMs = getNow().getTime();
+    const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
+    const displayDeltaPerTickMs = displayDeltaPerTickSec * 1000;
+    const ticksUntilUpdate = displayDeltaPerTickMs > 0
+        ? Math.max(1, Math.ceil(displayDeltaMs / displayDeltaPerTickMs))
+        : 1;
+    const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+
+    // Schedule next re-evaluation
+    v.nextUpdateTime = perfNow + timeUntilNextUpdateMs;
+
+    // Compute natural animation duration
+    const speed = v.animSpeed;  // rad/s
+    const TWO_PI = 2 * Math.PI;
+    const normalizedTarget = ((newTarget % TWO_PI) + TWO_PI) % TWO_PI;
+    const normalizedCurrent = ((v.anim.currentValue % TWO_PI) + TWO_PI) % TWO_PI;
+    let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+    if (angleDelta > Math.PI) angleDelta = TWO_PI - angleDelta;
+    const naturalDurationMs = speed > 0 ? (angleDelta / speed) * 1000 : 0;
+
+    const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+
+    // Compress if needed, otherwise use natural speed
+    if (naturalDurationMs > timeUntilNextUpdateMs) {
+        startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
+            timeUntilNextUpdateMs);
+    } else {
+        startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+    }
+
+    // No pending sweep during scrub — just snap-to-target with compression
+    v.pendingSweep = null;
+}
+
+// ============================================================================
+// Per-frame passes
+// ============================================================================
+
 /**
  * Pass 1: UPDATE — re-evaluate expressions whose timer has expired.
  *
- * For each value where `perfNow >= nextUpdateTime`, evaluate the AST
- * and set the new animation target.
+ * Three branches:
+ *   1. Scrub mode (tickIntervalMs != null): compress animations to fit tick budget
+ *   2. Natural-speed 1× (naturalSpeed > 0): two-phase catch-up + sweep
+ *   3. Normal 1× (naturalSpeed === 0): snap-to-target at animSpeed
+ *
+ * @param tickIntervalMs      null = 1×/−1× mode, >0 = scrub tick rate (ms)
+ * @param displayDeltaPerTickSec  Display seconds advanced per tick (for scrub compression)
+ * @param timeDirection       1 = forward, -1 = reverse
  */
 export function updateObsValues(
     vs: ObsValueSet,
     env: Environment,
     perfNow: number,
     getNow: () => Date,
+    tickIntervalMs: number | null = null,
+    displayDeltaPerTickSec: number = 0,
+    timeDirection: 1 | -1 = 1,
 ): void {
     const all = getAllValues(vs);
     for (const v of all) {
         if (perfNow >= v.nextUpdateTime) {
-            let newTarget = evalAttr(v.expr, env);
-
-            // Schedule next update
-            const updateIntervalMs = v.updateInterval * 1000;
-            const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow, 1, env);
-            v.nextUpdateDisplayTime = nextDisplayMs;
-            v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
-
-            // For constant-velocity values (custom animSpeed, e.g. second hands):
-            // The expression gives the angle at time T, but we need the animation
-            // target at T+interval so the hand arrives at the right place when
-            // the next update fires.  Project forward by dt × angularRate.
-            // (kECGLAngleAnimationSpeed = 2.0 rad/s)
-            if (v.projectTarget && isFinite(v.nextUpdateTime)) {
-                const dtSeconds = (v.nextUpdateTime - perfNow) / 1000;
-                const angularRate = v.animSpeed * 2.0;
-                newTarget += dtSeconds * angularRate;
+            if (tickIntervalMs !== null && tickIntervalMs > 0) {
+                // Scrub mode: compress as needed
+                updateObsValueScrub(v, env, perfNow, getNow, timeDirection,
+                    tickIntervalMs, displayDeltaPerTickSec);
+            } else if (v.naturalSpeed > 0) {
+                // 1×/−1× mode, natural speed: two-phase animation
+                updateNaturalSpeedValue(v, env, perfNow, getNow, timeDirection);
+            } else {
+                // 1×/−1× mode, normal: snap-to-target at animSpeed
+                const newTarget = evalAttr(v.expr, env);
+                const nextDisplayMs = computeNextBoundary(
+                    v.updateInterval * 1000, getNow, timeDirection, env);
+                v.nextUpdateDisplayTime = nextDisplayMs;
+                v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
+                v.pendingSweep = null;
+                const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+                startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
             }
-
-            startAnimationRaw(v.anim, newTarget, perfNow, v.animSpeed);
         }
     }
 }
 
 /**
  * Pass 2: ANIMATE — interpolate all AnimatingValues toward their targets.
+ *
+ * For natural-speed values, also handles Phase 2 handoff: when Phase 1
+ * (catch-up) completes and a pendingSweep is waiting, starts the sweep
+ * animation.
  *
  * Writes the interpolated result to `currentValue`.
  */
@@ -485,6 +687,17 @@ export function animateObsValues(
     const all = getAllValues(vs);
     for (const v of all) {
         v.currentValue = interpolateValue(v.anim, perfNow);
+
+        // Phase 2 handoff: if Phase 1 just finished and sweep is pending
+        if (!v.anim.animating && v.pendingSweep) {
+            const sweep = v.pendingSweep;
+            v.pendingSweep = null;
+            const sweepMultiplier = v.naturalSpeed / K_ANGLE_ANIM_SPEED;
+            startAnimationRaw(v.anim, sweep.target, perfNow,
+                sweepMultiplier, sweep.durationMs);
+            // Re-interpolate to pick up the new animation immediately
+            v.currentValue = interpolateValue(v.anim, perfNow);
+        }
     }
 }
 

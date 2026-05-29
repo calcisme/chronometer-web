@@ -13990,6 +13990,23 @@
 
   // src/shared/time-controller.ts
   var TICK_INTERVAL_MS = 100;
+  function displaySecondsPerTick(unit) {
+    switch (unit) {
+      case "second":
+        return 1;
+      case "minute":
+        return 60;
+      case "hour":
+        return 3600;
+      case "day":
+        return 86400;
+      case "month":
+        return 30 * 86400;
+      // approximate
+      case "year":
+        return 365 * 86400;
+    }
+  }
   function advanceByUnit(date, unit, direction) {
     switch (unit) {
       case "second":
@@ -15632,15 +15649,17 @@
   }
 
   // src/observatory/obs-values.ts
+  var K_ANGLE_ANIM_SPEED = 2;
+  var NATURAL_ERROR_THRESHOLD = 2e-3;
   function buildValueDefs() {
     const SK = SunAltitudeKind;
     const SATURN = 7, JUPITER = 6, MARS = 5, VENUS = 3, MERCURY = 2, MOON = 1;
-    const SECOND_ANIM_SPEED = Math.PI / 60;
+    const SECOND_NATURAL_SPEED = 2 * Math.PI / 60;
     const clock = [
       { name: "h24", expr: "hour24ValueAngle() + pi * noonOnTop", updateInterval: 15 },
       { name: "h12", expr: "hour12ValueAngle()", updateInterval: 1 },
       { name: "minute", expr: "minuteValueAngle()", updateInterval: 1 },
-      { name: "second", expr: "secondValueAngle()", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+      { name: "second", expr: "secondValueAngle()", updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED }
     ];
     const sunEvents = [
       // Sunrise updates when time crosses sunset (and vice versa)
@@ -15664,19 +15683,19 @@
       // UTC subdial is 24h
       { name: "utcHour", expr: "fmod((hour24Value() - tzOffset() / 3600), 24) * 2 * pi / 24", updateInterval: 60 },
       { name: "utcMinute", expr: "utcMinuteAngle()", updateInterval: 15 },
-      { name: "utcSecond", expr: "utcSecondAngle()", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+      { name: "utcSecond", expr: "utcSecondAngle()", updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED }
     ];
     const solar = [
       // Solar subdial is 12h
       { name: "solarHour", expr: "fmod(solarTimeSec() / 3600, 12) * 2 * pi / 12", updateInterval: 60 },
       { name: "solarMinute", expr: "fmod(solarTimeSec() / 60, 60) * 2 * pi / 60", updateInterval: 15 },
-      { name: "solarSecond", expr: "fmod(solarTimeSec(), 60) * 2 * pi / 60", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+      { name: "solarSecond", expr: "fmod(solarTimeSec(), 60) * 2 * pi / 60", updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED }
     ];
     const sidereal = [
       // Sidereal subdial is 24h
       { name: "sidHour", expr: "fmod(lstValue() / 3600, 24) * 2 * pi / 24", updateInterval: 60 },
       { name: "sidMinute", expr: "fmod(lstValue() / 60, 60) * 2 * pi / 60", updateInterval: 15 },
-      { name: "sidSecond", expr: "fmod(lstValue(), 60) * 2 * pi / 60", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+      { name: "sidSecond", expr: "fmod(lstValue(), 60) * 2 * pi / 60", updateInterval: 20, naturalSpeed: SECOND_NATURAL_SPEED }
     ];
     const planets2 = [
       { name: "saturnHand", expr: `-HLongitudeOfPlanet(${SATURN})`, updateInterval: 3600 },
@@ -15730,20 +15749,22 @@
   function createObsValue(def, env2, perfNow, _getNow) {
     const expr = parse(def.expr);
     const initialValue = evalAttr(expr, env2);
-    const animSpeed = def.animSpeed ?? 1;
+    const animSpeed = def.animSpeed ?? 2;
+    const naturalSpeed = def.naturalSpeed ?? 0;
     return {
       name: def.name,
       expr,
       updateInterval: def.updateInterval,
       animSpeed,
-      projectTarget: def.projectTarget ?? false,
+      naturalSpeed,
       currentValue: initialValue,
       anim: makeAnimatingValue(initialValue, perfNow),
       // Schedule immediate update on first frame so animation starts right away.
       // updateObsValues will evaluate the expression, start the animation,
       // and compute the real next boundary.
       nextUpdateDisplayTime: 0,
-      nextUpdateTime: 0
+      nextUpdateTime: 0,
+      pendingSweep: null
     };
   }
   function initObsValues(env2, perfNow, getNow2) {
@@ -15856,21 +15877,161 @@
     allValuesCache = all;
     return all;
   }
-  function updateObsValues(vs, env2, perfNow, getNow2) {
+  function updateNaturalSpeedValue(v, env2, perfNow, getNow2, timeDirection) {
+    const currentCorrectAngle = evalAttr(v.expr, env2);
+    const nextDisplayMs = computeNextBoundary(
+      v.updateInterval * 1e3,
+      getNow2,
+      timeDirection,
+      env2
+    );
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+    const dtToNextUpdateMs = v.nextUpdateTime - perfNow;
+    const dtToNextUpdateSec = dtToNextUpdateMs / 1e3;
+    if (dtToNextUpdateSec <= 0 || !isFinite(dtToNextUpdateSec)) {
+      startAnimationRaw(
+        v.anim,
+        currentCorrectAngle,
+        perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const effNaturalSpeed = v.naturalSpeed * timeDirection;
+    const TWO_PI10 = 2 * Math.PI;
+    let error;
+    if (timeDirection === 1) {
+      error = currentCorrectAngle - v.anim.currentValue;
+      error = (error % TWO_PI10 + TWO_PI10) % TWO_PI10;
+    } else {
+      error = v.anim.currentValue - currentCorrectAngle;
+      error = (error % TWO_PI10 + TWO_PI10) % TWO_PI10;
+    }
+    if (error < NATURAL_ERROR_THRESHOLD) {
+      const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
+      const finalTarget = currentCorrectAngle + sweepAngle2;
+      startAnimationRaw(
+        v.anim,
+        finalTarget,
+        perfNow,
+        v.naturalSpeed / K_ANGLE_ANIM_SPEED,
+        dtToNextUpdateMs
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const differentialSpeed = v.animSpeed - v.naturalSpeed;
+    if (differentialSpeed <= 0) {
+      const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
+      const finalTarget = currentCorrectAngle + sweepAngle2;
+      startAnimationRaw(
+        v.anim,
+        finalTarget,
+        perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED,
+        dtToNextUpdateMs
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const catchUpSec = error / differentialSpeed;
+    const catchUpMs = catchUpSec * 1e3;
+    if (catchUpMs >= dtToNextUpdateMs) {
+      const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
+      const finalTarget = currentCorrectAngle + sweepAngle2;
+      startAnimationRaw(
+        v.anim,
+        finalTarget,
+        perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED,
+        dtToNextUpdateMs
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const catchUpTarget = currentCorrectAngle + effNaturalSpeed * catchUpSec;
+    startAnimationRaw(
+      v.anim,
+      catchUpTarget,
+      perfNow,
+      v.animSpeed / K_ANGLE_ANIM_SPEED,
+      catchUpMs
+    );
+    const remainingMs = dtToNextUpdateMs - catchUpMs;
+    const sweepAngle = effNaturalSpeed * (remainingMs / 1e3);
+    v.pendingSweep = {
+      target: catchUpTarget + sweepAngle,
+      durationMs: remainingMs
+    };
+  }
+  function updateObsValueScrub(v, env2, perfNow, getNow2, timeDirection, tickIntervalMs, displayDeltaPerTickSec) {
+    const newTarget = evalAttr(v.expr, env2);
+    const nextDisplayMs = computeNextBoundary(
+      v.updateInterval * 1e3,
+      getNow2,
+      timeDirection,
+      env2
+    );
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    const displayNowMs = getNow2().getTime();
+    const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
+    const displayDeltaPerTickMs = displayDeltaPerTickSec * 1e3;
+    const ticksUntilUpdate = displayDeltaPerTickMs > 0 ? Math.max(1, Math.ceil(displayDeltaMs / displayDeltaPerTickMs)) : 1;
+    const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+    v.nextUpdateTime = perfNow + timeUntilNextUpdateMs;
+    const speed = v.animSpeed;
+    const TWO_PI10 = 2 * Math.PI;
+    const normalizedTarget = (newTarget % TWO_PI10 + TWO_PI10) % TWO_PI10;
+    const normalizedCurrent = (v.anim.currentValue % TWO_PI10 + TWO_PI10) % TWO_PI10;
+    let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+    if (angleDelta > Math.PI) angleDelta = TWO_PI10 - angleDelta;
+    const naturalDurationMs = speed > 0 ? angleDelta / speed * 1e3 : 0;
+    const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+    if (naturalDurationMs > timeUntilNextUpdateMs) {
+      startAnimationRaw(
+        v.anim,
+        newTarget,
+        perfNow,
+        multiplier,
+        timeUntilNextUpdateMs
+      );
+    } else {
+      startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+    }
+    v.pendingSweep = null;
+  }
+  function updateObsValues(vs, env2, perfNow, getNow2, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
     const all = getAllValues(vs);
     for (const v of all) {
       if (perfNow >= v.nextUpdateTime) {
-        let newTarget = evalAttr(v.expr, env2);
-        const updateIntervalMs = v.updateInterval * 1e3;
-        const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow2, 1, env2);
-        v.nextUpdateDisplayTime = nextDisplayMs;
-        v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
-        if (v.projectTarget && isFinite(v.nextUpdateTime)) {
-          const dtSeconds = (v.nextUpdateTime - perfNow) / 1e3;
-          const angularRate = v.animSpeed * 2;
-          newTarget += dtSeconds * angularRate;
+        if (tickIntervalMs !== null && tickIntervalMs > 0) {
+          updateObsValueScrub(
+            v,
+            env2,
+            perfNow,
+            getNow2,
+            timeDirection,
+            tickIntervalMs,
+            displayDeltaPerTickSec
+          );
+        } else if (v.naturalSpeed > 0) {
+          updateNaturalSpeedValue(v, env2, perfNow, getNow2, timeDirection);
+        } else {
+          const newTarget = evalAttr(v.expr, env2);
+          const nextDisplayMs = computeNextBoundary(
+            v.updateInterval * 1e3,
+            getNow2,
+            timeDirection,
+            env2
+          );
+          v.nextUpdateDisplayTime = nextDisplayMs;
+          v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+          v.pendingSweep = null;
+          const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+          startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
         }
-        startAnimationRaw(v.anim, newTarget, perfNow, v.animSpeed);
       }
     }
   }
@@ -15878,6 +16039,19 @@
     const all = getAllValues(vs);
     for (const v of all) {
       v.currentValue = interpolateValue(v.anim, perfNow);
+      if (!v.anim.animating && v.pendingSweep) {
+        const sweep = v.pendingSweep;
+        v.pendingSweep = null;
+        const sweepMultiplier = v.naturalSpeed / K_ANGLE_ANIM_SPEED;
+        startAnimationRaw(
+          v.anim,
+          sweep.target,
+          perfNow,
+          sweepMultiplier,
+          sweep.durationMs
+        );
+        v.currentValue = interpolateValue(v.anim, perfNow);
+      }
     }
   }
   function resetObsValueSchedules(vs) {
@@ -16014,7 +16188,19 @@
     timeController.beginFrame();
     const perfNow = performance.now();
     if (obsValues) {
-      updateObsValues(obsValues, env, perfNow, getNow);
+      const rate = timeController.currentRate;
+      const tickIntervalMs = rate ? TICK_INTERVAL_MS : null;
+      const displayDelta = rate ? displaySecondsPerTick(rate.unit) : 0;
+      const timeDirection = timeController.currentDirection;
+      updateObsValues(
+        obsValues,
+        env,
+        perfNow,
+        getNow,
+        tickIntervalMs,
+        displayDelta,
+        timeDirection
+      );
       animateObsValues(obsValues, perfNow);
     }
     drawFrame();

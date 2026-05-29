@@ -39,11 +39,12 @@ tick()
 | `name` | Human-readable name for debugging |
 | `expr` | Parsed AST (from expression parser) |
 | `updateInterval` | Seconds (positive = epoch-aligned, negative = sentinel) |
-| `animSpeed` | Animation speed multiplier (default 1.0 = 2 rad/s) |
-| `projectTarget` | When true, project animation target to next update time |
+| `animSpeed` | Catch-up animation speed in rad/s (default 2.0) |
+| `naturalSpeed` | Steady-state sweep speed in rad/s (default 0 = snap-to-target) |
 | `currentValue` | Current interpolated value (NaN = don't display) |
 | `anim` | AnimatingValue state for smooth interpolation |
 | `nextUpdateTime` | performance.now() of next scheduled re-evaluation |
+| `pendingSweep` | Phase 2 sweep params (target + duration), or null |
 
 ### Update Scheduling
 
@@ -58,48 +59,49 @@ Values use two scheduling mechanisms:
 - Example: `EC_UPDATE_NEXT_SUNSET` → sunrise hand updates when time crosses sunset
 - Planet sentinels use encoding: `EC_UPDATE_NEXT_PLANET_RISE(planet)` / `EC_UPDATE_NEXT_PLANET_SET(planet)`
 
-### Animation Speed
+### Animation Modes
 
-The `animSpeed` multiplier controls how fast a value animates toward its target:
+The update pass dispatches to one of three modes:
 
-- **Default (1.0)**: Speed = 2.0 rad/s. Good for snapping to new values quickly
-  (e.g., hour/minute hands, noonOnTop toggle, time step).
-- **Custom**: Set to match real-world angular velocity. Second hands use
-  `π/60` so speed = `2 × π/60 = 2π/60` rad/s — exactly one tick per second.
+**1. Snap-to-target** (`naturalSpeed === 0`, most values):
+The expression is evaluated at time T and the value animates at `animSpeed`
+(default 2.0 rad/s) to A(T). Used for hour/minute hands, sun events,
+planet hands, ring stops — anything that just moves to a new position.
 
-### Target Projection (`projectTarget`)
+**2. Two-phase sweep** (`naturalSpeed > 0`, second hands):
+For constant-velocity values that sweep between infrequent updates (e.g.,
+second hands updating every 20s). Uses a two-phase algorithm:
 
-For constant-velocity values that animate between infrequent updates (e.g.,
-second hands updating every 20s), the expression gives angle A(T) at evaluation
-time T. But the animation needs to arrive at A(T+interval) when the next
-update fires.
+- **Phase 1 (catch-up)**: If the hand is more than 0.002 rad from where it
+  should be, animate at `animSpeed` (2.0 rad/s) to the point where the hand
+  *should be when catch-up finishes* (the correct position advances at
+  `naturalSpeed` during catch-up, so `catchUpTime = error / (animSpeed - naturalSpeed)`).
+- **Phase 2 (sweep)**: From the catch-up target, sweep at `naturalSpeed` until
+  the next update boundary. Phase 2 params are stored in `pendingSweep` and
+  picked up by the animate pass when Phase 1 completes.
 
-When `projectTarget = true`:
-```
-target = evaluatedValue + dtToNextUpdate × animSpeed × kECGLAngleAnimationSpeed
-```
+This handles tab-switch recovery gracefully: the hand catches up at 2 rad/s
+then resumes smooth ticking.
 
-The math is self-consistent: `startValueAnimation` computes duration as
-`delta / speed × 1000`, which naturally recovers the update interval because
-`delta = interval × speed`.
-
-**Without** `projectTarget` (or for fast-animation values), the expression is
-evaluated at T and the value snaps/transitions quickly to A(T). This is correct
-for values where the animation is just "transition to new position" rather than
-"sweep at a constant rate."
+**3. Scrub compression** (quantized mode, all values):
+During hold-to-scrub, display time jumps by large units per tick. The
+compression logic mirrors the watch-face `tickAnimations`:
+- Compute ticks until next update boundary: `ceil(displayDelta / displayDeltaPerTick)`
+- Real-time budget: `ticksUntilUpdate × TICK_INTERVAL_MS`
+- If natural animation duration exceeds the budget, compress to fit
 
 ### Value Catalog
 
-| Group | Values | Update | animSpeed |
-|-------|--------|--------|-----------|
-| Clock hands | h24, h12, minute, second | 1–20s | 1.0 (second: π/60) |
-| Sun events | sunrise, sunset, golden×2, civil×2, nautical×2, astro×2, noon, midnight | Sentinel (rise↔set) | 1.0 |
-| UTC subdial | hour, minute, second | 1–60s | 1.0 (second: π/60) |
-| Solar subdial | hour, minute, second | 1–60s | 1.0 (second: π/60) |
-| Sidereal subdial | hour, minute, second | 1–60s | 1.0 (second: π/60) |
-| Planet hands | saturn, jupiter, mars, earth, venus, mercury, moonOffset | 3600s | 1.0 |
-| Planet rings | 6 × (rise, set, transit) | Sentinel (rise↔set) | 1.0 |
-| Sun ring | 14 altitude stops + noon + midnight | Sentinel (rise↔set) | 1.0 |
+| Group | Values | Update | naturalSpeed |
+|-------|--------|--------|--------------|
+| Clock hands | h24, h12, minute, second | 1–20s | second: 2π/60 |
+| Sun events | sunrise, sunset, golden×2, civil×2, nautical×2, astro×2, noon, midnight | Sentinel (rise↔set) | 0 |
+| UTC subdial | hour, minute, second | 1–60s | second: 2π/60 |
+| Solar subdial | hour, minute, second | 1–60s | second: 2π/60 |
+| Sidereal subdial | hour, minute, second | 1–60s | second: 2π/60 |
+| Planet hands | saturn, jupiter, mars, earth, venus, mercury, moonOffset | 3600s | 0 |
+| Planet rings | 6 × (rise, set, transit) | Sentinel (rise↔set) | 0 |
+| Sun ring | 14 altitude stops + noon + midnight | Sentinel (rise↔set) | 0 |
 
 ### NaN Convention
 
