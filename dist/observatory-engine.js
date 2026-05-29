@@ -16134,10 +16134,10 @@
       drawPlanetHands(ctx, L, obsValues);
     }
     if (obsValues) {
-      drawClockHands(ctx, L, obsValues);
+      drawSubdialHands(ctx, L, obsValues);
     }
     if (obsValues) {
-      drawSubdialHands(ctx, L, obsValues);
+      drawClockHands(ctx, L, obsValues);
     }
     const peripherals = [
       { cx: L.altCX, cy: L.altCY, r: L.altR, label: "ALT" },

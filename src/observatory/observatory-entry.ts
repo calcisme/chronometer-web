@@ -164,17 +164,20 @@ function drawFrame(): void {
     }
 
     // ================================================================
-    // 3b. Clock hands (24h, 12h, minute, second, sun events)
-    // ================================================================
-    if (obsValues) {
-        drawClockHands(ctx, L, obsValues);
-    }
-
-    // ================================================================
-    // 3c. Subdial hands (UTC, Solar, Sidereal)
+    // 3b. Subdial hands (UTC, Solar, Sidereal)
+    //     Drawn before main clock hands so main hands appear on top.
     // ================================================================
     if (obsValues) {
         drawSubdialHands(ctx, L, obsValues);
+    }
+
+    // ================================================================
+    // 3c. Clock hands (24h, 12h, minute, second, sun events)
+    //     Drawn last so the three main hands (h, m, s) are on top of
+    //     everything else, as they would be physically.
+    // ================================================================
+    if (obsValues) {
+        drawClockHands(ctx, L, obsValues);
     }
 
     // ================================================================
