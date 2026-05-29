@@ -18636,7 +18636,7 @@
     return new Date(snapped);
   }
 
-  // src/watch/astro-stepper.ts
+  // src/shared/astro-stepper.ts
   var FUDGE_SECONDS = 5;
   var TRANSIT_FUDGE_SECONDS = 12 * 3600;
   var LOOKAHEAD_SECONDS = 3600 * 13.2;
@@ -18764,6 +18764,590 @@
       default:
         return null;
     }
+  }
+
+  // src/shared/time-controls-ui.ts
+  var unitToRateIndex = {
+    "minute": 1,
+    // 10 min/s
+    "hour": 2,
+    // 10 hr/s
+    "day": 3,
+    // 10 day/s
+    "month": 4,
+    // 10 mo/s
+    "year": 5
+    // 10 yr/s
+  };
+  var stepMap = {
+    "-year": ["year", -1],
+    "-month": ["month", -1],
+    "-day": ["day", -1],
+    "-hour": ["hour", -1],
+    "-minute": ["minute", -1],
+    "+minute": ["minute", 1],
+    "+hour": ["hour", 1],
+    "+day": ["day", 1],
+    "+month": ["month", 1],
+    "+year": ["year", 1]
+  };
+  function initTimeControls(config) {
+    const {
+      timeController,
+      getTimezone,
+      getTzDeltaMs,
+      getLat,
+      getLon,
+      getSelectedBody,
+      onTimeStep,
+      onScrubStart,
+      onScrubEnd,
+      onNowClicked,
+      onTransportChange,
+      ensureSchedulerRunning,
+      writeTimeState,
+      onPopoverToggle
+    } = config;
+    const _timeBar = document.getElementById("time-bar");
+    const _timeBarLabel = document.getElementById("time-bar-label");
+    const _timeBarDate = document.getElementById("time-bar-date");
+    const _timeBarOffset = document.getElementById("time-bar-offset");
+    const _timeBarRate = document.getElementById("time-bar-rate");
+    const _timeBarNow = document.getElementById("time-bar-now");
+    const _timePopover = document.getElementById("time-popover");
+    const _tpRateLabel = document.getElementById("tp-rate-label");
+    const _tpTransport = document.getElementById("tp-transport");
+    const _tpClose = document.getElementById("tp-close");
+    if (!_timeBar || !_timeBarLabel || !_timeBarDate || !_timeBarOffset || !_timeBarRate || !_timeBarNow || !_timePopover || !_tpRateLabel || !_tpTransport || !_tpClose) {
+      console.warn("[TimeControlsUI] Required DOM elements not found");
+      return null;
+    }
+    const timeBar = _timeBar;
+    const timeBarLabel = _timeBarLabel;
+    const timeBarDate = _timeBarDate;
+    const timeBarOffset = _timeBarOffset;
+    const timeBarRate = _timeBarRate;
+    const timeBarNow = _timeBarNow;
+    const timePopover = _timePopover;
+    const tpRateLabel = _tpRateLabel;
+    const tpTransport = _tpTransport;
+    const tpClose = _tpClose;
+    const locationTzLabel = document.getElementById("location-tz");
+    const lpLocationTz = document.getElementById("lp-location-tz");
+    let popoverOpen = false;
+    function toTzDate(d) {
+      const delta = getTzDeltaMs();
+      return delta !== 0 ? new Date(d.getTime() + delta) : d;
+    }
+    function fromTzDate(d) {
+      const delta = getTzDeltaMs();
+      return delta !== 0 ? new Date(d.getTime() - delta) : d;
+    }
+    function targetTzOffsetSec(d) {
+      return -d.getTimezoneOffset() * 60 + getTzDeltaMs() / 1e3;
+    }
+    function formatSimTime(d) {
+      const di = dateToDateInterval(d);
+      const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const mo = months[cs.month - 1] || "Jan";
+      const h = cs.hour.toString().padStart(2, "0");
+      const m = cs.minute.toString().padStart(2, "0");
+      const s = Math.floor(cs.seconds).toString().padStart(2, "0");
+      let suffix = "";
+      if (cs.era === 0) {
+        suffix = " BCE";
+      }
+      if (di < kECJulianGregorianSwitchoverTimeInterval) {
+        suffix += " (Julian)";
+      }
+      const ms = d.getTime();
+      if (ms <= MIN_DISPLAY_DATE_MS) {
+        suffix += " \u2014 AT LIMIT";
+      } else if (ms >= MAX_DISPLAY_DATE_MS) {
+        suffix += " \u2014 AT LIMIT";
+      }
+      return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
+    }
+    function formatOffset(sim, real) {
+      const ms = sim.getTime() - real.getTime();
+      const sign = ms < 0 ? "-" : "+";
+      if (Math.abs(ms) < 2e3) return "";
+      const fromMs = (ms < 0 ? sim : real).getTime();
+      const toMs = (ms < 0 ? real : sim).getTime();
+      const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
+      const to = new Date(Math.floor(toMs / 1e3) * 1e3);
+      const fromDI = dateToDateInterval(from);
+      const toDI = dateToDateInterval(to);
+      const fromCs = localComponentsFromTimeInterval(fromDI, 0);
+      const toCs = localComponentsFromTimeInterval(toDI, 0);
+      const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
+      const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
+      let years = toSigned - fromSigned;
+      let months = toCs.month - fromCs.month;
+      if (months < 0) {
+        years--;
+        months += 12;
+      }
+      let cursorDI = fromDI;
+      if (years > 0 || months > 0) {
+        let cursorSigned = fromSigned + years;
+        let cursorMonth = fromCs.month + months;
+        if (cursorMonth > 12) {
+          cursorSigned++;
+          cursorMonth -= 12;
+        }
+        const cursorEra = cursorSigned <= 0 ? 0 : 1;
+        const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+        cursorDI = timeIntervalFromLocalComponents(
+          0,
+          cursorEra,
+          cursorYear,
+          cursorMonth,
+          fromCs.day,
+          fromCs.hour,
+          fromCs.minute,
+          fromCs.seconds
+        );
+        if (cursorDI > toDI) {
+          months--;
+          if (months < 0) {
+            years--;
+            months += 12;
+          }
+          cursorSigned = fromSigned + years;
+          cursorMonth = fromCs.month + months;
+          if (cursorMonth > 12) {
+            cursorSigned++;
+            cursorMonth -= 12;
+          }
+          if (cursorMonth < 1) {
+            cursorSigned--;
+            cursorMonth += 12;
+          }
+          const ce = cursorSigned <= 0 ? 0 : 1;
+          const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+          cursorDI = timeIntervalFromLocalComponents(
+            0,
+            ce,
+            cy,
+            cursorMonth,
+            fromCs.day,
+            fromCs.hour,
+            fromCs.minute,
+            fromCs.seconds
+          );
+        }
+      }
+      let remainSec = Math.round(toDI - cursorDI);
+      let days, hrs, mins, sec;
+      if (years > 0 || months > 0) {
+        remainSec = Math.round(remainSec / 3600) * 3600;
+        days = Math.floor(remainSec / 86400);
+        remainSec %= 86400;
+        hrs = Math.floor(remainSec / 3600);
+        mins = 0;
+        sec = 0;
+      } else if (remainSec >= 86400) {
+        remainSec = Math.round(remainSec / 60) * 60;
+        days = Math.floor(remainSec / 86400);
+        remainSec %= 86400;
+        hrs = Math.floor(remainSec / 3600);
+        remainSec %= 3600;
+        mins = Math.floor(remainSec / 60);
+        sec = 0;
+      } else {
+        days = 0;
+        hrs = Math.floor(remainSec / 3600);
+        remainSec %= 3600;
+        mins = Math.floor(remainSec / 60);
+        remainSec %= 60;
+        sec = remainSec;
+      }
+      if (hrs >= 24) {
+        days += Math.floor(hrs / 24);
+        hrs %= 24;
+      }
+      const parts = [];
+      if (years > 0) parts.push(`${years}y`);
+      if (months > 0) parts.push(`${months}mo`);
+      if (days > 0) parts.push(`${days}d`);
+      if (hrs > 0) parts.push(`${hrs}h`);
+      if (mins > 0) parts.push(`${mins}m`);
+      if (sec > 0) parts.push(`${sec}s`);
+      return parts.length > 0 ? `(${sign}${parts.join(" ")})` : "";
+    }
+    function formatTimezoneDisplay(olsonId, referenceDate) {
+      if (!olsonId) return "";
+      try {
+        const ref = referenceDate || /* @__PURE__ */ new Date();
+        const shortFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "short"
+        });
+        const shortParts = shortFmt.formatToParts(ref);
+        const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
+        const longFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "longOffset"
+        });
+        const longParts = longFmt.formatToParts(ref);
+        const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
+        let utcStr = offsetStr.replace("GMT", "UTC");
+        utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
+        return `${olsonId}\xA0(${abbr})\xA0${utcStr}`;
+      } catch {
+        return olsonId;
+      }
+    }
+    let _lastTransportReal = true;
+    let _lastTransportStopped = false;
+    function renderTransport() {
+      const isReal = timeController.isRealTime;
+      const isStopped = timeController.isStopped;
+      if (isReal === _lastTransportReal && isStopped === _lastTransportStopped) {
+        return;
+      }
+      _lastTransportReal = isReal;
+      _lastTransportStopped = isStopped;
+      tpTransport.innerHTML = "";
+      const topRow = document.createElement("div");
+      topRow.className = "tp-transport-row";
+      if (!timeController.isRealTime) {
+        const nowBtn = document.createElement("button");
+        nowBtn.className = "tp-btn";
+        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
+        nowBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          nowClicked();
+        });
+        topRow.appendChild(nowBtn);
+      }
+      if (!isStopped) {
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "tp-btn active";
+        pauseBtn.textContent = "\u2016";
+        pauseBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.stop();
+          onTransportChange();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        topRow.appendChild(pauseBtn);
+      }
+      if (topRow.childNodes.length > 0) {
+        tpTransport.appendChild(topRow);
+      }
+      if (isStopped) {
+        const bottomRow = document.createElement("div");
+        bottomRow.className = "tp-transport-row";
+        const revBtn = document.createElement("button");
+        revBtn.className = "tp-btn";
+        revBtn.textContent = "\u25C0";
+        revBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.setDirection(-1);
+          timeController.setRate(null);
+          onTransportChange();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        const fwdBtn = document.createElement("button");
+        fwdBtn.className = "tp-btn";
+        fwdBtn.textContent = "\u25B6";
+        fwdBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController.setDirection(1);
+          timeController.setRate(null);
+          onTransportChange();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        bottomRow.appendChild(revBtn);
+        bottomRow.appendChild(fwdBtn);
+        tpTransport.appendChild(bottomRow);
+      }
+    }
+    function updateTimeUI() {
+      const isReal = timeController.isRealTime;
+      timeBar.classList.toggle("overridden", !isReal);
+      const sim = timeController.getDisplayTime();
+      timeBarDate.textContent = formatSimTime(sim);
+      const simMs = sim.getTime();
+      const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
+      timeBar.classList.toggle("at-limit", atLimit);
+      if (!isReal) {
+        timeBarRate.textContent = timeController.statusLabel;
+        timeBarOffset.textContent = formatOffset(sim, /* @__PURE__ */ new Date());
+      }
+      tpRateLabel.textContent = timeController.statusLabel;
+      renderTransport();
+      updateTimezoneDisplay();
+      const simDI = dateToDateInterval(sim);
+      const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
+      const yearEl = document.getElementById("tp-year");
+      const monthEl = document.getElementById("tp-month");
+      const dayEl = document.getElementById("tp-day");
+      const hourEl = document.getElementById("tp-hour");
+      const minuteEl = document.getElementById("tp-minute");
+      if (yearEl) yearEl.value = simCs.year.toString();
+      if (monthEl) monthEl.value = simCs.month.toString();
+      if (dayEl) dayEl.value = simCs.day.toString();
+      if (hourEl) hourEl.value = simCs.hour.toString();
+      if (minuteEl) minuteEl.value = simCs.minute.toString();
+      const bceBtn = document.getElementById("tp-bce");
+      if (bceBtn) {
+        const isBCE = simCs.era === 0;
+        bceBtn.textContent = isBCE ? "BCE" : "CE";
+        bceBtn.classList.toggle("active", isBCE);
+      }
+    }
+    function updateTimezoneDisplay() {
+      const formatted = formatTimezoneDisplay(
+        getTimezone(),
+        timeController.getDisplayTime()
+      );
+      if (locationTzLabel) locationTzLabel.innerHTML = formatted;
+      if (lpLocationTz) lpLocationTz.innerHTML = formatted;
+    }
+    function showPopover() {
+      popoverOpen = true;
+      timePopover.style.display = "";
+      timeBarLabel.textContent = "\u23F1 Hide time controller";
+      timeBarLabel.classList.add("active");
+      updateTimeUI();
+      writeUrlState({ tc: true });
+      onPopoverToggle?.(true);
+    }
+    function hidePopover() {
+      popoverOpen = false;
+      timePopover.style.display = "none";
+      timeBarLabel.textContent = "\u23F1 Show time controller";
+      timeBarLabel.classList.remove("active");
+      updateTimeUI();
+      writeUrlState({ tc: false });
+      onPopoverToggle?.(false);
+    }
+    function nowClicked() {
+      onNowClicked();
+      updateTimeUI();
+      writeTimeState();
+    }
+    const HOLD_DELAY_MS = 300;
+    let holdTimer = null;
+    let holdingBtn = null;
+    function startHold(btn, unit, dir) {
+      holdingBtn = btn;
+      btn.classList.add("holding");
+      timeController.setDirection(dir);
+      const rateIdx = unitToRateIndex[unit];
+      if (rateIdx !== void 0) {
+        timeController.setRate(RATE_OPTIONS[rateIdx]);
+      }
+      onScrubStart();
+      updateTimeUI();
+      ensureSchedulerRunning();
+    }
+    function endHold() {
+      if (holdTimer !== null) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (holdingBtn) {
+        holdingBtn.classList.remove("holding");
+        holdingBtn = null;
+        onScrubEnd();
+        updateTimeUI();
+        ensureSchedulerRunning();
+        writeTimeState();
+      }
+    }
+    timePopover.querySelectorAll("[data-step]").forEach((btn) => {
+      const el = btn;
+      const stepKey = el.dataset.step;
+      const entry = stepMap[stepKey];
+      if (!entry) return;
+      const [unit, dir] = entry;
+      const unitName = el.dataset.unit || unit;
+      function doStep(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        timeController.stop();
+        timeController.step(unit, dir);
+        onTimeStep();
+        updateTimeUI();
+        ensureSchedulerRunning();
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          startHold(el, unitName, dir);
+        }, HOLD_DELAY_MS);
+      }
+      function doRelease(e) {
+        e.stopPropagation();
+        endHold();
+        writeTimeState();
+      }
+      el.addEventListener("mousedown", doStep);
+      el.addEventListener("mouseup", doRelease);
+      el.addEventListener("mouseleave", () => endHold());
+      el.addEventListener("touchstart", doStep);
+      el.addEventListener("touchend", doRelease);
+      el.addEventListener("touchcancel", () => endHold());
+    });
+    const tpTabDate = document.getElementById("tp-tab-date");
+    const tpTabAstro = document.getElementById("tp-tab-astro");
+    const tpTabs = timePopover.querySelectorAll(".tp-tab");
+    function switchTab(tabName) {
+      if (tpTabDate && tpTabAstro) {
+        const hiding = tabName === "a" ? tpTabDate : tpTabAstro;
+        const showing = tabName === "a" ? tpTabAstro : tpTabDate;
+        hiding.style.transition = "none";
+        hiding.classList.add("tp-pane-hidden");
+        void hiding.offsetHeight;
+        hiding.style.transition = "";
+        showing.classList.remove("tp-pane-hidden");
+      }
+      tpTabs.forEach((btn) => {
+        const el = btn;
+        el.classList.toggle("active", el.dataset.tab === (tabName === "a" ? "astro" : "date"));
+      });
+      writeUrlState({ tp: tabName });
+      if (popoverOpen) {
+        setTimeout(() => {
+          onPopoverToggle?.(true);
+        }, 320);
+      }
+    }
+    const urlTp = new URLSearchParams(window.location.search).get("tp");
+    if (urlTp === "a") {
+      switchTab("a");
+    }
+    tpTabs.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const el = btn;
+        switchTab(el.dataset.tab === "astro" ? "a" : "d");
+      });
+    });
+    function handleAstroStep(eventType, dir, btnEl) {
+      let bodyPlanetNumber;
+      if (eventType === "body-transit" || eventType === "body-rise" || eventType === "body-set") {
+        bodyPlanetNumber = getSelectedBody?.();
+        if (bodyPlanetNumber === void 0) {
+          const bodyLabel = document.getElementById("tp-body-transit-label");
+          bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || "1", 10) : void 0;
+        }
+      }
+      const targetDate = computeAstroTarget(
+        eventType,
+        dir,
+        timeController.getDisplayTime(),
+        getLat() * Math.PI / 180,
+        getLon() * Math.PI / 180,
+        bodyPlanetNumber
+      );
+      if (!targetDate || isNaN(targetDate.getTime())) {
+        btnEl.classList.add("flash-fail");
+        setTimeout(() => btnEl.classList.remove("flash-fail"), 300);
+        return;
+      }
+      timeController.stop();
+      timeController.setTime(targetDate);
+      onTimeStep();
+      updateTimeUI();
+      ensureSchedulerRunning();
+      writeTimeState();
+    }
+    timePopover.querySelectorAll("[data-astro]").forEach((btn) => {
+      const el = btn;
+      const eventType = el.dataset.astro;
+      const dir = parseInt(el.dataset.dir || "1", 10);
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAstroStep(eventType, dir, el);
+      });
+      el.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAstroStep(eventType, dir, el);
+      });
+    });
+    function applyDateInputs() {
+      const yr = parseInt(document.getElementById("tp-year").value, 10);
+      const mo = parseInt(document.getElementById("tp-month").value, 10);
+      const dy = parseInt(document.getElementById("tp-day").value, 10);
+      const hr = parseInt(document.getElementById("tp-hour").value, 10);
+      const mn = parseInt(document.getElementById("tp-minute").value, 10);
+      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+      const bceBtn = document.getElementById("tp-bce");
+      const isBCE = bceBtn?.classList.contains("active") ?? false;
+      const era = isBCE ? 0 : 1;
+      const refDate = timeController.getDisplayTime();
+      const tzOff = targetTzOffsetSec(refDate);
+      const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
+      const d = dateIntervalToDate(di);
+      const clampedMs = Math.max(
+        MIN_DISPLAY_DATE_MS,
+        Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
+      );
+      timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
+      onTimeStep();
+      updateTimeUI();
+      writeTimeState();
+    }
+    ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("change", () => applyDateInputs());
+      }
+    });
+    const tpBce = document.getElementById("tp-bce");
+    if (tpBce) {
+      tpBce.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isActive = tpBce.classList.toggle("active");
+        tpBce.textContent = isActive ? "BCE" : "CE";
+        applyDateInputs();
+      });
+    }
+    timeBarLabel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popoverOpen) {
+        hidePopover();
+      } else {
+        showPopover();
+      }
+    });
+    timeBarRate.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popoverOpen) {
+        hidePopover();
+      } else {
+        showPopover();
+      }
+    });
+    timeBarNow.addEventListener("click", (e) => {
+      e.stopPropagation();
+      nowClicked();
+    });
+    tpClose.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hidePopover();
+    });
+    updateTimezoneDisplay();
+    updateTimeUI();
+    return {
+      updateTimeUI,
+      showPopover,
+      hidePopover,
+      isPopoverOpen: () => popoverOpen,
+      updateTimezoneDisplay
+    };
   }
 
   // src/shared/composite-icon.ts
@@ -19449,7 +20033,7 @@
         }
       }
       if (tzDeltaMs !== oldTzDeltaMs || tzOffsetChanged) {
-        updateTimezoneDisplay();
+        timeUI?.updateTimezoneDisplay();
       }
       scheduleDstRebuild();
     }
@@ -19588,7 +20172,7 @@
       timeController.beginFrame();
       if (timeController.clampDisplayTime()) {
         finishAllAnimations();
-        updateTimeUI();
+        timeUI?.updateTimeUI();
         writeTimeState();
       }
       const frameRealTime = /* @__PURE__ */ new Date();
@@ -19668,16 +20252,7 @@
       } else if (isScrubbing && willTick) {
         _lastAnimFrameTime = null;
       }
-      {
-        const sim = timeController.getDisplayTime();
-        timeBarDate.textContent = formatSimTime(sim);
-        if (!timeController.isRealTime) {
-          timeBarOffset.textContent = formatOffset(sim, frameRealTime);
-        }
-        const ms = sim.getTime();
-        const atLimit = ms <= MIN_DISPLAY_DATE_MS || ms >= MAX_DISPLAY_DATE_MS;
-        timeBar.classList.toggle("at-limit", atLimit);
-      }
+      timeUI?.updateTimeUI();
       timeController.endFrame();
       if (timeController.needsContinuousRender || stillAnimating) {
         rafId = requestAnimationFrame(frame);
@@ -19726,7 +20301,7 @@
         buildStaticBlockCaches(watch, env, canvas.width, canvas.height, scale, images, face.terminatorLeaves);
         resetHandSchedules(face.handStates);
       }
-      updateTimezoneDisplay();
+      timeUI?.updateTimezoneDisplay();
       stopScheduler();
       startScheduler();
     }
@@ -19839,9 +20414,9 @@
         const hexStep = cellStep * Math.sqrt(3) / 2;
         return (remainder - 1) * cellStep + hexStep + (col - remainder) * cellStep;
       };
-      if (popoverOpen) {
+      if (timeUI?.isPopoverOpen()) {
         const gridRect = grid.getBoundingClientRect();
-        const popRect = timePopover.getBoundingClientRect();
+        const popRect = document.getElementById("time-popover").getBoundingClientRect();
         const upperEl = document.getElementById("tp-upper");
         const upperRect = upperEl.getBoundingClientRect();
         const pLeft = upperRect.left - gridRect.left;
@@ -19988,7 +20563,7 @@
       }
       const dpr = window.devicePixelRatio || 1;
       const newPhys = Math.round(size * dpr);
-      const isAstroTab = popoverOpen && !document.getElementById("tp-tab-astro")?.classList.contains("tp-pane-hidden");
+      const isAstroTab = (timeUI?.isPopoverOpen() ?? false) && !document.getElementById("tp-tab-astro")?.classList.contains("tp-pane-hidden");
       const positionChanged = useTopLeftAlign !== wasShifted || isAstroTab !== wasAstroTab;
       if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
       wasShifted = useTopLeftAlign;
@@ -20143,7 +20718,7 @@
         }
       }
       updateLocationDisplay();
-      updateTimezoneDisplay();
+      timeUI?.updateTimezoneDisplay();
       requestAnimationFrame(() => {
         triggerManualResize();
       });
@@ -20364,8 +20939,8 @@
         }
         return;
       }
-      if (popoverOpen) {
-        hidePopover();
+      if (timeUI?.isPopoverOpen()) {
+        timeUI.hidePopover();
         return;
       }
     });
@@ -20472,337 +21047,6 @@
         lpCityInput.value = "";
       }
     });
-    const timeBar = document.getElementById("time-bar");
-    const timeBarLabel = document.getElementById("time-bar-label");
-    const timeBarDate = document.getElementById("time-bar-date");
-    const timeBarOffset = document.getElementById("time-bar-offset");
-    const timeBarRate = document.getElementById("time-bar-rate");
-    const timeBarNow = document.getElementById("time-bar-now");
-    const timePopover = document.getElementById("time-popover");
-    const tpRateLabel = document.getElementById("tp-rate-label");
-    const tpTransport = document.getElementById("tp-transport");
-    const tpClose = document.getElementById("tp-close");
-    function formatTimezoneDisplay(olsonId, referenceDate) {
-      if (!olsonId) return "";
-      try {
-        const ref = referenceDate || /* @__PURE__ */ new Date();
-        const shortFmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonId,
-          timeZoneName: "short"
-        });
-        const shortParts = shortFmt.formatToParts(ref);
-        const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
-        const longFmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: olsonId,
-          timeZoneName: "longOffset"
-        });
-        const longParts = longFmt.formatToParts(ref);
-        const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
-        let utcStr = offsetStr.replace("GMT", "UTC");
-        utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
-        return `${olsonId}\xA0(${abbr})\xA0${utcStr}`;
-      } catch {
-        return olsonId;
-      }
-    }
-    function updateTimezoneDisplay() {
-      const formatted = formatTimezoneDisplay(locationTimezone, rawGetNow());
-      locationTzLabel.innerHTML = formatted;
-      lpLocationTz.innerHTML = formatted;
-    }
-    updateTimezoneDisplay();
-    let popoverOpen = false;
-    const unitToRateIndex = {
-      "minute": 1,
-      // 10 min/s
-      "hour": 2,
-      // 10 hr/s
-      "day": 3,
-      // 10 day/s
-      "month": 4,
-      // 10 mo/s
-      "year": 5
-      // 10 yr/s
-    };
-    const stepMap = {
-      "-year": ["year", -1],
-      "-month": ["month", -1],
-      "-day": ["day", -1],
-      "-hour": ["hour", -1],
-      "-minute": ["minute", -1],
-      "+minute": ["minute", 1],
-      "+hour": ["hour", 1],
-      "+day": ["day", 1],
-      "+month": ["month", 1],
-      "+year": ["year", 1]
-    };
-    function toTzDate(d) {
-      return tzDeltaMs !== 0 ? new Date(d.getTime() + tzDeltaMs) : d;
-    }
-    function fromTzDate(d) {
-      return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
-    }
-    function targetTzOffsetSec(d) {
-      return -d.getTimezoneOffset() * 60 + tzDeltaMs / 1e3;
-    }
-    function formatSimTime(d) {
-      const di = dateToDateInterval(d);
-      const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mo = months[cs.month - 1] || "Jan";
-      const h = cs.hour.toString().padStart(2, "0");
-      const m = cs.minute.toString().padStart(2, "0");
-      const s = Math.floor(cs.seconds).toString().padStart(2, "0");
-      let suffix = "";
-      if (cs.era === 0) {
-        suffix = " BCE";
-      }
-      if (di < kECJulianGregorianSwitchoverTimeInterval) {
-        suffix += " (Julian)";
-      }
-      const ms = d.getTime();
-      if (ms <= MIN_DISPLAY_DATE_MS) {
-        suffix += " \u2014 AT LIMIT";
-      } else if (ms >= MAX_DISPLAY_DATE_MS) {
-        suffix += " \u2014 AT LIMIT";
-      }
-      return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
-    }
-    function renderTransport() {
-      tpTransport.innerHTML = "";
-      const isStopped = timeController.isStopped;
-      const topRow = document.createElement("div");
-      topRow.className = "tp-transport-row";
-      if (!timeController.isRealTime) {
-        const nowBtn = document.createElement("button");
-        nowBtn.className = "tp-btn";
-        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
-        nowBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          nowClicked();
-        });
-        topRow.appendChild(nowBtn);
-      }
-      if (!isStopped) {
-        const pauseBtn = document.createElement("button");
-        pauseBtn.className = "tp-btn active";
-        pauseBtn.textContent = "\u2016";
-        pauseBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.stop();
-          rebuildEnvironments();
-          finishAllAnimations();
-          resetAllSchedules();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        topRow.appendChild(pauseBtn);
-      }
-      if (topRow.childNodes.length > 0) {
-        tpTransport.appendChild(topRow);
-      }
-      if (isStopped) {
-        const bottomRow = document.createElement("div");
-        bottomRow.className = "tp-transport-row";
-        const revBtn = document.createElement("button");
-        revBtn.className = "tp-btn";
-        revBtn.textContent = "\u25C0";
-        revBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.setDirection(-1);
-          timeController.setRate(null);
-          resetAllSchedules();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        const fwdBtn = document.createElement("button");
-        fwdBtn.className = "tp-btn";
-        fwdBtn.textContent = "\u25B6";
-        fwdBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          timeController.setDirection(1);
-          timeController.setRate(null);
-          resetAllSchedules();
-          updateTimeUI();
-          ensureSchedulerRunning();
-          writeTimeState();
-        });
-        bottomRow.appendChild(revBtn);
-        bottomRow.appendChild(fwdBtn);
-        tpTransport.appendChild(bottomRow);
-      }
-    }
-    function updateTimeUI() {
-      const isReal = timeController.isRealTime;
-      timeBar.classList.toggle("overridden", !isReal);
-      const sim = timeController.getDisplayTime();
-      timeBarDate.textContent = formatSimTime(sim);
-      const simMs = sim.getTime();
-      const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
-      timeBar.classList.toggle("at-limit", atLimit);
-      if (!isReal) {
-        timeBarRate.textContent = timeController.statusLabel;
-        timeBarOffset.textContent = formatOffset(sim, /* @__PURE__ */ new Date());
-      }
-      tpRateLabel.textContent = timeController.statusLabel;
-      renderTransport();
-      updateTimezoneDisplay();
-      const simDI = dateToDateInterval(sim);
-      const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
-      document.getElementById("tp-year").value = simCs.year.toString();
-      document.getElementById("tp-month").value = simCs.month.toString();
-      document.getElementById("tp-day").value = simCs.day.toString();
-      document.getElementById("tp-hour").value = simCs.hour.toString();
-      document.getElementById("tp-minute").value = simCs.minute.toString();
-      const bceBtn = document.getElementById("tp-bce");
-      if (bceBtn) {
-        const isBCE = simCs.era === 0;
-        bceBtn.textContent = isBCE ? "BCE" : "CE";
-        bceBtn.classList.toggle("active", isBCE);
-      }
-    }
-    function formatOffset(sim, real) {
-      const ms = sim.getTime() - real.getTime();
-      const sign = ms < 0 ? "-" : "+";
-      if (Math.abs(ms) < 2e3) return "";
-      const fromMs = (ms < 0 ? sim : real).getTime();
-      const toMs = (ms < 0 ? real : sim).getTime();
-      const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
-      const to = new Date(Math.floor(toMs / 1e3) * 1e3);
-      const fromDI = dateToDateInterval(from);
-      const toDI = dateToDateInterval(to);
-      const fromCs = localComponentsFromTimeInterval(fromDI, 0);
-      const toCs = localComponentsFromTimeInterval(toDI, 0);
-      const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
-      const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
-      let years = toSigned - fromSigned;
-      let months = toCs.month - fromCs.month;
-      if (months < 0) {
-        years--;
-        months += 12;
-      }
-      let cursorDI = fromDI;
-      if (years > 0 || months > 0) {
-        let cursorSigned = fromSigned + years;
-        let cursorMonth = fromCs.month + months;
-        if (cursorMonth > 12) {
-          cursorSigned++;
-          cursorMonth -= 12;
-        }
-        const cursorEra = cursorSigned <= 0 ? 0 : 1;
-        const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
-        cursorDI = timeIntervalFromLocalComponents(
-          0,
-          cursorEra,
-          cursorYear,
-          cursorMonth,
-          fromCs.day,
-          fromCs.hour,
-          fromCs.minute,
-          fromCs.seconds
-        );
-        if (cursorDI > toDI) {
-          months--;
-          if (months < 0) {
-            years--;
-            months += 12;
-          }
-          cursorSigned = fromSigned + years;
-          cursorMonth = fromCs.month + months;
-          if (cursorMonth > 12) {
-            cursorSigned++;
-            cursorMonth -= 12;
-          }
-          if (cursorMonth < 1) {
-            cursorSigned--;
-            cursorMonth += 12;
-          }
-          const ce = cursorSigned <= 0 ? 0 : 1;
-          const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
-          cursorDI = timeIntervalFromLocalComponents(
-            0,
-            ce,
-            cy,
-            cursorMonth,
-            fromCs.day,
-            fromCs.hour,
-            fromCs.minute,
-            fromCs.seconds
-          );
-        }
-      }
-      let remainSec = Math.round(toDI - cursorDI);
-      let days, hrs, mins, sec;
-      if (years > 0 || months > 0) {
-        remainSec = Math.round(remainSec / 3600) * 3600;
-        days = Math.floor(remainSec / 86400);
-        remainSec %= 86400;
-        hrs = Math.floor(remainSec / 3600);
-        mins = 0;
-        sec = 0;
-      } else if (remainSec >= 86400) {
-        remainSec = Math.round(remainSec / 60) * 60;
-        days = Math.floor(remainSec / 86400);
-        remainSec %= 86400;
-        hrs = Math.floor(remainSec / 3600);
-        remainSec %= 3600;
-        mins = Math.floor(remainSec / 60);
-        sec = 0;
-      } else {
-        days = 0;
-        hrs = Math.floor(remainSec / 3600);
-        remainSec %= 3600;
-        mins = Math.floor(remainSec / 60);
-        remainSec %= 60;
-        sec = remainSec;
-      }
-      if (hrs >= 24) {
-        days += Math.floor(hrs / 24);
-        hrs %= 24;
-      }
-      const parts = [];
-      if (years > 0) parts.push(`${years}y`);
-      if (months > 0) parts.push(`${months}mo`);
-      if (days > 0) parts.push(`${days}d`);
-      if (hrs > 0) parts.push(`${hrs}h`);
-      if (mins > 0) parts.push(`${mins}m`);
-      if (sec > 0) parts.push(`${sec}s`);
-      return parts.length > 0 ? `(${sign}${parts.join(" ")})` : "";
-    }
-    function showPopover() {
-      popoverOpen = true;
-      timePopover.style.display = "";
-      timeBarLabel.textContent = "\u23F1 Hide time controller";
-      timeBarLabel.classList.add("active");
-      updateTimeUI();
-      writeUrlState({ tc: true });
-      requestAnimationFrame(() => {
-        if (lastContainerW > 0) {
-          onGridResize(lastContainerW, lastContainerH);
-        }
-      });
-    }
-    function hidePopover() {
-      popoverOpen = false;
-      timePopover.style.display = "none";
-      timeBarLabel.textContent = "\u23F1 Show time controller";
-      timeBarLabel.classList.remove("active");
-      updateTimeUI();
-      writeUrlState({ tc: false });
-      if (lastContainerW > 0) {
-        onGridResize(lastContainerW, lastContainerH);
-      }
-    }
-    function ensureSchedulerRunning() {
-      if (rafId === null && idleTimerId === null) {
-        startScheduler();
-      } else if (rafId === null && timeController.needsContinuousRender) {
-        stopScheduler();
-        startScheduler();
-      }
-    }
     function finishAllAnimations() {
       for (const face of faces) {
         finishAnimations(face.handStates);
@@ -20819,6 +21063,14 @@
         if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
       }
     }
+    function ensureSchedulerRunning() {
+      if (rafId === null && idleTimerId === null) {
+        startScheduler();
+      } else if (rafId === null && timeController.needsContinuousRender) {
+        stopScheduler();
+        startScheduler();
+      }
+    }
     function writeTimeState() {
       if (timeController.isRealTime) {
         writeUrlState({ t: null, off: null, dir: 1 });
@@ -20833,271 +21085,56 @@
         });
       }
     }
-    timeBarLabel.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (popoverOpen) {
-        hidePopover();
-      } else {
-        showPopover();
-      }
-    });
-    timeBarRate.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (popoverOpen) {
-        hidePopover();
-      } else {
-        showPopover();
-      }
-    });
-    function nowClicked() {
-      timeController.reset();
-      finishAllAnimations();
-      resetAllSchedules();
-      updateTimeUI();
-      stopScheduler();
-      startScheduler();
-      writeTimeState();
-    }
-    timeBarNow.addEventListener("click", (e) => {
-      e.stopPropagation();
-      nowClicked();
-    });
-    const HOLD_DELAY_MS = 300;
-    let holdTimer = null;
-    let holdingBtn = null;
-    function startHold(btn, unit, dir) {
-      holdingBtn = btn;
-      btn.classList.add("holding");
-      timeController.setDirection(dir);
-      const rateIdx = unitToRateIndex[unit];
-      if (rateIdx !== void 0) {
-        timeController.setRate(RATE_OPTIONS[rateIdx]);
-      }
-      resetAllSchedules();
-      updateTimeUI();
-      ensureSchedulerRunning();
-    }
-    function endHold() {
-      if (holdTimer !== null) {
-        clearTimeout(holdTimer);
-        holdTimer = null;
-      }
-      if (holdingBtn) {
-        holdingBtn.classList.remove("holding");
-        holdingBtn = null;
+    const timeUI = initTimeControls({
+      timeController,
+      getTimezone: () => locationTimezone,
+      getTzDeltaMs: () => tzDeltaMs,
+      getLat: () => lat,
+      getLon: () => lon,
+      getSelectedBody: () => {
+        const bodyLabel = document.getElementById("tp-body-transit-label");
+        return bodyLabel ? parseInt(bodyLabel.dataset.planet || "1", 10) : void 0;
+      },
+      onTimeStep: () => {
+        finishAllAnimations();
+        resetAllSchedules();
+      },
+      onScrubStart: () => {
+        resetAllSchedules();
+      },
+      onScrubEnd: () => {
         timeController.stop();
         rebuildEnvironments();
         finishAllAnimations();
         resetAllSchedules();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        writeTimeState();
-      }
-    }
-    timePopover.querySelectorAll("[data-step]").forEach((btn) => {
-      const el = btn;
-      const stepKey = el.dataset.step;
-      const entry = stepMap[stepKey];
-      if (!entry) return;
-      const [unit, dir] = entry;
-      const unitName = el.dataset.unit || unit;
-      el.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        timeController.stop();
+      },
+      onNowClicked: () => {
+        timeController.reset();
         finishAllAnimations();
-        timeController.step(unit, dir);
-        timeController.beginFrame();
-        const stepNow = performance.now();
-        for (const face of faces) {
-          if (!face.enabled || !face.cachesBuilt) continue;
-          resetHandSchedules(face.handStates);
-          resetLeafSchedules(face.terminatorLeaves);
-          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-          tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
-          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-        }
-        timeController.endFrame();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          startHold(el, unitName, dir);
-        }, HOLD_DELAY_MS);
-      });
-      el.addEventListener("mouseup", (e) => {
-        e.stopPropagation();
-        endHold();
-        writeTimeState();
-      });
-      el.addEventListener("mouseleave", () => {
-        endHold();
-      });
-      el.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        timeController.stop();
+        resetAllSchedules();
+        stopScheduler();
+        startScheduler();
+      },
+      onTransportChange: () => {
+        rebuildEnvironments();
         finishAllAnimations();
-        timeController.step(unit, dir);
-        timeController.beginFrame();
-        const stepNow = performance.now();
-        for (const face of faces) {
-          if (!face.enabled || !face.cachesBuilt) continue;
-          resetHandSchedules(face.handStates);
-          resetLeafSchedules(face.terminatorLeaves);
-          if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-          tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
-          tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-        }
-        timeController.endFrame();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          startHold(el, unitName, dir);
-        }, HOLD_DELAY_MS);
-      });
-      el.addEventListener("touchend", (e) => {
-        e.stopPropagation();
-        endHold();
-        writeTimeState();
-      });
-      el.addEventListener("touchcancel", () => {
-        endHold();
-      });
-    });
-    const tpTabDate = document.getElementById("tp-tab-date");
-    const tpTabAstro = document.getElementById("tp-tab-astro");
-    const tpTabs = timePopover.querySelectorAll(".tp-tab");
-    function switchTab(tabName) {
-      if (tpTabDate && tpTabAstro) {
-        const hiding = tabName === "a" ? tpTabDate : tpTabAstro;
-        const showing = tabName === "a" ? tpTabAstro : tpTabDate;
-        hiding.style.transition = "none";
-        hiding.classList.add("tp-pane-hidden");
-        void hiding.offsetHeight;
-        hiding.style.transition = "";
-        showing.classList.remove("tp-pane-hidden");
-      }
-      tpTabs.forEach((btn) => {
-        const el = btn;
-        el.classList.toggle("active", el.dataset.tab === (tabName === "a" ? "astro" : "date"));
-      });
-      writeUrlState({ tp: tabName });
-      if (popoverOpen && lastContainerW > 0) {
-        setTimeout(() => {
+        resetAllSchedules();
+      },
+      ensureSchedulerRunning,
+      writeTimeState,
+      onPopoverToggle: (open) => {
+        if (open) {
           requestAnimationFrame(() => {
-            onGridResize(lastContainerW, lastContainerH);
+            if (lastContainerW > 0) {
+              onGridResize(lastContainerW, lastContainerH);
+            }
           });
-        }, 320);
+        } else {
+          if (lastContainerW > 0) {
+            onGridResize(lastContainerW, lastContainerH);
+          }
+        }
       }
-    }
-    const initialTab = urlState.tp;
-    if (initialTab === "a") {
-      switchTab("a");
-    }
-    tpTabs.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const el = btn;
-        switchTab(el.dataset.tab === "astro" ? "a" : "d");
-      });
-    });
-    function handleAstroStep(eventType, dir, btnEl) {
-      let bodyPlanetNumber;
-      if (eventType === "body-transit" || eventType === "body-rise" || eventType === "body-set") {
-        const bodyLabel = document.getElementById("tp-body-transit-label");
-        bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || "1", 10) : 1;
-      }
-      const targetDate = computeAstroTarget(
-        eventType,
-        dir,
-        timeController.getDisplayTime(),
-        lat * Math.PI / 180,
-        lon * Math.PI / 180,
-        bodyPlanetNumber
-      );
-      if (!targetDate || isNaN(targetDate.getTime())) {
-        btnEl.classList.add("flash-fail");
-        setTimeout(() => btnEl.classList.remove("flash-fail"), 300);
-        return;
-      }
-      timeController.stop();
-      finishAllAnimations();
-      timeController.setTime(targetDate);
-      timeController.beginFrame();
-      const stepNow = performance.now();
-      for (const face of faces) {
-        if (!face.enabled || !face.cachesBuilt) continue;
-        resetHandSchedules(face.handStates);
-        resetLeafSchedules(face.terminatorLeaves);
-        if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-        tickAnimations(face.handStates, face.env, stepNow, null, 0, 1);
-        tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-      }
-      timeController.endFrame();
-      updateTimeUI();
-      ensureSchedulerRunning();
-      writeTimeState();
-    }
-    timePopover.querySelectorAll("[data-astro]").forEach((btn) => {
-      const el = btn;
-      const eventType = el.dataset.astro;
-      const dir = parseInt(el.dataset.dir || "1", 10);
-      el.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleAstroStep(eventType, dir, el);
-      });
-      el.addEventListener("touchstart", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleAstroStep(eventType, dir, el);
-      });
-    });
-    function applyDateInputs() {
-      const yr = parseInt(document.getElementById("tp-year").value, 10);
-      const mo = parseInt(document.getElementById("tp-month").value, 10);
-      const dy = parseInt(document.getElementById("tp-day").value, 10);
-      const hr = parseInt(document.getElementById("tp-hour").value, 10);
-      const mn = parseInt(document.getElementById("tp-minute").value, 10);
-      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-      const bceBtn = document.getElementById("tp-bce");
-      const isBCE = bceBtn?.classList.contains("active") ?? false;
-      const era = isBCE ? 0 : 1;
-      const refDate = timeController.getDisplayTime();
-      const tzOff = targetTzOffsetSec(refDate);
-      const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
-      const d = dateIntervalToDate(di);
-      const clampedMs = Math.max(
-        MIN_DISPLAY_DATE_MS,
-        Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
-      );
-      timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
-      finishAllAnimations();
-      resetAllSchedules();
-      updateTimeUI();
-      stopScheduler();
-      startScheduler();
-      writeTimeState();
-    }
-    ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
-      document.getElementById(id).addEventListener("change", () => {
-        applyDateInputs();
-      });
-    });
-    const tpBce = document.getElementById("tp-bce");
-    if (tpBce) {
-      tpBce.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const isActive = tpBce.classList.toggle("active");
-        tpBce.textContent = isActive ? "BCE" : "CE";
-        applyDateInputs();
-      });
-    }
-    tpClose.addEventListener("click", (e) => {
-      e.stopPropagation();
-      hidePopover();
     });
     const infoBtn = document.getElementById("info-btn");
     const infoOverlay = document.getElementById("info-overlay");
@@ -21247,7 +21284,7 @@
     }
     function tickTimeBarClock() {
       if (timeController.isRealTime) {
-        timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
+        timeUI?.updateTimeUI();
       }
       const msUntilNextSecond = 1e3 - Date.now() % 1e3;
       setTimeout(tickTimeBarClock, msUntilNextSecond);
@@ -22091,10 +22128,10 @@
       }
     }
     if (!isEmbedMode) {
-      updateTimeUI();
+      timeUI?.updateTimeUI();
     }
     if (!isEmbedMode && urlState.tc) {
-      showPopover();
+      timeUI?.showPopover();
     }
     if (!isEmbedMode && needsPrompt) {
       showLocationPrompt(true);

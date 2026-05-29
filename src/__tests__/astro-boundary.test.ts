@@ -26,7 +26,7 @@ import {
     findNextQuarterPhase,
     findNextTransit,
     computeAstroTarget,
-} from '../watch/astro-stepper.js';
+} from '../shared/astro-stepper.js';
 
 // ============================================================================
 // Helpers

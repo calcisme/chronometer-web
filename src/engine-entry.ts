@@ -40,21 +40,17 @@ import { expandTerminatorToLeaves, updateLeafAngles, tickLeafAnimations, finishL
 import type { AnalemmaState } from './watch/analemma.js';
 import { expandAnalemma, tickAnalemma, resetAnalemmaSchedule } from './watch/analemma.js';
 import { evalAttr } from './watch/watch-env.js';
-import { TimeController, RATE_OPTIONS, TICK_INTERVAL_MS, displaySecondsPerTick } from './shared/time-controller.js';
-import type { TimeUnit } from './shared/time-controller.js';
+import { TimeController, TICK_INTERVAL_MS, displaySecondsPerTick } from './shared/time-controller.js';
+
 import { readUrlState, writeUrlState, initNavigationLinks, updateNavigationLinks } from './shared/url-state.js';
 import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './shared/city-search.js';
 import type { CityResult } from './shared/city-search.js';
 import { renderGlobe, loadOSMTile } from './shared/mini-map.js';
 import { resolveTimezone } from './shared/tz-resolve.js';
 import { findNextDstTransition, findPrevDstTransition } from './shared/dst-detect.js';
-import { computeAstroTarget } from './watch/astro-stepper.js';
-import type { AstroEventType } from './watch/astro-stepper.js';
-import {
-    localComponentsFromTimeInterval, timeIntervalFromLocalComponents,
-    kECJulianGregorianSwitchoverTimeInterval,
-} from './astronomy/es-calendar.js';
-import { dateToDateInterval, dateIntervalToDate, MIN_DISPLAY_DATE_MS, MAX_DISPLAY_DATE_MS } from './astronomy/es-time.js';
+
+import { initTimeControls } from './shared/time-controls-ui.js';
+import { MIN_DISPLAY_DATE_MS, MAX_DISPLAY_DATE_MS } from './astronomy/es-time.js';
 import { getBezelBackgroundColor, updateDynamicCompositeIcon } from './shared/composite-icon.js';
 
 /** Convert a face name like "Mauna Kea" or "Haleakalā" to a filename like "mauna-kea" */
@@ -800,7 +796,7 @@ async function main() {
         }
 
         if (tzDeltaMs !== oldTzDeltaMs || tzOffsetChanged) {
-            updateTimezoneDisplay();
+            timeUI?.updateTimezoneDisplay();
         }
 
         // Reschedule the DST timer — displayed time and/or direction may
@@ -987,7 +983,7 @@ async function main() {
         // Clamp here so the boundary is enforced every frame.
         if (timeController.clampDisplayTime()) {
             finishAllAnimations();
-            updateTimeUI();
+            timeUI?.updateTimeUI();
             writeTimeState();
         }
         const frameRealTime = new Date();  // capture real time at same instant as sim
@@ -1090,17 +1086,9 @@ async function main() {
             _lastAnimFrameTime = null;
         }
         // Update mini-bar time display (using frameRealTime captured at beginFrame)
-        {
-            const sim = timeController.getDisplayTime();
-            timeBarDate.textContent = formatSimTime(sim);
-            if (!timeController.isRealTime) {
-                timeBarOffset.textContent = formatOffset(sim, frameRealTime);
-            }
-            // Update at-limit indicator each frame
-            const ms = sim.getTime();
-            const atLimit = ms <= MIN_DISPLAY_DATE_MS || ms >= MAX_DISPLAY_DATE_MS;
-            timeBar.classList.toggle('at-limit', atLimit);
-        }
+        // This is a lightweight per-frame update — the full updateTimeUI() rebuilds
+        // transport buttons and is called only on state changes, not every frame.
+        timeUI?.updateTimeUI();
 
         timeController.endFrame();
 
@@ -1180,7 +1168,7 @@ async function main() {
             resetHandSchedules(face.handStates);
         }
 
-        updateTimezoneDisplay();
+        timeUI?.updateTimezoneDisplay();
         stopScheduler();
         startScheduler();
     }
@@ -1385,9 +1373,9 @@ async function main() {
         // If the popover is open, find the largest face size where some
         // grid configuration (column count) places the grid top-left-aligned
         // without the bottom-right face overlapping the popover.
-        if (popoverOpen) {
+        if (timeUI?.isPopoverOpen()) {
             const gridRect = grid.getBoundingClientRect();
-            const popRect = timePopover.getBoundingClientRect();
+            const popRect = document.getElementById('time-popover')!.getBoundingClientRect();
             // Use tp-upper's narrow width for horizontal bounds (tp-lower
             // sits over the time bar/location panel below the grid, so its
             // extra width doesn't block faces in the grid area).
@@ -1575,7 +1563,7 @@ async function main() {
         const dpr = window.devicePixelRatio || 1;
         const newPhys = Math.round(size * dpr);
         // Skip if size hasn't changed AND layout position hasn't changed
-        const isAstroTab = popoverOpen &&
+        const isAstroTab = (timeUI?.isPopoverOpen() ?? false) &&
             !document.getElementById('tp-tab-astro')?.classList.contains('tp-pane-hidden');
         const positionChanged = useTopLeftAlign !== wasShifted || isAstroTab !== wasAstroTab;
         if (newPhys === faces[0]?.canvas.width && !positionChanged) return;
@@ -1778,7 +1766,7 @@ async function main() {
             }
         }
         updateLocationDisplay();
-        updateTimezoneDisplay();
+        timeUI?.updateTimezoneDisplay();
         // The location panel may have changed height (e.g. city name now shown).
         // The ResizeObserver watches #app (viewport-sized) so it won't fire.
         // Defer a manual resize recalc so the face size accounts for the new panel height.
@@ -2072,8 +2060,8 @@ async function main() {
         }
 
         // 5. Time popover
-        if (popoverOpen) {
-            hidePopover();
+        if (timeUI?.isPopoverOpen()) {
+            timeUI.hidePopover();
             return;
         }
     });
@@ -2211,383 +2199,8 @@ async function main() {
 
 
     // =========================================================================
-    // Time Controller UI
+    // Time Controller UI (shared module)
     // =========================================================================
-
-    const timeBar = document.getElementById('time-bar')!;
-    const timeBarLabel = document.getElementById('time-bar-label')!;
-    const timeBarDate = document.getElementById('time-bar-date')!;
-    const timeBarOffset = document.getElementById('time-bar-offset')!;
-    const timeBarRate = document.getElementById('time-bar-rate')!;
-    const timeBarNow = document.getElementById('time-bar-now')!;
-    const timePopover = document.getElementById('time-popover')!;
-    const tpRateLabel = document.getElementById('tp-rate-label')!;
-    const tpTransport = document.getElementById('tp-transport')!;
-    const tpClose = document.getElementById('tp-close')!;
-
-    /** Format the current timezone for display in the time bar.
-     *  Output: "America/Los_Angeles\u00a0(PDT)\u00a0UTC-7:00" with non-breaking spaces. */
-    function formatTimezoneDisplay(olsonId: string | undefined, referenceDate?: Date): string {
-        if (!olsonId) return '';
-        try {
-            const ref = referenceDate || new Date();
-            // Get short abbreviation like "PDT", "EST"
-            const shortFmt = new Intl.DateTimeFormat('en-US', {
-                timeZone: olsonId,
-                timeZoneName: 'short',
-            });
-            const shortParts = shortFmt.formatToParts(ref);
-            const abbr = shortParts.find(p => p.type === 'timeZoneName')?.value || '';
-
-            // Get UTC offset like "GMT-07:00"
-            const longFmt = new Intl.DateTimeFormat('en-US', {
-                timeZone: olsonId,
-                timeZoneName: 'longOffset',
-            });
-            const longParts = longFmt.formatToParts(ref);
-            const offsetStr = longParts.find(p => p.type === 'timeZoneName')?.value || '';
-            // Convert "GMT-07:00" to "UTC-7:00", "GMT+05:30" to "UTC+5:30", "GMT" to "UTC"
-            let utcStr = offsetStr.replace('GMT', 'UTC');
-            // Remove leading zero: UTC-07:00 → UTC-7:00, UTC+05:30 → UTC+5:30
-            utcStr = utcStr.replace(/([+-])0(\d)/, '$1$2');
-
-            // Use non-breaking spaces within to prevent internal wrapping
-            // but the span itself allows line wrap before it
-            return `${olsonId}\u00a0(${abbr})\u00a0${utcStr}`;
-        } catch {
-            return olsonId;
-        }
-    }
-
-    function updateTimezoneDisplay() {
-        // Use the displayed time so the abbreviation/offset reflects
-        // the DST state at the displayed date, not the current date.
-        const formatted = formatTimezoneDisplay(locationTimezone, rawGetNow());
-        locationTzLabel.innerHTML = formatted;
-        lpLocationTz.innerHTML = formatted;
-    }
-    updateTimezoneDisplay();
-
-    let popoverOpen = false;
-
-    /** Map step unit names to RATE_OPTIONS indices for hold-to-scrub */
-    const unitToRateIndex: Record<string, number> = {
-        'minute': 1, // 10 min/s
-        'hour':   2, // 10 hr/s
-        'day':    3, // 10 day/s
-        'month':  4, // 10 mo/s
-        'year':   5, // 10 yr/s
-    };
-
-    /** Map data-step attributes to [unit, direction] */
-    const stepMap: Record<string, [TimeUnit, 1 | -1]> = {
-        '-year': ['year', -1],
-        '-month': ['month', -1],
-        '-day': ['day', -1],
-        '-hour': ['hour', -1],
-        '-minute': ['minute', -1],
-        '+minute': ['minute', 1],
-        '+hour': ['hour', 1],
-        '+day': ['day', 1],
-        '+month': ['month', 1],
-        '+year': ['year', 1],
-    };
-
-    /** Shift a Date to the target timezone for display purposes. */
-    function toTzDate(d: Date): Date {
-        return tzDeltaMs !== 0 ? new Date(d.getTime() + tzDeltaMs) : d;
-    }
-
-    /** Convert a Date entered in target-timezone values back to a real UTC instant. */
-    function fromTzDate(d: Date): Date {
-        return tzDeltaMs !== 0 ? new Date(d.getTime() - tzDeltaMs) : d;
-    }
-
-    /**
-     * Get the actual UTC offset (east-positive, in seconds) of the target timezone
-     * at a given instant.  This is what localComponentsFromTimeInterval expects.
-     *
-     * tzDeltaMs is the delta between target tz and browser tz, so we add the
-     * browser's own UTC offset (from getTimezoneOffset, negated for east-positive).
-     */
-    function targetTzOffsetSec(d: Date): number {
-        return -d.getTimezoneOffset() * 60 + tzDeltaMs / 1000;
-    }
-
-    function formatSimTime(d: Date): string {
-        const di = dateToDateInterval(d);
-        const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const mo = months[cs.month - 1] || 'Jan';
-        const h = cs.hour.toString().padStart(2, '0');
-        const m = cs.minute.toString().padStart(2, '0');
-        const s = Math.floor(cs.seconds).toString().padStart(2, '0');
-        let suffix = '';
-        if (cs.era === 0) {
-            suffix = ' BCE';
-        }
-        if (di < kECJulianGregorianSwitchoverTimeInterval) {
-            suffix += ' (Julian)';
-        }
-        const ms = d.getTime();
-        if (ms <= MIN_DISPLAY_DATE_MS) {
-            suffix += ' — AT LIMIT';
-        } else if (ms >= MAX_DISPLAY_DATE_MS) {
-            suffix += ' — AT LIMIT';
-        }
-        return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
-    }
-
-    /** Rebuild the transport bar buttons based on current state.
-     *  Two-row layout: top row = Now▶ and/or ‖, bottom row = ◀ ▶ (when stopped). */
-    function renderTransport() {
-        tpTransport.innerHTML = '';
-        const isStopped = timeController.isStopped;
-
-        // Top row: Now▶ (when overridden) and/or ‖ (when running)
-        const topRow = document.createElement('div');
-        topRow.className = 'tp-transport-row';
-
-        if (!timeController.isRealTime) {
-            const nowBtn = document.createElement('button');
-            nowBtn.className = 'tp-btn';
-            nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">▶</span>';
-            nowBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                nowClicked();
-            });
-            topRow.appendChild(nowBtn);
-        }
-
-        if (!isStopped) {
-            const pauseBtn = document.createElement('button');
-            pauseBtn.className = 'tp-btn active';
-            pauseBtn.textContent = '‖';
-            pauseBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                timeController.stop();
-                rebuildEnvironments();
-                finishAllAnimations();
-                resetAllSchedules();
-                updateTimeUI();
-                ensureSchedulerRunning();
-                writeTimeState();
-            });
-            topRow.appendChild(pauseBtn);
-        }
-
-        if (topRow.childNodes.length > 0) {
-            tpTransport.appendChild(topRow);
-        }
-
-        // Bottom row: ◀ ▶ direction buttons (only when stopped)
-        if (isStopped) {
-            const bottomRow = document.createElement('div');
-            bottomRow.className = 'tp-transport-row';
-
-            const revBtn = document.createElement('button');
-            revBtn.className = 'tp-btn';
-            revBtn.textContent = '◀';
-            revBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                timeController.setDirection(-1);
-                timeController.setRate(null);
-                resetAllSchedules();
-                updateTimeUI();
-                ensureSchedulerRunning();
-                writeTimeState();
-            });
-
-            const fwdBtn = document.createElement('button');
-            fwdBtn.className = 'tp-btn';
-            fwdBtn.textContent = '▶';
-            fwdBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                timeController.setDirection(1);
-                timeController.setRate(null);
-                resetAllSchedules();
-                updateTimeUI();
-                ensureSchedulerRunning();
-                writeTimeState();
-            });
-
-            bottomRow.appendChild(revBtn);
-            bottomRow.appendChild(fwdBtn);
-            tpTransport.appendChild(bottomRow);
-        }
-    }
-
-    function updateTimeUI() {
-        const isReal = timeController.isRealTime;
-
-        // Toggle overridden class to show/hide offset, rate, "Now" button
-        timeBar.classList.toggle('overridden', !isReal);
-
-        // Always update the displayed time
-        const sim = timeController.getDisplayTime();
-        timeBarDate.textContent = formatSimTime(sim);
-
-        // Toggle at-limit class for boundary indicator (pulsing amber background)
-        const simMs = sim.getTime();
-        const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
-        timeBar.classList.toggle('at-limit', atLimit);
-
-        if (!isReal) {
-            timeBarRate.textContent = timeController.statusLabel;
-            timeBarOffset.textContent = formatOffset(sim, new Date());
-        }
-        tpRateLabel.textContent = timeController.statusLabel;
-
-        // Rebuild transport bar
-        renderTransport();
-
-        // Update timezone display in case DST state changed
-        updateTimezoneDisplay();
-
-        // Populate date inputs with current sim time (hybrid calendar)
-        const simDI = dateToDateInterval(sim);
-        const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
-        (document.getElementById('tp-year') as HTMLInputElement).value = simCs.year.toString();
-        (document.getElementById('tp-month') as HTMLInputElement).value = simCs.month.toString();
-        (document.getElementById('tp-day') as HTMLInputElement).value = simCs.day.toString();
-        (document.getElementById('tp-hour') as HTMLInputElement).value = simCs.hour.toString();
-        (document.getElementById('tp-minute') as HTMLInputElement).value = simCs.minute.toString();
-        // Update BCE toggle state
-        const bceBtn = document.getElementById('tp-bce');
-        if (bceBtn) {
-            const isBCE = simCs.era === 0;
-            bceBtn.textContent = isBCE ? 'BCE' : 'CE';
-            bceBtn.classList.toggle('active', isBCE);
-        }
-    }
-
-    /** Format the difference between sim and real time as a human-readable string.
-     *  Uses calendar-based differencing for years and months. */
-    function formatOffset(sim: Date, real: Date): string {
-        const ms = sim.getTime() - real.getTime();
-        const sign = ms < 0 ? '-' : '+';
-        if (Math.abs(ms) < 2000) return '';
-
-        // Use hybrid calendar decomposition for year/month differencing
-        const fromMs = (ms < 0 ? sim : real).getTime();
-        const toMs   = (ms < 0 ? real : sim).getTime();
-        const from = new Date(Math.floor(fromMs / 1000) * 1000);
-        const to   = new Date(Math.floor(toMs / 1000) * 1000);
-
-        const fromDI = dateToDateInterval(from);
-        const toDI = dateToDateInterval(to);
-        const fromCs = localComponentsFromTimeInterval(fromDI, 0);
-        const toCs = localComponentsFromTimeInterval(toDI, 0);
-
-        // Calendar difference: years, months
-        const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
-        const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
-        let years = toSigned - fromSigned;
-        let months = toCs.month - fromCs.month;
-        if (months < 0) { years--; months += 12; }
-
-        // Estimate cursor after year+month offset, then compute remaining seconds
-        // Use a simple approximation: recompose fromDate + years/months
-        let cursorDI = fromDI;
-        if (years > 0 || months > 0) {
-            // Build approximate cursor from fromCs + offset
-            let cursorSigned = fromSigned + years;
-            let cursorMonth = fromCs.month + months;
-            if (cursorMonth > 12) { cursorSigned++; cursorMonth -= 12; }
-            const cursorEra = cursorSigned <= 0 ? 0 : 1;
-            const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
-            cursorDI = timeIntervalFromLocalComponents(
-                0, cursorEra, cursorYear, cursorMonth, fromCs.day,
-                fromCs.hour, fromCs.minute, fromCs.seconds,
-            );
-            if (cursorDI > toDI) {
-                months--;
-                if (months < 0) { years--; months += 12; }
-                cursorSigned = fromSigned + years;
-                cursorMonth = fromCs.month + months;
-                if (cursorMonth > 12) { cursorSigned++; cursorMonth -= 12; }
-                if (cursorMonth < 1) { cursorSigned--; cursorMonth += 12; }
-                const ce = cursorSigned <= 0 ? 0 : 1;
-                const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
-                cursorDI = timeIntervalFromLocalComponents(
-                    0, ce, cy, cursorMonth, fromCs.day,
-                    fromCs.hour, fromCs.minute, fromCs.seconds,
-                );
-            }
-        }
-
-        let remainSec = Math.round(toDI - cursorDI);
-
-        let days: number, hrs: number, mins: number, sec: number;
-        if (years > 0 || months > 0) {
-            remainSec = Math.round(remainSec / 3600) * 3600;
-            days = Math.floor(remainSec / 86400); remainSec %= 86400;
-            hrs  = Math.floor(remainSec / 3600);
-            mins = 0; sec = 0;
-        } else if (remainSec >= 86400) {
-            remainSec = Math.round(remainSec / 60) * 60;
-            days = Math.floor(remainSec / 86400); remainSec %= 86400;
-            hrs  = Math.floor(remainSec / 3600);  remainSec %= 3600;
-            mins = Math.floor(remainSec / 60);
-            sec  = 0;
-        } else {
-            days = 0;
-            hrs  = Math.floor(remainSec / 3600);  remainSec %= 3600;
-            mins = Math.floor(remainSec / 60);     remainSec %= 60;
-            sec  = remainSec;
-        }
-
-        if (hrs >= 24) { days += Math.floor(hrs / 24); hrs %= 24; }
-
-        const parts = [];
-        if (years > 0)  parts.push(`${years}y`);
-        if (months > 0) parts.push(`${months}mo`);
-        if (days > 0)   parts.push(`${days}d`);
-        if (hrs > 0)    parts.push(`${hrs}h`);
-        if (mins > 0)   parts.push(`${mins}m`);
-        if (sec > 0)    parts.push(`${sec}s`);
-        return parts.length > 0 ? `(${sign}${parts.join(' ')})` : '';
-    }
-
-    function showPopover() {
-        popoverOpen = true;
-        timePopover.style.display = '';
-        timeBarLabel.textContent = '⏱ Hide time controller';
-        timeBarLabel.classList.add('active');
-        updateTimeUI();
-        writeUrlState({ tc: true });
-        // Defer resize to next frame so the popover has been laid out
-        // (getBoundingClientRect needs the element to be rendered first)
-        requestAnimationFrame(() => {
-            if (lastContainerW > 0) {
-                onGridResize(lastContainerW, lastContainerH);
-            }
-        });
-    }
-
-    function hidePopover() {
-        popoverOpen = false;
-        timePopover.style.display = 'none';
-        timeBarLabel.textContent = '⏱ Show time controller';
-        timeBarLabel.classList.remove('active');
-        updateTimeUI();
-        writeUrlState({ tc: false });
-        // Re-layout to restore full-size faces
-        if (lastContainerW > 0) {
-            onGridResize(lastContainerW, lastContainerH);
-        }
-    }
-
-    function ensureSchedulerRunning() {
-        // Kick the scheduler if it's idle
-        if (rafId === null && idleTimerId === null) {
-            startScheduler();
-        } else if (rafId === null && timeController.needsContinuousRender) {
-            // Idle timer is set but we need continuous render now
-            stopScheduler();
-            startScheduler();
-        }
-    }
 
     /** Snap all in-flight hand animations to their targets across all faces. */
     function finishAllAnimations() {
@@ -2609,6 +2222,17 @@ async function main() {
         }
     }
 
+    function ensureSchedulerRunning() {
+        // Kick the scheduler if it's idle
+        if (rafId === null && idleTimerId === null) {
+            startScheduler();
+        } else if (rafId === null && timeController.needsContinuousRender) {
+            // Idle timer is set but we need continuous render now
+            stopScheduler();
+            startScheduler();
+        }
+    }
+
     /**
      * Write the current time state to the URL.
      * Uses 'off' for 1× forward with offset (stays valid as real time advances),
@@ -2616,17 +2240,14 @@ async function main() {
      */
     function writeTimeState() {
         if (timeController.isRealTime) {
-            // Real time — clear all time params
             writeUrlState({ t: null, off: null, dir: 1 });
         } else if (
             !timeController.isStopped &&
             timeController.currentRate === null &&
             timeController.currentDirection === 1
         ) {
-            // 1× forward with offset — store offset, clear absolute time
             writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
         } else {
-            // Stopped, reverse, or accelerated — store absolute time
             const dir = timeController.isStopped ? 0 : timeController.currentDirection;
             writeUrlState({
                 t: timeController.getDisplayTime().getTime(),
@@ -2636,349 +2257,59 @@ async function main() {
         }
     }
 
-    // --- "Time control" button (opens popover) ---
-    timeBarLabel.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (popoverOpen) {
-            hidePopover();
-        } else {
-            showPopover();
-        }
-    });
-
-    // --- Rate label click (opens popover when overridden) ---
-    timeBarRate.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (popoverOpen) {
-            hidePopover();
-        } else {
-            showPopover();
-        }
-    });
-
-    /** Reset to real time — shared by both Now buttons. */
-    function nowClicked() {
-        timeController.reset();
-        finishAllAnimations();
-        resetAllSchedules();
-        updateTimeUI();
-        stopScheduler();
-        startScheduler();
-        writeTimeState();
-    }
-
-    // --- "Now" reset button (time-bar version) ---
-    timeBarNow.addEventListener('click', (e) => {
-        e.stopPropagation();
-        nowClicked();
-    });
-
-    // --- Step buttons with hold-to-scrub ---
-    const HOLD_DELAY_MS = 300;
-    let holdTimer: ReturnType<typeof setTimeout> | null = null;
-    let holdingBtn: HTMLElement | null = null;
-
-    function startHold(btn: HTMLElement, unit: string, dir: 1 | -1) {
-        holdingBtn = btn;
-        btn.classList.add('holding');
-
-        // Set direction and start the corresponding rate
-        timeController.setDirection(dir);
-        const rateIdx = unitToRateIndex[unit];
-        if (rateIdx !== undefined) {
-            timeController.setRate(RATE_OPTIONS[rateIdx]);
-        }
-        resetAllSchedules();
-        updateTimeUI();
-        ensureSchedulerRunning();
-    }
-
-    function endHold() {
-        if (holdTimer !== null) {
-            clearTimeout(holdTimer);
-            holdTimer = null;
-        }
-        if (holdingBtn) {
-            holdingBtn.classList.remove('holding');
-            holdingBtn = null;
-
-            // Stop at current position and snap animations
+    const timeUI = initTimeControls({
+        timeController,
+        getTimezone: () => locationTimezone,
+        getTzDeltaMs: () => tzDeltaMs,
+        getLat: () => lat,
+        getLon: () => lon,
+        getSelectedBody: () => {
+            // Read from Venezia's currentPlanetNumber env variable
+            const bodyLabel = document.getElementById('tp-body-transit-label');
+            return bodyLabel ? parseInt(bodyLabel.dataset.planet || '1', 10) : undefined;
+        },
+        onTimeStep: () => {
+            finishAllAnimations();
+            resetAllSchedules();
+        },
+        onScrubStart: () => {
+            resetAllSchedules();
+        },
+        onScrubEnd: () => {
             timeController.stop();
             rebuildEnvironments();
             finishAllAnimations();
             resetAllSchedules();
-            updateTimeUI();
-            ensureSchedulerRunning();
-            // Write time state to URL on button release
-            writeTimeState();
-        }
-    }
-
-    timePopover.querySelectorAll('[data-step]').forEach(btn => {
-        const el = btn as HTMLElement;
-        const stepKey = el.dataset.step!;
-        const entry = stepMap[stepKey];
-        if (!entry) return;
-        const [unit, dir] = entry;
-        const unitName = el.dataset.unit || unit;
-
-        // Mouse events
-        el.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // Stop time and snap in-flight animations before stepping,
-            // so the scheduler doesn't fight the animation system.
-            timeController.stop();
+        },
+        onNowClicked: () => {
+            timeController.reset();
             finishAllAnimations();
-            timeController.step(unit, dir);
-            // One-shot: re-evaluate all hands with natural speed animation
-            // (null tickIntervalMs = no compression, unlike continuous scrub)
-            timeController.beginFrame();
-            const stepNow = performance.now();
-            for (const face of faces) {
-                if (!face.enabled || !face.cachesBuilt) continue;
-                resetHandSchedules(face.handStates);
-                resetLeafSchedules(face.terminatorLeaves);
-                if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-                tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
-                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-            }
-            timeController.endFrame();
-            updateTimeUI();
-            ensureSchedulerRunning();
-            // Start hold timer
-            holdTimer = setTimeout(() => {
-                holdTimer = null;
-                startHold(el, unitName, dir);
-            }, HOLD_DELAY_MS);
-        });
-
-        el.addEventListener('mouseup', (e) => {
-            e.stopPropagation();
-            endHold();
-            // Write current time state after step tap or hold release
-            writeTimeState();
-        });
-
-        el.addEventListener('mouseleave', () => {
-            endHold();
-        });
-
-        // Touch events
-        el.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // Stop time and snap in-flight animations before stepping,
-            // so the scheduler doesn't fight the animation system.
-            timeController.stop();
+            resetAllSchedules();
+            stopScheduler();
+            startScheduler();
+        },
+        onTransportChange: () => {
+            rebuildEnvironments();
             finishAllAnimations();
-            timeController.step(unit, dir);
-            // One-shot: re-evaluate all hands with natural speed animation
-            // (null tickIntervalMs = no compression, unlike continuous scrub)
-            timeController.beginFrame();
-            const stepNow = performance.now();
-            for (const face of faces) {
-                if (!face.enabled || !face.cachesBuilt) continue;
-                resetHandSchedules(face.handStates);
-                resetLeafSchedules(face.terminatorLeaves);
-                if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-                tickAnimations(face.handStates, face.env, stepNow, null, 0, dir);
-                tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-            }
-            timeController.endFrame();
-            updateTimeUI();
-            ensureSchedulerRunning();
-            holdTimer = setTimeout(() => {
-                holdTimer = null;
-                startHold(el, unitName, dir);
-            }, HOLD_DELAY_MS);
-        });
-
-        el.addEventListener('touchend', (e) => {
-            e.stopPropagation();
-            endHold();
-            // Write current time state after step tap or hold release
-            writeTimeState();
-        });
-
-        el.addEventListener('touchcancel', () => {
-            endHold();
-        });
-    });
-
-    // =========================================================================
-    // Tab switching: Date / Astro in lower panel
-    // =========================================================================
-    const tpTabDate = document.getElementById('tp-tab-date');
-    const tpTabAstro = document.getElementById('tp-tab-astro');
-    const tpTabs = timePopover.querySelectorAll('.tp-tab');
-
-    function switchTab(tabName: 'd' | 'a') {
-        if (tpTabDate && tpTabAstro) {
-            const hiding = tabName === 'a' ? tpTabDate : tpTabAstro;
-            const showing = tabName === 'a' ? tpTabAstro : tpTabDate;
-
-            // Collapse the outgoing pane instantly (no transition)
-            hiding.style.transition = 'none';
-            hiding.classList.add('tp-pane-hidden');
-            // Force reflow so the instant collapse takes effect before
-            // the incoming pane starts animating
-            void hiding.offsetHeight;
-            hiding.style.transition = '';
-
-            // Animate the incoming pane open
-            showing.classList.remove('tp-pane-hidden');
-        }
-        tpTabs.forEach(btn => {
-            const el = btn as HTMLElement;
-            el.classList.toggle('active', el.dataset.tab === (tabName === 'a' ? 'astro' : 'date'));
-        });
-        writeUrlState({ tp: tabName });
-        // Re-layout grid after the CSS transition completes (300ms)
-        // so the exclusion zone matches the final panel height.
-        if (popoverOpen && lastContainerW > 0) {
-            setTimeout(() => {
+            resetAllSchedules();
+        },
+        ensureSchedulerRunning,
+        writeTimeState,
+        onPopoverToggle: (open) => {
+            if (open) {
                 requestAnimationFrame(() => {
-                    onGridResize(lastContainerW, lastContainerH);
+                    if (lastContainerW > 0) {
+                        onGridResize(lastContainerW, lastContainerH);
+                    }
                 });
-            }, 320);
-        }
-    }
-
-    // Initialize tab from URL state
-    const initialTab = urlState.tp;
-    if (initialTab === 'a') {
-        switchTab('a');
-    }
-
-    tpTabs.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const el = btn as HTMLElement;
-            switchTab(el.dataset.tab === 'astro' ? 'a' : 'd');
-        });
+            } else {
+                if (lastContainerW > 0) {
+                    onGridResize(lastContainerW, lastContainerH);
+                }
+            }
+        },
     });
 
-    // =========================================================================
-    // Astronomical event stepper buttons
-    // =========================================================================
-    function handleAstroStep(eventType: AstroEventType, dir: 1 | -1, btnEl: HTMLElement) {
-        // Determine the body planet number for body-* events (Venezia)
-        let bodyPlanetNumber: number | undefined;
-        if (eventType === 'body-transit' || eventType === 'body-rise' || eventType === 'body-set') {
-            const bodyLabel = document.getElementById('tp-body-transit-label');
-            bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || '1', 10) : 1;
-        }
-
-        const targetDate = computeAstroTarget(
-            eventType, dir, timeController.getDisplayTime(),
-            lat * Math.PI / 180, lon * Math.PI / 180, bodyPlanetNumber,
-        );
-
-        if (!targetDate || isNaN(targetDate.getTime())) {
-            // No event found or invalid result — flash the button
-            btnEl.classList.add('flash-fail');
-            setTimeout(() => btnEl.classList.remove('flash-fail'), 300);
-            return;
-        }
-
-        // Identical to single-tap time step:
-        timeController.stop();
-        finishAllAnimations();
-        timeController.setTime(targetDate);
-        timeController.beginFrame();
-        const stepNow = performance.now();
-        for (const face of faces) {
-            if (!face.enabled || !face.cachesBuilt) continue;
-            resetHandSchedules(face.handStates);
-            resetLeafSchedules(face.terminatorLeaves);
-            if (face.analemmaState) resetAnalemmaSchedule(face.analemmaState);
-            tickAnimations(face.handStates, face.env, stepNow, null, 0, 1);
-            tickLeafAnimations(face.terminatorLeaves, face.env, stepNow, null, 0);
-        }
-        timeController.endFrame();
-        updateTimeUI();
-        ensureSchedulerRunning();
-        writeTimeState();
-    }
-
-    timePopover.querySelectorAll('[data-astro]').forEach(btn => {
-        const el = btn as HTMLElement;
-        const eventType = el.dataset.astro as AstroEventType;
-        const dir = parseInt(el.dataset.dir || '1', 10) as 1 | -1;
-
-        // Mouse events (no hold timer — tap only)
-        el.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleAstroStep(eventType, dir, el);
-        });
-
-        // Touch events
-        el.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleAstroStep(eventType, dir, el);
-        });
-    });
-
-
-    // --- Shared: read date inputs and apply via hybrid calendar ---
-    function applyDateInputs() {
-        const yr = parseInt((document.getElementById('tp-year') as HTMLInputElement).value, 10);
-        const mo = parseInt((document.getElementById('tp-month') as HTMLInputElement).value, 10);
-        const dy = parseInt((document.getElementById('tp-day') as HTMLInputElement).value, 10);
-        const hr = parseInt((document.getElementById('tp-hour') as HTMLInputElement).value, 10);
-        const mn = parseInt((document.getElementById('tp-minute') as HTMLInputElement).value, 10);
-        if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
-
-        // Read BCE toggle state
-        const bceBtn = document.getElementById('tp-bce');
-        const isBCE = bceBtn?.classList.contains('active') ?? false;
-        const era = isBCE ? 0 : 1;
-
-        // Use hybrid calendar to construct the time interval
-        // For the Apply action, use current sim time to determine which tz offset to use
-        const refDate = timeController.getDisplayTime();
-        const tzOff = targetTzOffsetSec(refDate);
-        const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
-        const d = dateIntervalToDate(di);
-        // Clamp to supported astronomical range (4000 BCE – 2800 CE)
-        const clampedMs = Math.max(MIN_DISPLAY_DATE_MS,
-                                   Math.min(MAX_DISPLAY_DATE_MS, d.getTime()));
-        timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
-        finishAllAnimations();
-        resetAllSchedules();
-        updateTimeUI();
-        stopScheduler();
-        startScheduler();
-        writeTimeState();
-    }
-
-    // Auto-apply when any date/time input changes (fires on blur / Enter)
-    ['tp-year', 'tp-month', 'tp-day', 'tp-hour', 'tp-minute'].forEach(id => {
-        document.getElementById(id)!.addEventListener('change', () => {
-            applyDateInputs();
-        });
-    });
-
-    // --- BCE toggle ---
-    const tpBce = document.getElementById('tp-bce');
-    if (tpBce) {
-        tpBce.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isActive = tpBce.classList.toggle('active');
-            tpBce.textContent = isActive ? 'BCE' : 'CE';
-            // Re-apply with the new era
-            applyDateInputs();
-        });
-    }
-
-    // --- Close button in popover ---
-    tpClose.addEventListener('click', (e) => {
-        e.stopPropagation();
-        hidePopover();
-    });
 
     // --- Info button & popup ---
     const infoBtn = document.getElementById('info-btn');
@@ -3162,7 +2493,7 @@ async function main() {
         // the frame loop handles all time bar updates with properly
         // paired sim/real timestamps to avoid offset jitter.
         if (timeController.isRealTime) {
-            timeBarDate.textContent = formatSimTime(timeController.getDisplayTime());
+            timeUI?.updateTimeUI();
         }
         const msUntilNextSecond = 1000 - (Date.now() % 1000);
         setTimeout(tickTimeBarClock, msUntilNextSecond);
@@ -4202,12 +3533,12 @@ async function main() {
 
     // Apply initial time bar styling (red text if URL set a non-real-time state)
     if (!isEmbedMode) {
-        updateTimeUI();
+        timeUI?.updateTimeUI();
     }
 
     // Show time controller if URL says so
     if (!isEmbedMode && urlState.tc) {
-        showPopover();
+        timeUI?.showPopover();
     }
 
     // Show location prompt if no location was available

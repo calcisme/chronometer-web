@@ -644,28 +644,42 @@ export function updateObsValues(
     getNow: () => Date,
     tickIntervalMs: number | null = null,
     displayDeltaPerTickSec: number = 0,
-    timeDirection: 1 | -1 = 1,
+    timeDirection: 0 | 1 | -1 = 1,
 ): void {
     const all = getAllValues(vs);
     for (const v of all) {
         if (perfNow >= v.nextUpdateTime) {
             if (tickIntervalMs !== null && tickIntervalMs > 0) {
                 // Scrub mode: compress as needed
-                updateObsValueScrub(v, env, perfNow, getNow, timeDirection,
+                // (timeDirection is always 1 or -1 in scrub mode)
+                updateObsValueScrub(v, env, perfNow, getNow,
+                    (timeDirection || 1) as 1 | -1,
                     tickIntervalMs, displayDeltaPerTickSec);
-            } else if (v.naturalSpeed > 0) {
+            } else if (v.naturalSpeed > 0 && timeDirection !== 0) {
                 // 1×/−1× mode, natural speed: two-phase animation
                 updateNaturalSpeedValue(v, env, perfNow, getNow, timeDirection);
             } else {
-                // 1×/−1× mode, normal: snap-to-target at animSpeed
+                // Snap-to-target at animSpeed.
+                // This branch handles:
+                //   - Normal values (naturalSpeed === 0)
+                //   - Natural-speed values when time is stopped
+                //     (timeDirection === 0, no forward projection)
                 const newTarget = evalAttr(v.expr, env);
-                const nextDisplayMs = computeNextBoundary(
-                    v.updateInterval * 1000, getNow, timeDirection, env);
-                v.nextUpdateDisplayTime = nextDisplayMs;
-                v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
-                v.pendingSweep = null;
-                const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
-                startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+                if (timeDirection === 0) {
+                    // Stopped: snap and re-check shortly (time may resume)
+                    v.nextUpdateTime = perfNow + 100;
+                    v.pendingSweep = null;
+                    startAnimationRaw(v.anim, newTarget, perfNow,
+                        v.animSpeed / K_ANGLE_ANIM_SPEED);
+                } else {
+                    const nextDisplayMs = computeNextBoundary(
+                        v.updateInterval * 1000, getNow, timeDirection, env);
+                    v.nextUpdateDisplayTime = nextDisplayMs;
+                    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
+                    v.pendingSweep = null;
+                    const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+                    startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+                }
             }
         }
     }

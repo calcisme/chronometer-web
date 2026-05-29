@@ -1,0 +1,428 @@
+      /* ============= Time Controller ============= */
+
+      /* Time bar (always visible, between watch-grid and location-panel) */
+      #time-bar {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 5px 16px;
+          font-size: 13px;
+          border-top: 1px solid #2a2a3e;
+          background: rgba(25, 25, 42, 0.9);
+          color: #99b;
+          font-family: monospace;
+          user-select: none;
+      }
+
+      #time-bar-label {
+          background: rgba(42, 42, 62, 0.85);
+          border: 1px solid #3a3a5e;
+          border-radius: 16px;
+          color: #99b;
+          font-size: 13px;
+          padding: 4px 16px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s;
+      }
+
+      #time-bar-label:hover {
+          background: rgba(60, 60, 90, 0.95);
+          color: #ccf;
+      }
+
+      #time-bar-label.active {
+          background: #99b;
+          color: #1a1a2e;
+          border-color: #99b;
+      }
+
+      #time-bar-label.active:hover {
+          background: #bbf;
+          color: #1a1a2e;
+      }
+
+      #time-bar-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
+
+
+      #time-bar-date {
+          color: #99b;
+      }
+
+      #time-bar.overridden #time-bar-date {
+          color: #f66;
+          font-weight: 600;
+      }
+
+      #time-bar-offset {
+          color: #f99;
+          font-size: 12px;
+          display: none;
+      }
+
+      #time-bar.overridden #time-bar-offset {
+          display: inline;
+      }
+
+      #time-bar-rate {
+          color: #f88;
+          font-weight: 600;
+          cursor: pointer;
+          display: none;
+      }
+
+      #time-bar.overridden #time-bar-rate {
+          display: inline;
+      }
+
+      .time-bar-btn {
+          background: #2a2a3e;
+          border: 1px solid #444;
+          border-radius: 4px;
+          color: #aac;
+          font-size: 12px;
+          padding: 2px 10px;
+          cursor: pointer;
+          transition: background 0.15s;
+          display: none;
+      }
+
+      #time-bar.overridden .time-bar-btn {
+          display: inline-block;
+      }
+
+      .time-bar-btn:hover {
+          background: #3a3a5e;
+          color: #ddf;
+      }
+
+      /* Boundary limit indicator — static amber */
+      #time-bar.at-limit {
+          background: rgba(100, 60, 0, 0.92);
+      }
+
+      #time-bar.at-limit #time-bar-date {
+          color: #fc0 !important;
+          font-weight: 700;
+      }
+
+      /* Popover */
+      /* ---- L-shaped time popover ---- */
+      #time-popover {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          z-index: 30;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          background: none;
+          /* sections carry their own bg */
+          overflow: visible;
+          /* close btn floats above */
+          padding: 0;
+          pointer-events: none;
+      }
+
+      /* Close button: floats above popover top edge */
+      #tp-close {
+          position: absolute;
+          top: -26px;
+          right: 4px;
+          background: rgba(26, 26, 46, 0.85);
+          border: 1px solid #3a3a5e;
+          border-radius: 50%;
+          color: #667;
+          font-size: 14px;
+          width: 24px;
+          height: 24px;
+          cursor: pointer;
+          padding: 0;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: color 0.15s, background 0.15s;
+          z-index: 31;
+          pointer-events: auto;
+      }
+
+      #tp-close:hover {
+          color: #ccf;
+          background: rgba(50, 50, 80, 0.95);
+      }
+
+      /* Upper section: narrow, right-aligned */
+      #tp-upper {
+          width: 120px;
+          padding: 10px 10px 6px;
+          background: rgba(26, 26, 46, 0.96);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid #3a3a5e;
+          border-radius: 14px 0 0 0;
+          border-bottom: none;
+          box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
+          pointer-events: auto;
+      }
+
+      /* Lower section: full width */
+      #tp-lower {
+          width: 100%;
+          min-width: 200px;
+          padding: 8px 14px 12px;
+          background: rgba(26, 26, 46, 0.96);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid #3a3a5e;
+          border-radius: 14px 0 0 0;
+          border-top: 1px solid #3a3a5e;
+          box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.5);
+          pointer-events: auto;
+      }
+
+      .tp-label {
+          font-size: 10px;
+          text-transform: uppercase;
+          color: #667;
+          letter-spacing: 0.5px;
+          margin-bottom: 5px;
+          text-align: center;
+      }
+
+      #tp-upper .tp-label {
+          margin-top: 8px;
+      }
+
+      .tp-btn {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          border-radius: 6px;
+          color: #99b;
+          font-size: 12px;
+          padding: 5px 8px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+          min-width: 32px;
+          text-align: center;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .tp-btn:hover {
+          background: #3a3a5e;
+          color: #ccf;
+      }
+
+      .tp-btn.active {
+          background: #445;
+          border-color: #8af;
+          color: #8af;
+      }
+
+      /* Step buttons: 2 per row, fill equally */
+      .tp-step-row {
+          display: flex;
+          gap: 3px;
+          margin-bottom: 3px;
+      }
+
+      .tp-step-row .tp-btn {
+          flex: 1;
+          font-size: 11px;
+          padding: 4px 2px;
+      }
+
+      .tp-btn.holding {
+          background: #556;
+          border-color: #8af;
+          color: #ccf;
+      }
+
+      /* Transport: flex column with sub-rows */
+      .tp-transport {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+      }
+
+      .tp-transport-row {
+          display: flex;
+          gap: 3px;
+          justify-content: center;
+      }
+
+      .tp-transport .tp-btn {
+          font-size: 13px;
+          padding: 4px 10px;
+          flex: 1;
+      }
+
+      #tp-rate-label {
+          font-size: 11px;
+          color: #8af;
+          text-align: center;
+          margin-top: 4px;
+          margin-bottom: 2px;
+      }
+
+      .tp-date-inputs {
+          display: flex;
+          gap: 4px;
+          margin-bottom: 4px;
+      }
+
+      .tp-date-inputs input {
+          width: 52px;
+          padding: 4px 5px;
+          border: 1px solid #444;
+          border-radius: 4px;
+          background: #2a2a3e;
+          color: #ddd;
+          font-size: 13px;
+          font-family: monospace;
+          text-align: center;
+          -moz-appearance: textfield;
+      }
+
+      .tp-date-inputs input::-webkit-outer-spin-button,
+      .tp-date-inputs input::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+      }
+
+      .tp-date-inputs input:first-child {
+          width: 58px;
+      }
+
+      /* BCE toggle */
+      #tp-bce {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          border-radius: 4px;
+          color: #99b;
+          font-size: 10px;
+          padding: 4px 5px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+          line-height: 1;
+          flex-shrink: 0;
+          width: 58px;
+      }
+
+      #tp-bce:hover {
+          color: #ccf;
+      }
+
+      #tp-bce.active {
+          background: #2a2a3e;
+          border-color: #a44;
+          color: #f44;
+      }
+
+      /* YYYY */
+
+      /* ============= Tab strip for lower panel ============= */
+
+      #tp-tabs {
+          display: flex;
+          gap: 0;
+          margin-bottom: 8px;
+      }
+
+      .tp-tab {
+          flex: 1;
+          background: #222238;
+          border: 1px solid #3a3a5e;
+          color: #667;
+          font-size: 11px;
+          padding: 5px 8px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          text-align: center;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      .tp-tab:first-child {
+          border-radius: 6px 0 0 6px;
+          border-right: none;
+      }
+
+      .tp-tab:last-child {
+          border-radius: 0 6px 6px 0;
+      }
+
+      .tp-tab.active {
+          background: #2a2a3e;
+          border-color: #8af;
+          color: #8af;
+      }
+
+      .tp-tab:hover:not(.active) {
+          color: #99b;
+          background: #2a2a44;
+      }
+
+      .tp-tab-pane {
+          display: grid;
+          grid-template-rows: 1fr;
+          transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
+          opacity: 1;
+      }
+
+      .tp-tab-pane>* {
+          overflow: hidden;
+          /* children clip during collapse */
+      }
+
+      .tp-tab-pane.tp-pane-hidden {
+          grid-template-rows: 0fr;
+          opacity: 0;
+          pointer-events: none;
+      }
+
+      /* ============= Astro stepper rows ============= */
+
+      .tp-astro-row {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-bottom: 3px;
+      }
+
+      .tp-astro-btn {
+          flex: 0 0 auto;
+          font-size: 11px;
+          padding: 4px 8px;
+          min-width: 28px;
+      }
+
+      .tp-astro-label {
+          flex: 1;
+          font-size: 12px;
+          color: #99b;
+          text-align: center;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      /* Highlighted body name on Venezia */
+      .tp-body-label {
+          color: #8af;
+      }
+
+      .tp-astro-btn.flash-fail {
+          background: #432;
+          border-color: #754;
+          color: #a86;
+          transition: none;
+      }
+

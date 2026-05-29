@@ -886,7 +886,7 @@
           margin-top: 8px;
       }
 
-      /* ============= Time Controller ============= */
+            /* ============= Time Controller ============= */
 
       /* Time bar (always visible, between watch-grid and location-panel) */
       #time-bar {
@@ -1314,6 +1314,8 @@
           transition: none;
       }
 
+
+
       /* ============= Vienna Noon Toggle ============= */
 
       #vienna-noon-toggle {
@@ -1699,7 +1701,7 @@
               <div id="help-content">
                 <!-- Populated from help-template on first info click -->
               </div>
-              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.142</div>
+              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.147</div>
             </div>
 
             <div id="info-sub-view">
@@ -1947,7 +1949,7 @@ represents daytime) is reproduced on all the rings.
           Constant hand rate
         </button>
       </div>
-      <div id="time-bar">
+            <div id="time-bar">
         <button id="time-bar-label">⏱ Show time controller</button>
         <span id="time-bar-info">
           <span id="time-bar-date"></span>
@@ -1956,109 +1958,6 @@ represents daytime) is reproduced on all the rings.
         </span>
         <button class="time-bar-btn" id="time-bar-now">Now</button>
       </div>
-      <div id="location-panel">
-        <div id="location-info">
-          <div id="location-info-row">
-            <span id="location-display"></span>
-            <span id="location-source"></span>
-          </div>
-          <span id="location-tz"></span>
-        </div>
-        <button id="set-location-btn">Location</button>
-      </div>
-
-      <!-- Location prompt overlay (hidden by default) -->
-<div id="location-prompt" style="display: none">
-  <div class="lp-backdrop"></div>
-  <div class="lp-dialog">
-    <h3 class="lp-title">Location</h3>
-
-    <!-- Current location status (map + name) — shown at top when we have a location -->
-    <div class="lp-status-section" id="lp-status-section">
-      <div class="lp-map-row" id="lp-map-row">
-        <canvas id="lp-globe" width="100" height="100"></canvas>
-        <div class="lp-osm-container" id="lp-osm-container">
-          <img id="lp-osm-tile" alt="" />
-          <div class="lp-map-marker" id="lp-map-marker"></div>
-          <div class="lp-osm-offline" id="lp-osm-offline" style="display: none">
-            (offline)
-          </div>
-        </div>
-      </div>
-      <div class="lp-map-attribution" id="lp-osm-attribution">
-        ©
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noopener"
-          >OpenStreetMap</a
-        >
-        contributors
-      </div>
-      <div class="lp-location-name" id="lp-location-name"></div>
-      <div class="lp-location-tz" id="lp-location-tz"></div>
-    </div>
-
-    <!-- "No location set yet" placeholder -->
-    <div class="lp-no-location" id="lp-no-location">
-      <div
-        class="lp-no-location-hint"
-        id="lp-no-location-hint"
-        style="display: none"
-      >
-        <div class="lp-hint-icon">📍</div>
-        <div class="lp-hint-text">No location specified via URL</div>
-        <div class="lp-hint-sub">
-          To skip this dialog in the future, bookmark the page after selecting a
-          location below
-        </div>
-      </div>
-      <div class="lp-no-location-text" id="lp-no-location-default">
-        No location set yet
-      </div>
-    </div>
-
-    <div class="lp-search-section">
-      <div class="lp-search-label">City search</div>
-      <div class="lp-search-input-wrap">
-        <input
-          type="text"
-          id="lp-city-input"
-          placeholder="Search city or airport code…"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-        />
-      </div>
-      <div id="lp-city-results"></div>
-    </div>
-    <div class="lp-browser-section">
-      <button class="lp-btn" id="lp-use-browser">
-        Use device location via browser
-      </button>
-    </div>
-    <div class="lp-manual-section">
-      <div class="lp-search-label">Manual coordinates</div>
-      <div class="lp-inputs">
-        <label
-          >Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"
-        /></label>
-        <label
-          >Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"
-        /></label>
-      </div>
-      <div class="lp-buttons">
-        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
-      </div>
-    </div>
-    <div class="lp-dialog-footer">
-      <button class="lp-btn lp-btn-done" id="lp-done">Done</button>
-    </div>
-  </div>
-</div>
-
-
 
       <!-- Time controller popover (L-shaped) -->
       <div id="time-popover" style="display: none">
@@ -2359,6 +2258,111 @@ represents daytime) is reproduced on all the rings.
           </div>
         </div>
       </div>
+
+      <div id="location-panel">
+        <div id="location-info">
+          <div id="location-info-row">
+            <span id="location-display"></span>
+            <span id="location-source"></span>
+          </div>
+          <span id="location-tz"></span>
+        </div>
+        <button id="set-location-btn">Location</button>
+      </div>
+
+      <!-- Location prompt overlay (hidden by default) -->
+<div id="location-prompt" style="display: none">
+  <div class="lp-backdrop"></div>
+  <div class="lp-dialog">
+    <h3 class="lp-title">Location</h3>
+
+    <!-- Current location status (map + name) — shown at top when we have a location -->
+    <div class="lp-status-section" id="lp-status-section">
+      <div class="lp-map-row" id="lp-map-row">
+        <canvas id="lp-globe" width="100" height="100"></canvas>
+        <div class="lp-osm-container" id="lp-osm-container">
+          <img id="lp-osm-tile" alt="" />
+          <div class="lp-map-marker" id="lp-map-marker"></div>
+          <div class="lp-osm-offline" id="lp-osm-offline" style="display: none">
+            (offline)
+          </div>
+        </div>
+      </div>
+      <div class="lp-map-attribution" id="lp-osm-attribution">
+        ©
+        <a
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noopener"
+          >OpenStreetMap</a
+        >
+        contributors
+      </div>
+      <div class="lp-location-name" id="lp-location-name"></div>
+      <div class="lp-location-tz" id="lp-location-tz"></div>
+    </div>
+
+    <!-- "No location set yet" placeholder -->
+    <div class="lp-no-location" id="lp-no-location">
+      <div
+        class="lp-no-location-hint"
+        id="lp-no-location-hint"
+        style="display: none"
+      >
+        <div class="lp-hint-icon">📍</div>
+        <div class="lp-hint-text">No location specified via URL</div>
+        <div class="lp-hint-sub">
+          To skip this dialog in the future, bookmark the page after selecting a
+          location below
+        </div>
+      </div>
+      <div class="lp-no-location-text" id="lp-no-location-default">
+        No location set yet
+      </div>
+    </div>
+
+    <div class="lp-search-section">
+      <div class="lp-search-label">City search</div>
+      <div class="lp-search-input-wrap">
+        <input
+          type="text"
+          id="lp-city-input"
+          placeholder="Search city or airport code…"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+      </div>
+      <div id="lp-city-results"></div>
+    </div>
+    <div class="lp-browser-section">
+      <button class="lp-btn" id="lp-use-browser">
+        Use device location via browser
+      </button>
+    </div>
+    <div class="lp-manual-section">
+      <div class="lp-search-label">Manual coordinates</div>
+      <div class="lp-inputs">
+        <label
+          >Lat: <input id="lp-lat" type="text" placeholder="e.g. 37.335"
+        /></label>
+        <label
+          >Lon: <input id="lp-lon" type="text" placeholder="e.g. -122.009"
+        /></label>
+      </div>
+      <div class="lp-buttons">
+        <button class="lp-btn" id="lp-use-coords">Use coordinates</button>
+      </div>
+    </div>
+    <div class="lp-dialog-footer">
+      <button class="lp-btn lp-btn-done" id="lp-done">Done</button>
+    </div>
+  </div>
+</div>
+
+
+
     </div>
         <script src="chronometer-engine.js"></script>
     <script src="face-miami.js"></script>

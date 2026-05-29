@@ -77,6 +77,27 @@
 
       /* ── Location dialog injection ─────────────────── */
       {{LOCATION_CSS}}
+
+      /* ── Time controller injection ──────────────────── */
+      {{TIME_CSS}}
+
+      /* Override time-bar styling for Observatory's dark overlay */
+      #time-bar {
+          position: fixed;
+          bottom: 36px;
+          left: 0;
+          right: 0;
+          z-index: 10;
+          background: rgba(0, 0, 0, 0.5);
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      #time-popover {
+          position: fixed;
+          bottom: 64px;
+          right: 12px;
+          z-index: 20;
+      }
     </style>
   </head>
   <body>
@@ -89,6 +110,8 @@
     </div>
 
     {{LOCATION_DIALOG}}
+
+    {{TIME_CONTROLLER}}
 
     <script src="observatory-engine.js"></script>
   </body>

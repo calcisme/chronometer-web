@@ -10591,9 +10591,9 @@
       val.animating = false;
       return;
     }
-    const TWO_PI10 = 2 * Math.PI;
+    const TWO_PI11 = 2 * Math.PI;
     let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI10 * Math.round(delta / TWO_PI10);
+    delta = delta - TWO_PI11 * Math.round(delta / TWO_PI11);
     val.currentValue = newTarget - delta;
     startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
   }
@@ -13989,6 +13989,14 @@
   }
 
   // src/shared/time-controller.ts
+  var RATE_OPTIONS = [
+    { label: "10\xD7", unit: "second" },
+    { label: "10 min/s", unit: "minute" },
+    { label: "10 hr/s", unit: "hour" },
+    { label: "10 day/s", unit: "day" },
+    { label: "10 mo/s", unit: "month" },
+    { label: "10 yr/s", unit: "year" }
+  ];
   var TICK_INTERVAL_MS = 100;
   function displaySecondsPerTick(unit) {
     switch (unit) {
@@ -14397,8 +14405,722 @@
     }
   };
 
-  // src/observatory/layout.ts
+  // src/shared/astro-stepper.ts
+  var FUDGE_SECONDS = 5;
+  var TRANSIT_FUDGE_SECONDS = 12 * 3600;
+  var LOOKAHEAD_SECONDS = 3600 * 13.2;
   var TWO_PI5 = 2 * Math.PI;
+  var HALF_PI = Math.PI / 2;
+  function findNextRiseSet(riseNotSet, planetNumber, displayTime, direction, lat2, lon2) {
+    const calculationDI = dateToDateInterval(displayTime);
+    const searchForward = direction === 1;
+    const fudge = searchForward ? FUDGE_SECONDS : -FUDGE_SECONDS;
+    const lookahead = searchForward ? LOOKAHEAD_SECONDS : -LOOKAHEAD_SECONDS;
+    const fudgeDate = calculationDI + fudge;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat2, lon2, !searchForward);
+    try {
+      const result = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        lat2,
+        lon2,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result.riseSetTime)) {
+        return null;
+      }
+      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
+      if (inRightDirection) {
+        return dateIntervalToDate(result.riseSetTime);
+      }
+      const tryDate = fudgeDate + lookahead;
+      releaseCachePool(pool);
+      initializeCachePool(pool, tryDate, lat2, lon2, !searchForward);
+      const result2 = planetaryRiseSetTimeRefined(
+        tryDate,
+        lat2,
+        lon2,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result2.riseSetTime)) {
+        return null;
+      }
+      return dateIntervalToDate(result2.riseSetTime);
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function findNextQuarterPhase(displayTime, direction) {
+    const di = dateToDateInterval(displayTime);
+    const { age } = moonAge(di, null);
+    const runningBackward = direction === -1;
+    const fudgeFactor = runningBackward ? -0.01 : 0.01;
+    const ageSinceQuarter = fmod(age + fudgeFactor, HALF_PI);
+    const ageAtLastQuarter = age + fudgeFactor - ageSinceQuarter;
+    let targetAge = runningBackward ? ageAtLastQuarter : ageAtLastQuarter + HALF_PI;
+    if (targetAge > 15 / 8 * Math.PI) {
+      targetAge -= TWO_PI5;
+    }
+    const phaseDI = refineMoonAgeTargetForDate(di, targetAge);
+    return dateIntervalToDate(phaseDI);
+  }
+  function findNextTransit(planetNumber, displayTime, direction, lat2, lon2) {
+    const di = dateToDateInterval(displayTime);
+    const fudgeDate = di + direction * TRANSIT_FUDGE_SECONDS;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat2, lon2, direction === -1);
+    try {
+      const result = planettransitTimeRefined(
+        fudgeDate,
+        lat2,
+        lon2,
+        true,
+        planetNumber,
+        pool
+      );
+      const delta = result - di;
+      const inRightDirection = direction === 1 ? delta > 60 : delta < -60;
+      if (inRightDirection) {
+        return dateIntervalToDate(result);
+      }
+      releaseCachePool(pool);
+      const retryDate = di + direction * 86400;
+      initializeCachePool(pool, retryDate, lat2, lon2, direction === -1);
+      const result2 = planettransitTimeRefined(
+        retryDate,
+        lat2,
+        lon2,
+        true,
+        planetNumber,
+        pool
+      );
+      return dateIntervalToDate(result2);
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function computeAstroTarget(eventType, direction, displayTime, lat2, lon2, bodyPlanetNumber) {
+    switch (eventType) {
+      case "sunrise":
+        return findNextRiseSet(true, 0 /* Sun */, displayTime, direction, lat2, lon2);
+      case "sunset":
+        return findNextRiseSet(false, 0 /* Sun */, displayTime, direction, lat2, lon2);
+      case "moonrise":
+        return findNextRiseSet(true, 1 /* Moon */, displayTime, direction, lat2, lon2);
+      case "moonset":
+        return findNextRiseSet(false, 1 /* Moon */, displayTime, direction, lat2, lon2);
+      case "moonphase":
+        return findNextQuarterPhase(displayTime, direction);
+      case "sun-transit":
+        return findNextTransit(0 /* Sun */, displayTime, direction, lat2, lon2);
+      case "moon-transit":
+        return findNextTransit(1 /* Moon */, displayTime, direction, lat2, lon2);
+      case "body-rise":
+        if (bodyPlanetNumber === void 0) return null;
+        return findNextRiseSet(true, bodyPlanetNumber, displayTime, direction, lat2, lon2);
+      case "body-set":
+        if (bodyPlanetNumber === void 0) return null;
+        return findNextRiseSet(false, bodyPlanetNumber, displayTime, direction, lat2, lon2);
+      case "body-transit":
+        if (bodyPlanetNumber === void 0) return null;
+        return findNextTransit(bodyPlanetNumber, displayTime, direction, lat2, lon2);
+      default:
+        return null;
+    }
+  }
+
+  // src/shared/time-controls-ui.ts
+  var unitToRateIndex = {
+    "minute": 1,
+    // 10 min/s
+    "hour": 2,
+    // 10 hr/s
+    "day": 3,
+    // 10 day/s
+    "month": 4,
+    // 10 mo/s
+    "year": 5
+    // 10 yr/s
+  };
+  var stepMap = {
+    "-year": ["year", -1],
+    "-month": ["month", -1],
+    "-day": ["day", -1],
+    "-hour": ["hour", -1],
+    "-minute": ["minute", -1],
+    "+minute": ["minute", 1],
+    "+hour": ["hour", 1],
+    "+day": ["day", 1],
+    "+month": ["month", 1],
+    "+year": ["year", 1]
+  };
+  function initTimeControls(config) {
+    const {
+      timeController: timeController2,
+      getTimezone,
+      getTzDeltaMs,
+      getLat,
+      getLon,
+      getSelectedBody,
+      onTimeStep,
+      onScrubStart,
+      onScrubEnd,
+      onNowClicked,
+      onTransportChange,
+      ensureSchedulerRunning,
+      writeTimeState,
+      onPopoverToggle
+    } = config;
+    const _timeBar = document.getElementById("time-bar");
+    const _timeBarLabel = document.getElementById("time-bar-label");
+    const _timeBarDate = document.getElementById("time-bar-date");
+    const _timeBarOffset = document.getElementById("time-bar-offset");
+    const _timeBarRate = document.getElementById("time-bar-rate");
+    const _timeBarNow = document.getElementById("time-bar-now");
+    const _timePopover = document.getElementById("time-popover");
+    const _tpRateLabel = document.getElementById("tp-rate-label");
+    const _tpTransport = document.getElementById("tp-transport");
+    const _tpClose = document.getElementById("tp-close");
+    if (!_timeBar || !_timeBarLabel || !_timeBarDate || !_timeBarOffset || !_timeBarRate || !_timeBarNow || !_timePopover || !_tpRateLabel || !_tpTransport || !_tpClose) {
+      console.warn("[TimeControlsUI] Required DOM elements not found");
+      return null;
+    }
+    const timeBar = _timeBar;
+    const timeBarLabel = _timeBarLabel;
+    const timeBarDate = _timeBarDate;
+    const timeBarOffset = _timeBarOffset;
+    const timeBarRate = _timeBarRate;
+    const timeBarNow = _timeBarNow;
+    const timePopover = _timePopover;
+    const tpRateLabel = _tpRateLabel;
+    const tpTransport = _tpTransport;
+    const tpClose = _tpClose;
+    const locationTzLabel = document.getElementById("location-tz");
+    const lpLocationTz = document.getElementById("lp-location-tz");
+    let popoverOpen = false;
+    function toTzDate(d) {
+      const delta = getTzDeltaMs();
+      return delta !== 0 ? new Date(d.getTime() + delta) : d;
+    }
+    function fromTzDate(d) {
+      const delta = getTzDeltaMs();
+      return delta !== 0 ? new Date(d.getTime() - delta) : d;
+    }
+    function targetTzOffsetSec(d) {
+      return -d.getTimezoneOffset() * 60 + getTzDeltaMs() / 1e3;
+    }
+    function formatSimTime(d) {
+      const di = dateToDateInterval(d);
+      const cs = localComponentsFromTimeInterval(di, targetTzOffsetSec(d));
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const mo = months[cs.month - 1] || "Jan";
+      const h = cs.hour.toString().padStart(2, "0");
+      const m = cs.minute.toString().padStart(2, "0");
+      const s = Math.floor(cs.seconds).toString().padStart(2, "0");
+      let suffix = "";
+      if (cs.era === 0) {
+        suffix = " BCE";
+      }
+      if (di < kECJulianGregorianSwitchoverTimeInterval) {
+        suffix += " (Julian)";
+      }
+      const ms = d.getTime();
+      if (ms <= MIN_DISPLAY_DATE_MS) {
+        suffix += " \u2014 AT LIMIT";
+      } else if (ms >= MAX_DISPLAY_DATE_MS) {
+        suffix += " \u2014 AT LIMIT";
+      }
+      return `${mo} ${cs.day}, ${cs.year}${suffix}  ${h}:${m}:${s}`;
+    }
+    function formatOffset(sim, real) {
+      const ms = sim.getTime() - real.getTime();
+      const sign = ms < 0 ? "-" : "+";
+      if (Math.abs(ms) < 2e3) return "";
+      const fromMs = (ms < 0 ? sim : real).getTime();
+      const toMs = (ms < 0 ? real : sim).getTime();
+      const from = new Date(Math.floor(fromMs / 1e3) * 1e3);
+      const to = new Date(Math.floor(toMs / 1e3) * 1e3);
+      const fromDI = dateToDateInterval(from);
+      const toDI = dateToDateInterval(to);
+      const fromCs = localComponentsFromTimeInterval(fromDI, 0);
+      const toCs = localComponentsFromTimeInterval(toDI, 0);
+      const fromSigned = fromCs.era === 0 ? -fromCs.year : fromCs.year;
+      const toSigned = toCs.era === 0 ? -toCs.year : toCs.year;
+      let years = toSigned - fromSigned;
+      let months = toCs.month - fromCs.month;
+      if (months < 0) {
+        years--;
+        months += 12;
+      }
+      let cursorDI = fromDI;
+      if (years > 0 || months > 0) {
+        let cursorSigned = fromSigned + years;
+        let cursorMonth = fromCs.month + months;
+        if (cursorMonth > 12) {
+          cursorSigned++;
+          cursorMonth -= 12;
+        }
+        const cursorEra = cursorSigned <= 0 ? 0 : 1;
+        const cursorYear = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+        cursorDI = timeIntervalFromLocalComponents(
+          0,
+          cursorEra,
+          cursorYear,
+          cursorMonth,
+          fromCs.day,
+          fromCs.hour,
+          fromCs.minute,
+          fromCs.seconds
+        );
+        if (cursorDI > toDI) {
+          months--;
+          if (months < 0) {
+            years--;
+            months += 12;
+          }
+          cursorSigned = fromSigned + years;
+          cursorMonth = fromCs.month + months;
+          if (cursorMonth > 12) {
+            cursorSigned++;
+            cursorMonth -= 12;
+          }
+          if (cursorMonth < 1) {
+            cursorSigned--;
+            cursorMonth += 12;
+          }
+          const ce = cursorSigned <= 0 ? 0 : 1;
+          const cy = cursorSigned <= 0 ? 1 - cursorSigned : cursorSigned;
+          cursorDI = timeIntervalFromLocalComponents(
+            0,
+            ce,
+            cy,
+            cursorMonth,
+            fromCs.day,
+            fromCs.hour,
+            fromCs.minute,
+            fromCs.seconds
+          );
+        }
+      }
+      let remainSec = Math.round(toDI - cursorDI);
+      let days, hrs, mins, sec;
+      if (years > 0 || months > 0) {
+        remainSec = Math.round(remainSec / 3600) * 3600;
+        days = Math.floor(remainSec / 86400);
+        remainSec %= 86400;
+        hrs = Math.floor(remainSec / 3600);
+        mins = 0;
+        sec = 0;
+      } else if (remainSec >= 86400) {
+        remainSec = Math.round(remainSec / 60) * 60;
+        days = Math.floor(remainSec / 86400);
+        remainSec %= 86400;
+        hrs = Math.floor(remainSec / 3600);
+        remainSec %= 3600;
+        mins = Math.floor(remainSec / 60);
+        sec = 0;
+      } else {
+        days = 0;
+        hrs = Math.floor(remainSec / 3600);
+        remainSec %= 3600;
+        mins = Math.floor(remainSec / 60);
+        remainSec %= 60;
+        sec = remainSec;
+      }
+      if (hrs >= 24) {
+        days += Math.floor(hrs / 24);
+        hrs %= 24;
+      }
+      const parts = [];
+      if (years > 0) parts.push(`${years}y`);
+      if (months > 0) parts.push(`${months}mo`);
+      if (days > 0) parts.push(`${days}d`);
+      if (hrs > 0) parts.push(`${hrs}h`);
+      if (mins > 0) parts.push(`${mins}m`);
+      if (sec > 0) parts.push(`${sec}s`);
+      return parts.length > 0 ? `(${sign}${parts.join(" ")})` : "";
+    }
+    function formatTimezoneDisplay(olsonId, referenceDate) {
+      if (!olsonId) return "";
+      try {
+        const ref = referenceDate || /* @__PURE__ */ new Date();
+        const shortFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "short"
+        });
+        const shortParts = shortFmt.formatToParts(ref);
+        const abbr = shortParts.find((p) => p.type === "timeZoneName")?.value || "";
+        const longFmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: olsonId,
+          timeZoneName: "longOffset"
+        });
+        const longParts = longFmt.formatToParts(ref);
+        const offsetStr = longParts.find((p) => p.type === "timeZoneName")?.value || "";
+        let utcStr = offsetStr.replace("GMT", "UTC");
+        utcStr = utcStr.replace(/([+-])0(\d)/, "$1$2");
+        return `${olsonId}\xA0(${abbr})\xA0${utcStr}`;
+      } catch {
+        return olsonId;
+      }
+    }
+    let _lastTransportReal = true;
+    let _lastTransportStopped = false;
+    function renderTransport() {
+      const isReal = timeController2.isRealTime;
+      const isStopped = timeController2.isStopped;
+      if (isReal === _lastTransportReal && isStopped === _lastTransportStopped) {
+        return;
+      }
+      _lastTransportReal = isReal;
+      _lastTransportStopped = isStopped;
+      tpTransport.innerHTML = "";
+      const topRow = document.createElement("div");
+      topRow.className = "tp-transport-row";
+      if (!timeController2.isRealTime) {
+        const nowBtn = document.createElement("button");
+        nowBtn.className = "tp-btn";
+        nowBtn.innerHTML = 'Now\u2009<span style="position:relative;top:1px">\u25B6</span>';
+        nowBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          nowClicked();
+        });
+        topRow.appendChild(nowBtn);
+      }
+      if (!isStopped) {
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "tp-btn active";
+        pauseBtn.textContent = "\u2016";
+        pauseBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController2.stop();
+          onTransportChange();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        topRow.appendChild(pauseBtn);
+      }
+      if (topRow.childNodes.length > 0) {
+        tpTransport.appendChild(topRow);
+      }
+      if (isStopped) {
+        const bottomRow = document.createElement("div");
+        bottomRow.className = "tp-transport-row";
+        const revBtn = document.createElement("button");
+        revBtn.className = "tp-btn";
+        revBtn.textContent = "\u25C0";
+        revBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController2.setDirection(-1);
+          timeController2.setRate(null);
+          onTransportChange();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        const fwdBtn = document.createElement("button");
+        fwdBtn.className = "tp-btn";
+        fwdBtn.textContent = "\u25B6";
+        fwdBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          timeController2.setDirection(1);
+          timeController2.setRate(null);
+          onTransportChange();
+          updateTimeUI();
+          ensureSchedulerRunning();
+          writeTimeState();
+        });
+        bottomRow.appendChild(revBtn);
+        bottomRow.appendChild(fwdBtn);
+        tpTransport.appendChild(bottomRow);
+      }
+    }
+    function updateTimeUI() {
+      const isReal = timeController2.isRealTime;
+      timeBar.classList.toggle("overridden", !isReal);
+      const sim = timeController2.getDisplayTime();
+      timeBarDate.textContent = formatSimTime(sim);
+      const simMs = sim.getTime();
+      const atLimit = simMs <= MIN_DISPLAY_DATE_MS || simMs >= MAX_DISPLAY_DATE_MS;
+      timeBar.classList.toggle("at-limit", atLimit);
+      if (!isReal) {
+        timeBarRate.textContent = timeController2.statusLabel;
+        timeBarOffset.textContent = formatOffset(sim, /* @__PURE__ */ new Date());
+      }
+      tpRateLabel.textContent = timeController2.statusLabel;
+      renderTransport();
+      updateTimezoneDisplay();
+      const simDI = dateToDateInterval(sim);
+      const simCs = localComponentsFromTimeInterval(simDI, targetTzOffsetSec(sim));
+      const yearEl = document.getElementById("tp-year");
+      const monthEl = document.getElementById("tp-month");
+      const dayEl = document.getElementById("tp-day");
+      const hourEl = document.getElementById("tp-hour");
+      const minuteEl = document.getElementById("tp-minute");
+      if (yearEl) yearEl.value = simCs.year.toString();
+      if (monthEl) monthEl.value = simCs.month.toString();
+      if (dayEl) dayEl.value = simCs.day.toString();
+      if (hourEl) hourEl.value = simCs.hour.toString();
+      if (minuteEl) minuteEl.value = simCs.minute.toString();
+      const bceBtn = document.getElementById("tp-bce");
+      if (bceBtn) {
+        const isBCE = simCs.era === 0;
+        bceBtn.textContent = isBCE ? "BCE" : "CE";
+        bceBtn.classList.toggle("active", isBCE);
+      }
+    }
+    function updateTimezoneDisplay() {
+      const formatted = formatTimezoneDisplay(
+        getTimezone(),
+        timeController2.getDisplayTime()
+      );
+      if (locationTzLabel) locationTzLabel.innerHTML = formatted;
+      if (lpLocationTz) lpLocationTz.innerHTML = formatted;
+    }
+    function showPopover() {
+      popoverOpen = true;
+      timePopover.style.display = "";
+      timeBarLabel.textContent = "\u23F1 Hide time controller";
+      timeBarLabel.classList.add("active");
+      updateTimeUI();
+      writeUrlState({ tc: true });
+      onPopoverToggle?.(true);
+    }
+    function hidePopover() {
+      popoverOpen = false;
+      timePopover.style.display = "none";
+      timeBarLabel.textContent = "\u23F1 Show time controller";
+      timeBarLabel.classList.remove("active");
+      updateTimeUI();
+      writeUrlState({ tc: false });
+      onPopoverToggle?.(false);
+    }
+    function nowClicked() {
+      onNowClicked();
+      updateTimeUI();
+      writeTimeState();
+    }
+    const HOLD_DELAY_MS = 300;
+    let holdTimer = null;
+    let holdingBtn = null;
+    function startHold(btn, unit, dir) {
+      holdingBtn = btn;
+      btn.classList.add("holding");
+      timeController2.setDirection(dir);
+      const rateIdx = unitToRateIndex[unit];
+      if (rateIdx !== void 0) {
+        timeController2.setRate(RATE_OPTIONS[rateIdx]);
+      }
+      onScrubStart();
+      updateTimeUI();
+      ensureSchedulerRunning();
+    }
+    function endHold() {
+      if (holdTimer !== null) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+      if (holdingBtn) {
+        holdingBtn.classList.remove("holding");
+        holdingBtn = null;
+        onScrubEnd();
+        updateTimeUI();
+        ensureSchedulerRunning();
+        writeTimeState();
+      }
+    }
+    timePopover.querySelectorAll("[data-step]").forEach((btn) => {
+      const el = btn;
+      const stepKey = el.dataset.step;
+      const entry = stepMap[stepKey];
+      if (!entry) return;
+      const [unit, dir] = entry;
+      const unitName = el.dataset.unit || unit;
+      function doStep(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        timeController2.stop();
+        timeController2.step(unit, dir);
+        onTimeStep();
+        updateTimeUI();
+        ensureSchedulerRunning();
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          startHold(el, unitName, dir);
+        }, HOLD_DELAY_MS);
+      }
+      function doRelease(e) {
+        e.stopPropagation();
+        endHold();
+        writeTimeState();
+      }
+      el.addEventListener("mousedown", doStep);
+      el.addEventListener("mouseup", doRelease);
+      el.addEventListener("mouseleave", () => endHold());
+      el.addEventListener("touchstart", doStep);
+      el.addEventListener("touchend", doRelease);
+      el.addEventListener("touchcancel", () => endHold());
+    });
+    const tpTabDate = document.getElementById("tp-tab-date");
+    const tpTabAstro = document.getElementById("tp-tab-astro");
+    const tpTabs = timePopover.querySelectorAll(".tp-tab");
+    function switchTab(tabName) {
+      if (tpTabDate && tpTabAstro) {
+        const hiding = tabName === "a" ? tpTabDate : tpTabAstro;
+        const showing = tabName === "a" ? tpTabAstro : tpTabDate;
+        hiding.style.transition = "none";
+        hiding.classList.add("tp-pane-hidden");
+        void hiding.offsetHeight;
+        hiding.style.transition = "";
+        showing.classList.remove("tp-pane-hidden");
+      }
+      tpTabs.forEach((btn) => {
+        const el = btn;
+        el.classList.toggle("active", el.dataset.tab === (tabName === "a" ? "astro" : "date"));
+      });
+      writeUrlState({ tp: tabName });
+      if (popoverOpen) {
+        setTimeout(() => {
+          onPopoverToggle?.(true);
+        }, 320);
+      }
+    }
+    const urlTp = new URLSearchParams(window.location.search).get("tp");
+    if (urlTp === "a") {
+      switchTab("a");
+    }
+    tpTabs.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const el = btn;
+        switchTab(el.dataset.tab === "astro" ? "a" : "d");
+      });
+    });
+    function handleAstroStep(eventType, dir, btnEl) {
+      let bodyPlanetNumber;
+      if (eventType === "body-transit" || eventType === "body-rise" || eventType === "body-set") {
+        bodyPlanetNumber = getSelectedBody?.();
+        if (bodyPlanetNumber === void 0) {
+          const bodyLabel = document.getElementById("tp-body-transit-label");
+          bodyPlanetNumber = bodyLabel ? parseInt(bodyLabel.dataset.planet || "1", 10) : void 0;
+        }
+      }
+      const targetDate = computeAstroTarget(
+        eventType,
+        dir,
+        timeController2.getDisplayTime(),
+        getLat() * Math.PI / 180,
+        getLon() * Math.PI / 180,
+        bodyPlanetNumber
+      );
+      if (!targetDate || isNaN(targetDate.getTime())) {
+        btnEl.classList.add("flash-fail");
+        setTimeout(() => btnEl.classList.remove("flash-fail"), 300);
+        return;
+      }
+      timeController2.stop();
+      timeController2.setTime(targetDate);
+      onTimeStep();
+      updateTimeUI();
+      ensureSchedulerRunning();
+      writeTimeState();
+    }
+    timePopover.querySelectorAll("[data-astro]").forEach((btn) => {
+      const el = btn;
+      const eventType = el.dataset.astro;
+      const dir = parseInt(el.dataset.dir || "1", 10);
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAstroStep(eventType, dir, el);
+      });
+      el.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleAstroStep(eventType, dir, el);
+      });
+    });
+    function applyDateInputs() {
+      const yr = parseInt(document.getElementById("tp-year").value, 10);
+      const mo = parseInt(document.getElementById("tp-month").value, 10);
+      const dy = parseInt(document.getElementById("tp-day").value, 10);
+      const hr = parseInt(document.getElementById("tp-hour").value, 10);
+      const mn = parseInt(document.getElementById("tp-minute").value, 10);
+      if (isNaN(yr) || isNaN(mo) || isNaN(dy) || isNaN(hr) || isNaN(mn)) return;
+      const bceBtn = document.getElementById("tp-bce");
+      const isBCE = bceBtn?.classList.contains("active") ?? false;
+      const era = isBCE ? 0 : 1;
+      const refDate = timeController2.getDisplayTime();
+      const tzOff = targetTzOffsetSec(refDate);
+      const di = timeIntervalFromLocalComponents(tzOff, era, yr, mo, dy, hr, mn, 0);
+      const d = dateIntervalToDate(di);
+      const clampedMs = Math.max(
+        MIN_DISPLAY_DATE_MS,
+        Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
+      );
+      timeController2.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
+      onTimeStep();
+      updateTimeUI();
+      writeTimeState();
+    }
+    ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("change", () => applyDateInputs());
+      }
+    });
+    const tpBce = document.getElementById("tp-bce");
+    if (tpBce) {
+      tpBce.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isActive = tpBce.classList.toggle("active");
+        tpBce.textContent = isActive ? "BCE" : "CE";
+        applyDateInputs();
+      });
+    }
+    timeBarLabel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popoverOpen) {
+        hidePopover();
+      } else {
+        showPopover();
+      }
+    });
+    timeBarRate.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (popoverOpen) {
+        hidePopover();
+      } else {
+        showPopover();
+      }
+    });
+    timeBarNow.addEventListener("click", (e) => {
+      e.stopPropagation();
+      nowClicked();
+    });
+    tpClose.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hidePopover();
+    });
+    updateTimezoneDisplay();
+    updateTimeUI();
+    return {
+      updateTimeUI,
+      showPopover,
+      hidePopover,
+      isPopoverOpen: () => popoverOpen,
+      updateTimezoneDisplay
+    };
+  }
+
+  // src/observatory/layout.ts
+  var TWO_PI6 = 2 * Math.PI;
   var REF_MAIN_R = 365;
   function computeLayout(viewW, viewH) {
     const dpr = typeof devicePixelRatio !== "undefined" ? devicePixelRatio : 1;
@@ -14551,8 +15273,8 @@
   }
 
   // src/observatory/draw-utils.ts
-  var TWO_PI6 = 2 * Math.PI;
-  var HALF_PI = Math.PI / 2;
+  var TWO_PI7 = 2 * Math.PI;
+  var HALF_PI2 = Math.PI / 2;
   var _fontCenterCache = /* @__PURE__ */ new Map();
   function textVisualCenterY(ctx2, _text) {
     const font = ctx2.font;
@@ -14573,16 +15295,16 @@
     _fontHalfHeightCache.set(font, cached);
     return cached;
   }
-  function drawTicks(ctx2, cx, cy, n, innerR, outerR, lineWidth, color, angle1 = 0, angle2 = TWO_PI6, noFives = false) {
+  function drawTicks(ctx2, cx, cy, n, innerR, outerR, lineWidth, color, angle1 = 0, angle2 = TWO_PI7, noFives = false) {
     ctx2.save();
     ctx2.lineWidth = lineWidth;
     ctx2.strokeStyle = color;
     ctx2.beginPath();
     for (let i = 0; i < n; i++) {
       if (noFives && i % 5 === 0) continue;
-      const th = i / n * TWO_PI6;
-      if (angle1 <= th && th <= angle2 || th === 0 && angle2 === TWO_PI6) {
-        const canvasAngle = th - HALF_PI;
+      const th = i / n * TWO_PI7;
+      if (angle1 <= th && th <= angle2 || th === 0 && angle2 === TWO_PI7) {
+        const canvasAngle = th - HALF_PI2;
         const cosA = Math.cos(canvasAngle);
         const sinA = Math.sin(canvasAngle);
         ctx2.moveTo(cx + outerR * cosA, cy + outerR * sinA);
@@ -14607,7 +15329,7 @@
       const textW = metrics.width;
       const textH = parseFloat(font);
       const h = radius - Math.sqrt(textW * textW + textH * textH) / 2;
-      const th = i / n * TWO_PI6 - HALF_PI;
+      const th = i / n * TWO_PI7 - HALF_PI2;
       const x = cx + h * Math.cos(th);
       const y = cy + h * Math.sin(th);
       ctx2.save();
@@ -14629,7 +15351,7 @@
     for (let i = 0; i < n; i++) {
       const label = labels[i];
       if (!label || label === " ") continue;
-      const th = i / n * TWO_PI6 - HALF_PI;
+      const th = i / n * TWO_PI7 - HALF_PI2;
       const isBottom = i > n / 4 && i < 3 * n / 4;
       ctx2.save();
       if (isBottom) {
@@ -14637,14 +15359,14 @@
         const tx = textR * Math.cos(th);
         const ty = textR * Math.sin(th);
         ctx2.translate(cx + tx, cy + ty);
-        ctx2.rotate(th + HALF_PI + Math.PI);
+        ctx2.rotate(th + HALF_PI2 + Math.PI);
         ctx2.fillText(label, 0, textVisualCenterY(ctx2, label));
       } else {
         const textR = radius - halfH;
         const tx = textR * Math.cos(th);
         const ty = textR * Math.sin(th);
         ctx2.translate(cx + tx, cy + ty);
-        ctx2.rotate(th + HALF_PI);
+        ctx2.rotate(th + HALF_PI2);
         ctx2.fillText(label, 0, textVisualCenterY(ctx2, label));
       }
       ctx2.restore();
@@ -14671,7 +15393,7 @@
       charWidths.push(w);
       totalArc += w / radius;
     }
-    const normAngle = (angle % TWO_PI6 + TWO_PI6) % TWO_PI6;
+    const normAngle = (angle % TWO_PI7 + TWO_PI7) % TWO_PI7;
     const needFlip = demi && normAngle > Math.PI / 2 && normAngle < 3 * Math.PI / 2;
     let effectiveR = radius;
     if (needFlip) {
@@ -14717,7 +15439,7 @@
     ctx2.lineWidth = lineWidth;
     ctx2.strokeStyle = color;
     ctx2.beginPath();
-    ctx2.arc(cx, cy, radius, 0, TWO_PI6);
+    ctx2.arc(cx, cy, radius, 0, TWO_PI7);
     ctx2.stroke();
     ctx2.restore();
   }
@@ -14725,7 +15447,7 @@
     ctx2.save();
     ctx2.fillStyle = color;
     ctx2.beginPath();
-    ctx2.arc(cx, cy, radius, 0, TWO_PI6);
+    ctx2.arc(cx, cy, radius, 0, TWO_PI7);
     ctx2.fill();
     ctx2.restore();
   }
@@ -14740,7 +15462,7 @@
   var EO_Sidereal_constellation_names_0_at_top_2x_default = "data:image/png;base64,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";
 
   // src/observatory/main-dial.ts
-  var TWO_PI7 = 2 * Math.PI;
+  var TWO_PI8 = 2 * Math.PI;
   var zodiacImg = null;
   var sunImg = null;
   var siderealConstellationImg = null;
@@ -14820,7 +15542,7 @@
     ctx2.strokeStyle = "rgba(255, 255, 255, 1.0)";
     ctx2.lineWidth = 0.5;
     ctx2.beginPath();
-    ctx2.arc(cx, cy, mainR, 0, TWO_PI7);
+    ctx2.arc(cx, cy, mainR, 0, TWO_PI8);
     ctx2.fill();
     ctx2.stroke();
     ctx2.restore();
@@ -14839,8 +15561,8 @@
         mainR - tickH * 0.7,
         2,
         "#000000",
-        12.9 * TWO_PI7 / 24,
-        21 * TWO_PI7 / 24
+        12.9 * TWO_PI8 / 24,
+        21 * TWO_PI8 / 24
       );
     } else {
       drawTicks(
@@ -14853,7 +15575,7 @@
         2,
         "#000000",
         0,
-        9 * TWO_PI7 / 24
+        9 * TWO_PI8 / 24
       );
     }
     const numbers24NoonOnTop = "12,13,14,15,16,17,18,19,20,21,22,23,24,1,2,3,4,5,6,7,8,9,10,11".split(",");
@@ -14891,8 +15613,8 @@
       drawCircle(ctx2, cx, cy, L.plR2 - i * L.orbitInc, 0.3, "rgba(255, 255, 255, 0.8)");
     }
     const s = L.mainR / 365;
-    drawTicks(ctx2, cx, cy, 60, L.secLen - 6 * s, L.secLen, 1, lightGray, 0, TWO_PI7, true);
-    drawTicks(ctx2, cx, cy, 300, L.secLen - 3 * s, L.secLen, 0.5, lightGray, 0, TWO_PI7, true);
+    drawTicks(ctx2, cx, cy, 60, L.secLen - 6 * s, L.secLen, 1, lightGray, 0, TWO_PI8, true);
+    drawTicks(ctx2, cx, cy, 300, L.secLen - 3 * s, L.secLen, 0.5, lightGray, 0, TWO_PI8, true);
     if (sunImg && sunImg.complete) {
       ctx2.save();
       ctx2.globalAlpha = 0.75;
@@ -15099,8 +15821,8 @@
   }
 
   // src/observatory/ring-view.ts
-  var TWO_PI8 = 2 * Math.PI;
-  var HALF_PI2 = Math.PI / 2;
+  var TWO_PI9 = 2 * Math.PI;
+  var HALF_PI3 = Math.PI / 2;
   function lerpColor(c1, c2, t) {
     const parse2 = (s) => {
       const m = s.match(/rgba?\((\d+),(\d+),(\d+),?([\d.]*)\)/);
@@ -15208,9 +15930,9 @@
       if (color === null) {
         const latRad = lat2 * Math.PI / 180;
         const lngRad = lng * Math.PI / 180;
-        let angleNorm = val % TWO_PI8;
-        if (angleNorm < 0) angleNorm += TWO_PI8;
-        const secSinceMidnight = angleNorm / TWO_PI8 * 86400;
+        let angleNorm = val % TWO_PI9;
+        if (angleNorm < 0) angleNorm += TWO_PI9;
+        const secSinceMidnight = angleNorm / TWO_PI9 * 86400;
         const unixNow = now.getTime() / 1e3;
         const localNow = unixNow + tzOffsetSeconds;
         const localMidnight = Math.floor(localNow / 86400) * 86400;
@@ -15223,11 +15945,11 @@
     }
     if (stops.length < 2) return;
     stops.sort((a, b) => a.angle - b.angle);
-    const grad = ctx2.createConicGradient(-HALF_PI2, cx, cy);
+    const grad = ctx2.createConicGradient(-HALF_PI3, cx, cy);
     const angleToOffset = (angle) => {
-      let a = angle % TWO_PI8;
-      if (a < 0) a += TWO_PI8;
-      return a / TWO_PI8;
+      let a = angle % TWO_PI9;
+      if (a < 0) a += TWO_PI9;
+      return a / TWO_PI9;
     };
     for (const stop of stops) {
       grad.addColorStop(angleToOffset(stop.angle), stop.color);
@@ -15248,7 +15970,7 @@
     ctx2.lineWidth = ringWidth;
     ctx2.lineCap = "butt";
     ctx2.beginPath();
-    ctx2.arc(cx, cy, centerR, 0, TWO_PI8);
+    ctx2.arc(cx, cy, centerR, 0, TWO_PI9);
     ctx2.stroke();
     ctx2.restore();
   }
@@ -15302,8 +16024,8 @@
       let drawLabelOnly = false;
       if (!cache.riseValid || !cache.setValid) {
         if (cache.aboveHorizon) {
-          riseAngle = ((cache.transitAngle - Math.PI + 1e-4) % TWO_PI8 + TWO_PI8) % TWO_PI8;
-          setAngle = ((cache.transitAngle + Math.PI - 1e-4) % TWO_PI8 + TWO_PI8) % TWO_PI8;
+          riseAngle = ((cache.transitAngle - Math.PI + 1e-4) % TWO_PI9 + TWO_PI9) % TWO_PI9;
+          setAngle = ((cache.transitAngle + Math.PI - 1e-4) % TWO_PI9 + TWO_PI9) % TWO_PI9;
         } else {
           drawLabelOnly = true;
         }
@@ -15312,8 +16034,8 @@
       ctx2.lineWidth = lineW;
       ctx2.lineCap = "butt";
       if (!drawLabelOnly) {
-        const canvasRise = riseAngle - HALF_PI2;
-        const canvasSet = setAngle - HALF_PI2;
+        const canvasRise = riseAngle - HALF_PI3;
+        const canvasSet = setAngle - HALF_PI3;
         ctx2.strokeStyle = ring.dayColor;
         ctx2.beginPath();
         ctx2.arc(cx, cy, centerR, canvasRise, canvasSet);
@@ -15324,8 +16046,8 @@
           ctx2.arc(cx, cy, centerR, canvasSet, canvasRise);
           ctx2.stroke();
         }
-        const canvasTransit = cache.transitAngle - HALF_PI2;
-        const dc = 9 / 20 * TWO_PI8 / 360;
+        const canvasTransit = cache.transitAngle - HALF_PI3;
+        const dc = 9 / 20 * TWO_PI9 / 360;
         const midR = (outerR + innerR) / 2;
         const ct = Math.cos(canvasTransit);
         const st = Math.sin(canvasTransit);
@@ -15397,7 +16119,7 @@
   }
 
   // src/observatory/hand-views.ts
-  var TWO_PI9 = Math.PI * 2;
+  var TWO_PI10 = Math.PI * 2;
   var HOUR24_COLOR = "rgba(255, 255, 255, 0.85)";
   var HOUR12_COLOR = "rgba(250, 183, 0, 1)";
   var MINUTE_COLOR = "rgba(255, 193, 37, 1)";
@@ -15427,7 +16149,7 @@
       ctx2.lineTo(arrowWidth, -(length - arrowLength));
       ctx2.closePath();
     } else {
-      ctx2.arc(0, -length, width / 2, 0, TWO_PI9);
+      ctx2.arc(0, -length, width / 2, 0, TWO_PI10);
     }
     ctx2.fill();
     ctx2.restore();
@@ -15450,7 +16172,7 @@
     ctx2.fillStyle = fillColor;
     ctx2.lineWidth = 0.1;
     ctx2.beginPath();
-    ctx2.arc(0, 0, centerRadius, 0, TWO_PI9);
+    ctx2.arc(0, 0, centerRadius, 0, TWO_PI10);
     ctx2.fill();
     ctx2.stroke();
     ctx2.beginPath();
@@ -15462,9 +16184,9 @@
     ctx2.fill();
     ctx2.stroke();
     ctx2.beginPath();
-    ctx2.arc(0, -breOuterCenter, breOuterRadius, 0, TWO_PI9);
+    ctx2.arc(0, -breOuterCenter, breOuterRadius, 0, TWO_PI10);
     ctx2.moveTo(breInnerRadius, -breInnerCenter);
-    ctx2.arc(0, -breInnerCenter, breInnerRadius, 0, -TWO_PI9, true);
+    ctx2.arc(0, -breInnerCenter, breInnerRadius, 0, -TWO_PI10, true);
     ctx2.fill("evenodd");
     ctx2.stroke();
     ctx2.beginPath();
@@ -15496,11 +16218,11 @@
     ctx2.stroke();
     if (ballRadius > 0) {
       ctx2.beginPath();
-      ctx2.arc(0, 0, ballRadius / 2, 0, TWO_PI9);
+      ctx2.arc(0, 0, ballRadius / 2, 0, TWO_PI10);
       ctx2.fill();
       ctx2.lineWidth = width;
       ctx2.beginPath();
-      ctx2.arc(0, length * TAIL_FRACTION, ballRadius, 0, TWO_PI9);
+      ctx2.arc(0, length * TAIL_FRACTION, ballRadius, 0, TWO_PI10);
       ctx2.stroke();
     }
     ctx2.restore();
@@ -15900,14 +16622,14 @@
       return;
     }
     const effNaturalSpeed = v.naturalSpeed * timeDirection;
-    const TWO_PI10 = 2 * Math.PI;
+    const TWO_PI11 = 2 * Math.PI;
     let error;
     if (timeDirection === 1) {
       error = currentCorrectAngle - v.anim.currentValue;
-      error = (error % TWO_PI10 + TWO_PI10) % TWO_PI10;
+      error = (error % TWO_PI11 + TWO_PI11) % TWO_PI11;
     } else {
       error = v.anim.currentValue - currentCorrectAngle;
-      error = (error % TWO_PI10 + TWO_PI10) % TWO_PI10;
+      error = (error % TWO_PI11 + TWO_PI11) % TWO_PI11;
     }
     if (error < NATURAL_ERROR_THRESHOLD) {
       const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
@@ -15982,11 +16704,11 @@
     const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
     v.nextUpdateTime = perfNow + timeUntilNextUpdateMs;
     const speed = v.animSpeed;
-    const TWO_PI10 = 2 * Math.PI;
-    const normalizedTarget = (newTarget % TWO_PI10 + TWO_PI10) % TWO_PI10;
-    const normalizedCurrent = (v.anim.currentValue % TWO_PI10 + TWO_PI10) % TWO_PI10;
+    const TWO_PI11 = 2 * Math.PI;
+    const normalizedTarget = (newTarget % TWO_PI11 + TWO_PI11) % TWO_PI11;
+    const normalizedCurrent = (v.anim.currentValue % TWO_PI11 + TWO_PI11) % TWO_PI11;
     let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
-    if (angleDelta > Math.PI) angleDelta = TWO_PI10 - angleDelta;
+    if (angleDelta > Math.PI) angleDelta = TWO_PI11 - angleDelta;
     const naturalDurationMs = speed > 0 ? angleDelta / speed * 1e3 : 0;
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
     if (naturalDurationMs > timeUntilNextUpdateMs) {
@@ -16012,25 +16734,36 @@
             env2,
             perfNow,
             getNow2,
-            timeDirection,
+            timeDirection || 1,
             tickIntervalMs,
             displayDeltaPerTickSec
           );
-        } else if (v.naturalSpeed > 0) {
+        } else if (v.naturalSpeed > 0 && timeDirection !== 0) {
           updateNaturalSpeedValue(v, env2, perfNow, getNow2, timeDirection);
         } else {
           const newTarget = evalAttr(v.expr, env2);
-          const nextDisplayMs = computeNextBoundary(
-            v.updateInterval * 1e3,
-            getNow2,
-            timeDirection,
-            env2
-          );
-          v.nextUpdateDisplayTime = nextDisplayMs;
-          v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
-          v.pendingSweep = null;
-          const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
-          startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+          if (timeDirection === 0) {
+            v.nextUpdateTime = perfNow + 100;
+            v.pendingSweep = null;
+            startAnimationRaw(
+              v.anim,
+              newTarget,
+              perfNow,
+              v.animSpeed / K_ANGLE_ANIM_SPEED
+            );
+          } else {
+            const nextDisplayMs = computeNextBoundary(
+              v.updateInterval * 1e3,
+              getNow2,
+              timeDirection,
+              env2
+            );
+            v.nextUpdateDisplayTime = nextDisplayMs;
+            v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+            v.pendingSweep = null;
+            const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+            startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+          }
         }
       }
     }
@@ -16084,6 +16817,7 @@
   var getNow = () => timeController.getDisplayTime();
   var env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
   var obsValues = null;
+  var timeUI = null;
   function initCanvas() {
     canvas = document.getElementById("observatory-canvas");
     const context = canvas.getContext("2d");
@@ -16191,7 +16925,8 @@
       const rate = timeController.currentRate;
       const tickIntervalMs = rate ? TICK_INTERVAL_MS : null;
       const displayDelta = rate ? displaySecondsPerTick(rate.unit) : 0;
-      const timeDirection = timeController.currentDirection;
+      const isStopped = timeController.isStopped;
+      const timeDirection = isStopped ? 0 : timeController.currentDirection;
       updateObsValues(
         obsValues,
         env,
@@ -16204,6 +16939,7 @@
       animateObsValues(obsValues, perfNow);
     }
     drawFrame();
+    timeUI?.updateTimeUI();
     timeController.endFrame();
     requestAnimationFrame(tick);
   }
@@ -16250,6 +16986,7 @@
         }
         rebuildEnv();
         updateLocationDisplay();
+        timeUI?.updateTimezoneDisplay();
       }
     });
     if (locationDialog && setLocationBtn) {
@@ -16289,6 +17026,41 @@
     env.variables.set("noonOnTop", noonOnTop ? 1 : 0);
     obsValues = initObsValues(env, performance.now(), getNow);
     invalidateObsValueCache();
+    timeUI = initTimeControls({
+      timeController,
+      getTimezone: () => locationTimezone,
+      getTzDeltaMs: () => tzDeltaMs,
+      getLat: () => lat,
+      getLon: () => lon,
+      onTimeStep: () => {
+        if (obsValues) resetObsValueSchedules(obsValues);
+        rebuildEnv();
+      },
+      onScrubStart: () => {
+        if (obsValues) resetObsValueSchedules(obsValues);
+      },
+      onScrubEnd: () => {
+        timeController.stop();
+        rebuildEnv();
+        if (obsValues) resetObsValueSchedules(obsValues);
+      },
+      onNowClicked: () => {
+        timeController.reset();
+        rebuildEnv();
+        if (obsValues) resetObsValueSchedules(obsValues);
+      },
+      onTransportChange: () => {
+        rebuildEnv();
+        if (obsValues) resetObsValueSchedules(obsValues);
+      },
+      ensureSchedulerRunning: () => {
+      },
+      writeTimeState: () => {
+      }
+    });
+    if (urlState.tc) {
+      timeUI?.showPopover();
+    }
     console.log("[Observatory] Initialized \u2014 lat:", lat, "lon:", lon, "tz:", locationTimezone);
     Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
       invalidateMainDialCache();

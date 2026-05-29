@@ -18,6 +18,8 @@ import { resolveTimezone } from '../shared/tz-resolve.js';
 import { findClosestCity } from '../shared/city-search.js';
 import { initLocationDialog, requestBrowserLocation } from '../shared/location-dialog.js';
 import { TimeController, TICK_INTERVAL_MS, displaySecondsPerTick } from '../shared/time-controller.js';
+import { initTimeControls } from '../shared/time-controls-ui.js';
+import type { TimeControlsAPI } from '../shared/time-controls-ui.js';
 import { computeLayout, type LayoutParams } from './layout.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
@@ -71,6 +73,9 @@ let env: Environment = createAstroEnvironment(lat, lon, getNow, locationTimezone
 
 
 let obsValues: ObsValueSet | null = null;
+
+/** Time controller UI handle (null until DOM is ready) */
+let timeUI: TimeControlsAPI | null = null;
 
 // ============================================================================
 // Canvas setup
@@ -259,13 +264,17 @@ function tick(): void {
         const rate = timeController.currentRate;
         const tickIntervalMs = rate ? TICK_INTERVAL_MS : null;
         const displayDelta = rate ? displaySecondsPerTick(rate.unit) : 0;
-        const timeDirection = timeController.currentDirection;
+        const isStopped = timeController.isStopped;
+        const timeDirection: 0 | 1 | -1 = isStopped ? 0 : timeController.currentDirection;
         updateObsValues(obsValues, env, perfNow, getNow,
             tickIntervalMs, displayDelta, timeDirection);
         animateObsValues(obsValues, perfNow);
     }
 
     drawFrame();
+
+    // Update time controller UI display
+    timeUI?.updateTimeUI();
 
     timeController.endFrame();
 
@@ -327,6 +336,7 @@ function setupLocationDialog(): void {
 
             rebuildEnv();
             updateLocationDisplay();
+            timeUI?.updateTimezoneDisplay();
         },
     });
 
@@ -379,6 +389,49 @@ function init(): void {
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
     obsValues = initObsValues(env, performance.now(), getNow);
     invalidateObsValueCache();
+
+    // --- Wire time controller UI ---
+    timeUI = initTimeControls({
+        timeController,
+        getTimezone: () => locationTimezone,
+        getTzDeltaMs: () => tzDeltaMs,
+        getLat: () => lat,
+        getLon: () => lon,
+        onTimeStep: () => {
+            // Reset value schedules so they re-evaluate at the new time
+            if (obsValues) resetObsValueSchedules(obsValues);
+            rebuildEnv();
+        },
+        onScrubStart: () => {
+            if (obsValues) resetObsValueSchedules(obsValues);
+        },
+        onScrubEnd: () => {
+            timeController.stop();
+            rebuildEnv();
+            if (obsValues) resetObsValueSchedules(obsValues);
+        },
+        onNowClicked: () => {
+            timeController.reset();
+            rebuildEnv();
+            if (obsValues) resetObsValueSchedules(obsValues);
+        },
+        onTransportChange: () => {
+            rebuildEnv();
+            if (obsValues) resetObsValueSchedules(obsValues);
+        },
+        ensureSchedulerRunning: () => {
+            // Observatory uses a continuous RAF loop — nothing to kick
+        },
+        writeTimeState: () => {
+            // For now, Observatory doesn't persist time state to URL
+            // (will be added when url-state is extended for Observatory)
+        },
+    });
+
+    // Show time controller if URL says so
+    if (urlState.tc) {
+        timeUI?.showPopover();
+    }
 
     console.log('[Observatory] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone);
 
