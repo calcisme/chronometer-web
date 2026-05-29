@@ -22,6 +22,9 @@ import { computeLayout, type LayoutParams } from './layout.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
+import { drawClockHands, drawSubdialHands } from './hand-views.js';
+import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
+import { dateToDateInterval } from '../astronomy/es-time.js';
 
 // ============================================================================
 // State
@@ -58,6 +61,11 @@ let tzDeltaMs = computeTzDeltaMs(locationTimezone);
 // --- Astronomy environment ---
 const getNow = (): Date => timeController.getDisplayTime();
 let env: Environment = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+
+// --- Cache pool for hand angle computations ---
+// Created separately from the env's internal pool so we can pass it
+// to computeSunSpecial24HourAngle and planettransitTimeRefined.
+let handPool = new AstroCachePool();
 
 // ============================================================================
 // Canvas setup
@@ -145,6 +153,21 @@ function drawFrame(): void {
     // 3. Planet hands (dynamic — recomputed hourly)
     // ================================================================
     drawPlanetHands(ctx, L, now, env);
+
+    // ================================================================
+    // 3b. Clock hands (24h, 12h, minute, second, sun events)
+    // ================================================================
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+    const calcDI = dateToDateInterval(now);
+    initializeCachePool(handPool, calcDI, latRad, lonRad, false, tzOffsetSec);
+    drawClockHands(ctx, L, env, now, noonOnTop, handPool, tzOffsetSec, getNow, latRad, lonRad);
+    releaseCachePool(handPool);
+
+    // ================================================================
+    // 3c. Subdial hands (UTC, Solar, Sidereal)
+    // ================================================================
+    drawSubdialHands(ctx, L, now, tzOffsetSec, lonRad);
 
     // ================================================================
     // 4. Peripheral dial placeholders (Phase 7 will replace these)

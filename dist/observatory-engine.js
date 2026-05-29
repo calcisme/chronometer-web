@@ -11733,7 +11733,7 @@
     );
     return alt > altAtRS;
   }
-  function nextPrevRiseSetInternal(calcDate, observerLat, observerLon, riseNotSet, planetNumber, isNext, fudgeSeconds, lookahead, pool) {
+  function nextPrevRiseSetInternal(calcDate, observerLat, observerLon, riseNotSet, planetNumber, isNext, fudgeSeconds, lookahead, pool, overrideAltitude = NaN) {
     let fudge = fudgeSeconds;
     let look = lookahead;
     if (!isNext) {
@@ -11747,7 +11747,7 @@
       observerLon,
       riseNotSet,
       planetNumber,
-      NaN,
+      overrideAltitude,
       pool
     );
     const transitOk = isNext ? result1.transitTime >= fudgeDate : result1.transitTime < fudgeDate;
@@ -11761,7 +11761,7 @@
       observerLon,
       riseNotSet,
       planetNumber,
-      NaN,
+      overrideAltitude,
       pool
     );
     return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
@@ -11900,6 +11900,127 @@
       leafCenterAngle -= 2 * Math.PI;
     }
     return leafCenterAngle;
+  }
+  function getParamsForAltitudeKind(kind) {
+    switch (kind) {
+      case 0 /* SunRiseMorning */:
+        return { altitude: NaN, riseNotSet: true };
+      case 1 /* SunSetEvening */:
+        return { altitude: NaN, riseNotSet: false };
+      case 2 /* SunGoldenHourMorning */:
+        return { altitude: 15 * Math.PI / 180, riseNotSet: true };
+      case 3 /* SunGoldenHourEvening */:
+        return { altitude: 15 * Math.PI / 180, riseNotSet: false };
+      case 4 /* SunCivilTwilightMorning */:
+        return { altitude: -6 * Math.PI / 180, riseNotSet: true };
+      case 5 /* SunCivilTwilightEvening */:
+        return { altitude: -6 * Math.PI / 180, riseNotSet: false };
+      case 6 /* SunNauticalTwilightMorning */:
+        return { altitude: -12 * Math.PI / 180, riseNotSet: true };
+      case 7 /* SunNauticalTwilightEvening */:
+        return { altitude: -12 * Math.PI / 180, riseNotSet: false };
+      case 8 /* SunAstroTwilightMorning */:
+        return { altitude: -18 * Math.PI / 180, riseNotSet: true };
+      case 9 /* SunAstroTwilightEvening */:
+        return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+    }
+  }
+  function computeSunSpecial24HourAngle(altitudeKind, getNow2, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const { altitude, riseNotSet } = getParamsForAltitudeKind(altitudeKind);
+    const calcDate = dateToDateInterval(getNow2());
+    const fudgeFactorSeconds = 5;
+    const lookahead = 3600 * 13.2;
+    if (altitudeKind === 0 /* SunRiseMorning */ || altitudeKind === 1 /* SunSetEvening */) {
+      const planetIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
+      const result = nextPrevRiseSetInternal(
+        calcDate,
+        observerLat,
+        observerLon,
+        riseNotSet,
+        0 /* Sun */,
+        riseNotSet ? !planetIsUp : planetIsUp,
+        -fudgeFactorSeconds,
+        lookahead,
+        pool
+      );
+      let transitAngle = angle24HourForDate(result.transitTime, tzOffsetSeconds);
+      if (isNaN(result.eventTime) && isAlwaysAbove(result.eventTime)) {
+        transitAngle = fmod(transitAngle + Math.PI, 2 * Math.PI);
+      }
+      const eventAngle = isNoRiseSet(result.eventTime) ? NaN : angle24HourForDate(result.eventTime, tzOffsetSeconds);
+      if (isNaN(eventAngle)) {
+        return { angle: transitAngle, valid: false };
+      }
+      return { angle: eventAngle, valid: true };
+    }
+    let anchorTime;
+    let twilightResult;
+    if (riseNotSet) {
+      const sunsetResult = nextPrevRiseSetInternal(
+        calcDate,
+        observerLat,
+        observerLon,
+        false,
+        0 /* Sun */,
+        // riseNotSet=false → sunset
+        true,
+        // isNext=true → forward to next sunset
+        fudgeFactorSeconds,
+        lookahead,
+        pool
+        // NaN altitude → standard sunset
+      );
+      anchorTime = sunsetResult.transitTime;
+      twilightResult = nextPrevRiseSetInternal(
+        anchorTime,
+        observerLat,
+        observerLon,
+        true,
+        0 /* Sun */,
+        // riseNotSet=true → rise (morning boundary)
+        false,
+        // isNext=false → backward
+        fudgeFactorSeconds,
+        lookahead,
+        pool,
+        altitude
+        // override altitude for twilight
+      );
+    } else {
+      const sunriseResult = nextPrevRiseSetInternal(
+        calcDate,
+        observerLat,
+        observerLon,
+        true,
+        0 /* Sun */,
+        // riseNotSet=true → sunrise
+        false,
+        // isNext=false → backward to prev sunrise
+        fudgeFactorSeconds,
+        lookahead,
+        pool
+        // NaN altitude → standard sunrise
+      );
+      anchorTime = sunriseResult.transitTime;
+      twilightResult = nextPrevRiseSetInternal(
+        anchorTime,
+        observerLat,
+        observerLon,
+        false,
+        0 /* Sun */,
+        // riseNotSet=false → set (evening boundary)
+        true,
+        // isNext=true → forward
+        fudgeFactorSeconds,
+        lookahead,
+        pool,
+        altitude
+        // override altitude for twilight
+      );
+    }
+    const valid = !isNaN(twilightResult.eventTime) && isFinite(twilightResult.eventTime) && !isNoRiseSet(twilightResult.eventTime);
+    const angle = angle24HourForDate(twilightResult.transitTime, tzOffsetSeconds);
+    return { angle, valid };
   }
   function computeYear366IndicatorFraction(date) {
     const year = date.getFullYear();
@@ -13363,6 +13484,16 @@
     const h12Len = minLen * 0.75;
     const h24Len = mainR - tickHeight * 0.37;
     const sunRiseSetLen = h24Len;
+    const h24Arrow = 25 * s;
+    const h24Wid = h24Arrow / 1.8 / Math.sqrt(3);
+    const sunRiseSetArrow = 18 * s;
+    const len2 = zR - 5 * s;
+    const breH12Width = 30 * s;
+    const breH12CenterR = 12 * s;
+    const breMinWidth = 25 * s;
+    const breMinCenterR = 8 * s;
+    const secWidth = 2 * s;
+    const secBallR = 6 * s;
     const cos30 = Math.cos(Math.PI / 6);
     const sin30 = Math.sin(Math.PI / 6);
     const utcCX = mainCX;
@@ -13422,6 +13553,16 @@
       h12Len,
       minLen,
       sunRiseSetLen,
+      h24Arrow,
+      h24Wid,
+      sunRiseSetArrow,
+      len2,
+      breH12Width,
+      breH12CenterR,
+      breMinWidth,
+      breMinCenterR,
+      secWidth,
+      secBallR,
       mainFontSize,
       subdialFontSize,
       zodiacFontSize,
@@ -14271,6 +14412,500 @@
     sunRingCacheNoonOnTop = null;
   }
 
+  // src/observatory/hand-views.ts
+  var TWO_PI9 = Math.PI * 2;
+  var HOUR24_COLOR = "rgba(255, 255, 255, 0.85)";
+  var HOUR12_COLOR = "rgba(250, 183, 0, 1)";
+  var MINUTE_COLOR = "rgba(255, 193, 37, 1)";
+  var SECOND_COLOR = "rgba(255, 217, 154, 1)";
+  var RISESET_COLOR = "rgba(255, 128, 0, 0.75)";
+  var GOLDEN_COLOR = "rgba(255, 204, 0, 0.75)";
+  var TWILIGHT_COLOR = "rgba(0, 128, 128, 0.75)";
+  var TWILIGHT_ARM_COLOR = "rgba(77, 153, 153, 1)";
+  var SNOON_COLOR = "rgba(255, 255, 0, 0.75)";
+  var SMID_COLOR = "rgba(0, 0, 255, 0.75)";
+  function drawArrowHand(ctx2, cx, cy, angle, length, len2, width, arrowLength, arrowWidth, strokeColor, armColor) {
+    ctx2.save();
+    ctx2.translate(cx, cy);
+    ctx2.rotate(angle);
+    ctx2.strokeStyle = armColor;
+    ctx2.lineWidth = width;
+    ctx2.lineCap = "round";
+    ctx2.beginPath();
+    ctx2.moveTo(0, -len2);
+    ctx2.lineTo(0, -(length - arrowLength));
+    ctx2.stroke();
+    ctx2.fillStyle = strokeColor;
+    ctx2.beginPath();
+    if (arrowLength > 0) {
+      ctx2.moveTo(-arrowWidth, -(length - arrowLength));
+      ctx2.lineTo(0, -length);
+      ctx2.lineTo(arrowWidth, -(length - arrowLength));
+      ctx2.closePath();
+    } else {
+      ctx2.arc(0, -length, width / 2, 0, TWO_PI9);
+    }
+    ctx2.fill();
+    ctx2.restore();
+  }
+  function drawBreguetHand(ctx2, cx, cy, angle, length, handWidth, strokeColor, fillColor, centerRadius) {
+    const widthScaler = handWidth / (length * 0.16);
+    const lengthScaler = length * 0.059;
+    const armWidth = length * 0.04 * widthScaler;
+    const breOuterCenter = length * 0.71 + lengthScaler;
+    const breInnerCenter = length * 0.725 + lengthScaler * 0.88;
+    const breOuterRadius = length * 0.075 * widthScaler;
+    const breInnerRadius = length * 0.05 * widthScaler;
+    const breBase = breInnerCenter - breInnerRadius;
+    const tipBase = breOuterCenter + breOuterRadius - length * 5e-3;
+    const tipWidth = length * 0.045 * widthScaler;
+    ctx2.save();
+    ctx2.translate(cx, cy);
+    ctx2.rotate(angle);
+    ctx2.strokeStyle = strokeColor;
+    ctx2.fillStyle = fillColor;
+    ctx2.lineWidth = 0.1;
+    ctx2.beginPath();
+    ctx2.arc(0, 0, centerRadius, 0, TWO_PI9);
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.beginPath();
+    ctx2.moveTo(-armWidth / 2, -centerRadius);
+    ctx2.lineTo(-armWidth / 5, -breBase);
+    ctx2.lineTo(armWidth / 5, -breBase);
+    ctx2.lineTo(armWidth / 2, -centerRadius);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.beginPath();
+    ctx2.arc(0, -breOuterCenter, breOuterRadius, 0, TWO_PI9);
+    ctx2.moveTo(breInnerRadius, -breInnerCenter);
+    ctx2.arc(0, -breInnerCenter, breInnerRadius, 0, -TWO_PI9, true);
+    ctx2.fill("evenodd");
+    ctx2.stroke();
+    ctx2.beginPath();
+    ctx2.moveTo(-tipWidth / 2, -tipBase);
+    ctx2.lineTo(0, -length);
+    ctx2.lineTo(tipWidth / 2, -tipBase);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.restore();
+  }
+  var TAIL_FRACTION = 0.3;
+  function drawNeedleHand(ctx2, cx, cy, angle, length, width, color, ballRadius) {
+    ctx2.save();
+    ctx2.translate(cx, cy);
+    ctx2.rotate(angle);
+    ctx2.fillStyle = color;
+    ctx2.strokeStyle = color;
+    ctx2.lineWidth = 0.1;
+    ctx2.beginPath();
+    ctx2.moveTo(-width / 2, 0);
+    ctx2.lineTo(-width / 2, -(length / 2));
+    ctx2.lineTo(0, -length);
+    ctx2.lineTo(width / 2, -(length / 2));
+    ctx2.lineTo(width / 2, length * TAIL_FRACTION - ballRadius);
+    ctx2.lineTo(-width / 2, length * TAIL_FRACTION - ballRadius);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.stroke();
+    if (ballRadius > 0) {
+      ctx2.beginPath();
+      ctx2.arc(0, 0, ballRadius / 2, 0, TWO_PI9);
+      ctx2.fill();
+      ctx2.lineWidth = width;
+      ctx2.beginPath();
+      ctx2.arc(0, length * TAIL_FRACTION, ballRadius, 0, TWO_PI9);
+      ctx2.stroke();
+    }
+    ctx2.restore();
+  }
+  var TRIANGLE_TAIL_FRACTION = 0.21;
+  var SUBDIAL_STROKE = "rgba(170, 170, 170, 1)";
+  var SUBDIAL_FILL = "rgba(128, 128, 128, 1)";
+  var SUBDIAL_SEC_STROKE = "rgba(255, 0, 0, 0.5)";
+  var SUBDIAL_SEC_FILL = "rgba(255, 0, 0, 0.75)";
+  function drawTriangleHand(ctx2, cx, cy, angle, length, width, strokeColor, fillColor) {
+    ctx2.save();
+    ctx2.translate(cx, cy);
+    ctx2.rotate(angle);
+    ctx2.strokeStyle = strokeColor;
+    ctx2.fillStyle = fillColor;
+    ctx2.lineWidth = width / 10;
+    ctx2.beginPath();
+    ctx2.moveTo(-width / 2, 0);
+    ctx2.lineTo(0, -length);
+    ctx2.lineTo(width / 2, 0);
+    ctx2.lineTo(0, length * TRIANGLE_TAIL_FRACTION);
+    ctx2.closePath();
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.restore();
+  }
+  function drawClockHands(ctx2, L, env2, now, noonOnTop2, pool, tzOffsetSeconds, getNow2, observerLat, observerLon) {
+    const { mainCX, mainCY } = L;
+    const noonOffset = noonOnTop2 ? Math.PI : 0;
+    const utcMs = now.getTime();
+    const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
+    const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
+    const srResult = computeSunSpecial24HourAngle(
+      0 /* SunRiseMorning */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (srResult.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        srResult.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        RISESET_COLOR,
+        RISESET_COLOR
+      );
+    }
+    const ssResult = computeSunSpecial24HourAngle(
+      1 /* SunSetEvening */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ssResult.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ssResult.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        RISESET_COLOR,
+        RISESET_COLOR
+      );
+    }
+    const ghMorning = computeSunSpecial24HourAngle(
+      2 /* SunGoldenHourMorning */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ghMorning.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ghMorning.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        GOLDEN_COLOR,
+        "#555555"
+      );
+    }
+    const ctMorning = computeSunSpecial24HourAngle(
+      4 /* SunCivilTwilightMorning */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ctMorning.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ctMorning.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        TWILIGHT_COLOR,
+        TWILIGHT_ARM_COLOR
+      );
+    }
+    const ntMorning = computeSunSpecial24HourAngle(
+      6 /* SunNauticalTwilightMorning */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ntMorning.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ntMorning.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        TWILIGHT_COLOR,
+        TWILIGHT_ARM_COLOR
+      );
+    }
+    const atMorning = computeSunSpecial24HourAngle(
+      8 /* SunAstroTwilightMorning */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (atMorning.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        atMorning.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        TWILIGHT_COLOR,
+        TWILIGHT_ARM_COLOR
+      );
+    }
+    const ghEvening = computeSunSpecial24HourAngle(
+      3 /* SunGoldenHourEvening */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ghEvening.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ghEvening.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        GOLDEN_COLOR,
+        "#555555"
+      );
+    }
+    const ctEvening = computeSunSpecial24HourAngle(
+      5 /* SunCivilTwilightEvening */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ctEvening.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ctEvening.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        TWILIGHT_COLOR,
+        TWILIGHT_ARM_COLOR
+      );
+    }
+    const ntEvening = computeSunSpecial24HourAngle(
+      7 /* SunNauticalTwilightEvening */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (ntEvening.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        ntEvening.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        TWILIGHT_COLOR,
+        TWILIGHT_ARM_COLOR
+      );
+    }
+    const atEvening = computeSunSpecial24HourAngle(
+      9 /* SunAstroTwilightEvening */,
+      getNow2,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+    if (atEvening.valid) {
+      drawArrowHand(
+        ctx2,
+        mainCX,
+        mainCY,
+        atEvening.angle + noonOffset,
+        L.sunRiseSetLen,
+        L.len2,
+        1,
+        L.sunRiseSetArrow,
+        L.sunRiseSetArrow / 2 / Math.sqrt(3),
+        TWILIGHT_COLOR,
+        TWILIGHT_ARM_COLOR
+      );
+    }
+    const calcDate = dateToDateInterval(now);
+    const transitDI = planettransitTimeRefined(
+      calcDate,
+      observerLat,
+      observerLon,
+      true,
+      0,
+      pool
+    );
+    const snoonAngle = angle24HourForDate(transitDI, tzOffsetSeconds);
+    drawArrowHand(
+      ctx2,
+      mainCX,
+      mainCY,
+      snoonAngle + noonOffset,
+      L.sunRiseSetLen,
+      L.len2,
+      1,
+      L.sunRiseSetArrow,
+      L.sunRiseSetArrow / 2 / Math.sqrt(3),
+      SNOON_COLOR,
+      "#555555"
+    );
+    drawArrowHand(
+      ctx2,
+      mainCX,
+      mainCY,
+      snoonAngle + Math.PI + noonOffset,
+      L.sunRiseSetLen,
+      L.len2,
+      1,
+      L.sunRiseSetArrow,
+      L.sunRiseSetArrow / 2 / Math.sqrt(3),
+      SMID_COLOR,
+      "#555555"
+    );
+    const h24Angle = fmod(secSinceMidnight / 3600, 24) * TWO_PI9 / 24 + noonOffset;
+    drawArrowHand(
+      ctx2,
+      mainCX,
+      mainCY,
+      h24Angle,
+      L.h24Len,
+      0,
+      0.75,
+      L.h24Arrow,
+      L.h24Wid,
+      HOUR24_COLOR,
+      HOUR24_COLOR
+    );
+    const h12Angle = fmod(secSinceMidnight / 3600, 12) * TWO_PI9 / 12;
+    drawBreguetHand(
+      ctx2,
+      mainCX,
+      mainCY,
+      h12Angle,
+      L.h12Len,
+      L.breH12Width,
+      "white",
+      HOUR12_COLOR,
+      L.breH12CenterR
+    );
+    const minAngle = fmod(secSinceMidnight / 60, 60) * TWO_PI9 / 60;
+    drawBreguetHand(
+      ctx2,
+      mainCX,
+      mainCY,
+      minAngle,
+      L.minLen,
+      L.breMinWidth,
+      "white",
+      MINUTE_COLOR,
+      L.breMinCenterR
+    );
+    const secAngle = fmod(secSinceMidnight, 60) * TWO_PI9 / 60;
+    drawNeedleHand(
+      ctx2,
+      mainCX,
+      mainCY,
+      secAngle,
+      L.secLen,
+      L.secWidth,
+      SECOND_COLOR,
+      L.secBallR
+    );
+  }
+  function drawSubdialHands(ctx2, L, now, tzOffsetSeconds, observerLonRad) {
+    const { subR } = L;
+    const ss = subR / 73;
+    const hourLen = subR * 0.55;
+    const minuteLen = subR * 0.75;
+    const secondLen = subR * 0.85;
+    const hourWid = 5 * ss;
+    const minuteWid = 4 * ss;
+    const secondWid = 3 * ss;
+    const utcMs = now.getTime();
+    const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
+    const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
+    const utcSecsMidnight = secSinceMidnight - tzOffsetSeconds;
+    const utcSecNorm = (utcSecsMidnight % 86400 + 86400) % 86400;
+    const utcHourAngle = fmod(utcSecNorm / 3600, 24) * TWO_PI9 / 24;
+    const utcMinAngle = fmod(utcSecNorm / 60, 60) * TWO_PI9 / 60;
+    const utcSecAngle = fmod(utcSecNorm, 60) * TWO_PI9 / 60;
+    drawTriangleHand(ctx2, L.utcCX, L.utcCY, utcHourAngle, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.utcCX, L.utcCY, utcMinAngle, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.utcCX, L.utcCY, utcSecAngle, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    const di = dateToDateInterval(now);
+    const eotSec = EOTSeconds(di, null);
+    const solarTimeSec = secSinceMidnight + observerLonRad * 86400 / TWO_PI9 - tzOffsetSeconds + eotSec;
+    const solarSecNorm = (solarTimeSec % 86400 + 86400) % 86400;
+    const solarHourAngle = fmod(solarSecNorm / 3600, 12) * TWO_PI9 / 12;
+    const solarMinAngle = fmod(solarSecNorm / 60, 60) * TWO_PI9 / 60;
+    const solarSecAngle = fmod(solarSecNorm, 60) * TWO_PI9 / 60;
+    drawTriangleHand(ctx2, L.solarCX, L.solarCY, solarHourAngle, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.solarCX, L.solarCY, solarMinAngle, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.solarCX, L.solarCY, solarSecAngle, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    const lstRad = localSiderealTime(di, observerLonRad, null);
+    const lstSec = lstRad * (12 * 3600) / Math.PI;
+    const lstSecNorm = (lstSec % 86400 + 86400) % 86400;
+    const sidHourAngle = fmod(lstSecNorm / 3600, 24) * TWO_PI9 / 24;
+    const sidMinAngle = fmod(lstSecNorm / 60, 60) * TWO_PI9 / 60;
+    const sidSecAngle = fmod(lstSecNorm, 60) * TWO_PI9 / 60;
+    drawTriangleHand(ctx2, L.sidCX, L.sidCY, sidHourAngle, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.sidCX, L.sidCY, sidMinAngle, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.sidCX, L.sidCY, sidSecAngle, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+  }
+
   // src/observatory/observatory-entry.ts
   var noonOnTop = false;
   var layout;
@@ -14289,6 +14924,7 @@
   var tzDeltaMs = computeTzDeltaMs(locationTimezone);
   var getNow = () => timeController.getDisplayTime();
   var env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+  var handPool = new AstroCachePool();
   function initCanvas() {
     canvas = document.getElementById("observatory-canvas");
     const context = canvas.getContext("2d");
@@ -14334,6 +14970,13 @@
     const tzOffsetSec = env.tzOffsetSec ?? 0;
     drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec);
     drawPlanetHands(ctx, L, now, env);
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+    const calcDI = dateToDateInterval(now);
+    initializeCachePool(handPool, calcDI, latRad, lonRad, false, tzOffsetSec);
+    drawClockHands(ctx, L, env, now, noonOnTop, handPool, tzOffsetSec, getNow, latRad, lonRad);
+    releaseCachePool(handPool);
+    drawSubdialHands(ctx, L, now, tzOffsetSec, lonRad);
     const peripherals = [
       { cx: L.altCX, cy: L.altCY, r: L.altR, label: "ALT" },
       { cx: L.azCX, cy: L.azCY, r: L.azR, label: "AZ" },

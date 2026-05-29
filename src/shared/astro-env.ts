@@ -1716,7 +1716,7 @@ export function registerAstroFunctions(
  * Convert a dateInterval to a 24-hour angle in local time.
  * iOS: angle24HourForDateInterval:timeBaseKind:ECTimeBaseKindLT
  */
-function angle24HourForDate(dateInterval: number, tzOffsetSeconds: number): number {
+export function angle24HourForDate(dateInterval: number, tzOffsetSeconds: number): number {
     // Compute local time of day from the UTC dateInterval + timezone offset.
     // This avoids relying on browser-local getHours() which would be wrong
     // when the target timezone differs from the browser timezone.
@@ -1777,6 +1777,7 @@ function nextPrevRiseSetInternal(
     fudgeSeconds: number,
     lookahead: number,
     pool: AstroCachePool,
+    overrideAltitude: number = NaN,
 ): { eventTime: number; transitTime: number } {
     // iOS lines 2326-2329: if searching backward, negate fudge and lookahead
     let fudge = fudgeSeconds;
@@ -1789,7 +1790,7 @@ function nextPrevRiseSetInternal(
     const fudgeDate = calcDate + fudge;
     const result1 = planetaryRiseSetTimeRefined(
         fudgeDate, observerLat, observerLon,
-        riseNotSet, planetNumber, NaN, pool,
+        riseNotSet, planetNumber, overrideAltitude, pool,
     );
 
     // iOS lines 2335-2337: check if transit is in the right direction
@@ -1805,7 +1806,7 @@ function nextPrevRiseSetInternal(
     const tryDate = fudgeDate + look;
     const result2 = planetaryRiseSetTimeRefined(
         tryDate, observerLat, observerLon,
-        riseNotSet, planetNumber, NaN, pool,
+        riseNotSet, planetNumber, overrideAltitude, pool,
     );
 
     return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
@@ -1993,6 +1994,176 @@ export function computeDayNightLeafAngle(
     }
 
     return leafCenterAngle;
+}
+
+// ============================================================================
+// Sun special 24-hour indicator angle (twilight / golden hour hands)
+// ============================================================================
+
+/**
+ * Sun altitude kind for the Observatory's twilight/golden-hour hand indicators.
+ * iOS: CacheSlotIndex enum values sunRiseMorning..sunAstroTwilightEvening
+ * Port of: ESAstronomy.cpp getParamsForAltitudeKind (L2663-2714)
+ */
+export enum SunAltitudeKind {
+    SunRiseMorning,
+    SunSetEvening,
+    SunGoldenHourMorning,
+    SunGoldenHourEvening,
+    SunCivilTwilightMorning,
+    SunCivilTwilightEvening,
+    SunNauticalTwilightMorning,
+    SunNauticalTwilightEvening,
+    SunAstroTwilightMorning,
+    SunAstroTwilightEvening,
+}
+
+export interface SunSpecialAngleResult {
+    angle: number;
+    valid: boolean;
+}
+
+/**
+ * Map altitude kind to (altitude, riseNotSet) parameters.
+ * Port of: ESAstronomy.cpp getParamsForAltitudeKind (L2663-2714)
+ */
+function getParamsForAltitudeKind(kind: SunAltitudeKind): { altitude: number; riseNotSet: boolean } {
+    switch (kind) {
+        case SunAltitudeKind.SunRiseMorning:
+            return { altitude: NaN, riseNotSet: true };
+        case SunAltitudeKind.SunSetEvening:
+            return { altitude: NaN, riseNotSet: false };
+        case SunAltitudeKind.SunGoldenHourMorning:
+            return { altitude: 15 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunGoldenHourEvening:
+            return { altitude: 15 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunCivilTwilightMorning:
+            return { altitude: -6 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunCivilTwilightEvening:
+            return { altitude: -6 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunNauticalTwilightMorning:
+            return { altitude: -12 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunNauticalTwilightEvening:
+            return { altitude: -12 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunAstroTwilightMorning:
+            return { altitude: -18 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunAstroTwilightEvening:
+            return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+    }
+}
+
+/**
+ * Compute the 24-hour indicator angle for a sun event (sunrise, sunset,
+ * twilight boundary, or golden hour boundary).
+ *
+ * Port of: ESAstronomy.cpp sunSpecial24HourIndicatorAngleForAltitudeKind (L5538-5581)
+ *
+ * For sunrise/sunset: uses the standard dayNightLeafAngle approach.
+ * For twilight/golden hour: uses a two-step search:
+ *   1. Find the nearest sunset (for morning events) or sunrise (for evening events)
+ *   2. From that anchor, search backward/forward for the twilight boundary
+ *
+ * This ensures the hand transitions at the correct point (180° from the
+ * transit, i.e., when the relevant sunrise/sunset changes) rather than at
+ * midnight like sunAltitudeTimeForDay would.
+ */
+export function computeSunSpecial24HourAngle(
+    altitudeKind: SunAltitudeKind,
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): SunSpecialAngleResult {
+    const { altitude, riseNotSet } = getParamsForAltitudeKind(altitudeKind);
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeFactorSeconds = 5;
+    const lookahead = 3600 * 13.2;
+
+    if (altitudeKind === SunAltitudeKind.SunRiseMorning ||
+        altitudeKind === SunAltitudeKind.SunSetEvening) {
+        // Sunrise/sunset: same as computeDayNightLeafAngle(Sun, 0/1, 0, ...)
+        // but with validity tracking.
+        // iOS: dayNightLeafAngleForPlanetNumber(Sun, riseNotSet?0:1, 0, NaN, &validReturn, NULL)
+        const planetIsUp = planetIsUpForRiseSet(ECPlanetNumber.Sun, calcDate, observerLat, observerLon);
+        const result = nextPrevRiseSetInternal(
+            calcDate, observerLat, observerLon,
+            riseNotSet, ECPlanetNumber.Sun,
+            riseNotSet ? !planetIsUp : planetIsUp,
+            -fudgeFactorSeconds, lookahead, pool,
+        );
+        let transitAngle = angle24HourForDate(result.transitTime, tzOffsetSeconds);
+        if (isNaN(result.eventTime) && isAlwaysAbove(result.eventTime)) {
+            transitAngle = fmod(transitAngle + Math.PI, 2 * Math.PI);
+        }
+        const eventAngle = isNoRiseSet(result.eventTime)
+            ? NaN
+            : angle24HourForDate(result.eventTime, tzOffsetSeconds);
+        if (isNaN(eventAngle)) {
+            return { angle: transitAngle, valid: false };
+        }
+        return { angle: eventAngle, valid: true };
+    }
+
+    // =========================================================================
+    // Twilight / golden hour: two-step search
+    // iOS L5547-5577
+    // =========================================================================
+    let anchorTime: number;
+    let twilightResult: { eventTime: number; transitTime: number };
+
+    if (riseNotSet) {
+        // Morning twilight: find next sunset, then search backward from there
+        // for the preceding morning twilight at the specified altitude.
+        // iOS L5550-5561
+        const sunsetResult = nextPrevRiseSetInternal(
+            calcDate, observerLat, observerLon,
+            false, ECPlanetNumber.Sun,  // riseNotSet=false → sunset
+            true,                        // isNext=true → forward to next sunset
+            fudgeFactorSeconds, lookahead, pool,
+            // NaN altitude → standard sunset
+        );
+        anchorTime = sunsetResult.transitTime;
+
+        // From sunset, search backward for the morning twilight boundary
+        twilightResult = nextPrevRiseSetInternal(
+            anchorTime, observerLat, observerLon,
+            true, ECPlanetNumber.Sun,   // riseNotSet=true → rise (morning boundary)
+            false,                       // isNext=false → backward
+            fudgeFactorSeconds, lookahead, pool,
+            altitude,                    // override altitude for twilight
+        );
+    } else {
+        // Evening twilight: find previous sunrise, then search forward from there
+        // for the following evening twilight at the specified altitude.
+        // iOS L5562-5573
+        const sunriseResult = nextPrevRiseSetInternal(
+            calcDate, observerLat, observerLon,
+            true, ECPlanetNumber.Sun,   // riseNotSet=true → sunrise
+            false,                       // isNext=false → backward to prev sunrise
+            fudgeFactorSeconds, lookahead, pool,
+            // NaN altitude → standard sunrise
+        );
+        anchorTime = sunriseResult.transitTime;
+
+        // From sunrise, search forward for the evening twilight boundary
+        twilightResult = nextPrevRiseSetInternal(
+            anchorTime, observerLat, observerLon,
+            false, ECPlanetNumber.Sun,  // riseNotSet=false → set (evening boundary)
+            true,                        // isNext=true → forward
+            fudgeFactorSeconds, lookahead, pool,
+            altitude,                    // override altitude for twilight
+        );
+    }
+
+    // iOS L5561/5573: valid = !isnan(ignoreMe) where ignoreMe is the event return value
+    const valid = !isNaN(twilightResult.eventTime) && isFinite(twilightResult.eventTime)
+        && !isNoRiseSet(twilightResult.eventTime);
+    // iOS L5577: angle = angle24HourForDateInterval(riseSetOrTransit, LT)
+    // riseSetOrTransit = transitTime output from the search
+    const angle = angle24HourForDate(twilightResult.transitTime, tzOffsetSeconds);
+
+    return { angle, valid };
 }
 
 // ============================================================================

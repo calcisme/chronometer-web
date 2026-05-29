@@ -68,6 +68,28 @@ export interface LayoutParams {
     minLen: number;
     sunRiseSetLen: number;
 
+    // Hand drawing dimensions
+    /** Arrow length for the 24h hand arrowhead */
+    h24Arrow: number;
+    /** Half-width of the 24h arrow */
+    h24Wid: number;
+    /** Arrow length for sunrise/sunset/twilight hands */
+    sunRiseSetArrow: number;
+    /** Tail length for arrow hands (inner endpoint) */
+    len2: number;
+    /** Breguet 12h hand width param (iOS: 30) */
+    breH12Width: number;
+    /** Breguet 12h hand center hub radius (iOS: 12) */
+    breH12CenterR: number;
+    /** Breguet minute hand width param (iOS: 25) */
+    breMinWidth: number;
+    /** Breguet minute hand center hub radius (iOS: 8) */
+    breMinCenterR: number;
+    /** Needle (second) hand body width (iOS: 2) */
+    secWidth: number;
+    /** Needle (second) hand tail ball radius (iOS: 6) */
+    secBallR: number;
+
     // Font sizes (proportional to mainR)
     mainFontSize: number;
     subdialFontSize: number;
@@ -197,6 +219,22 @@ export function computeLayout(viewW: number, viewH: number): LayoutParams {
     const h24Len = mainR - tickHeight * 0.37;
     const sunRiseSetLen = h24Len;
 
+    // Hand drawing dimensions (iOS: EOClock.mm L1676-1689)
+    const h24Arrow = 25 * s;
+    const h24Wid = h24Arrow / 1.8 / Math.sqrt(3);
+    const sunRiseSetArrow = 18 * s;
+    const len2 = zR - 5 * s;  // iOS: zR-5, tail length for arrow hands
+
+    // Breguet hand dimensions (iOS: EOClock.mm L2053-2056)
+    const breH12Width = 30 * s;     // iOS: hour12Hand width=30
+    const breH12CenterR = 12 * s;   // iOS: hour12Hand centerRadius=12
+    const breMinWidth = 25 * s;     // iOS: minuteHand width=25
+    const breMinCenterR = 8 * s;    // iOS: minuteHand centerRadius=8
+
+    // Needle (second) hand dimensions (iOS: EOClock.mm L2057)
+    const secWidth = 2 * s;         // iOS: secondHand width=2
+    const secBallR = 6 * s;         // iOS: secondHand ballRadius=6
+
     // --- Inner subdials (positioned relative to main center) ---
     // iOS CG coords (Y-up):
     //   UTC at (0, +subOffset) = above center
@@ -268,6 +306,9 @@ export function computeLayout(viewW: number, viewH: number): LayoutParams {
         subR, zR, zD, sunD, tickHeight, secLen,
         plR, plR2, orbitInc, sunRingWidth,
         h24Len, h12Len, minLen, sunRiseSetLen,
+        h24Arrow, h24Wid, sunRiseSetArrow, len2,
+        breH12Width, breH12CenterR, breMinWidth, breMinCenterR,
+        secWidth, secBallR,
         mainFontSize, subdialFontSize, zodiacFontSize, smallZodiacFontSize,
         subOffset, utcCX, utcCY, solarCX, solarCY, sidCX, sidCY,
         moonCX, moonCY, moonR,

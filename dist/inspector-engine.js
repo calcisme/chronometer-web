@@ -12216,7 +12216,7 @@
     );
     return alt > altAtRS;
   }
-  function nextPrevRiseSetInternal(calcDate, observerLat, observerLon, riseNotSet, planetNumber, isNext, fudgeSeconds, lookahead, pool) {
+  function nextPrevRiseSetInternal(calcDate, observerLat, observerLon, riseNotSet, planetNumber, isNext, fudgeSeconds, lookahead, pool, overrideAltitude = NaN) {
     let fudge = fudgeSeconds;
     let look = lookahead;
     if (!isNext) {
@@ -12230,7 +12230,7 @@
       observerLon,
       riseNotSet,
       planetNumber,
-      NaN,
+      overrideAltitude,
       pool
     );
     const transitOk = isNext ? result1.transitTime >= fudgeDate : result1.transitTime < fudgeDate;
@@ -12244,7 +12244,7 @@
       observerLon,
       riseNotSet,
       planetNumber,
-      NaN,
+      overrideAltitude,
       pool
     );
     return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
