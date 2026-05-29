@@ -10865,6 +10865,18 @@
     }
     return altNotAz ? planetAltitude : planetAzimuth;
   }
+  function cachelessPlanetAlt(planetNumber, dateInterval, observerLatitude, observerLongitude) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
+    const tau = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, tau);
+    const planetRA = pos.apparentRightAscension;
+    const planetDecl = pos.apparentDeclination;
+    const gst = convertUTToGSTP03(dateInterval, null);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const hourAngle = lst - planetRA;
+    const sinAlt = Math.sin(planetDecl) * Math.sin(observerLatitude) + Math.cos(planetDecl) * Math.cos(observerLatitude) * Math.cos(hourAngle);
+    return Math.asin(sinAlt);
+  }
   function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
     return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
   }
@@ -12784,6 +12796,20 @@
     SunAltitudeKind2[SunAltitudeKind2["SunNauticalTwilightEvening"] = 7] = "SunNauticalTwilightEvening";
     SunAltitudeKind2[SunAltitudeKind2["SunAstroTwilightMorning"] = 8] = "SunAstroTwilightMorning";
     SunAltitudeKind2[SunAltitudeKind2["SunAstroTwilightEvening"] = 9] = "SunAstroTwilightEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing18BelowMorning"] = 10] = "SunRing18BelowMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing18BelowEvening"] = 11] = "SunRing18BelowEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing9BelowMorning"] = 12] = "SunRing9BelowMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing9BelowEvening"] = 13] = "SunRing9BelowEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing1BelowMorning"] = 14] = "SunRing1BelowMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing1BelowEvening"] = 15] = "SunRing1BelowEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRingHalfBelowMorning"] = 16] = "SunRingHalfBelowMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRingHalfBelowEvening"] = 17] = "SunRingHalfBelowEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing1AboveMorning"] = 18] = "SunRing1AboveMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing1AboveEvening"] = 19] = "SunRing1AboveEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing9AboveMorning"] = 20] = "SunRing9AboveMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing9AboveEvening"] = 21] = "SunRing9AboveEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing30AboveMorning"] = 22] = "SunRing30AboveMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunRing30AboveEvening"] = 23] = "SunRing30AboveEvening";
     return SunAltitudeKind2;
   })(SunAltitudeKind || {});
   function getParamsForAltitudeKind(kind) {
@@ -12808,6 +12834,35 @@
         return { altitude: -18 * Math.PI / 180, riseNotSet: true };
       case 9 /* SunAstroTwilightEvening */:
         return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+      // Sun ring gradient stops
+      case 10 /* SunRing18BelowMorning */:
+        return { altitude: -18 * Math.PI / 180, riseNotSet: true };
+      case 11 /* SunRing18BelowEvening */:
+        return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+      case 12 /* SunRing9BelowMorning */:
+        return { altitude: -9 * Math.PI / 180, riseNotSet: true };
+      case 13 /* SunRing9BelowEvening */:
+        return { altitude: -9 * Math.PI / 180, riseNotSet: false };
+      case 14 /* SunRing1BelowMorning */:
+        return { altitude: -1 * Math.PI / 180, riseNotSet: true };
+      case 15 /* SunRing1BelowEvening */:
+        return { altitude: -1 * Math.PI / 180, riseNotSet: false };
+      case 16 /* SunRingHalfBelowMorning */:
+        return { altitude: -0.5 * Math.PI / 180, riseNotSet: true };
+      case 17 /* SunRingHalfBelowEvening */:
+        return { altitude: -0.5 * Math.PI / 180, riseNotSet: false };
+      case 18 /* SunRing1AboveMorning */:
+        return { altitude: 1 * Math.PI / 180, riseNotSet: true };
+      case 19 /* SunRing1AboveEvening */:
+        return { altitude: 1 * Math.PI / 180, riseNotSet: false };
+      case 20 /* SunRing9AboveMorning */:
+        return { altitude: 9 * Math.PI / 180, riseNotSet: true };
+      case 21 /* SunRing9AboveEvening */:
+        return { altitude: 9 * Math.PI / 180, riseNotSet: false };
+      case 22 /* SunRing30AboveMorning */:
+        return { altitude: 30 * Math.PI / 180, riseNotSet: true };
+      case 23 /* SunRing30AboveEvening */:
+        return { altitude: 30 * Math.PI / 180, riseNotSet: false };
     }
   }
   function computeSunSpecial24HourAngle(altitudeKind, getNow2, observerLat, observerLon, pool, tzOffsetSeconds) {
@@ -15040,6 +15095,43 @@
   // src/observatory/ring-view.ts
   var TWO_PI8 = 2 * Math.PI;
   var HALF_PI2 = Math.PI / 2;
+  function lerpColor(c1, c2, t) {
+    const parse2 = (s) => {
+      const m = s.match(/rgba?\((\d+),(\d+),(\d+),?([\d.]*)\)/);
+      return m ? [+m[1], +m[2], +m[3], m[4] !== "" ? +m[4] : 1] : [0, 0, 0, 1];
+    };
+    const a = parse2(c1);
+    const b = parse2(c2);
+    return `rgba(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)},${(a[3] + (b[3] - a[3]) * t).toFixed(3)})`;
+  }
+  var GRADIENT_STEPS = [
+    { alt: -90.01, r: 0.125, g: 0.125, b: 0.125, a: 0 },
+    // full night
+    { alt: -30, r: 0.125, g: 0.125, b: 0.125, a: 0 },
+    { alt: -9, r: 0, g: 0, b: 0.39, a: 1 },
+    { alt: -1, r: 0.17, g: 0.77, b: 0.84, a: 1 },
+    { alt: -0.5, r: 0.84, g: 0, b: 0, a: 1 },
+    { alt: 1, r: 0.94, g: 0.42, b: 0, a: 1 },
+    { alt: 9, r: 1, g: 1, b: 0, a: 1 },
+    { alt: 30, r: 0.9, g: 0.9, b: 1, a: 1 },
+    { alt: 90.01, r: 0.9, g: 0.9, b: 1, a: 1 }
+  ];
+  function colorForAltitude(altRad) {
+    const altDeg = altRad * 180 / Math.PI;
+    const alt = Math.max(-90, Math.min(90, altDeg));
+    let i = 0;
+    while (i < GRADIENT_STEPS.length - 1 && GRADIENT_STEPS[i].alt <= alt) {
+      i++;
+    }
+    const j = Math.max(0, i - 1);
+    const stepWidth = GRADIENT_STEPS[i].alt - GRADIENT_STEPS[j].alt;
+    const fraction = stepWidth > 0 ? (alt - GRADIENT_STEPS[j].alt) / stepWidth : 0;
+    const r = GRADIENT_STEPS[j].r + (GRADIENT_STEPS[i].r - GRADIENT_STEPS[j].r) * fraction;
+    const g = GRADIENT_STEPS[j].g + (GRADIENT_STEPS[i].g - GRADIENT_STEPS[j].g) * fraction;
+    const b = GRADIENT_STEPS[j].b + (GRADIENT_STEPS[i].b - GRADIENT_STEPS[j].b) * fraction;
+    const a = GRADIENT_STEPS[j].a + (GRADIENT_STEPS[i].a - GRADIENT_STEPS[j].a) * fraction;
+    return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${a.toFixed(3)})`;
+  }
   var PLANET_RINGS = [
     { planet: 7 /* Saturn */, outerOffset: 2, width: 8, dayColor: "rgba(169,252,252,1)", nightColor: null },
     { planet: 6 /* Jupiter */, outerOffset: 12, width: 8, dayColor: "rgba(169,252,169,1)", nightColor: null },
@@ -15057,8 +15149,116 @@
     [7 /* Saturn */]: "Saturn"
   };
   var ringCache = /* @__PURE__ */ new Map();
-  var sunRingCacheCanvas = null;
-  var sunRingCacheNoonOnTop = null;
+  var sunRingLogOnce = false;
+  var SUN_RING_COLORS = [
+    // Morning (night → day): indices 0–6
+    "rgba(32,32,32,1)",
+    // -18°: end of astronomical twilight (full night)
+    "rgba(0,0,100,1)",
+    // -9°: dark blue
+    "rgba(43,196,214,1)",
+    // -1°: light cyan
+    "rgba(214,0,0,1)",
+    // -0.5°: red (sunrise)
+    "rgba(240,107,0,1)",
+    // +1°: orange
+    "rgba(255,255,0,1)",
+    // +9°: yellow (golden hour)
+    "rgba(230,230,255,1)",
+    // +30°: pale blue-white (full day)
+    // Evening (day → night): indices 7–13
+    "rgba(230,230,255,1)",
+    // +30°: pale blue-white
+    "rgba(255,255,0,1)",
+    // +9°: yellow
+    "rgba(240,107,0,1)",
+    // +1°: orange
+    "rgba(214,0,0,1)",
+    // -0.5°: red (sunset)
+    "rgba(43,196,214,1)",
+    // -1°: light cyan
+    "rgba(0,0,100,1)",
+    // -9°: dark blue
+    "rgba(32,32,32,1)",
+    // -18°: end of astronomical twilight (full night)
+    // Anchor points: colors computed at render time
+    null,
+    // noon — computed
+    null
+    // midnight — computed
+  ];
+  function drawSunRingGradient(ctx2, L, vs, now, lat2, lng, tzOffsetSeconds) {
+    const cx = L.mainCX;
+    const cy = L.mainCY;
+    const outerR = L.plR;
+    const innerR = L.plR - L.sunRingWidth;
+    const centerR = (outerR + innerR) / 2;
+    const ringWidth = outerR - innerR;
+    const stops = [];
+    const ringValues = vs.sunRing;
+    for (let i = 0; i < ringValues.length; i++) {
+      const val = ringValues[i].currentValue;
+      if (isNaN(val)) continue;
+      let color = SUN_RING_COLORS[i];
+      if (color === null) {
+        const latRad = lat2 * Math.PI / 180;
+        const lngRad = lng * Math.PI / 180;
+        let angleNorm = val % TWO_PI8;
+        if (angleNorm < 0) angleNorm += TWO_PI8;
+        const secSinceMidnight = angleNorm / TWO_PI8 * 86400;
+        const unixNow = now.getTime() / 1e3;
+        const localNow = unixNow + tzOffsetSeconds;
+        const localMidnight = Math.floor(localNow / 86400) * 86400;
+        const targetUnix = localMidnight + secSinceMidnight - tzOffsetSeconds;
+        const targetDI = targetUnix - 978307200;
+        const alt = cachelessPlanetAlt(0 /* Sun */, targetDI, latRad, lngRad);
+        color = colorForAltitude(alt).replace(/,[\d.]+\)$/, ",1)");
+      }
+      stops.push({ angle: val, color });
+    }
+    if (stops.length < 2) return;
+    stops.sort((a, b) => a.angle - b.angle);
+    const grad = ctx2.createConicGradient(-HALF_PI2, cx, cy);
+    const angleToOffset = (angle) => {
+      let a = angle % TWO_PI8;
+      if (a < 0) a += TWO_PI8;
+      return a / TWO_PI8;
+    };
+    for (const stop of stops) {
+      grad.addColorStop(angleToOffset(stop.angle), stop.color);
+    }
+    const firstStop = stops[0];
+    const lastStop = stops[stops.length - 1];
+    const firstOffset = angleToOffset(firstStop.angle);
+    const lastOffset = angleToOffset(lastStop.angle);
+    const gapSize = 1 - lastOffset + firstOffset;
+    if (gapSize > 1e-3) {
+      const frac = (1 - lastOffset) / gapSize;
+      const boundaryColor = lerpColor(lastStop.color, firstStop.color, frac);
+      grad.addColorStop(0, boundaryColor);
+      grad.addColorStop(1, boundaryColor);
+    }
+    if (!sunRingLogOnce) {
+      sunRingLogOnce = true;
+      console.log("[SunRing] Gradient stops (" + stops.length + "):");
+      for (const stop of stops) {
+        const offset = angleToOffset(stop.angle);
+        const hours = (offset * 24).toFixed(2);
+        const name = ringValues.find((v) => Math.abs(v.currentValue - stop.angle) < 1e-3)?.name ?? "?";
+        console.log(`  ${name}: angle=${stop.angle.toFixed(3)} \u2192 ${hours}h, offset=${offset.toFixed(4)}, color=${stop.color}`);
+      }
+      const nanNames = ringValues.filter((v) => isNaN(v.currentValue)).map((v) => v.name);
+      if (nanNames.length) console.log("[SunRing] NaN (skipped):", nanNames.join(", "));
+    }
+    ctx2.save();
+    ctx2.strokeStyle = grad;
+    ctx2.lineWidth = ringWidth;
+    ctx2.lineCap = "butt";
+    ctx2.beginPath();
+    ctx2.arc(cx, cy, centerR, 0, TWO_PI8);
+    ctx2.stroke();
+    ctx2.restore();
+  }
   var RING_VALUE_KEYS = [
     "saturnRing",
     "jupiterRing",
@@ -15197,11 +15397,10 @@
   }
   function drawRiseSetRings(ctx2, L, env2, noonOnTop2, now, lat2, lon2, tzOffsetSeconds, vs) {
     updateRingCache(env2, vs);
+    drawSunRingGradient(ctx2, L, vs, now, lat2, lon2, tzOffsetSeconds);
     drawPlanetRing(ctx2, L);
   }
   function invalidateRingCache() {
-    sunRingCacheCanvas = null;
-    sunRingCacheNoonOnTop = null;
   }
 
   // src/observatory/hand-views.ts
@@ -15529,7 +15728,28 @@
         { name: `${key}Transit`, expr: `planetTransitAngle(${pn}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) }
       ]);
     }
-    return { clock, sunEvents, utc, solar, sidereal, planets: planets2, rings };
+    const sunRing = [
+      // Morning side (night → day): update at next sunset
+      { name: "ring18BelowMorn", expr: `sunSpecialAngle(${SK.SunRing18BelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ring9BelowMorn", expr: `sunSpecialAngle(${SK.SunRing9BelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ring1BelowMorn", expr: `sunSpecialAngle(${SK.SunRing1BelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ringHalfBelowMorn", expr: `sunSpecialAngle(${SK.SunRingHalfBelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ring1AboveMorn", expr: `sunSpecialAngle(${SK.SunRing1AboveMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ring9AboveMorn", expr: `sunSpecialAngle(${SK.SunRing9AboveMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "ring30AboveMorn", expr: `sunSpecialAngle(${SK.SunRing30AboveMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      // Evening side (day → night): update at next sunrise
+      { name: "ring30AboveEve", expr: `sunSpecialAngle(${SK.SunRing30AboveEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ring9AboveEve", expr: `sunSpecialAngle(${SK.SunRing9AboveEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ring1AboveEve", expr: `sunSpecialAngle(${SK.SunRing1AboveEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ringHalfBelowEve", expr: `sunSpecialAngle(${SK.SunRingHalfBelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ring1BelowEve", expr: `sunSpecialAngle(${SK.SunRing1BelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ring9BelowEve", expr: `sunSpecialAngle(${SK.SunRing9BelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "ring18BelowEve", expr: `sunSpecialAngle(${SK.SunRing18BelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      // Anchor points: solar noon and midnight (positions always valid, colors computed at render time)
+      { name: "ringNoon", expr: "solarNoonAngle() + pi * noonOnTop", updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+      { name: "ringMidnight", expr: "solarNoonAngle() + pi + pi * noonOnTop", updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET }
+    ];
+    return { clock, sunEvents, utc, solar, sidereal, planets: planets2, rings, sunRing };
   }
   function createObsValue(def, env2, perfNow, _getNow) {
     const expr = parse(def.expr);
@@ -15608,7 +15828,9 @@
       marsRing: makeRing("mars"),
       venusRing: makeRing("venus"),
       mercuryRing: makeRing("mercury"),
-      moonRing: makeRing("moon")
+      moonRing: makeRing("moon"),
+      // Sun ring gradient stops
+      sunRing: defs.sunRing.map(make)
     };
   }
   var allValuesCache = null;
@@ -15652,7 +15874,8 @@
       ...vs.marsRing,
       ...vs.venusRing,
       ...vs.mercuryRing,
-      ...vs.moonRing
+      ...vs.moonRing,
+      ...vs.sunRing
     ];
     allValuesCache = all;
     return all;

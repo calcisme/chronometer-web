@@ -2087,6 +2087,21 @@ export enum SunAltitudeKind {
     SunNauticalTwilightEvening,
     SunAstroTwilightMorning,
     SunAstroTwilightEvening,
+    // Sun ring gradient stops — altitudes for ring color transitions
+    SunRing18BelowMorning,
+    SunRing18BelowEvening,
+    SunRing9BelowMorning,
+    SunRing9BelowEvening,
+    SunRing1BelowMorning,
+    SunRing1BelowEvening,
+    SunRingHalfBelowMorning,
+    SunRingHalfBelowEvening,
+    SunRing1AboveMorning,
+    SunRing1AboveEvening,
+    SunRing9AboveMorning,
+    SunRing9AboveEvening,
+    SunRing30AboveMorning,
+    SunRing30AboveEvening,
 }
 
 export interface SunSpecialAngleResult {
@@ -2120,6 +2135,35 @@ function getParamsForAltitudeKind(kind: SunAltitudeKind): { altitude: number; ri
             return { altitude: -18 * Math.PI / 180, riseNotSet: true };
         case SunAltitudeKind.SunAstroTwilightEvening:
             return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+        // Sun ring gradient stops
+        case SunAltitudeKind.SunRing18BelowMorning:
+            return { altitude: -18 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRing18BelowEvening:
+            return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunRing9BelowMorning:
+            return { altitude: -9 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRing9BelowEvening:
+            return { altitude: -9 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunRing1BelowMorning:
+            return { altitude: -1 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRing1BelowEvening:
+            return { altitude: -1 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunRingHalfBelowMorning:
+            return { altitude: -0.5 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRingHalfBelowEvening:
+            return { altitude: -0.5 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunRing1AboveMorning:
+            return { altitude: 1 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRing1AboveEvening:
+            return { altitude: 1 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunRing9AboveMorning:
+            return { altitude: 9 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRing9AboveEvening:
+            return { altitude: 9 * Math.PI / 180, riseNotSet: false };
+        case SunAltitudeKind.SunRing30AboveMorning:
+            return { altitude: 30 * Math.PI / 180, riseNotSet: true };
+        case SunAltitudeKind.SunRing30AboveEvening:
+            return { altitude: 30 * Math.PI / 180, riseNotSet: false };
     }
 }
 

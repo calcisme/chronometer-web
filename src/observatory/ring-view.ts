@@ -15,14 +15,14 @@
  *   Mercury — 8px, salmon day arc
  *   Moon   — 8px, blue day arc
  *
- * The Sun ring iterates over ±12 hours from now, computing sun altitude
- * at each time step and coloring arc segments using the iOS gradient table
- * (EORingView.mm L61–71). Uses cachelessPlanetAlt for time-offset altitude.
+ * The Sun ring uses a conic gradient with fixed colors at animated angular
+ * positions. Each position corresponds to a specific sun altitude threshold
+ * (-30°, -9°, -1°, -0.5°, +1°, +9°, +30°) for both morning and evening
+ * sides, plus noon/midnight anchors with computed colors. Positions are
+ * ObsValues that animate smoothly and update at sunrise/sunset sentinels.
  *
  * Planet rings use rise/set angles via dayNightLeafAngle(planet, 0/1, 0)
  * (which IS the same underlying function as iOS planetrise24HourIndicatorAngle).
- *
- * Update interval: 3600s (rings recomputed hourly).
  */
 
 import type { LayoutParams } from './layout.js';
@@ -31,10 +31,20 @@ import type { ObsValueSet } from './obs-values.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
 import { cachelessPlanetAlt } from '../astronomy/es-astro.js';
 import { drawCircularText } from './draw-utils.js';
-import { dateToDateInterval } from '../astronomy/es-time.js';
 
 const TWO_PI = 2 * Math.PI;
 const HALF_PI = Math.PI / 2;
+
+/** Linearly interpolate between two `rgba(r,g,b,a)` CSS color strings. */
+function lerpColor(c1: string, c2: string, t: number): string {
+    const parse = (s: string) => {
+        const m = s.match(/rgba?\((\d+),(\d+),(\d+),?([\d.]*)\)/);
+        return m ? [+m[1], +m[2], +m[3], m[4] !== '' ? +m[4] : 1] : [0, 0, 0, 1];
+    };
+    const a = parse(c1);
+    const b = parse(c2);
+    return `rgba(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)},${(a[3] + (b[3] - a[3]) * t).toFixed(3)})`;
+}
 
 
 // ---------------------------------------------------------------------------
@@ -141,53 +151,68 @@ interface RingCacheEntry {
 
 const ringCache = new Map<ECPlanetNumber, RingCacheEntry>();
 
-// Sun ring OffscreenCanvas cache
-let sunRingCacheCanvas: OffscreenCanvas | null = null;
-let sunRingCacheNoonOnTop: boolean | null = null;
+let sunRingLogOnce = false; // DEBUG
 
 // ---------------------------------------------------------------------------
-// Sun ring rendering
+// Sun ring rendering — conic gradient with animated color stops
 // ---------------------------------------------------------------------------
 
 /**
- * Compute local time seconds since midnight for a given dateInterval + tz offset.
+ * Fixed color for each sun ring altitude stop.
+ * Index matches the order of sunRing ObsValues in obs-values.ts:
+ *   [0..6] = morning side (-18°, -9°, -1°, -0.5°, +1°, +9°, +30°)
+ *   [7..13] = evening side (+30°, +9°, +1°, -0.5°, -1°, -9°, -18°)
+ *   [14] = noon (color computed at render time)
+ *   [15] = midnight (color computed at render time)
+ */
+const SUN_RING_COLORS: (string | null)[] = [
+    // Morning (night → day): indices 0–6
+    'rgba(32,32,32,1)',       // -18°: end of astronomical twilight (full night)
+    'rgba(0,0,100,1)',        // -9°: dark blue
+    'rgba(43,196,214,1)',     // -1°: light cyan
+    'rgba(214,0,0,1)',        // -0.5°: red (sunrise)
+    'rgba(240,107,0,1)',      // +1°: orange
+    'rgba(255,255,0,1)',      // +9°: yellow (golden hour)
+    'rgba(230,230,255,1)',    // +30°: pale blue-white (full day)
+    // Evening (day → night): indices 7–13
+    'rgba(230,230,255,1)',    // +30°: pale blue-white
+    'rgba(255,255,0,1)',      // +9°: yellow
+    'rgba(240,107,0,1)',      // +1°: orange
+    'rgba(214,0,0,1)',        // -0.5°: red (sunset)
+    'rgba(43,196,214,1)',     // -1°: light cyan
+    'rgba(0,0,100,1)',        // -9°: dark blue
+    'rgba(32,32,32,1)',       // -18°: end of astronomical twilight (full night)
+    // Anchor points: colors computed at render time
+    null,  // noon — computed
+    null,  // midnight — computed
+];
+
+/**
+ * Draw the sun ring using a conic gradient with animated color stop positions.
  *
- * Port of: tempWatchTime->secondsSinceMidnightValueUsingEnv(env)
- * iOS uses ESWatchTime which applies the timezone to get local time.
+ * Each color stop has a fixed color (from the gradient table) at an animated
+ * angular position (from the ObsValue system). The conic gradient interpolates
+ * smoothly between stops.
  *
- * @param dateInterval  Apple epoch seconds
+ * Noon/midnight anchor points always exist; their colors are computed from
+ * the actual sun altitude at those times (important for polar regions).
+ *
+ * @param ctx  Canvas 2D context
+ * @param L    Layout parameters
+ * @param vs   ObsValueSet with sunRing[] values
+ * @param now  Current display time
+ * @param lat  Observer latitude in degrees
+ * @param lng  Observer longitude in degrees
  * @param tzOffsetSeconds  Timezone offset from UTC in seconds
  */
-function secondsSinceMidnightForDateInterval(dateInterval: number, tzOffsetSeconds: number): number {
-    // Convert Apple epoch to Unix timestamp
-    const unixTime = dateInterval + 978307200;
-    // Apply timezone offset to get local time
-    const localTime = unixTime + tzOffsetSeconds;
-    // Get seconds since midnight (modular arithmetic)
-    return ((localTime % 86400) + 86400) % 86400;
-}
-
-/**
- * Draw the Sun altitude ring.
- *
- * Port of: EORingView.mm L170–310 (drawRect for planet==ECPlanetSun)
- *
- * Iterates from (now - 12h) to (now + 12h), computing sun altitude
- * at each angular step and drawing colored arc segments.
- *
- * Angular convention (matching iOS):
- * - startAngle = secondsSinceMidnight / 3600 * 2π/24 + π * noonOnTop
- * - Canvas conversion: halfPi - clockAngle
- * - Arc drawn with anticlockwise=true (matches iOS CGContextAddArc clockwise=1 in UIKit)
- */
-function drawSunRing(
+function drawSunRingGradient(
     ctx: CanvasRenderingContext2D,
     L: LayoutParams,
+    vs: ObsValueSet,
     now: Date,
     lat: number,
     lng: number,
     tzOffsetSeconds: number,
-    noonOnTop: boolean,
 ): void {
     const cx = L.mainCX;
     const cy = L.mainCY;
@@ -195,61 +220,108 @@ function drawSunRing(
     const innerR = L.plR - L.sunRingWidth;
     const centerR = (outerR + innerR) / 2;
     const ringWidth = outerR - innerR;
-    const noonOffset = noonOnTop ? Math.PI : 0;
 
-    const nowDI = dateToDateInterval(now);
-    const latRad = lat * Math.PI / 180;
-    const lngRad = lng * Math.PI / 180;
+    // Collect valid stops: (angle, color) pairs
+    const stops: { angle: number; color: string }[] = [];
+    const ringValues = vs.sunRing;
 
-    ctx.save();
-    ctx.lineWidth = ringWidth;
-    ctx.lineCap = 'butt';
+    for (let i = 0; i < ringValues.length; i++) {
+        const val = ringValues[i].currentValue;
+        if (isNaN(val)) continue;  // skip invalid stops (polar regions)
 
-    // iOS: iterate from now-12h to now+12h
-    // angleInc = 3/outerR (about 0.005 rad at r=600)
-    // Finer steps (angleInc/3) near horizon (|alt| < 9°)
-    const angleInc = 3 / outerR;
+        let color = SUN_RING_COLORS[i];
+        if (color === null) {
+            // Noon or midnight anchor — compute color from actual sun altitude.
+            // Convert the ObsValue's dial angle back to a time, then compute altitude.
+            // The dial angle (without noonOnTop offset) maps to hours:
+            //   angle / (2π) * 24 = hours since midnight
+            // But val already includes noonOnTop offset from the expression.
+            // We can still use it: convert angle to fraction of day, then to epoch time.
+            const latRad = lat * Math.PI / 180;
+            const lngRad = lng * Math.PI / 180;
 
-    const startTime = nowDI - 12 * 3600;
-    const endTime = nowDI + 12 * 3600;
+            // Convert dial angle to seconds since midnight (local time)
+            let angleNorm = val % TWO_PI;
+            if (angleNorm < 0) angleNorm += TWO_PI;
+            const secSinceMidnight = (angleNorm / TWO_PI) * 86400;
 
-    // Compute starting clock angle
-    const startSeconds = secondsSinceMidnightForDateInterval(startTime, tzOffsetSeconds);
-    let startClockAngle = (startSeconds / 3600 % 24) * TWO_PI / 24 + noonOffset;
-    if (startClockAngle > TWO_PI) startClockAngle -= TWO_PI;
+            // Convert to Apple epoch time
+            const unixNow = now.getTime() / 1000;
+            const localNow = unixNow + tzOffsetSeconds;
+            const localMidnight = Math.floor(localNow / 86400) * 86400;
+            const targetUnix = localMidnight + secSinceMidnight - tzOffsetSeconds;
+            const targetDI = targetUnix - 978307200;  // Unix to Apple epoch
 
-    const cheat = 1 / outerR;
-    let drawAngle = startClockAngle;
-    let t = startTime;
-    let first = true;
+            const alt = cachelessPlanetAlt(ECPlanetNumber.Sun, targetDI, latRad, lngRad);
+            // Force alpha=1: the GRADIENT_STEPS table has alpha=0 for deep
+            // night (original iOS made the ring transparent there), but our
+            // conic gradient ring should always be fully opaque.
+            color = colorForAltitude(alt).replace(/,[\d.]+\)$/, ',1)');
+        }
 
-    while (t < endTime) {
-        const alt = cachelessPlanetAlt(ECPlanetNumber.Sun, t, latRad, lngRad);
-        const color = colorForAltitude(alt);
-
-        // Step size: finer near horizon (|alt| < 9° = π/20 rad)
-        const step = Math.abs(alt) < TWO_PI * 9 / 360 ? angleInc / 3 : angleInc * 3;
-
-        const nextAngle = drawAngle + step;
-
-        // iOS: CGContextAddClockArc(startAngle-cheat, endAngle+cheat)
-        //   = CGContextAddArc(ctx, 0, 0, centerR, halfPi-(sa), halfPi-(ea), 1)
-        // iOS uses Y-up CG angles in a UIKit Y-down context — the Y-flip makes
-        // halfPi visually map to TOP. Canvas angles work directly with Y-down,
-        // so the correct conversion is (clockAngle - HALF_PI), not the reverse.
-        const canvasStart = (drawAngle - cheat) - HALF_PI;
-        const canvasEnd = (nextAngle + cheat) - HALF_PI;
-
-        ctx.strokeStyle = color;
-        ctx.beginPath();
-        ctx.arc(cx, cy, centerR, canvasStart, canvasEnd);
-        ctx.stroke();
-
-        drawAngle = nextAngle;
-        t += 86400 * step / TWO_PI;
-        first = false;
+        stops.push({ angle: val, color });
     }
 
+    if (stops.length < 2) return;  // nothing to draw
+
+    // Sort stops by angle (ascending)
+    stops.sort((a, b) => a.angle - b.angle);
+
+    // Build conic gradient.
+    // createConicGradient startAngle is in canvas coordinates (0 = 3 o'clock).
+    // Our angles are clock angles (0 = 12 o'clock = top).
+    // Canvas angle = clockAngle - π/2.
+    // Using startAngle = -π/2 means offset 0.0 maps to clock angle 0 (top).
+    const grad = ctx.createConicGradient(-HALF_PI, cx, cy);
+
+    // Helper to compute normalized offset from clock angle
+    const angleToOffset = (angle: number): number => {
+        let a = angle % TWO_PI;
+        if (a < 0) a += TWO_PI;
+        return a / TWO_PI;
+    };
+
+    for (const stop of stops) {
+        grad.addColorStop(angleToOffset(stop.angle), stop.color);
+    }
+
+    // Canvas conic gradients clamp at the boundary: the region from the
+    // last stop to offset 1.0 and from 0.0 to the first stop shows a
+    // solid color (no interpolation). Bridge this gap by computing the
+    // interpolated color at offset 0.0/1.0 between the last and first stops.
+    const firstStop = stops[0];
+    const lastStop = stops[stops.length - 1];
+    const firstOffset = angleToOffset(firstStop.angle);
+    const lastOffset = angleToOffset(lastStop.angle);
+    const gapSize = (1 - lastOffset) + firstOffset;  // total gap across boundary
+    if (gapSize > 0.001) {
+        const frac = (1 - lastOffset) / gapSize;  // fraction at offset 0.0
+        const boundaryColor = lerpColor(lastStop.color, firstStop.color, frac);
+        grad.addColorStop(0, boundaryColor);
+        grad.addColorStop(1, boundaryColor);
+    }
+
+    // DEBUG: log gradient stops once
+    if (!sunRingLogOnce) {
+        sunRingLogOnce = true;
+        console.log('[SunRing] Gradient stops (' + stops.length + '):');
+        for (const stop of stops) {
+            const offset = angleToOffset(stop.angle);
+            const hours = (offset * 24).toFixed(2);
+            const name = ringValues.find(v => Math.abs(v.currentValue - stop.angle) < 0.001)?.name ?? '?';
+            console.log(`  ${name}: angle=${stop.angle.toFixed(3)} → ${hours}h, offset=${offset.toFixed(4)}, color=${stop.color}`);
+        }
+        const nanNames = ringValues.filter(v => isNaN(v.currentValue)).map(v => v.name);
+        if (nanNames.length) console.log('[SunRing] NaN (skipped):', nanNames.join(', '));
+    }
+
+    ctx.save();
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = ringWidth;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.arc(cx, cy, centerR, 0, TWO_PI);
+    ctx.stroke();
     ctx.restore();
 }
 
@@ -429,13 +501,13 @@ function drawPlanetRing(
  *
  * @param ctx       Canvas 2D context (already at DPR scale)
  * @param L         Layout parameters
- * @param env       Astronomy environment (still needed for sun ring + aboveHorizon check)
+ * @param env       Astronomy environment (for aboveHorizon check in planet rings)
  * @param noonOnTop Whether noon is at the top of the dial
- * @param now       Current display time (still needed for sun ring)
- * @param lat       Observer latitude in degrees (still needed for sun ring)
- * @param lon       Observer longitude in degrees (still needed for sun ring)
- * @param tzOffsetSeconds  Timezone offset from UTC in seconds (still needed for sun ring)
- * @param vs        Observatory values (for planet ring angles)
+ * @param now       Current display time (for sun ring noon/midnight anchor colors)
+ * @param lat       Observer latitude in degrees (for sun ring anchor altitude)
+ * @param lon       Observer longitude in degrees (for sun ring anchor altitude)
+ * @param tzOffsetSeconds  Timezone offset from UTC in seconds
+ * @param vs        Observatory values (for planet ring and sun ring angles)
  */
 export function drawRiseSetRings(
     ctx: CanvasRenderingContext2D,
@@ -451,9 +523,8 @@ export function drawRiseSetRings(
     // Update planet ring cache from ObsValues
     updateRingCache(env, vs);
 
-    // 1. Sun ring (altitude-based sky-color gradient — stays as-is)
-    // PERF TEST: sun ring disabled to measure impact
-    // drawSunRing(ctx, L, now, lat, lon, tzOffsetSeconds, noonOnTop);
+    // 1. Sun ring (conic gradient with animated color stop positions)
+    drawSunRingGradient(ctx, L, vs, now, lat, lon, tzOffsetSeconds);
 
     // 2. Planet rings (simple rise/set arcs)
     drawPlanetRing(ctx, L);
@@ -464,6 +535,6 @@ export function drawRiseSetRings(
  * Call when location, timezone, or noonOnTop changes.
  */
 export function invalidateRingCache(): void {
-    sunRingCacheCanvas = null;
-    sunRingCacheNoonOnTop = null;
+    // Planet ring cache is cleared implicitly by ObsValue reset.
+    // No sun ring cache to clear (rendered from ObsValues each frame).
 }

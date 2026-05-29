@@ -133,6 +133,10 @@ export interface ObsValueSet {
     venusRing: ObsValue[];
     mercuryRing: ObsValue[];
     moonRing: ObsValue[];
+
+    // -- Sun ring gradient stops (angular positions with fixed colors) --
+    // NaN = sun doesn't reach this altitude (polar regions)
+    sunRing: ObsValue[];
 }
 
 // ============================================================================
@@ -161,6 +165,7 @@ function buildValueDefs(): {
     sidereal: ObsValueDef[];
     planets: ObsValueDef[];
     rings: Map<string, ObsValueDef[]>;
+    sunRing: ObsValueDef[];
 } {
     // SunAltitudeKind enum values for expression args
     const SK = SunAltitudeKind;
@@ -250,7 +255,33 @@ function buildValueDefs(): {
         ]);
     }
 
-    return { clock, sunEvents, utc, solar, sidereal, planets, rings };
+    // Sun ring gradient stops — angular positions for fixed-color stops.
+    // Each stop represents where the sun crosses a specific altitude threshold.
+    // Morning stops update at sunset; evening stops at sunrise (same as hands).
+    // Noon/midnight anchors update at either event.
+    const sunRing: ObsValueDef[] = [
+        // Morning side (night → day): update at next sunset
+        { name: 'ring18BelowMorn',   expr: `sunSpecialAngle(${SK.SunRing18BelowMorning}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ring9BelowMorn',    expr: `sunSpecialAngle(${SK.SunRing9BelowMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ring1BelowMorn',    expr: `sunSpecialAngle(${SK.SunRing1BelowMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ringHalfBelowMorn', expr: `sunSpecialAngle(${SK.SunRingHalfBelowMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ring1AboveMorn',    expr: `sunSpecialAngle(${SK.SunRing1AboveMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ring9AboveMorn',    expr: `sunSpecialAngle(${SK.SunRing9AboveMorning}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNSET },
+        { name: 'ring30AboveMorn',   expr: `sunSpecialAngle(${SK.SunRing30AboveMorning}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNSET },
+        // Evening side (day → night): update at next sunrise
+        { name: 'ring30AboveEve',    expr: `sunSpecialAngle(${SK.SunRing30AboveEvening}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ring9AboveEve',     expr: `sunSpecialAngle(${SK.SunRing9AboveEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ring1AboveEve',     expr: `sunSpecialAngle(${SK.SunRing1AboveEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ringHalfBelowEve',  expr: `sunSpecialAngle(${SK.SunRingHalfBelowEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ring1BelowEve',     expr: `sunSpecialAngle(${SK.SunRing1BelowEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ring9BelowEve',     expr: `sunSpecialAngle(${SK.SunRing9BelowEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        { name: 'ring18BelowEve',    expr: `sunSpecialAngle(${SK.SunRing18BelowEvening}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
+        // Anchor points: solar noon and midnight (positions always valid, colors computed at render time)
+        { name: 'ringNoon',     expr: 'solarNoonAngle() + pi * noonOnTop',      updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+        { name: 'ringMidnight', expr: 'solarNoonAngle() + pi + pi * noonOnTop',  updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+    ];
+
+    return { clock, sunEvents, utc, solar, sidereal, planets, rings, sunRing };
 }
 
 // ============================================================================
@@ -364,6 +395,9 @@ export function initObsValues(
         venusRing:   makeRing('venus'),
         mercuryRing: makeRing('mercury'),
         moonRing:    makeRing('moon'),
+
+        // Sun ring gradient stops
+        sunRing: defs.sunRing.map(make),
     };
 }
 
@@ -393,6 +427,7 @@ export function getAllValues(vs: ObsValueSet): ObsValue[] {
         vs.earthHand, vs.venusHand, vs.mercuryHand, vs.moonOffset,
         ...vs.saturnRing, ...vs.jupiterRing, ...vs.marsRing,
         ...vs.venusRing, ...vs.mercuryRing, ...vs.moonRing,
+        ...vs.sunRing,
     ];
 
     allValuesCache = all;

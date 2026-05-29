@@ -99,9 +99,83 @@ for values where the animation is just "transition to new position" rather than
 | Sidereal subdial | hour, minute, second | 1–60s | 1.0 (second: π/60) |
 | Planet hands | saturn, jupiter, mars, earth, venus, mercury, moonOffset | 3600s | 1.0 |
 | Planet rings | 6 × (rise, set, transit) | Sentinel (rise↔set) | 1.0 |
+| Sun ring | 14 altitude stops + noon + midnight | Sentinel (rise↔set) | 1.0 |
 
 ### NaN Convention
 
 `NaN` means "don't display this element." Sun event hands (e.g., sunrise in
 polar regions) and planet rings (never-rising planets) use NaN to suppress
 rendering. Draw functions check `isNaN(value)` before drawing.
+
+Sun ring altitude stops also use NaN — if the sun never reaches a given
+altitude (e.g., -30° during polar summer), that gradient stop is skipped
+and the conic gradient interpolates between adjacent valid stops.
+
+## Sun Ring
+
+The outermost ring on the Observatory dial shows a 24-hour sky-color gradient
+based on sun altitude. It uses a **conic gradient with fixed colors at animated
+positions** — a design that naturally supports smooth animation during
+noonOnTop toggles, DST transitions, and location changes.
+
+### Architecture
+
+Instead of computing sun altitude at 200-400 points per frame (the old approach),
+the sun ring defines a small set of **color stops** at specific altitude
+thresholds. Each stop has:
+
+- A **fixed color** from the gradient table (e.g., red at sunrise, dark blue at
+  nautical twilight)
+- An **animated angular position** (an ObsValue tracking where on the 24h dial
+  the sun crosses that altitude)
+
+The conic gradient API (`createConicGradient`) interpolates smoothly between
+stops, producing the continuous color ring with a single draw call.
+
+### Color Stops
+
+| Index | Altitude | Color | Description |
+|-------|----------|-------|-------------|
+| 0, 13 | -30° | Dark gray `(32,32,32)` | Deep night boundary |
+| 1, 12 | -9° | Dark blue `(0,0,100)` | Deep twilight |
+| 2, 11 | -1° | Light cyan `(43,196,214)` | Bright horizon glow |
+| 3, 10 | -0.5° | Red `(214,0,0)` | Sunrise/sunset (refraction zone) |
+| 4, 9 | +1° | Orange `(240,107,0)` | Just above horizon |
+| 5, 8 | +9° | Yellow `(255,255,0)` | Golden hour |
+| 6, 7 | +30° | Pale blue-white `(230,230,255)` | Full daylight |
+| 14 | noon | *computed* | Color from altitude at solar noon |
+| 15 | midnight | *computed* | Color from altitude at solar midnight |
+
+Indices 0–6 are the morning side (night→day), 7–13 are the evening side
+(day→night). Each morning/evening pair at the same altitude has the same
+fixed color.
+
+### Noon/Midnight Anchors
+
+The noon and midnight anchors always exist (their positions never become NaN).
+Their colors are **computed at render time** from the actual sun altitude at
+solar noon/midnight using the gradient table interpolation. This is critical
+for polar regions:
+
+- **Polar summer**: The midnight sun might be at +5° altitude → midnight anchor
+  gets orange-yellow. The -30° and -9° stops are NaN (skipped), so the gradient
+  smoothly transitions through the computed color at midnight.
+- **Polar winter**: The noon sun might be at -15° altitude → noon anchor gets
+  deep blue. The +30° and +9° stops are NaN (skipped).
+
+### Update Schedule
+
+All stops use sentinel-based scheduling, matching the existing twilight hands:
+
+| Stops | Sentinel | Rationale |
+|-------|----------|-----------|
+| Morning (indices 0–6) | `EC_UPDATE_NEXT_SUNSET` | Morning values change when today's sunset passes |
+| Evening (indices 7–13) | `EC_UPDATE_NEXT_SUNRISE` | Evening values change when today's sunrise passes |
+| Noon, Midnight | `EC_UPDATE_NEXT_SUNRISE_OR_SUNSET` | Anchor colors change at either event |
+
+### Performance
+
+- **Per frame**: 1 conic gradient draw call (16 color stops, hardware-accelerated)
+- **Per sentinel event**: 7 expression evaluations + 2 altitude computations
+  (noon/midnight anchors) — runs once per sunrise/sunset
+- **Old approach**: 200-400+ `cachelessPlanetAlt` calls per frame = eliminated
