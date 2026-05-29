@@ -1692,6 +1692,77 @@ export function registerAstroFunctions(
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
         );
     });
+    // --- Sun special angle (sunrise/sunset/twilight/golden) ---
+    // Wraps computeSunSpecial24HourAngle for expression evaluation.
+    // Returns the 24h dial angle (radians), or NaN if the event is invalid
+    // (e.g., no sunrise in polar regions).
+    // Kind: 0=SunRiseMorning, 1=SunSetEvening, 2=CivilTwiMorn, 3=CivilTwiEve,
+    //       4=NautTwiMorn, 5=NautTwiEve, 6=GoldenMorn, 7=GoldenEve,
+    //       8=AstroTwiMorn, 9=AstroTwiEve
+    functions.set('sunSpecialAngle', (kind: number) => {
+        const result = computeSunSpecial24HourAngle(
+            kind as SunAltitudeKind,
+            getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds,
+        );
+        return result.valid ? result.angle : NaN;
+    });
+
+    // --- Solar noon angle on the 24h dial ---
+    // Port of iOS: watchTimeWithSuntransitForDay()->hour24Value * 2π/24
+    functions.set('solarNoonAngle', () => {
+        const di = dateToDateInterval(getNow());
+        const transitDI = planettransitTimeRefined(
+            di, OBSERVER_LAT, OBSERVER_LON,
+            true /* wantHighTransit */, ECPlanetNumber.Sun, pool,
+        );
+        return angle24HourForDate(transitDI, tzOffsetSeconds);
+    });
+
+    // --- Local apparent solar time in seconds since midnight ---
+    // iOS: solarTime = now + longitude * 86400/(2π) - tzOffset + EOT * 86400/(2π)
+    functions.set('solarTimeSec', () => {
+        const di = dateToDateInterval(getNow());
+        const eotSec = EOTSeconds(di, null);
+        const utcMs = getNow().getTime();
+        const localSeconds = ((utcMs / 1000) + tzOffsetSeconds) % 86400;
+        const secSinceMidnight = ((localSeconds % 86400) + 86400) % 86400;
+        const solarSec = secSinceMidnight
+            + OBSERVER_LON * 86400 / (2 * Math.PI)
+            - tzOffsetSeconds
+            + eotSec;
+        return ((solarSec % 86400) + 86400) % 86400;
+    });
+
+    // --- Planet transit angle on the 24h dial ---
+    // Computes the high transit time and converts to a 24h angle.
+    functions.set('planetTransitAngle', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        const transitDI = planettransitTimeRefined(
+            di, OBSERVER_LAT, OBSERVER_LON,
+            true /* wantHighTransit */, planetNumber as ECPlanetNumber, pool,
+        );
+        return angle24HourForDate(transitDI, tzOffsetSeconds);
+    });
+
+    // --- UTC time hand angles ---
+    // UTC minute: subtract tz offset (in whole minutes) from local minute angle
+    functions.set('utcMinuteAngle', () => {
+        const t = liveTime();
+        const localMinFrac = t.m;  // fractional minutes including seconds
+        const tzMinOffset = Math.round(tzOffsetSeconds / 60) % 60;
+        return fmod(localMinFrac - tzMinOffset, 60) * 2 * Math.PI / 60;
+    });
+
+    // UTC second: same as local second (tz offsets are whole minutes)
+    functions.set('utcSecondAngle', () => liveTime().s * 2 * Math.PI / 60);
+
+    // --- Timezone offset in seconds (callable from expressions) ---
+    functions.set('tzOffset', () => tzOffsetSeconds);
+
+    // --- noonOnTop variable (0 or 1, set by Observatory toggle) ---
+    if (!env.variables.has('noonOnTop')) {
+        env.variables.set('noonOnTop', 0);
+    }
 
     return { pool, tzDeltaMs, tzOffsetSeconds };
 }

@@ -18,11 +18,8 @@
  */
 
 import type { LayoutParams } from './layout.js';
-import type { Environment } from '../expr/evaluator.js';
+import type { ObsValueSet } from './obs-values.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
-import { moonAge } from '../astronomy/es-astro.js';
-import { WB_planetHeliocentricLongitude } from '../astronomy/willmann-bell.js';
-import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
 
 // Image asset imports (bundled as data URLs by esbuild)
 import saturnPng from '../../.observatory-ref/Resources/saturn.png';
@@ -109,86 +106,28 @@ export function waitForPlanetImages(): Promise<void> {
     return imageLoadPromise;
 }
 
-// ---------------------------------------------------------------------------
-// Angle caching (update hourly, not every frame)
-// ---------------------------------------------------------------------------
 
-/** Cached heliocentric longitudes for each planet */
-const cachedAngles = new Map<ECPlanetNumber, number>();
-let cachedMoonAngle = 0;
-let lastUpdateTime = 0;
-const UPDATE_INTERVAL_MS = 3600 * 1000;  // 1 hour
-
-/**
- * Apple epoch to dateInterval conversion
- */
-function dateToDateInterval(date: Date): number {
-    return (date.getTime() / 1000) - 978307200;
-}
-
-/**
- * Recompute planet angles if enough time has passed.
- * Uses the same functions registered in astro-env:
- *   HLongitudeOfPlanet → WB_planetHeliocentricLongitude
- *   moonAgeAngle → moonAge().age
- *
- * iOS angle computation (EOHandView.mm L353-372):
- *   Saturn:  angle = -planetHeliocentricLongitude(ECPlanetSaturn)
- *   Jupiter: angle = -planetHeliocentricLongitude(ECPlanetJupiter)
- *   Mars:    angle = -planetHeliocentricLongitude(ECPlanetMars)
- *   Earth:   angle = -planetHeliocentricLongitude(ECPlanetEarth)
- *   Venus:   angle = -planetHeliocentricLongitude(ECPlanetVenus)
- *   Mercury: angle = -planetHeliocentricLongitude(ECPlanetMercury)
- *   Moon:    angle = -moonAgeAngle() + π
- */
-function updateAngles(now: Date): void {
-    const nowMs = now.getTime();
-    if (nowMs - lastUpdateTime < UPDATE_INTERVAL_MS && lastUpdateTime > 0) return;
-    lastUpdateTime = nowMs;
-
-    const di = dateToDateInterval(now);
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
-    // Willmann-Bell uses Julian millennia (JM = JC / 10)
-    const tau = julianCenturiesSince2000Epoch / 100;
-
-    for (const p of planets) {
-        // iOS: angle = -astro->planetHeliocentricLongitude(planet)
-        const hLong = WB_planetHeliocentricLongitude(p.planet, tau);
-        cachedAngles.set(p.planet, -hLong);
-    }
-
-    // Moon: angle = -moonAgeAngle + π
-    const { age } = moonAge(di, null);
-    cachedMoonAngle = -age + Math.PI;
-}
 
 // ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
 
-/**
- * Draw all planet hands on the orrery.
- *
- * Each planet image is positioned at its orbit radius from center,
- * rotated by its heliocentric longitude.
- *
- * The Moon is drawn as a sub-hand of Earth — rotated relative to
- * the Earth hand by its moon age angle.
- *
- * @param ctx   Canvas 2D rendering context (already at DPR scale)
- * @param L     Layout parameters
- * @param now   Current display time
- * @param _env   Astronomy environment (unused — we call WB functions directly)
- */
+/** Map from ECPlanetNumber to ObsValueSet field name. */
+const planetValueMap: { planet: ECPlanetNumber; key: keyof ObsValueSet }[] = [
+    { planet: ECPlanetNumber.Saturn,  key: 'saturnHand' },
+    { planet: ECPlanetNumber.Jupiter, key: 'jupiterHand' },
+    { planet: ECPlanetNumber.Mars,    key: 'marsHand' },
+    { planet: ECPlanetNumber.Earth,   key: 'earthHand' },
+    { planet: ECPlanetNumber.Venus,   key: 'venusHand' },
+    { planet: ECPlanetNumber.Mercury, key: 'mercuryHand' },
+];
+
 export function drawPlanetHands(
     ctx: CanvasRenderingContext2D,
     L: LayoutParams,
-    now: Date,
-    _env: Environment,
+    vs: ObsValueSet,
 ): void {
     if (!imagesLoaded) return;
-
-    updateAngles(now);
 
     const cx = L.mainCX;
     const cy = L.mainCY;
@@ -197,7 +136,9 @@ export function drawPlanetHands(
         const img = p.img;
         if (!img || !img.complete) continue;
 
-        const angle = cachedAngles.get(p.planet) ?? 0;
+        // Look up the pre-computed angle from ObsValueSet
+        const mapping = planetValueMap.find(m => m.planet === p.planet);
+        const angle = mapping ? (vs[mapping.key] as { currentValue: number }).currentValue : 0;
 
         // Orbit radius: plR2 - orbitIndex * orbitInc (matching iOS L1983-1997)
         const orbitR = L.plR2 - p.orbitIndex * L.orbitInc;
@@ -227,7 +168,7 @@ export function drawPlanetHands(
 
         // Draw Moon sub-hand if this is Earth
         if (p.planet === ECPlanetNumber.Earth) {
-            drawMoonSubHand(ctx, L, s, orbitR);
+            drawMoonSubHand(ctx, L, s, orbitR, vs.moonOffset.currentValue);
         }
 
         // Reset compositing before restore
@@ -253,6 +194,7 @@ function drawMoonSubHand(
     L: LayoutParams,
     s: number,
     earthOrbitR: number,
+    moonAngle: number,
 ): void {
     const moonImg = moonConfig.img;
     if (!moonImg || !moonImg.complete) return;
@@ -269,7 +211,7 @@ function drawMoonSubHand(
     // Rotate by the Moon's angle (relative to Earth).
     // Negated to compensate for the inherited scale(-1,1) from Earth's context,
     // which mirrors the rotation direction.
-    ctx.rotate(-cachedMoonAngle);
+    ctx.rotate(-moonAngle);
 
     // Draw moon image at moonOrbitRadius offset (positive Y, matching iOS)
     // scale(-1,1) undoes the inherited X-flip from the Earth drawing context.

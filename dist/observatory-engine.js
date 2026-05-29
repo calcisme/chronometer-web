@@ -1,5 +1,426 @@
 "use strict";
 (() => {
+  // src/expr/tokenizer.ts
+  var TokenizerError = class extends Error {
+    constructor(message, position) {
+      super(message);
+      this.position = position;
+      this.name = "TokenizerError";
+    }
+  };
+  function tokenize(source) {
+    const tokens = [];
+    let pos = 0;
+    while (pos < source.length) {
+      if (isWhitespace(source[pos])) {
+        pos++;
+        continue;
+      }
+      if (source[pos] === "/" && pos + 1 < source.length && source[pos + 1] === "*") {
+        pos += 2;
+        while (pos + 1 < source.length && !(source[pos] === "*" && source[pos + 1] === "/")) {
+          pos++;
+        }
+        if (pos + 1 >= source.length) {
+          throw new TokenizerError("Unterminated comment", pos);
+        }
+        pos += 2;
+        continue;
+      }
+      const start = pos;
+      if (isDigit(source[pos]) || source[pos] === "." && pos + 1 < source.length && isDigit(source[pos + 1])) {
+        const tok = readNumber(source, pos);
+        tokens.push(tok);
+        pos = start + tok.value.length;
+        continue;
+      }
+      if (isIdentStart(source[pos])) {
+        while (pos < source.length && isIdentChar(source[pos])) {
+          pos++;
+        }
+        tokens.push({ type: "Identifier" /* Identifier */, value: source.slice(start, pos), position: start });
+        continue;
+      }
+      if (pos + 1 < source.length) {
+        const two = source.slice(pos, pos + 2);
+        const twoCharType = TWO_CHAR_OPS[two];
+        if (twoCharType !== void 0) {
+          tokens.push({ type: twoCharType, value: two, position: start });
+          pos += 2;
+          continue;
+        }
+      }
+      const oneCharType = ONE_CHAR_OPS[source[pos]];
+      if (oneCharType !== void 0) {
+        tokens.push({ type: oneCharType, value: source[pos], position: start });
+        pos++;
+        continue;
+      }
+      pos++;
+    }
+    tokens.push({ type: "EOF" /* EOF */, value: "", position: pos });
+    return tokens;
+  }
+  function readNumber(source, pos) {
+    const start = pos;
+    if (source[pos] === "0" && pos + 1 < source.length && (source[pos + 1] === "x" || source[pos + 1] === "X")) {
+      pos += 2;
+      while (pos < source.length && isHexDigit(source[pos])) {
+        pos++;
+      }
+      return { type: "Integer" /* Integer */, value: source.slice(start, pos), position: start };
+    }
+    const hasLeadingDigits = isDigit(source[pos]);
+    if (hasLeadingDigits) {
+      while (pos < source.length && isDigit(source[pos])) {
+        pos++;
+      }
+    }
+    const hasDot = pos < source.length && source[pos] === ".";
+    if (hasDot) {
+      pos++;
+      while (pos < source.length && isDigit(source[pos])) {
+        pos++;
+      }
+    }
+    if (pos < source.length && (source[pos] === "e" || source[pos] === "E")) {
+      pos++;
+      if (pos < source.length && (source[pos] === "+" || source[pos] === "-")) {
+        pos++;
+      }
+      while (pos < source.length && isDigit(source[pos])) {
+        pos++;
+      }
+      return { type: "DoubleE" /* DoubleE */, value: source.slice(start, pos), position: start };
+    }
+    if (hasDot) {
+      return { type: "Double" /* Double */, value: source.slice(start, pos), position: start };
+    }
+    return { type: "Integer" /* Integer */, value: source.slice(start, pos), position: start };
+  }
+  var TWO_CHAR_OPS = {
+    "<<": "<<" /* LeftShift */,
+    ">>": ">>" /* RightShift */,
+    "<=": "<=" /* LessEqual */,
+    ">=": ">=" /* GreaterEqual */,
+    "==": "==" /* EqualEqual */,
+    "!=": "!=" /* BangEqual */,
+    "&&": "&&" /* AmpAmp */,
+    "||": "||" /* PipePipe */,
+    "+=": "+=" /* PlusEquals */,
+    "-=": "-=" /* MinusEquals */,
+    "*=": "*=" /* StarEquals */,
+    "/=": "/=" /* SlashEquals */
+  };
+  var ONE_CHAR_OPS = {
+    "(": "(" /* LParen */,
+    ")": ")" /* RParen */,
+    ",": "," /* Comma */,
+    ":": ":" /* Colon */,
+    "?": "?" /* Question */,
+    "+": "+" /* Plus */,
+    "-": "-" /* Minus */,
+    "*": "*" /* Star */,
+    "/": "/" /* Slash */,
+    "%": "%" /* Percent */,
+    "&": "&" /* Ampersand */,
+    "|": "|" /* Pipe */,
+    "^": "^" /* Caret */,
+    "~": "~" /* Tilde */,
+    "!": "!" /* Bang */,
+    "<": "<" /* LessThan */,
+    ">": ">" /* GreaterThan */,
+    "=": "=" /* Equals */
+  };
+  function isWhitespace(ch) {
+    return ch === " " || ch === "	" || ch === "\n" || ch === "\r" || ch === "\f" || ch === "\v";
+  }
+  function isDigit(ch) {
+    return ch >= "0" && ch <= "9";
+  }
+  function isHexDigit(ch) {
+    return ch >= "0" && ch <= "9" || ch >= "a" && ch <= "f" || ch >= "A" && ch <= "F";
+  }
+  function isIdentStart(ch) {
+    return ch >= "a" && ch <= "z" || ch >= "A" && ch <= "Z" || ch === "_";
+  }
+  function isIdentChar(ch) {
+    return isIdentStart(ch) || isDigit(ch);
+  }
+
+  // src/expr/parser.ts
+  var ParseError = class extends Error {
+    constructor(message, position) {
+      super(message);
+      this.position = position;
+      this.name = "ParseError";
+    }
+  };
+  function parse(source) {
+    const tokens = tokenize(source);
+    const parser = new Parser(tokens);
+    const result = parser.parseExpression();
+    parser.expect("EOF" /* EOF */);
+    return result;
+  }
+  var Parser = class {
+    constructor(tokens) {
+      this.tokens = tokens;
+      this.pos = 0;
+    }
+    // Current token
+    peek() {
+      return this.tokens[this.pos];
+    }
+    // Advance and return the consumed token
+    advance() {
+      const tok = this.tokens[this.pos];
+      this.pos++;
+      return tok;
+    }
+    // Expect a specific token type, advance, and return the token
+    expect(type) {
+      const tok = this.peek();
+      if (tok.type !== type) {
+        throw new ParseError(
+          `Expected ${type} but got ${tok.type} ('${tok.value}')`,
+          tok.position
+        );
+      }
+      return this.advance();
+    }
+    // Check if current token is a specific type (optionally with a specific value)
+    match(type, value) {
+      const tok = this.peek();
+      if (tok.type !== type) return false;
+      if (value !== void 0 && tok.value !== value) return false;
+      return true;
+    }
+    // Save/restore for backtracking
+    save() {
+      return this.pos;
+    }
+    restore(saved) {
+      this.pos = saved;
+    }
+    // ========================================================================
+    // Grammar rules — following c.y precedence exactly
+    // ========================================================================
+    // expression → assignment_expression (',' assignment_expression)*
+    parseExpression() {
+      const first = this.parseAssignment();
+      if (!this.match("," /* Comma */)) {
+        return first;
+      }
+      const expressions = [first];
+      while (this.match("," /* Comma */)) {
+        this.advance();
+        expressions.push(this.parseAssignment());
+      }
+      return { kind: "ExpressionList", expressions };
+    }
+    // assignment_expression → IDENTIFIER ('='|'+='|'-='|'*='|'/=') assignment_expression
+    //                       | conditional_expression
+    parseAssignment() {
+      if (this.match("Identifier" /* Identifier */)) {
+        const saved = this.save();
+        const idTok = this.advance();
+        const tok = this.peek();
+        if (tok.type === "=" /* Equals */ || tok.type === "+=" /* PlusEquals */ || tok.type === "-=" /* MinusEquals */ || tok.type === "*=" /* StarEquals */ || tok.type === "/=" /* SlashEquals */) {
+          const op = this.advance();
+          const value = this.parseAssignment();
+          return {
+            kind: "Assignment",
+            name: idTok.value,
+            operator: op.value,
+            value
+          };
+        }
+        this.restore(saved);
+      }
+      return this.parseConditional();
+    }
+    // conditional_expression → logical_or ('?' expression ':' conditional_expression)?
+    parseConditional() {
+      let node = this.parseLogicalOr();
+      if (this.match("?" /* Question */)) {
+        this.advance();
+        const consequent = this.parseExpression();
+        this.expect(":" /* Colon */);
+        const alternate = this.parseConditional();
+        node = { kind: "Ternary", condition: node, consequent, alternate };
+      }
+      return node;
+    }
+    // logical_or → logical_and ('||' logical_and)*
+    parseLogicalOr() {
+      let node = this.parseLogicalAnd();
+      while (this.match("||" /* PipePipe */)) {
+        this.advance();
+        const right = this.parseLogicalAnd();
+        node = { kind: "BinaryOp", operator: "||", left: node, right };
+      }
+      return node;
+    }
+    // logical_and → inclusive_or ('&&' inclusive_or)*
+    parseLogicalAnd() {
+      let node = this.parseBitwiseOr();
+      while (this.match("&&" /* AmpAmp */)) {
+        this.advance();
+        const right = this.parseBitwiseOr();
+        node = { kind: "BinaryOp", operator: "&&", left: node, right };
+      }
+      return node;
+    }
+    // inclusive_or → exclusive_or ('|' exclusive_or)*
+    parseBitwiseOr() {
+      let node = this.parseBitwiseXor();
+      while (this.match("|" /* Pipe */)) {
+        this.advance();
+        const right = this.parseBitwiseXor();
+        node = { kind: "BinaryOp", operator: "|", left: node, right };
+      }
+      return node;
+    }
+    // exclusive_or → and_expression ('^' and_expression)*
+    parseBitwiseXor() {
+      let node = this.parseBitwiseAnd();
+      while (this.match("^" /* Caret */)) {
+        this.advance();
+        const right = this.parseBitwiseAnd();
+        node = { kind: "BinaryOp", operator: "^", left: node, right };
+      }
+      return node;
+    }
+    // and_expression → equality ('&' equality)*
+    parseBitwiseAnd() {
+      let node = this.parseEquality();
+      while (this.match("&" /* Ampersand */)) {
+        this.advance();
+        const right = this.parseEquality();
+        node = { kind: "BinaryOp", operator: "&", left: node, right };
+      }
+      return node;
+    }
+    // equality → relational (('=='|'!=') relational)*
+    parseEquality() {
+      let node = this.parseRelational();
+      while (this.match("==" /* EqualEqual */) || this.match("!=" /* BangEqual */)) {
+        const op = this.advance();
+        const right = this.parseRelational();
+        node = { kind: "BinaryOp", operator: op.value, left: node, right };
+      }
+      return node;
+    }
+    // relational → shift (('<'|'>'|'<='|'>=') shift)*
+    parseRelational() {
+      let node = this.parseShift();
+      while (this.match("<" /* LessThan */) || this.match(">" /* GreaterThan */) || this.match("<=" /* LessEqual */) || this.match(">=" /* GreaterEqual */)) {
+        const op = this.advance();
+        const right = this.parseShift();
+        node = { kind: "BinaryOp", operator: op.value, left: node, right };
+      }
+      return node;
+    }
+    // shift → additive (('<<'|'>>') additive)*
+    parseShift() {
+      let node = this.parseAdditive();
+      while (this.match("<<" /* LeftShift */) || this.match(">>" /* RightShift */)) {
+        const op = this.advance();
+        const right = this.parseAdditive();
+        node = { kind: "BinaryOp", operator: op.value, left: node, right };
+      }
+      return node;
+    }
+    // additive → multiplicative (('+'|'-') multiplicative)*
+    parseAdditive() {
+      let node = this.parseMultiplicative();
+      while (this.match("+" /* Plus */) || this.match("-" /* Minus */)) {
+        const op = this.advance();
+        const right = this.parseMultiplicative();
+        node = { kind: "BinaryOp", operator: op.value, left: node, right };
+      }
+      return node;
+    }
+    // multiplicative → unary (('*'|'/'|'%') unary)*
+    parseMultiplicative() {
+      let node = this.parseUnary();
+      while (this.match("*" /* Star */) || this.match("/" /* Slash */) || this.match("%" /* Percent */)) {
+        const op = this.advance();
+        const right = this.parseUnary();
+        node = { kind: "BinaryOp", operator: op.value, left: node, right };
+      }
+      return node;
+    }
+    // unary → ('+'|'-'|'~'|'!') unary | postfix
+    parseUnary() {
+      if (this.match("+" /* Plus */) || this.match("-" /* Minus */) || this.match("~" /* Tilde */) || this.match("!" /* Bang */)) {
+        const op = this.advance();
+        const operand = this.parseUnary();
+        return { kind: "UnaryOp", operator: op.value, operand };
+      }
+      return this.parsePostfix();
+    }
+    // postfix → IDENTIFIER '(' argList? ')' | primary
+    parsePostfix() {
+      if (this.match("Identifier" /* Identifier */)) {
+        const saved = this.save();
+        const idTok = this.advance();
+        if (this.match("(" /* LParen */)) {
+          this.advance();
+          if (this.match(")" /* RParen */)) {
+            this.advance();
+            return { kind: "FunctionCall", name: idTok.value, args: [] };
+          }
+          const args = [this.parseAssignment()];
+          while (this.match("," /* Comma */)) {
+            this.advance();
+            args.push(this.parseAssignment());
+          }
+          this.expect(")" /* RParen */);
+          return { kind: "FunctionCall", name: idTok.value, args };
+        }
+        this.restore(saved);
+      }
+      return this.parsePrimary();
+    }
+    // primary → NUMBER | IDENTIFIER | '(' expression ')'
+    parsePrimary() {
+      const tok = this.peek();
+      if (tok.type === "Integer" /* Integer */ || tok.type === "Double" /* Double */ || tok.type === "DoubleE" /* DoubleE */) {
+        this.advance();
+        return { kind: "NumberLiteral", value: parseNumericLiteral(tok) };
+      }
+      if (tok.type === "Identifier" /* Identifier */) {
+        this.advance();
+        return { kind: "Identifier", name: tok.value };
+      }
+      if (tok.type === "(" /* LParen */) {
+        this.advance();
+        const expr = this.parseExpression();
+        this.expect(")" /* RParen */);
+        return expr;
+      }
+      throw new ParseError(
+        `Unexpected token ${tok.type} ('${tok.value}')`,
+        tok.position
+      );
+    }
+  };
+  function parseNumericLiteral(tok) {
+    const s = tok.value;
+    if (tok.type === "Integer" /* Integer */) {
+      if (s.startsWith("0x") || s.startsWith("0X")) {
+        return Number(BigInt(s) & BigInt(4294967295));
+      }
+      if (s.length > 1 && s.startsWith("0")) {
+        return parseInt(s, 8);
+      }
+      return parseInt(s, 10);
+    }
+    return parseFloat(s);
+  }
+
   // src/expr/evaluator.ts
   function createDefaultEnvironment() {
     const variables = /* @__PURE__ */ new Map();
@@ -50,6 +471,143 @@
     functions.set("round", Math.round);
     functions.set("fmod", (a, b) => a - Math.trunc(a / b) * b);
     return { variables, functions, kyHandMode: 0 };
+  }
+  var EvalError = class extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "EvalError";
+    }
+  };
+  function evaluate(node, env2) {
+    switch (node.kind) {
+      case "NumberLiteral":
+        return node.value;
+      case "Identifier": {
+        const val = env2.variables.get(node.name);
+        if (val === void 0) {
+          throw new EvalError(`Undefined variable: ${node.name}`);
+        }
+        return val;
+      }
+      case "UnaryOp": {
+        const operand = evaluate(node.operand, env2);
+        switch (node.operator) {
+          case "+":
+            return operand;
+          case "-":
+            return -operand;
+          case "~":
+            return ~operand;
+          case "!":
+            return operand ? 0 : 1;
+        }
+        break;
+      }
+      case "BinaryOp":
+        return evaluateBinaryOp(node.operator, node.left, node.right, env2);
+      case "Ternary": {
+        const cond = evaluate(node.condition, env2);
+        return cond ? evaluate(node.consequent, env2) : evaluate(node.alternate, env2);
+      }
+      case "Assignment": {
+        const value = evaluate(node.value, env2);
+        const name = node.name;
+        switch (node.operator) {
+          case "=":
+            env2.variables.set(name, value);
+            return value;
+          case "+=": {
+            const cur = env2.variables.get(name) ?? 0;
+            const result = cur + value;
+            env2.variables.set(name, result);
+            return result;
+          }
+          case "-=": {
+            const cur = env2.variables.get(name) ?? 0;
+            const result = cur - value;
+            env2.variables.set(name, result);
+            return result;
+          }
+          case "*=": {
+            const cur = env2.variables.get(name) ?? 0;
+            const result = cur * value;
+            env2.variables.set(name, result);
+            return result;
+          }
+          case "/=": {
+            const cur = env2.variables.get(name) ?? 0;
+            const result = cur / value;
+            env2.variables.set(name, result);
+            return result;
+          }
+        }
+        break;
+      }
+      case "FunctionCall": {
+        const fn = env2.functions.get(node.name);
+        if (!fn) {
+          throw new EvalError(`Undefined function: ${node.name}`);
+        }
+        const args = node.args.map((arg) => evaluate(arg, env2));
+        return fn(...args);
+      }
+      case "ExpressionList": {
+        let result = 0;
+        for (const expr of node.expressions) {
+          result = evaluate(expr, env2);
+        }
+        return result;
+      }
+    }
+    throw new EvalError(`Unknown node kind: ${node.kind}`);
+  }
+  function evaluateBinaryOp(operator, left, right, env2) {
+    if (operator === "&&") {
+      const l2 = evaluate(left, env2);
+      return l2 ? evaluate(right, env2) : 0;
+    }
+    if (operator === "||") {
+      const l2 = evaluate(left, env2);
+      return l2 ? l2 : evaluate(right, env2);
+    }
+    const l = evaluate(left, env2);
+    const r = evaluate(right, env2);
+    switch (operator) {
+      case "+":
+        return l + r;
+      case "-":
+        return l - r;
+      case "*":
+        return l * r;
+      case "/":
+        return l / r;
+      case "%":
+        return l % r;
+      case "<<":
+        return l << r;
+      case ">>":
+        return l >> r;
+      case "<":
+        return l < r ? 1 : 0;
+      case ">":
+        return l > r ? 1 : 0;
+      case "<=":
+        return l <= r ? 1 : 0;
+      case ">=":
+        return l >= r ? 1 : 0;
+      case "==":
+        return l === r ? 1 : 0;
+      case "!=":
+        return l !== r ? 1 : 0;
+      case "&":
+        return l & r;
+      case "^":
+        return l ^ r;
+      case "|":
+        return l | r;
+      default:
+        throw new EvalError(`Unknown binary operator: ${operator}`);
+    }
   }
 
   // src/astronomy/astro-constants.ts
@@ -9939,6 +10497,7 @@
   }
 
   // src/shared/animation.ts
+  var kECGLAngleAnimationSpeed = 2;
   var kECGLFrameRate = 1 / 240;
   var EC_UPDATE_NEXT_SUNRISE = -1001;
   var EC_UPDATE_NEXT_SUNSET = -1002;
@@ -9951,7 +10510,273 @@
   var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
   var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
   var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
+  var PLANET_SENTINEL_BASE = -2e3;
+  function EC_UPDATE_NEXT_PLANET_RISE(planet) {
+    return PLANET_SENTINEL_BASE - planet * 2;
+  }
+  function EC_UPDATE_NEXT_PLANET_SET(planet) {
+    return PLANET_SENTINEL_BASE - planet * 2 - 1;
+  }
+  function isPlanetRiseSetSentinel(sentinel) {
+    return sentinel <= PLANET_SENTINEL_BASE;
+  }
+  function decodePlanetSentinel(sentinel) {
+    const offset = -sentinel + PLANET_SENTINEL_BASE;
+    return { planet: offset >> 1, isRise: (offset & 1) === 0 };
+  }
+  function makeAnimatingValue(initial, now) {
+    return {
+      currentValue: initial,
+      targetValue: initial,
+      lastAnimationTime: now,
+      animationStopTime: now,
+      animating: false
+    };
+  }
+  function startValueAnimation(val, newTarget, now, speed, durationOverrideMs) {
+    if (speed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateValue(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    const delta = Math.abs(newTarget - val.currentValue);
+    const durationMs = durationOverrideMs ?? delta / speed * 1e3;
+    if (durationMs < kECGLFrameRate * 1e3) {
+      val.currentValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + durationMs;
+  }
+  function interpolateValue(val, now) {
+    if (!val.animating) {
+      return val.currentValue;
+    }
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = val.targetValue;
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
+  }
+  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+    newTarget = fmod2(newTarget, 2 * Math.PI);
+    if (speed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateValue(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    const TWO_PI10 = 2 * Math.PI;
+    let delta = newTarget - val.currentValue;
+    delta = delta - TWO_PI10 * Math.round(delta / TWO_PI10);
+    val.currentValue = newTarget - delta;
+    startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
+  }
+  function computeNextBoundary(updateIntervalMs, getNow2, timeDirection, env2) {
+    if (updateIntervalMs > 0) {
+      const tzOffsetMs = (env2.tzOffsetSec ?? 0) * 1e3;
+      const displayNowMs = getNow2().getTime();
+      const localNowMs = displayNowMs + tzOffsetMs;
+      if (timeDirection === -1) {
+        const localBoundary = Math.floor(localNowMs / updateIntervalMs) * updateIntervalMs;
+        const boundary = (localBoundary === localNowMs ? localBoundary - updateIntervalMs : localBoundary) - tzOffsetMs;
+        return boundary;
+      } else {
+        const localBoundary = Math.ceil(localNowMs / updateIntervalMs) * updateIntervalMs;
+        return localBoundary - tzOffsetMs;
+      }
+    }
+    const sentinel = updateIntervalMs / 1e3;
+    const eventDI = resolveSentinel(sentinel, getNow2, env2, timeDirection);
+    if (!isFinite(eventDI)) {
+      return Infinity;
+    }
+    return (eventDI + 978307200) * 1e3;
+  }
+  function displayTimeToPerfNow(displayTimeMs, getNow2) {
+    if (!isFinite(displayTimeMs)) return Infinity;
+    const deltaMs = Math.abs(displayTimeMs - getNow2().getTime());
+    return performance.now() + deltaMs;
+  }
+  var SENTINEL_FUDGE_SECONDS = 5;
   var SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
+  function nextPlanetRiseSet(riseNotSet, planetNumber, getNow2, lat2, lon2, timeDirection) {
+    const calculationDI = dateToDateInterval(getNow2());
+    const searchForward = timeDirection === 1;
+    const fudge = searchForward ? SENTINEL_FUDGE_SECONDS : -SENTINEL_FUDGE_SECONDS;
+    const lookahead = searchForward ? SENTINEL_LOOKAHEAD_SECONDS : -SENTINEL_LOOKAHEAD_SECONDS;
+    const fudgeDate = calculationDI + fudge;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat2, lon2, !searchForward);
+    try {
+      const result = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        lat2,
+        lon2,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result.riseSetTime)) {
+        return NaN;
+      }
+      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
+      if (inRightDirection) {
+        return result.riseSetTime;
+      }
+      const tryDate = fudgeDate + lookahead;
+      releaseCachePool(pool);
+      initializeCachePool(pool, tryDate, lat2, lon2, !searchForward);
+      const result2 = planetaryRiseSetTimeRefined(
+        tryDate,
+        lat2,
+        lon2,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result2.riseSetTime)) {
+        return NaN;
+      }
+      return result2.riseSetTime;
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function nextOrMidnight(eventDI, getNow2, tzOffsetSec, timeDirection) {
+    if (isNaN(eventDI)) {
+      return nextMidnightDI(getNow2, tzOffsetSec, timeDirection);
+    }
+    const nowDI = dateToDateInterval(getNow2());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+    if (timeDirection === -1) {
+      if (eventDI < todayMidnightDI) {
+        return todayMidnightDI;
+      }
+    } else {
+      const tomorrowMidnightDI = todayMidnightDI + 86400;
+      if (eventDI > tomorrowMidnightDI) {
+        return tomorrowMidnightDI;
+      }
+    }
+    return eventDI;
+  }
+  function nextMidnightDI(getNow2, tzOffsetSec, timeDirection) {
+    const nowDI = dateToDateInterval(getNow2());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+    if (timeDirection === -1) {
+      return todayMidnightDI;
+    } else {
+      return todayMidnightDI + 86400;
+    }
+  }
+  function resolveSentinel(sentinel, getNow2, env2, timeDirection) {
+    const lat2 = env2.observerLatRad ?? 0;
+    const lon2 = env2.observerLonRad ?? 0;
+    const tzOff = env2.tzOffsetSec ?? 0;
+    switch (sentinel) {
+      // Bare rise/set (no midnight clamp)
+      case EC_UPDATE_NEXT_SUNRISE:
+        return nextPlanetRiseSet(true, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+      case EC_UPDATE_NEXT_SUNSET:
+        return nextPlanetRiseSet(false, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+      case EC_UPDATE_NEXT_MOONRISE:
+        return nextPlanetRiseSet(true, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+      case EC_UPDATE_NEXT_MOONSET:
+        return nextPlanetRiseSet(false, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+      // Rise/set clamped to midnight
+      case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(true, 0 /* Sun */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(false, 0 /* Sun */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(true, 1 /* Moon */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(false, 1 /* Moon */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      // Combined: whichever comes first in the direction of flow
+      case EC_UPDATE_NEXT_SUNRISE_OR_SUNSET: {
+        const rise = nextPlanetRiseSet(true, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+        const set = nextPlanetRiseSet(false, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+        return closerInTimeDirection(rise, set, timeDirection);
+      }
+      case EC_UPDATE_NEXT_MOONRISE_OR_MOONSET: {
+        const rise = nextPlanetRiseSet(true, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+        const set = nextPlanetRiseSet(false, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+        return closerInTimeDirection(rise, set, timeDirection);
+      }
+      // Environment change only — effectively never (only explicit reset)
+      case 0:
+      case EC_UPDATE_ENV_CHANGE_ONLY:
+        return Infinity;
+      default:
+        if (isPlanetRiseSetSentinel(sentinel)) {
+          const { planet, isRise } = decodePlanetSentinel(sentinel);
+          return nextPlanetRiseSet(isRise, planet, getNow2, lat2, lon2, timeDirection);
+        }
+        console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
+        return nextMidnightDI(getNow2, tzOff, timeDirection);
+    }
+  }
+  function closerInTimeDirection(a, b, timeDirection) {
+    if (isNaN(a)) return b;
+    if (isNaN(b)) return a;
+    return timeDirection === 1 ? Math.min(a, b) : Math.max(a, b);
+  }
+  function fmod2(value, modulus) {
+    const result = value % modulus;
+    return result < 0 ? result + modulus : result;
+  }
 
   // src/astronomy/es-astro.ts
   var TWO_PI4 = Math.PI * 2;
@@ -10039,18 +10864,6 @@
       cache.set(391 /* planetAzimuth */ + planetNumber, planetAzimuth);
     }
     return altNotAz ? planetAltitude : planetAzimuth;
-  }
-  function cachelessPlanetAlt(planetNumber, dateInterval, observerLatitude, observerLongitude) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, null);
-    const tau = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, tau);
-    const planetRA = pos.apparentRightAscension;
-    const planetDecl = pos.apparentDeclination;
-    const gst = convertUTToGSTP03(dateInterval, null);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const hourAngle = lst - planetRA;
-    const sinAlt = Math.sin(planetDecl) * Math.sin(observerLatitude) + Math.cos(planetDecl) * Math.cos(observerLatitude) * Math.cos(hourAngle);
-    return Math.asin(sinAlt);
   }
   function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
     return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
@@ -10420,7 +11233,7 @@
       return 0 + indexWithinQuadrant / leavesPerQuadrant * (Math.PI / 2);
     }
   }
-  function fmod2(a, b) {
+  function fmod3(a, b) {
     return (a % b + b) % b;
   }
   function terminatorAngle(phase, quad, indexWithinQuad, leavesPerQuad, incr) {
@@ -10428,7 +11241,7 @@
     const indexWithinQuadrant = indexWithinQuad;
     const leavesPerQuadrant = leavesPerQuad;
     const incremental = incr;
-    phase = fmod2(phase, Math.PI * 2);
+    phase = fmod3(phase, Math.PI * 2);
     const halfLeafSpan = 0.5 / leavesPerQuadrant * (Math.PI / 2);
     if (phase > Math.PI) {
       phase -= halfLeafSpan;
@@ -10529,6 +11342,10 @@
       targetOffsetSec = browserOffsetSec;
     }
     return (targetOffsetSec - browserOffsetSec) * 1e3;
+  }
+  function evalAttr(expr, env2) {
+    if (!expr) return 0;
+    return evaluate(expr, env2);
   }
   function createAstroEnvironment(observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow2 = () => /* @__PURE__ */ new Date(), olsonTimezone) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
@@ -11703,6 +12520,61 @@
         tzOffsetSeconds
       );
     });
+    functions.set("sunSpecialAngle", (kind) => {
+      const result = computeSunSpecial24HourAngle(
+        kind,
+        getNow2,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+      return result.valid ? result.angle : NaN;
+    });
+    functions.set("solarNoonAngle", () => {
+      const di = dateToDateInterval(getNow2());
+      const transitDI = planettransitTimeRefined(
+        di,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        0 /* Sun */,
+        pool
+      );
+      return angle24HourForDate(transitDI, tzOffsetSeconds);
+    });
+    functions.set("solarTimeSec", () => {
+      const di = dateToDateInterval(getNow2());
+      const eotSec = EOTSeconds(di, null);
+      const utcMs = getNow2().getTime();
+      const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
+      const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
+      const solarSec = secSinceMidnight + OBSERVER_LON * 86400 / (2 * Math.PI) - tzOffsetSeconds + eotSec;
+      return (solarSec % 86400 + 86400) % 86400;
+    });
+    functions.set("planetTransitAngle", (planetNumber) => {
+      const di = dateToDateInterval(getNow2());
+      const transitDI = planettransitTimeRefined(
+        di,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        planetNumber,
+        pool
+      );
+      return angle24HourForDate(transitDI, tzOffsetSeconds);
+    });
+    functions.set("utcMinuteAngle", () => {
+      const t = liveTime();
+      const localMinFrac = t.m;
+      const tzMinOffset = Math.round(tzOffsetSeconds / 60) % 60;
+      return fmod(localMinFrac - tzMinOffset, 60) * 2 * Math.PI / 60;
+    });
+    functions.set("utcSecondAngle", () => liveTime().s * 2 * Math.PI / 60);
+    functions.set("tzOffset", () => tzOffsetSeconds);
+    if (!env2.variables.has("noonOnTop")) {
+      env2.variables.set("noonOnTop", 0);
+    }
     return { pool, tzDeltaMs: tzDeltaMs2, tzOffsetSeconds };
   }
   function angle24HourForDate(dateInterval, tzOffsetSeconds) {
@@ -11901,6 +12773,19 @@
     }
     return leafCenterAngle;
   }
+  var SunAltitudeKind = /* @__PURE__ */ ((SunAltitudeKind2) => {
+    SunAltitudeKind2[SunAltitudeKind2["SunRiseMorning"] = 0] = "SunRiseMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunSetEvening"] = 1] = "SunSetEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunGoldenHourMorning"] = 2] = "SunGoldenHourMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunGoldenHourEvening"] = 3] = "SunGoldenHourEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunCivilTwilightMorning"] = 4] = "SunCivilTwilightMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunCivilTwilightEvening"] = 5] = "SunCivilTwilightEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunNauticalTwilightMorning"] = 6] = "SunNauticalTwilightMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunNauticalTwilightEvening"] = 7] = "SunNauticalTwilightEvening";
+    SunAltitudeKind2[SunAltitudeKind2["SunAstroTwilightMorning"] = 8] = "SunAstroTwilightMorning";
+    SunAltitudeKind2[SunAltitudeKind2["SunAstroTwilightEvening"] = 9] = "SunAstroTwilightEvening";
+    return SunAltitudeKind2;
+  })(SunAltitudeKind || {});
   function getParamsForAltitudeKind(kind) {
     switch (kind) {
       case 0 /* SunRiseMorning */:
@@ -14103,36 +14988,23 @@
   function waitForPlanetImages() {
     return imageLoadPromise2;
   }
-  var cachedAngles = /* @__PURE__ */ new Map();
-  var cachedMoonAngle = 0;
-  var lastUpdateTime = 0;
-  var UPDATE_INTERVAL_MS = 3600 * 1e3;
-  function dateToDateInterval2(date) {
-    return date.getTime() / 1e3 - 978307200;
-  }
-  function updateAngles(now) {
-    const nowMs = now.getTime();
-    if (nowMs - lastUpdateTime < UPDATE_INTERVAL_MS && lastUpdateTime > 0) return;
-    lastUpdateTime = nowMs;
-    const di = dateToDateInterval2(now);
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
-    const tau = julianCenturiesSince2000Epoch / 100;
-    for (const p of planets) {
-      const hLong = WB_planetHeliocentricLongitude(p.planet, tau);
-      cachedAngles.set(p.planet, -hLong);
-    }
-    const { age } = moonAge(di, null);
-    cachedMoonAngle = -age + Math.PI;
-  }
-  function drawPlanetHands(ctx2, L, now, _env) {
+  var planetValueMap = [
+    { planet: 7 /* Saturn */, key: "saturnHand" },
+    { planet: 6 /* Jupiter */, key: "jupiterHand" },
+    { planet: 5 /* Mars */, key: "marsHand" },
+    { planet: 4 /* Earth */, key: "earthHand" },
+    { planet: 3 /* Venus */, key: "venusHand" },
+    { planet: 2 /* Mercury */, key: "mercuryHand" }
+  ];
+  function drawPlanetHands(ctx2, L, vs) {
     if (!imagesLoaded2) return;
-    updateAngles(now);
     const cx = L.mainCX;
     const cy = L.mainCY;
     for (const p of planets) {
       const img = p.img;
       if (!img || !img.complete) continue;
-      const angle = cachedAngles.get(p.planet) ?? 0;
+      const mapping = planetValueMap.find((m) => m.planet === p.planet);
+      const angle = mapping ? vs[mapping.key].currentValue : 0;
       const orbitR = L.plR2 - p.orbitIndex * L.orbitInc;
       ctx2.save();
       ctx2.translate(cx, cy);
@@ -14144,13 +15016,13 @@
       ctx2.globalCompositeOperation = "lighten";
       ctx2.drawImage(img, -imgW / 2, orbitR - imgH / 2, imgW, imgH);
       if (p.planet === 4 /* Earth */) {
-        drawMoonSubHand(ctx2, L, s, orbitR);
+        drawMoonSubHand(ctx2, L, s, orbitR, vs.moonOffset.currentValue);
       }
       ctx2.globalCompositeOperation = "source-over";
       ctx2.restore();
     }
   }
-  function drawMoonSubHand(ctx2, L, s, earthOrbitR) {
+  function drawMoonSubHand(ctx2, L, s, earthOrbitR, moonAngle) {
     const moonImg = moonConfig.img;
     if (!moonImg || !moonImg.complete) return;
     const moonR = moonConfig.moonOrbitRadius * s;
@@ -14158,7 +15030,7 @@
     const moonH = moonImg.naturalHeight * s;
     ctx2.save();
     ctx2.translate(0, earthOrbitR);
-    ctx2.rotate(-cachedMoonAngle);
+    ctx2.rotate(-moonAngle);
     ctx2.scale(-1, 1);
     ctx2.globalCompositeOperation = "lighten";
     ctx2.drawImage(moonImg, -moonW / 2, moonR - moonH / 2, moonW, moonH);
@@ -14168,34 +15040,6 @@
   // src/observatory/ring-view.ts
   var TWO_PI8 = 2 * Math.PI;
   var HALF_PI2 = Math.PI / 2;
-  var GRADIENT_STEPS = [
-    { alt: -90.01, r: 0.125, g: 0.125, b: 0.125, a: 0 },
-    // full night
-    { alt: -30, r: 0.125, g: 0.125, b: 0.125, a: 0 },
-    { alt: -9, r: 0, g: 0, b: 0.39, a: 1 },
-    { alt: -1, r: 0.17, g: 0.77, b: 0.84, a: 1 },
-    { alt: -0.5, r: 0.84, g: 0, b: 0, a: 1 },
-    { alt: 1, r: 0.94, g: 0.42, b: 0, a: 1 },
-    { alt: 9, r: 1, g: 1, b: 0, a: 1 },
-    { alt: 30, r: 0.9, g: 0.9, b: 1, a: 1 },
-    { alt: 90.01, r: 0.9, g: 0.9, b: 1, a: 1 }
-  ];
-  function colorForAltitude(altRad) {
-    const altDeg = altRad * 180 / Math.PI;
-    const alt = Math.max(-90, Math.min(90, altDeg));
-    let i = 0;
-    while (i < GRADIENT_STEPS.length - 1 && GRADIENT_STEPS[i].alt <= alt) {
-      i++;
-    }
-    const j = Math.max(0, i - 1);
-    const stepWidth = GRADIENT_STEPS[i].alt - GRADIENT_STEPS[j].alt;
-    const fraction = stepWidth > 0 ? (alt - GRADIENT_STEPS[j].alt) / stepWidth : 0;
-    const r = GRADIENT_STEPS[j].r + (GRADIENT_STEPS[i].r - GRADIENT_STEPS[j].r) * fraction;
-    const g = GRADIENT_STEPS[j].g + (GRADIENT_STEPS[i].g - GRADIENT_STEPS[j].g) * fraction;
-    const b = GRADIENT_STEPS[j].b + (GRADIENT_STEPS[i].b - GRADIENT_STEPS[j].b) * fraction;
-    const a = GRADIENT_STEPS[j].a + (GRADIENT_STEPS[i].a - GRADIENT_STEPS[j].a) * fraction;
-    return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${a.toFixed(3)})`;
-  }
   var PLANET_RINGS = [
     { planet: 7 /* Saturn */, outerOffset: 2, width: 8, dayColor: "rgba(169,252,252,1)", nightColor: null },
     { planet: 6 /* Jupiter */, outerOffset: 12, width: 8, dayColor: "rgba(169,252,169,1)", nightColor: null },
@@ -14213,75 +15057,25 @@
     [7 /* Saturn */]: "Saturn"
   };
   var ringCache = /* @__PURE__ */ new Map();
-  var lastRingUpdateTime = 0;
-  var RING_UPDATE_INTERVAL_MS = 3600 * 1e3;
   var sunRingCacheCanvas = null;
   var sunRingCacheNoonOnTop = null;
-  function dateToDateInterval3(date) {
-    return date.getTime() / 1e3 - 978307200;
-  }
-  function secondsSinceMidnightForDateInterval(dateInterval, tzOffsetSeconds) {
-    const unixTime = dateInterval + 978307200;
-    const localTime = unixTime + tzOffsetSeconds;
-    return (localTime % 86400 + 86400) % 86400;
-  }
-  function drawSunRing(ctx2, L, now, lat2, lng, tzOffsetSeconds, noonOnTop2) {
-    const cx = L.mainCX;
-    const cy = L.mainCY;
-    const outerR = L.plR;
-    const innerR = L.plR - L.sunRingWidth;
-    const centerR = (outerR + innerR) / 2;
-    const ringWidth = outerR - innerR;
-    const noonOffset = noonOnTop2 ? Math.PI : 0;
-    const nowDI = dateToDateInterval3(now);
-    const latRad = lat2 * Math.PI / 180;
-    const lngRad = lng * Math.PI / 180;
-    ctx2.save();
-    ctx2.lineWidth = ringWidth;
-    ctx2.lineCap = "butt";
-    const angleInc = 3 / outerR;
-    const startTime = nowDI - 12 * 3600;
-    const endTime = nowDI + 12 * 3600;
-    const startSeconds = secondsSinceMidnightForDateInterval(startTime, tzOffsetSeconds);
-    let startClockAngle = startSeconds / 3600 % 24 * TWO_PI8 / 24 + noonOffset;
-    if (startClockAngle > TWO_PI8) startClockAngle -= TWO_PI8;
-    const cheat = 1 / outerR;
-    let drawAngle = startClockAngle;
-    let t = startTime;
-    let first = true;
-    while (t < endTime) {
-      const alt = cachelessPlanetAlt(0 /* Sun */, t, latRad, lngRad);
-      const color = colorForAltitude(alt);
-      const step = Math.abs(alt) < TWO_PI8 * 9 / 360 ? angleInc / 3 : angleInc * 3;
-      const nextAngle = drawAngle + step;
-      const canvasStart = drawAngle - cheat - HALF_PI2;
-      const canvasEnd = nextAngle + cheat - HALF_PI2;
-      ctx2.strokeStyle = color;
-      ctx2.beginPath();
-      ctx2.arc(cx, cy, centerR, canvasStart, canvasEnd);
-      ctx2.stroke();
-      drawAngle = nextAngle;
-      t += 86400 * step / TWO_PI8;
-      first = false;
-    }
-    ctx2.restore();
-  }
-  function updateRingCache(env2, noonOnTop2) {
-    const nowMs = Date.now();
-    if (nowMs - lastRingUpdateTime < RING_UPDATE_INTERVAL_MS && lastRingUpdateTime > 0) return;
-    lastRingUpdateTime = nowMs;
-    const dayNightLeafAngle = env2.functions.get("dayNightLeafAngle");
-    if (!dayNightLeafAngle) return;
-    const noonOffset = noonOnTop2 ? Math.PI : 0;
-    for (const ring of PLANET_RINGS) {
-      const rawRise = dayNightLeafAngle(ring.planet, 0, 0);
-      const rawSet = dayNightLeafAngle(ring.planet, 1, 0);
-      const riseAngle = rawRise + noonOffset;
-      const setAngle = rawSet + noonOffset;
-      const riseValid = isFinite(rawRise);
-      const setValid = isFinite(rawSet);
-      const transitFn = env2.functions.get("planettransit24HourIndicatorAngle");
-      const transitAngle = transitFn ? transitFn(ring.planet) + noonOffset : (riseAngle + setAngle) / 2;
+  var RING_VALUE_KEYS = [
+    "saturnRing",
+    "jupiterRing",
+    "marsRing",
+    "venusRing",
+    "mercuryRing",
+    "moonRing"
+  ];
+  function updateRingCache(env2, vs) {
+    for (let i = 0; i < PLANET_RINGS.length; i++) {
+      const ring = PLANET_RINGS[i];
+      const ringValues = vs[RING_VALUE_KEYS[i]];
+      const riseAngle = ringValues[0].currentValue;
+      const setAngle = ringValues[1].currentValue;
+      const transitAngle = ringValues[2].currentValue;
+      const riseValid = isFinite(riseAngle) && !isNaN(riseAngle);
+      const setValid = isFinite(setAngle) && !isNaN(setAngle);
       let aboveHorizon = false;
       if (!riseValid || !setValid) {
         const altFn = env2.functions.get("altitudeOfPlanet");
@@ -14401,13 +15195,11 @@
       ctx2.restore();
     }
   }
-  function drawRiseSetRings(ctx2, L, env2, noonOnTop2, now, lat2, lon2, tzOffsetSeconds) {
-    updateRingCache(env2, noonOnTop2);
-    drawSunRing(ctx2, L, now, lat2, lon2, tzOffsetSeconds, noonOnTop2);
+  function drawRiseSetRings(ctx2, L, env2, noonOnTop2, now, lat2, lon2, tzOffsetSeconds, vs) {
+    updateRingCache(env2, vs);
     drawPlanetRing(ctx2, L);
   }
   function invalidateRingCache() {
-    lastRingUpdateTime = 0;
     sunRingCacheCanvas = null;
     sunRingCacheNoonOnTop = null;
   }
@@ -14543,257 +15335,40 @@
     ctx2.stroke();
     ctx2.restore();
   }
-  function drawClockHands(ctx2, L, env2, now, noonOnTop2, pool, tzOffsetSeconds, getNow2, observerLat, observerLon) {
+  function drawClockHands(ctx2, L, vs) {
     const { mainCX, mainCY } = L;
-    const noonOffset = noonOnTop2 ? Math.PI : 0;
-    const utcMs = now.getTime();
-    const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
-    const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
-    const srResult = computeSunSpecial24HourAngle(
-      0 /* SunRiseMorning */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (srResult.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        srResult.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        RISESET_COLOR,
-        RISESET_COLOR
-      );
-    }
-    const ssResult = computeSunSpecial24HourAngle(
-      1 /* SunSetEvening */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ssResult.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ssResult.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        RISESET_COLOR,
-        RISESET_COLOR
-      );
-    }
-    const ghMorning = computeSunSpecial24HourAngle(
-      2 /* SunGoldenHourMorning */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ghMorning.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ghMorning.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        GOLDEN_COLOR,
-        "#555555"
-      );
-    }
-    const ctMorning = computeSunSpecial24HourAngle(
-      4 /* SunCivilTwilightMorning */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ctMorning.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ctMorning.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        TWILIGHT_COLOR,
-        TWILIGHT_ARM_COLOR
-      );
-    }
-    const ntMorning = computeSunSpecial24HourAngle(
-      6 /* SunNauticalTwilightMorning */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ntMorning.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ntMorning.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        TWILIGHT_COLOR,
-        TWILIGHT_ARM_COLOR
-      );
-    }
-    const atMorning = computeSunSpecial24HourAngle(
-      8 /* SunAstroTwilightMorning */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (atMorning.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        atMorning.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        TWILIGHT_COLOR,
-        TWILIGHT_ARM_COLOR
-      );
-    }
-    const ghEvening = computeSunSpecial24HourAngle(
-      3 /* SunGoldenHourEvening */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ghEvening.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ghEvening.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        GOLDEN_COLOR,
-        "#555555"
-      );
-    }
-    const ctEvening = computeSunSpecial24HourAngle(
-      5 /* SunCivilTwilightEvening */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ctEvening.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ctEvening.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        TWILIGHT_COLOR,
-        TWILIGHT_ARM_COLOR
-      );
-    }
-    const ntEvening = computeSunSpecial24HourAngle(
-      7 /* SunNauticalTwilightEvening */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (ntEvening.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        ntEvening.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        TWILIGHT_COLOR,
-        TWILIGHT_ARM_COLOR
-      );
-    }
-    const atEvening = computeSunSpecial24HourAngle(
-      9 /* SunAstroTwilightEvening */,
-      getNow2,
-      observerLat,
-      observerLon,
-      pool,
-      tzOffsetSeconds
-    );
-    if (atEvening.valid) {
-      drawArrowHand(
-        ctx2,
-        mainCX,
-        mainCY,
-        atEvening.angle + noonOffset,
-        L.sunRiseSetLen,
-        L.len2,
-        1,
-        L.sunRiseSetArrow,
-        L.sunRiseSetArrow / 2 / Math.sqrt(3),
-        TWILIGHT_COLOR,
-        TWILIGHT_ARM_COLOR
-      );
-    }
-    const calcDate = dateToDateInterval(now);
-    const transitDI = planettransitTimeRefined(
-      calcDate,
-      observerLat,
-      observerLon,
-      true,
-      0,
-      pool
-    );
-    const snoonAngle = angle24HourForDate(transitDI, tzOffsetSeconds);
+    const drawSunHand = (v, stroke, arm) => {
+      if (!isNaN(v.currentValue)) {
+        drawArrowHand(
+          ctx2,
+          mainCX,
+          mainCY,
+          v.currentValue,
+          L.sunRiseSetLen,
+          L.len2,
+          1,
+          L.sunRiseSetArrow,
+          L.sunRiseSetArrow / 2 / Math.sqrt(3),
+          stroke,
+          arm
+        );
+      }
+    };
+    drawSunHand(vs.sunrise, RISESET_COLOR, RISESET_COLOR);
+    drawSunHand(vs.sunset, RISESET_COLOR, RISESET_COLOR);
+    drawSunHand(vs.goldenMorning, GOLDEN_COLOR, "#555555");
+    drawSunHand(vs.goldenEvening, GOLDEN_COLOR, "#555555");
+    drawSunHand(vs.civilTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.civilTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.nautTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.nautTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.astroTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.astroTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
     drawArrowHand(
       ctx2,
       mainCX,
       mainCY,
-      snoonAngle + noonOffset,
+      vs.solarNoon.currentValue,
       L.sunRiseSetLen,
       L.len2,
       1,
@@ -14806,7 +15381,7 @@
       ctx2,
       mainCX,
       mainCY,
-      snoonAngle + Math.PI + noonOffset,
+      vs.solarMidnight.currentValue,
       L.sunRiseSetLen,
       L.len2,
       1,
@@ -14815,12 +15390,11 @@
       SMID_COLOR,
       "#555555"
     );
-    const h24Angle = fmod(secSinceMidnight / 3600, 24) * TWO_PI9 / 24 + noonOffset;
     drawArrowHand(
       ctx2,
       mainCX,
       mainCY,
-      h24Angle,
+      vs.h24.currentValue,
       L.h24Len,
       0,
       0.75,
@@ -14829,43 +15403,40 @@
       HOUR24_COLOR,
       HOUR24_COLOR
     );
-    const h12Angle = fmod(secSinceMidnight / 3600, 12) * TWO_PI9 / 12;
     drawBreguetHand(
       ctx2,
       mainCX,
       mainCY,
-      h12Angle,
+      vs.h12.currentValue,
       L.h12Len,
       L.breH12Width,
       "white",
       HOUR12_COLOR,
       L.breH12CenterR
     );
-    const minAngle = fmod(secSinceMidnight / 60, 60) * TWO_PI9 / 60;
     drawBreguetHand(
       ctx2,
       mainCX,
       mainCY,
-      minAngle,
+      vs.minute.currentValue,
       L.minLen,
       L.breMinWidth,
       "white",
       MINUTE_COLOR,
       L.breMinCenterR
     );
-    const secAngle = fmod(secSinceMidnight, 60) * TWO_PI9 / 60;
     drawNeedleHand(
       ctx2,
       mainCX,
       mainCY,
-      secAngle,
+      vs.second.currentValue,
       L.secLen,
       L.secWidth,
       SECOND_COLOR,
       L.secBallR
     );
   }
-  function drawSubdialHands(ctx2, L, now, tzOffsetSeconds, observerLonRad) {
+  function drawSubdialHands(ctx2, L, vs) {
     const { subR } = L;
     const ss = subR / 73;
     const hourLen = subR * 0.55;
@@ -14874,36 +15445,251 @@
     const hourWid = 5 * ss;
     const minuteWid = 4 * ss;
     const secondWid = 3 * ss;
-    const utcMs = now.getTime();
-    const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
-    const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
-    const utcSecsMidnight = secSinceMidnight - tzOffsetSeconds;
-    const utcSecNorm = (utcSecsMidnight % 86400 + 86400) % 86400;
-    const utcHourAngle = fmod(utcSecNorm / 3600, 24) * TWO_PI9 / 24;
-    const utcMinAngle = fmod(utcSecNorm / 60, 60) * TWO_PI9 / 60;
-    const utcSecAngle = fmod(utcSecNorm, 60) * TWO_PI9 / 60;
-    drawTriangleHand(ctx2, L.utcCX, L.utcCY, utcHourAngle, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx2, L.utcCX, L.utcCY, utcMinAngle, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx2, L.utcCX, L.utcCY, utcSecAngle, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
-    const di = dateToDateInterval(now);
-    const eotSec = EOTSeconds(di, null);
-    const solarTimeSec = secSinceMidnight + observerLonRad * 86400 / TWO_PI9 - tzOffsetSeconds + eotSec;
-    const solarSecNorm = (solarTimeSec % 86400 + 86400) % 86400;
-    const solarHourAngle = fmod(solarSecNorm / 3600, 12) * TWO_PI9 / 12;
-    const solarMinAngle = fmod(solarSecNorm / 60, 60) * TWO_PI9 / 60;
-    const solarSecAngle = fmod(solarSecNorm, 60) * TWO_PI9 / 60;
-    drawTriangleHand(ctx2, L.solarCX, L.solarCY, solarHourAngle, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx2, L.solarCX, L.solarCY, solarMinAngle, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx2, L.solarCX, L.solarCY, solarSecAngle, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
-    const lstRad = localSiderealTime(di, observerLonRad, null);
-    const lstSec = lstRad * (12 * 3600) / Math.PI;
-    const lstSecNorm = (lstSec % 86400 + 86400) % 86400;
-    const sidHourAngle = fmod(lstSecNorm / 3600, 24) * TWO_PI9 / 24;
-    const sidMinAngle = fmod(lstSecNorm / 60, 60) * TWO_PI9 / 60;
-    const sidSecAngle = fmod(lstSecNorm, 60) * TWO_PI9 / 60;
-    drawTriangleHand(ctx2, L.sidCX, L.sidCY, sidHourAngle, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx2, L.sidCX, L.sidCY, sidMinAngle, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx2, L.sidCX, L.sidCY, sidSecAngle, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx2, L.utcCX, L.utcCY, vs.utcHour.currentValue, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.utcCX, L.utcCY, vs.utcMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.utcCX, L.utcCY, vs.utcSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx2, L.solarCX, L.solarCY, vs.solarHour.currentValue, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.solarCX, L.solarCY, vs.solarMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.solarCX, L.solarCY, vs.solarSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx2, L.sidCX, L.sidCY, vs.sidHour.currentValue, hourLen, hourWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.sidCX, L.sidCY, vs.sidMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx2, L.sidCX, L.sidCY, vs.sidSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+  }
+
+  // src/observatory/obs-values.ts
+  function buildValueDefs() {
+    const SK = SunAltitudeKind;
+    const SATURN = 7, JUPITER = 6, MARS = 5, VENUS = 3, MERCURY = 2, MOON = 1;
+    const SECOND_ANIM_SPEED = Math.PI / 60;
+    const clock = [
+      { name: "h24", expr: "hour24ValueAngle() + pi * noonOnTop", updateInterval: 15 },
+      { name: "h12", expr: "hour12ValueAngle()", updateInterval: 1 },
+      { name: "minute", expr: "minuteValueAngle()", updateInterval: 1 },
+      { name: "second", expr: "secondValueAngle()", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+    ];
+    const sunEvents = [
+      // Sunrise updates when time crosses sunset (and vice versa)
+      // Morning events update at next sunset; evening events at next sunrise.
+      // This matches iOS: sunriseForDay changes when time passes through
+      // the point 180° from the observer.
+      { name: "sunrise", expr: `sunSpecialAngle(${SK.SunRiseMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "sunset", expr: `sunSpecialAngle(${SK.SunSetEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "goldenMorning", expr: `sunSpecialAngle(${SK.SunGoldenHourMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "goldenEvening", expr: `sunSpecialAngle(${SK.SunGoldenHourEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "civilTwiMorning", expr: `sunSpecialAngle(${SK.SunCivilTwilightMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "civilTwiEvening", expr: `sunSpecialAngle(${SK.SunCivilTwilightEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "nautTwiMorning", expr: `sunSpecialAngle(${SK.SunNauticalTwilightMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "nautTwiEvening", expr: `sunSpecialAngle(${SK.SunNauticalTwilightEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "astroTwiMorning", expr: `sunSpecialAngle(${SK.SunAstroTwilightMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
+      { name: "astroTwiEvening", expr: `sunSpecialAngle(${SK.SunAstroTwilightEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
+      { name: "solarNoon", expr: "solarNoonAngle() + pi * noonOnTop", updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+      { name: "solarMidnight", expr: "solarNoonAngle() + pi + pi * noonOnTop", updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET }
+    ];
+    const utc = [
+      // UTC subdial is 24h
+      { name: "utcHour", expr: "fmod((hour24Value() - tzOffset() / 3600), 24) * 2 * pi / 24", updateInterval: 60 },
+      { name: "utcMinute", expr: "utcMinuteAngle()", updateInterval: 15 },
+      { name: "utcSecond", expr: "utcSecondAngle()", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+    ];
+    const solar = [
+      // Solar subdial is 12h
+      { name: "solarHour", expr: "fmod(solarTimeSec() / 3600, 12) * 2 * pi / 12", updateInterval: 60 },
+      { name: "solarMinute", expr: "fmod(solarTimeSec() / 60, 60) * 2 * pi / 60", updateInterval: 15 },
+      { name: "solarSecond", expr: "fmod(solarTimeSec(), 60) * 2 * pi / 60", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+    ];
+    const sidereal = [
+      // Sidereal subdial is 24h
+      { name: "sidHour", expr: "fmod(lstValue() / 3600, 24) * 2 * pi / 24", updateInterval: 60 },
+      { name: "sidMinute", expr: "fmod(lstValue() / 60, 60) * 2 * pi / 60", updateInterval: 15 },
+      { name: "sidSecond", expr: "fmod(lstValue(), 60) * 2 * pi / 60", updateInterval: 20, animSpeed: SECOND_ANIM_SPEED, projectTarget: true }
+    ];
+    const planets2 = [
+      { name: "saturnHand", expr: `-HLongitudeOfPlanet(${SATURN})`, updateInterval: 3600 },
+      { name: "jupiterHand", expr: `-HLongitudeOfPlanet(${JUPITER})`, updateInterval: 3600 },
+      { name: "marsHand", expr: `-HLongitudeOfPlanet(${MARS})`, updateInterval: 3600 },
+      { name: "earthHand", expr: "-HLongitudeOfPlanet(4)", updateInterval: 3600 },
+      // Earth = 4
+      { name: "venusHand", expr: `-HLongitudeOfPlanet(${VENUS})`, updateInterval: 3600 },
+      { name: "mercuryHand", expr: `-HLongitudeOfPlanet(${MERCURY})`, updateInterval: 3600 },
+      { name: "moonOffset", expr: "-moonAgeAngle() + pi", updateInterval: 3600 }
+    ];
+    const ringPlanets = [
+      { key: "saturn", pn: SATURN },
+      { key: "jupiter", pn: JUPITER },
+      { key: "mars", pn: MARS },
+      { key: "venus", pn: VENUS },
+      { key: "mercury", pn: MERCURY },
+      { key: "moon", pn: MOON }
+    ];
+    const rings = /* @__PURE__ */ new Map();
+    for (const { key, pn } of ringPlanets) {
+      rings.set(key, [
+        { name: `${key}Rise`, expr: `dayNightLeafAngle(${pn}, 0, 0) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
+        { name: `${key}Set`, expr: `dayNightLeafAngle(${pn}, 1, 0) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_RISE(pn) },
+        { name: `${key}Transit`, expr: `planetTransitAngle(${pn}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) }
+      ]);
+    }
+    return { clock, sunEvents, utc, solar, sidereal, planets: planets2, rings };
+  }
+  function createObsValue(def, env2, perfNow, _getNow) {
+    const expr = parse(def.expr);
+    const initialValue = evalAttr(expr, env2);
+    const animSpeed = def.animSpeed ?? 1;
+    return {
+      name: def.name,
+      expr,
+      updateInterval: def.updateInterval,
+      animSpeed,
+      projectTarget: def.projectTarget ?? false,
+      currentValue: initialValue,
+      anim: makeAnimatingValue(initialValue, perfNow),
+      // Schedule immediate update on first frame so animation starts right away.
+      // updateObsValues will evaluate the expression, start the animation,
+      // and compute the real next boundary.
+      nextUpdateDisplayTime: 0,
+      nextUpdateTime: 0
+    };
+  }
+  function initObsValues(env2, perfNow, getNow2) {
+    const defs = buildValueDefs();
+    const make = (d) => createObsValue(d, env2, perfNow, getNow2);
+    const findAndMake = (defs2, name) => {
+      const def = defs2.find((d) => d.name === name);
+      if (!def) throw new Error(`[ObsValues] Missing def: ${name}`);
+      return make(def);
+    };
+    const makeRing = (key) => {
+      const ringDefs = defs.rings.get(key);
+      if (!ringDefs) throw new Error(`[ObsValues] Missing ring defs: ${key}`);
+      return ringDefs.map(make);
+    };
+    return {
+      // Clock hands
+      h24: findAndMake(defs.clock, "h24"),
+      h12: findAndMake(defs.clock, "h12"),
+      minute: findAndMake(defs.clock, "minute"),
+      second: findAndMake(defs.clock, "second"),
+      // Sun events
+      sunrise: findAndMake(defs.sunEvents, "sunrise"),
+      sunset: findAndMake(defs.sunEvents, "sunset"),
+      goldenMorning: findAndMake(defs.sunEvents, "goldenMorning"),
+      goldenEvening: findAndMake(defs.sunEvents, "goldenEvening"),
+      civilTwiMorning: findAndMake(defs.sunEvents, "civilTwiMorning"),
+      civilTwiEvening: findAndMake(defs.sunEvents, "civilTwiEvening"),
+      nautTwiMorning: findAndMake(defs.sunEvents, "nautTwiMorning"),
+      nautTwiEvening: findAndMake(defs.sunEvents, "nautTwiEvening"),
+      astroTwiMorning: findAndMake(defs.sunEvents, "astroTwiMorning"),
+      astroTwiEvening: findAndMake(defs.sunEvents, "astroTwiEvening"),
+      solarNoon: findAndMake(defs.sunEvents, "solarNoon"),
+      solarMidnight: findAndMake(defs.sunEvents, "solarMidnight"),
+      // UTC subdial
+      utcHour: findAndMake(defs.utc, "utcHour"),
+      utcMinute: findAndMake(defs.utc, "utcMinute"),
+      utcSecond: findAndMake(defs.utc, "utcSecond"),
+      // Solar subdial
+      solarHour: findAndMake(defs.solar, "solarHour"),
+      solarMinute: findAndMake(defs.solar, "solarMinute"),
+      solarSecond: findAndMake(defs.solar, "solarSecond"),
+      // Sidereal subdial
+      sidHour: findAndMake(defs.sidereal, "sidHour"),
+      sidMinute: findAndMake(defs.sidereal, "sidMinute"),
+      sidSecond: findAndMake(defs.sidereal, "sidSecond"),
+      // Planet hands
+      saturnHand: findAndMake(defs.planets, "saturnHand"),
+      jupiterHand: findAndMake(defs.planets, "jupiterHand"),
+      marsHand: findAndMake(defs.planets, "marsHand"),
+      earthHand: findAndMake(defs.planets, "earthHand"),
+      venusHand: findAndMake(defs.planets, "venusHand"),
+      mercuryHand: findAndMake(defs.planets, "mercuryHand"),
+      moonOffset: findAndMake(defs.planets, "moonOffset"),
+      // Planet rings
+      saturnRing: makeRing("saturn"),
+      jupiterRing: makeRing("jupiter"),
+      marsRing: makeRing("mars"),
+      venusRing: makeRing("venus"),
+      mercuryRing: makeRing("mercury"),
+      moonRing: makeRing("moon")
+    };
+  }
+  var allValuesCache = null;
+  function getAllValues(vs) {
+    if (allValuesCache) return allValuesCache;
+    const all = [
+      vs.h24,
+      vs.h12,
+      vs.minute,
+      vs.second,
+      vs.sunrise,
+      vs.sunset,
+      vs.goldenMorning,
+      vs.goldenEvening,
+      vs.civilTwiMorning,
+      vs.civilTwiEvening,
+      vs.nautTwiMorning,
+      vs.nautTwiEvening,
+      vs.astroTwiMorning,
+      vs.astroTwiEvening,
+      vs.solarNoon,
+      vs.solarMidnight,
+      vs.utcHour,
+      vs.utcMinute,
+      vs.utcSecond,
+      vs.solarHour,
+      vs.solarMinute,
+      vs.solarSecond,
+      vs.sidHour,
+      vs.sidMinute,
+      vs.sidSecond,
+      vs.saturnHand,
+      vs.jupiterHand,
+      vs.marsHand,
+      vs.earthHand,
+      vs.venusHand,
+      vs.mercuryHand,
+      vs.moonOffset,
+      ...vs.saturnRing,
+      ...vs.jupiterRing,
+      ...vs.marsRing,
+      ...vs.venusRing,
+      ...vs.mercuryRing,
+      ...vs.moonRing
+    ];
+    allValuesCache = all;
+    return all;
+  }
+  function updateObsValues(vs, env2, perfNow, getNow2) {
+    const all = getAllValues(vs);
+    for (const v of all) {
+      if (perfNow >= v.nextUpdateTime) {
+        let newTarget = evalAttr(v.expr, env2);
+        const updateIntervalMs = v.updateInterval * 1e3;
+        const nextDisplayMs = computeNextBoundary(updateIntervalMs, getNow2, 1, env2);
+        v.nextUpdateDisplayTime = nextDisplayMs;
+        v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+        if (v.projectTarget && isFinite(v.nextUpdateTime)) {
+          const dtSeconds = (v.nextUpdateTime - perfNow) / 1e3;
+          const angularRate = v.animSpeed * 2;
+          newTarget += dtSeconds * angularRate;
+        }
+        startAnimationRaw(v.anim, newTarget, perfNow, v.animSpeed);
+      }
+    }
+  }
+  function animateObsValues(vs, perfNow) {
+    const all = getAllValues(vs);
+    for (const v of all) {
+      v.currentValue = interpolateValue(v.anim, perfNow);
+    }
+  }
+  function resetObsValueSchedules(vs) {
+    const all = getAllValues(vs);
+    for (const v of all) {
+      v.nextUpdateDisplayTime = 0;
+      v.nextUpdateTime = 0;
+    }
+  }
+  function invalidateObsValueCache() {
+    allValuesCache = null;
   }
 
   // src/observatory/observatory-entry.ts
@@ -14924,7 +15710,7 @@
   var tzDeltaMs = computeTzDeltaMs(locationTimezone);
   var getNow = () => timeController.getDisplayTime();
   var env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
-  var handPool = new AstroCachePool();
+  var obsValues = null;
   function initCanvas() {
     canvas = document.getElementById("observatory-canvas");
     const context = canvas.getContext("2d");
@@ -14968,15 +15754,18 @@
     ctx.scale(dpr, dpr);
     const now = getNow();
     const tzOffsetSec = env.tzOffsetSec ?? 0;
-    drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec);
-    drawPlanetHands(ctx, L, now, env);
-    const latRad = lat * Math.PI / 180;
-    const lonRad = lon * Math.PI / 180;
-    const calcDI = dateToDateInterval(now);
-    initializeCachePool(handPool, calcDI, latRad, lonRad, false, tzOffsetSec);
-    drawClockHands(ctx, L, env, now, noonOnTop, handPool, tzOffsetSec, getNow, latRad, lonRad);
-    releaseCachePool(handPool);
-    drawSubdialHands(ctx, L, now, tzOffsetSec, lonRad);
+    if (obsValues) {
+      drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec, obsValues);
+    }
+    if (obsValues) {
+      drawPlanetHands(ctx, L, obsValues);
+    }
+    if (obsValues) {
+      drawClockHands(ctx, L, obsValues);
+    }
+    if (obsValues) {
+      drawSubdialHands(ctx, L, obsValues);
+    }
     const peripherals = [
       { cx: L.altCX, cy: L.altCY, r: L.altR, label: "ALT" },
       { cx: L.azCX, cy: L.azCY, r: L.azR, label: "AZ" },
@@ -15024,6 +15813,11 @@
   function tick() {
     timeController.checkTick(performance.now());
     timeController.beginFrame();
+    const perfNow = performance.now();
+    if (obsValues) {
+      updateObsValues(obsValues, env, perfNow, getNow);
+      animateObsValues(obsValues, perfNow);
+    }
     drawFrame();
     timeController.endFrame();
     requestAnimationFrame(tick);
@@ -15046,8 +15840,12 @@
   function rebuildEnv() {
     tzDeltaMs = computeTzDeltaMs(locationTimezone);
     env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+    env.variables.set("noonOnTop", noonOnTop ? 1 : 0);
     invalidateRingCache();
     needsStaticRedraw = true;
+    if (obsValues) {
+      resetObsValueSchedules(obsValues);
+    }
   }
   function setupLocationDialog() {
     const setLocationBtn = document.getElementById("set-location-btn");
@@ -15103,6 +15901,9 @@
     setupLocationDialog();
     updateLocationDisplay();
     timeController.onTick = () => rebuildEnv();
+    env.variables.set("noonOnTop", noonOnTop ? 1 : 0);
+    obsValues = initObsValues(env, performance.now(), getNow);
+    invalidateObsValueCache();
     console.log("[Observatory] Initialized \u2014 lat:", lat, "lon:", lon, "tz:", locationTimezone);
     Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
       invalidateMainDialCache();

@@ -23,8 +23,15 @@ import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
 import { drawClockHands, drawSubdialHands } from './hand-views.js';
-import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
-import { dateToDateInterval } from '../astronomy/es-time.js';
+
+import {
+    type ObsValueSet,
+    initObsValues,
+    updateObsValues,
+    animateObsValues,
+    resetObsValueSchedules,
+    invalidateObsValueCache,
+} from './obs-values.js';
 
 // ============================================================================
 // State
@@ -62,10 +69,8 @@ let tzDeltaMs = computeTzDeltaMs(locationTimezone);
 const getNow = (): Date => timeController.getDisplayTime();
 let env: Environment = createAstroEnvironment(lat, lon, getNow, locationTimezone);
 
-// --- Cache pool for hand angle computations ---
-// Created separately from the env's internal pool so we can pass it
-// to computeSunSpecial24HourAngle and planettransitTimeRefined.
-let handPool = new AstroCachePool();
+
+let obsValues: ObsValueSet | null = null;
 
 // ============================================================================
 // Canvas setup
@@ -147,27 +152,30 @@ function drawFrame(): void {
     // ================================================================
     const now = getNow();
     const tzOffsetSec = env.tzOffsetSec ?? 0;
-    drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec);
+    if (obsValues) {
+        drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec, obsValues);
+    }
 
     // ================================================================
-    // 3. Planet hands (dynamic — recomputed hourly)
+    // 3. Planet hands (dynamic — values update hourly via ObsValues)
     // ================================================================
-    drawPlanetHands(ctx, L, now, env);
+    if (obsValues) {
+        drawPlanetHands(ctx, L, obsValues);
+    }
 
     // ================================================================
     // 3b. Clock hands (24h, 12h, minute, second, sun events)
     // ================================================================
-    const latRad = lat * Math.PI / 180;
-    const lonRad = lon * Math.PI / 180;
-    const calcDI = dateToDateInterval(now);
-    initializeCachePool(handPool, calcDI, latRad, lonRad, false, tzOffsetSec);
-    drawClockHands(ctx, L, env, now, noonOnTop, handPool, tzOffsetSec, getNow, latRad, lonRad);
-    releaseCachePool(handPool);
+    if (obsValues) {
+        drawClockHands(ctx, L, obsValues);
+    }
 
     // ================================================================
     // 3c. Subdial hands (UTC, Solar, Sidereal)
     // ================================================================
-    drawSubdialHands(ctx, L, now, tzOffsetSec, lonRad);
+    if (obsValues) {
+        drawSubdialHands(ctx, L, obsValues);
+    }
 
     // ================================================================
     // 4. Peripheral dial placeholders (Phase 7 will replace these)
@@ -241,6 +249,14 @@ function tick(): void {
     // Begin frame snapshot (all parts see same time)
     timeController.beginFrame();
 
+    const perfNow = performance.now();
+
+    // Pass 1 & 2: Update + animate Observatory values
+    if (obsValues) {
+        updateObsValues(obsValues, env, perfNow, getNow);
+        animateObsValues(obsValues, perfNow);
+    }
+
     drawFrame();
 
     timeController.endFrame();
@@ -272,8 +288,15 @@ function updateLocationDisplay(): void {
 function rebuildEnv(): void {
     tzDeltaMs = computeTzDeltaMs(locationTimezone);
     env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+    // Preserve noonOnTop variable in the new environment
+    env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
     invalidateRingCache();
     needsStaticRedraw = true;
+
+    // Reset Observatory value schedules so they re-evaluate immediately
+    if (obsValues) {
+        resetObsValueSchedules(obsValues);
+    }
 }
 
 function setupLocationDialog(): void {
@@ -343,6 +366,11 @@ function init(): void {
 
     // Wire up time controller env rebuild on tick
     timeController.onTick = () => rebuildEnv();
+
+    // Initialize Observatory value system
+    env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
+    obsValues = initObsValues(env, performance.now(), getNow);
+    invalidateObsValueCache();
 
     console.log('[Observatory] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone);
 

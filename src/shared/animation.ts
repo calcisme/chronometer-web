@@ -60,6 +60,29 @@ export const EC_UPDATE_ENV_CHANGE_ONLY           = -1013;
 export const EC_UPDATE_NEXT_SUNRISE_OR_SUNSET    = -1016;
 export const EC_UPDATE_NEXT_MOONRISE_OR_MOONSET  = -1017;
 
+// --- Generic planet rise/set sentinels (Observatory) ---
+// Encoding: -2000 - planetNumber*2 - (set ? 1 : 0)
+// Decode:   planetNumber = ((-sentinel - 2000) >> 1), isSet = ((-sentinel - 2000) & 1)
+const PLANET_SENTINEL_BASE = -2000;
+
+/** Create a sentinel for "update at next rise of planet N". */
+export function EC_UPDATE_NEXT_PLANET_RISE(planet: number): number {
+    return PLANET_SENTINEL_BASE - planet * 2;
+}
+/** Create a sentinel for "update at next set of planet N". */
+export function EC_UPDATE_NEXT_PLANET_SET(planet: number): number {
+    return PLANET_SENTINEL_BASE - planet * 2 - 1;
+}
+/** Test whether a sentinel value is a planet rise/set encoding. */
+function isPlanetRiseSetSentinel(sentinel: number): boolean {
+    return sentinel <= PLANET_SENTINEL_BASE;
+}
+/** Decode a planet rise/set sentinel. */
+function decodePlanetSentinel(sentinel: number): { planet: number; isRise: boolean } {
+    const offset = -sentinel + PLANET_SENTINEL_BASE;
+    return { planet: offset >> 1, isRise: (offset & 1) === 0 };
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -788,7 +811,7 @@ export function interpolateRaw(val: AnimatingValue, now: number): number {
  * For positive intervals, returns the next epoch-aligned boundary.
  * For negative sentinel values, delegates to resolveSentinel().
  */
-function computeNextBoundary(
+export function computeNextBoundary(
     updateIntervalMs: number,
     getNow: () => Date,
     timeDirection: 1 | -1,
@@ -832,7 +855,7 @@ function computeNextBoundary(
  * Convert a display-time ms-since-epoch boundary to performance.now().
  * Used to set the idle-timer wakeup.
  */
-function displayTimeToPerfNow(displayTimeMs: number, getNow: () => Date): number {
+export function displayTimeToPerfNow(displayTimeMs: number, getNow: () => Date): number {
     if (!isFinite(displayTimeMs)) return Infinity;
     const deltaMs = Math.abs(displayTimeMs - getNow().getTime());
     return performance.now() + deltaMs;
@@ -1048,6 +1071,11 @@ function resolveSentinel(
             return Infinity;
 
         default:
+            // Check for generic planet rise/set sentinel encoding
+            if (isPlanetRiseSetSentinel(sentinel)) {
+                const { planet, isRise } = decodePlanetSentinel(sentinel);
+                return nextPlanetRiseSet(isRise, planet, getNow, lat, lon, timeDirection);
+            }
             console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
             return nextMidnightDI(getNow, tzOff, timeDirection);
     }

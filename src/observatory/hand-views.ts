@@ -16,15 +16,7 @@
  */
 
 import type { LayoutParams } from './layout.js';
-import type { Environment } from '../expr/evaluator.js';
-import { computeSunSpecial24HourAngle, SunAltitudeKind } from '../shared/astro-env.js';
-import { dateToDateInterval } from '../astronomy/es-time.js';
-import { fmod } from '../astronomy/astro-constants.js';
-import { planettransitTimeRefined } from '../astronomy/es-riseset.js';
-import { angle24HourForDate } from '../shared/astro-env.js';
-import { localSiderealTime } from '../astronomy/es-astro.js';
-import { EOTSeconds } from '../astronomy/es-astro.js';
-import type { AstroCachePool } from '../astronomy/astro-cache.js';
+import type { ObsValueSet } from './obs-values.js';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -308,205 +300,86 @@ function drawTriangleHand(
 export function drawClockHands(
     ctx: Ctx2D,
     L: LayoutParams,
-    env: Environment,
-    now: Date,
-    noonOnTop: boolean,
-    pool: AstroCachePool,
-    tzOffsetSeconds: number,
-    getNow: () => Date,
-    observerLat: number,
-    observerLon: number,
+    vs: ObsValueSet,
 ): void {
     const { mainCX, mainCY } = L;
-    const noonOffset = noonOnTop ? Math.PI : 0;
-
-    // iOS EOHandView update (L153): now = secondsSinceMidnightValueUsingEnv
-    // Since our date uses browser time, extract seconds from the timezone-
-    // adjusted time to avoid discrepancy with the environment tz offset.
-    const utcMs = now.getTime();
-    const localSeconds = ((utcMs / 1000) + tzOffsetSeconds) % 86400;
-    const secSinceMidnight = ((localSeconds % 86400) + 86400) % 86400;
 
     // ====================================================================
     // 1. Twilight / sunrise-sunset / golden hour / noon-midnight hands
     //    These are drawn BEHIND the timekeeping hands in iOS (L2060-2094).
+    //    NaN currentValue = event is invalid (e.g., polar regions) → skip.
     // ====================================================================
 
-    // --- Sunrise (arrow, orange) ---
-    const srResult = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunRiseMorning,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (srResult.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            srResult.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            RISESET_COLOR, RISESET_COLOR);
-    }
+    // Helper: draw a sun event hand if valid (not NaN)
+    const drawSunHand = (v: { currentValue: number }, stroke: string, arm: string) => {
+        if (!isNaN(v.currentValue)) {
+            drawArrowHand(ctx, mainCX, mainCY,
+                v.currentValue,
+                L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
+                stroke, arm);
+        }
+    };
 
-    // --- Sunset (arrow, orange) ---
-    const ssResult = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunSetEvening,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ssResult.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ssResult.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            RISESET_COLOR, RISESET_COLOR);
-    }
+    // Sunrise / Sunset (orange)
+    drawSunHand(vs.sunrise, RISESET_COLOR, RISESET_COLOR);
+    drawSunHand(vs.sunset,  RISESET_COLOR, RISESET_COLOR);
 
-    // --- Golden hour end (morning, arrow, golden) ---
-    const ghMorning = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunGoldenHourMorning,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ghMorning.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ghMorning.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            GOLDEN_COLOR, '#555555');
-    }
+    // Golden hour (golden with grey arm)
+    drawSunHand(vs.goldenMorning, GOLDEN_COLOR, '#555555');
+    drawSunHand(vs.goldenEvening, GOLDEN_COLOR, '#555555');
 
-    // --- Civil twilight begin (morning, arrow, teal) ---
-    const ctMorning = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunCivilTwilightMorning,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ctMorning.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ctMorning.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    }
+    // Civil twilight (teal)
+    drawSunHand(vs.civilTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.civilTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
 
-    // --- Nautical twilight begin (morning, arrow, teal) ---
-    const ntMorning = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunNauticalTwilightMorning,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ntMorning.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ntMorning.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    }
+    // Nautical twilight (teal)
+    drawSunHand(vs.nautTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.nautTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
 
-    // --- Astronomical twilight begin (morning, arrow, teal) ---
-    const atMorning = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunAstroTwilightMorning,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (atMorning.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            atMorning.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    }
+    // Astronomical twilight (teal)
+    drawSunHand(vs.astroTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(vs.astroTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
 
-    // --- Golden hour begin (evening, arrow, golden) ---
-    const ghEvening = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunGoldenHourEvening,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ghEvening.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ghEvening.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            GOLDEN_COLOR, '#555555');
-    }
-
-    // --- Civil twilight end (evening, arrow, teal) ---
-    const ctEvening = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunCivilTwilightEvening,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ctEvening.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ctEvening.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    }
-
-    // --- Nautical twilight end (evening, arrow, teal) ---
-    const ntEvening = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunNauticalTwilightEvening,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (ntEvening.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            ntEvening.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    }
-
-    // --- Astronomical twilight end (evening, arrow, teal) ---
-    const atEvening = computeSunSpecial24HourAngle(
-        SunAltitudeKind.SunAstroTwilightEvening,
-        getNow, observerLat, observerLon, pool, tzOffsetSeconds,
-    );
-    if (atEvening.valid) {
-        drawArrowHand(ctx, mainCX, mainCY,
-            atEvening.angle + noonOffset,
-            L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
-            TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    }
-
-    // --- Solar noon (arrow, yellow) ---
-    // iOS L287: angle = suntransitForDay.hour24Value * 2π/24 + π*noonOnTop
-    const calcDate = dateToDateInterval(now);
-    const transitDI = planettransitTimeRefined(
-        calcDate, observerLat, observerLon,
-        true /* wantHighTransit */, 0 /* ECPlanetSun */, pool,
-    );
-    const snoonAngle = angle24HourForDate(transitDI, tzOffsetSeconds);
+    // Solar noon (yellow) — always valid
     drawArrowHand(ctx, mainCX, mainCY,
-        snoonAngle + noonOffset,
+        vs.solarNoon.currentValue,
         L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
         SNOON_COLOR, '#555555');
 
-    // --- Solar midnight (arrow, blue) —  noon angle + π ---
-    // iOS L290: angle = suntransitForDay.hour24Value * 2π/24 + π + π*noonOnTop
+    // Solar midnight (blue) — always valid
     drawArrowHand(ctx, mainCX, mainCY,
-        snoonAngle + Math.PI + noonOffset,
+        vs.solarMidnight.currentValue,
         L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
         SMID_COLOR, '#555555');
 
     // ====================================================================
     // 2. 24-hour hand (arrow, white)
-    //    iOS L202-203: angle = EC_fmod(now/3600, 24) * 2π/24 + π*noonOnTop
+    //    noonOnTop offset is baked into the expression
     // ====================================================================
-    const h24Angle = fmod(secSinceMidnight / 3600, 24) * TWO_PI / 24 + noonOffset;
     drawArrowHand(ctx, mainCX, mainCY,
-        h24Angle,
+        vs.h24.currentValue,
         L.h24Len, 0, 0.75, L.h24Arrow, L.h24Wid,
         HOUR24_COLOR, HOUR24_COLOR);
 
     // ====================================================================
     // 3. 12-hour hand (Breguet, gold)
-    //    iOS L177-178: angle = EC_fmod(now/3600, 12) * 2π/12
     // ====================================================================
-    const h12Angle = fmod(secSinceMidnight / 3600, 12) * TWO_PI / 12;
     drawBreguetHand(ctx, mainCX, mainCY,
-        h12Angle,
+        vs.h12.currentValue,
         L.h12Len, L.breH12Width, 'white', HOUR12_COLOR, L.breH12CenterR);
 
     // ====================================================================
     // 4. Minute hand (Breguet, lighter gold)
-    //    iOS L175: angle = EC_fmod(now/60, 60) * 2π/60
     // ====================================================================
-    const minAngle = fmod(secSinceMidnight / 60, 60) * TWO_PI / 60;
     drawBreguetHand(ctx, mainCX, mainCY,
-        minAngle,
+        vs.minute.currentValue,
         L.minLen, L.breMinWidth, 'white', MINUTE_COLOR, L.breMinCenterR);
 
     // ====================================================================
     // 5. Second hand (needle, warm white)
-    //    iOS L171-172: angle = EC_fmod(now, 60) * 2π/60
     // ====================================================================
-    const secAngle = fmod(secSinceMidnight, 60) * TWO_PI / 60;
     drawNeedleHand(ctx, mainCX, mainCY,
-        secAngle,
+        vs.second.currentValue,
         L.secLen, L.secWidth, SECOND_COLOR, L.secBallR);
 }
 
@@ -530,9 +403,7 @@ export function drawClockHands(
 export function drawSubdialHands(
     ctx: Ctx2D,
     L: LayoutParams,
-    now: Date,
-    tzOffsetSeconds: number,
-    observerLonRad: number,
+    vs: ObsValueSet,
 ): void {
     const { subR } = L;
 
@@ -546,68 +417,24 @@ export function drawSubdialHands(
     const minuteWid = 4 * ss;
     const secondWid = 3 * ss;
 
-    // Seconds since midnight in local time (same as main clock hands)
-    const utcMs = now.getTime();
-    const localSeconds = ((utcMs / 1000) + tzOffsetSeconds) % 86400;
-    const secSinceMidnight = ((localSeconds % 86400) + 86400) % 86400;
-
     // ====================================================================
     // UTC subdial — 24h clock, hands show UTC time
-    // iOS L205-214: subtract tz offset from local time
     // ====================================================================
-    const utcSecsMidnight = secSinceMidnight - tzOffsetSeconds;
-    const utcSecNorm = ((utcSecsMidnight % 86400) + 86400) % 86400;
-
-    // iOS L214: UTCHours angle = (now/3600 - tzOffset/3600) * 2π/24 + π*noonOnTop
-    // UTC subdial is 24h, and noonOnTop offset applies.
-    // But the subdial labels are drawn without noonOnTop, so we don't add it here.
-    const utcHourAngle  = fmod(utcSecNorm / 3600, 24) * TWO_PI / 24;
-    const utcMinAngle   = fmod(utcSecNorm / 60, 60) * TWO_PI / 60;
-    const utcSecAngle   = fmod(utcSecNorm, 60) * TWO_PI / 60;
-
-    drawTriangleHand(ctx, L.utcCX, L.utcCY, utcHourAngle,  hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.utcCX, L.utcCY, utcMinAngle,   minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.utcCX, L.utcCY, utcSecAngle,   secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx, L.utcCX, L.utcCY, vs.utcHour.currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.utcCX, L.utcCY, vs.utcMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.utcCX, L.utcCY, vs.utcSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
 
     // ====================================================================
     // Solar subdial — 12h clock, hands show local apparent solar time
-    // iOS L295-309:
-    //   solarTime = now + longitude * 86400/(2π) - tzOffset + EOT * 86400/(2π)
     // ====================================================================
-    const di = dateToDateInterval(now);
-    const eotSec = EOTSeconds(di, null);   // EOT in seconds (already in seconds, not radians)
-    // iOS EOT() returns radians; EOTSeconds already converts.
-    // But the iOS formula uses astro->EOT() * 86400 / 2π, which IS the seconds conversion.
-    // Our EOTSeconds already gives seconds. So:
-    const solarTimeSec = secSinceMidnight
-        + observerLonRad * 86400 / TWO_PI
-        - tzOffsetSeconds
-        + eotSec;
-    const solarSecNorm = ((solarTimeSec % 86400) + 86400) % 86400;
-
-    // Solar subdial is 12h
-    const solarHourAngle = fmod(solarSecNorm / 3600, 12) * TWO_PI / 12;
-    const solarMinAngle  = fmod(solarSecNorm / 60, 60) * TWO_PI / 60;
-    const solarSecAngle  = fmod(solarSecNorm, 60) * TWO_PI / 60;
-
-    drawTriangleHand(ctx, L.solarCX, L.solarCY, solarHourAngle,  hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.solarCX, L.solarCY, solarMinAngle,   minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.solarCX, L.solarCY, solarSecAngle,   secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx, L.solarCX, L.solarCY, vs.solarHour.currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.solarCX, L.solarCY, vs.solarMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.solarCX, L.solarCY, vs.solarSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
 
     // ====================================================================
     // Sidereal subdial — 24h clock, hands show local sidereal time
-    // iOS L311-318: localSiderealTime() returns seconds
-    // Our localSiderealTime() returns radians; convert: sec = rad * 12*3600/π
     // ====================================================================
-    const lstRad = localSiderealTime(di, observerLonRad, null);
-    const lstSec = lstRad * (12 * 3600) / Math.PI;
-    const lstSecNorm = ((lstSec % 86400) + 86400) % 86400;
-
-    const sidHourAngle = fmod(lstSecNorm / 3600, 24) * TWO_PI / 24;
-    const sidMinAngle  = fmod(lstSecNorm / 60, 60) * TWO_PI / 60;
-    const sidSecAngle  = fmod(lstSecNorm, 60) * TWO_PI / 60;
-
-    drawTriangleHand(ctx, L.sidCX, L.sidCY, sidHourAngle,  hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.sidCX, L.sidCY, sidMinAngle,   minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.sidCX, L.sidCY, sidSecAngle,   secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx, L.sidCX, L.sidCY, vs.sidHour.currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.sidCX, L.sidCY, vs.sidMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.sidCX, L.sidCY, vs.sidSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
 }

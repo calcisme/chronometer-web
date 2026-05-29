@@ -12186,6 +12186,61 @@
         tzOffsetSeconds
       );
     });
+    functions.set("sunSpecialAngle", (kind) => {
+      const result = computeSunSpecial24HourAngle(
+        kind,
+        getNow2,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+      return result.valid ? result.angle : NaN;
+    });
+    functions.set("solarNoonAngle", () => {
+      const di = dateToDateInterval(getNow2());
+      const transitDI = planettransitTimeRefined(
+        di,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        0 /* Sun */,
+        pool
+      );
+      return angle24HourForDate(transitDI, tzOffsetSeconds);
+    });
+    functions.set("solarTimeSec", () => {
+      const di = dateToDateInterval(getNow2());
+      const eotSec = EOTSeconds(di, null);
+      const utcMs = getNow2().getTime();
+      const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
+      const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
+      const solarSec = secSinceMidnight + OBSERVER_LON * 86400 / (2 * Math.PI) - tzOffsetSeconds + eotSec;
+      return (solarSec % 86400 + 86400) % 86400;
+    });
+    functions.set("planetTransitAngle", (planetNumber) => {
+      const di = dateToDateInterval(getNow2());
+      const transitDI = planettransitTimeRefined(
+        di,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        true,
+        planetNumber,
+        pool
+      );
+      return angle24HourForDate(transitDI, tzOffsetSeconds);
+    });
+    functions.set("utcMinuteAngle", () => {
+      const t = liveTime();
+      const localMinFrac = t.m;
+      const tzMinOffset = Math.round(tzOffsetSeconds / 60) % 60;
+      return fmod(localMinFrac - tzMinOffset, 60) * 2 * Math.PI / 60;
+    });
+    functions.set("utcSecondAngle", () => liveTime().s * 2 * Math.PI / 60);
+    functions.set("tzOffset", () => tzOffsetSeconds);
+    if (!env2.variables.has("noonOnTop")) {
+      env2.variables.set("noonOnTop", 0);
+    }
     return { pool, tzDeltaMs: tzDeltaMs2, tzOffsetSeconds };
   }
   function angle24HourForDate(dateInterval, tzOffsetSeconds) {
@@ -12383,6 +12438,127 @@
       leafCenterAngle -= 2 * Math.PI;
     }
     return leafCenterAngle;
+  }
+  function getParamsForAltitudeKind(kind) {
+    switch (kind) {
+      case 0 /* SunRiseMorning */:
+        return { altitude: NaN, riseNotSet: true };
+      case 1 /* SunSetEvening */:
+        return { altitude: NaN, riseNotSet: false };
+      case 2 /* SunGoldenHourMorning */:
+        return { altitude: 15 * Math.PI / 180, riseNotSet: true };
+      case 3 /* SunGoldenHourEvening */:
+        return { altitude: 15 * Math.PI / 180, riseNotSet: false };
+      case 4 /* SunCivilTwilightMorning */:
+        return { altitude: -6 * Math.PI / 180, riseNotSet: true };
+      case 5 /* SunCivilTwilightEvening */:
+        return { altitude: -6 * Math.PI / 180, riseNotSet: false };
+      case 6 /* SunNauticalTwilightMorning */:
+        return { altitude: -12 * Math.PI / 180, riseNotSet: true };
+      case 7 /* SunNauticalTwilightEvening */:
+        return { altitude: -12 * Math.PI / 180, riseNotSet: false };
+      case 8 /* SunAstroTwilightMorning */:
+        return { altitude: -18 * Math.PI / 180, riseNotSet: true };
+      case 9 /* SunAstroTwilightEvening */:
+        return { altitude: -18 * Math.PI / 180, riseNotSet: false };
+    }
+  }
+  function computeSunSpecial24HourAngle(altitudeKind, getNow2, observerLat, observerLon, pool, tzOffsetSeconds) {
+    const { altitude, riseNotSet } = getParamsForAltitudeKind(altitudeKind);
+    const calcDate = dateToDateInterval(getNow2());
+    const fudgeFactorSeconds = 5;
+    const lookahead = 3600 * 13.2;
+    if (altitudeKind === 0 /* SunRiseMorning */ || altitudeKind === 1 /* SunSetEvening */) {
+      const planetIsUp = planetIsUpForRiseSet(0 /* Sun */, calcDate, observerLat, observerLon);
+      const result = nextPrevRiseSetInternal(
+        calcDate,
+        observerLat,
+        observerLon,
+        riseNotSet,
+        0 /* Sun */,
+        riseNotSet ? !planetIsUp : planetIsUp,
+        -fudgeFactorSeconds,
+        lookahead,
+        pool
+      );
+      let transitAngle = angle24HourForDate(result.transitTime, tzOffsetSeconds);
+      if (isNaN(result.eventTime) && isAlwaysAbove(result.eventTime)) {
+        transitAngle = fmod(transitAngle + Math.PI, 2 * Math.PI);
+      }
+      const eventAngle = isNoRiseSet(result.eventTime) ? NaN : angle24HourForDate(result.eventTime, tzOffsetSeconds);
+      if (isNaN(eventAngle)) {
+        return { angle: transitAngle, valid: false };
+      }
+      return { angle: eventAngle, valid: true };
+    }
+    let anchorTime;
+    let twilightResult;
+    if (riseNotSet) {
+      const sunsetResult = nextPrevRiseSetInternal(
+        calcDate,
+        observerLat,
+        observerLon,
+        false,
+        0 /* Sun */,
+        // riseNotSet=false → sunset
+        true,
+        // isNext=true → forward to next sunset
+        fudgeFactorSeconds,
+        lookahead,
+        pool
+        // NaN altitude → standard sunset
+      );
+      anchorTime = sunsetResult.transitTime;
+      twilightResult = nextPrevRiseSetInternal(
+        anchorTime,
+        observerLat,
+        observerLon,
+        true,
+        0 /* Sun */,
+        // riseNotSet=true → rise (morning boundary)
+        false,
+        // isNext=false → backward
+        fudgeFactorSeconds,
+        lookahead,
+        pool,
+        altitude
+        // override altitude for twilight
+      );
+    } else {
+      const sunriseResult = nextPrevRiseSetInternal(
+        calcDate,
+        observerLat,
+        observerLon,
+        true,
+        0 /* Sun */,
+        // riseNotSet=true → sunrise
+        false,
+        // isNext=false → backward to prev sunrise
+        fudgeFactorSeconds,
+        lookahead,
+        pool
+        // NaN altitude → standard sunrise
+      );
+      anchorTime = sunriseResult.transitTime;
+      twilightResult = nextPrevRiseSetInternal(
+        anchorTime,
+        observerLat,
+        observerLon,
+        false,
+        0 /* Sun */,
+        // riseNotSet=false → set (evening boundary)
+        true,
+        // isNext=true → forward
+        fudgeFactorSeconds,
+        lookahead,
+        pool,
+        altitude
+        // override altitude for twilight
+      );
+    }
+    const valid = !isNaN(twilightResult.eventTime) && isFinite(twilightResult.eventTime) && !isNoRiseSet(twilightResult.eventTime);
+    const angle = angle24HourForDate(twilightResult.transitTime, tzOffsetSeconds);
+    return { angle, valid };
   }
   function computeYear366IndicatorFraction(date) {
     const year = date.getFullYear();

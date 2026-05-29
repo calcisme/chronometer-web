@@ -27,9 +27,11 @@
 
 import type { LayoutParams } from './layout.js';
 import type { Environment } from '../expr/evaluator.js';
+import type { ObsValueSet } from './obs-values.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
 import { cachelessPlanetAlt } from '../astronomy/es-astro.js';
 import { drawCircularText } from './draw-utils.js';
+import { dateToDateInterval } from '../astronomy/es-time.js';
 
 const TWO_PI = 2 * Math.PI;
 const HALF_PI = Math.PI / 2;
@@ -128,10 +130,6 @@ const PLANET_NAMES: Partial<Record<ECPlanetNumber, string>> = {
     [ECPlanetNumber.Saturn]: 'Saturn',
 };
 
-// ---------------------------------------------------------------------------
-// Caching
-// ---------------------------------------------------------------------------
-
 interface RingCacheEntry {
     riseAngle: number;
     setAngle: number;
@@ -142,20 +140,10 @@ interface RingCacheEntry {
 }
 
 const ringCache = new Map<ECPlanetNumber, RingCacheEntry>();
-let lastRingUpdateTime = 0;
-const RING_UPDATE_INTERVAL_MS = 3600 * 1000;
 
 // Sun ring OffscreenCanvas cache
 let sunRingCacheCanvas: OffscreenCanvas | null = null;
 let sunRingCacheNoonOnTop: boolean | null = null;
-
-// ---------------------------------------------------------------------------
-// Apple epoch conversion
-// ---------------------------------------------------------------------------
-
-function dateToDateInterval(date: Date): number {
-    return (date.getTime() / 1000) - 978307200;
-}
 
 // ---------------------------------------------------------------------------
 // Sun ring rendering
@@ -270,48 +258,31 @@ function drawSunRing(
 // ---------------------------------------------------------------------------
 
 /**
- * Update the planet rise/set angle cache.
- *
- * Uses dayNightLeafAngle(planet, 0, 0) for rise and (planet, 1, 0) for set.
- * These ARE the same as iOS planetrise24HourIndicatorAngle / planetset24HourIndicatorAngle
- * (confirmed: ESAstronomy.cpp L5509–5520 calls dayNightLeafAngleForPlanetNumber
- * with leafNumber=0/1, numLeaves=0).
- *
- * The returned angles are in "clock" convention: 0 = midnight, π = noon, clockwise.
- * We add noonOnTop offset here (matching iOS: + pi * noonOnTop).
+ * Map from ring config index to ObsValueSet ring array key.
  */
-function updateRingCache(env: Environment, noonOnTop: boolean): void {
-    const nowMs = Date.now();
-    if (nowMs - lastRingUpdateTime < RING_UPDATE_INTERVAL_MS && lastRingUpdateTime > 0) return;
-    lastRingUpdateTime = nowMs;
+const RING_VALUE_KEYS: (keyof ObsValueSet)[] = [
+    'saturnRing', 'jupiterRing', 'marsRing', 'venusRing', 'mercuryRing', 'moonRing',
+];
 
-    const dayNightLeafAngle = env.functions.get('dayNightLeafAngle') as
-        ((planet: number, leaf: number, numLeaves: number) => number) | undefined;
+/**
+ * Update the planet ring cache from ObsValues.
+ *
+ * Reads pre-computed rise/set/transit angles from the ObsValueSet.
+ * NaN rise/set = planet doesn't rise/set (always above or below horizon).
+ * The aboveHorizon check uses the env function when needed.
+ */
+function updateRingCache(env: Environment, vs: ObsValueSet): void {
+    for (let i = 0; i < PLANET_RINGS.length; i++) {
+        const ring = PLANET_RINGS[i];
+        const ringValues = vs[RING_VALUE_KEYS[i]] as { currentValue: number }[];
 
-    if (!dayNightLeafAngle) return;
+        // Ring array: [rise, set, transit]
+        const riseAngle = ringValues[0].currentValue;
+        const setAngle = ringValues[1].currentValue;
+        const transitAngle = ringValues[2].currentValue;
 
-    const noonOffset = noonOnTop ? Math.PI : 0;
-
-    for (const ring of PLANET_RINGS) {
-        // Rise angle: dayNightLeafAngle(planet, 0, 0)
-        const rawRise = dayNightLeafAngle(ring.planet, 0, 0);
-        // Set angle: dayNightLeafAngle(planet, 1, 0)
-        const rawSet = dayNightLeafAngle(ring.planet, 1, 0);
-
-        const riseAngle = rawRise + noonOffset;
-        const setAngle = rawSet + noonOffset;
-
-        const riseValid = isFinite(rawRise);
-        const setValid = isFinite(rawSet);
-
-        // Transit: use leafNumber=4 with numLeaves=0 for direct transit angle
-        // (matching iOS planettransit24HourIndicatorAngle which calls
-        // dayNightLeafAngleForPlanetNumber with leafNumber=4, numLeaves=0)
-        // But our web version's computeDayNightLeafAngle doesn't handle leafNumber=4.
-        // Use the planettransit24HourIndicatorAngle function which is already registered.
-        const transitFn = env.functions.get('planettransit24HourIndicatorAngle') as
-            ((planet: number) => number) | undefined;
-        const transitAngle = transitFn ? transitFn(ring.planet) + noonOffset : (riseAngle + setAngle) / 2;
+        const riseValid = isFinite(riseAngle) && !isNaN(riseAngle);
+        const setValid = isFinite(setAngle) && !isNaN(setAngle);
 
         let aboveHorizon = false;
         if (!riseValid || !setValid) {
@@ -458,12 +429,13 @@ function drawPlanetRing(
  *
  * @param ctx       Canvas 2D context (already at DPR scale)
  * @param L         Layout parameters
- * @param env       Astronomy environment
+ * @param env       Astronomy environment (still needed for sun ring + aboveHorizon check)
  * @param noonOnTop Whether noon is at the top of the dial
- * @param now       Current display time
- * @param lat       Observer latitude in degrees
- * @param lon       Observer longitude in degrees
- * @param tzOffsetSeconds  Timezone offset from UTC in seconds
+ * @param now       Current display time (still needed for sun ring)
+ * @param lat       Observer latitude in degrees (still needed for sun ring)
+ * @param lon       Observer longitude in degrees (still needed for sun ring)
+ * @param tzOffsetSeconds  Timezone offset from UTC in seconds (still needed for sun ring)
+ * @param vs        Observatory values (for planet ring angles)
  */
 export function drawRiseSetRings(
     ctx: CanvasRenderingContext2D,
@@ -474,12 +446,14 @@ export function drawRiseSetRings(
     lat: number,
     lon: number,
     tzOffsetSeconds: number,
+    vs: ObsValueSet,
 ): void {
-    // Update planet ring cache
-    updateRingCache(env, noonOnTop);
+    // Update planet ring cache from ObsValues
+    updateRingCache(env, vs);
 
-    // 1. Sun ring (altitude-based sky-color gradient)
-    drawSunRing(ctx, L, now, lat, lon, tzOffsetSeconds, noonOnTop);
+    // 1. Sun ring (altitude-based sky-color gradient — stays as-is)
+    // PERF TEST: sun ring disabled to measure impact
+    // drawSunRing(ctx, L, now, lat, lon, tzOffsetSeconds, noonOnTop);
 
     // 2. Planet rings (simple rise/set arcs)
     drawPlanetRing(ctx, L);
@@ -490,7 +464,6 @@ export function drawRiseSetRings(
  * Call when location, timezone, or noonOnTop changes.
  */
 export function invalidateRingCache(): void {
-    lastRingUpdateTime = 0;
     sunRingCacheCanvas = null;
     sunRingCacheNoonOnTop = null;
 }
