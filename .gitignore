@@ -2,6 +2,7 @@
 .esastro-ref
 .estime-ref
 .eslocation-ref
+.esgl-ref
 .observatory-ref
 .observatory-opengl-ref
 node_modules
