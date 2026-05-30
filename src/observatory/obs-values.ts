@@ -620,13 +620,14 @@ function updateObsValueScrub(
 
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
 
-    // Compress if needed, otherwise use natural speed
-    if (naturalDurationMs > timeUntilNextUpdateMs) {
-        startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
-            timeUntilNextUpdateMs);
-    } else {
-        startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
-    }
+    // Always use the tick interval as animation duration during scrub.
+    // For large-delta values (clock hands), this compresses the animation
+    // to fit in one tick — same as before.
+    // For small-delta values (planet ring edges), this stretches the
+    // animation across the full tick interval (~6 frames), preventing
+    // the near-instant snap that causes visible jumpiness.
+    startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
+        timeUntilNextUpdateMs);
 
     // No pending sweep during scrub — just snap-to-target with compression
     v.pendingSweep = null;

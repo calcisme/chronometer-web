@@ -17047,17 +17047,13 @@
     if (angleDelta > Math.PI) angleDelta = TWO_PI11 - angleDelta;
     const naturalDurationMs = speed > 0 ? angleDelta / speed * 1e3 : 0;
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
-    if (naturalDurationMs > timeUntilNextUpdateMs) {
-      startAnimationRaw(
-        v.anim,
-        newTarget,
-        perfNow,
-        multiplier,
-        timeUntilNextUpdateMs
-      );
-    } else {
-      startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
-    }
+    startAnimationRaw(
+      v.anim,
+      newTarget,
+      perfNow,
+      multiplier,
+      timeUntilNextUpdateMs
+    );
     v.pendingSweep = null;
   }
   function updateObsValues(vs, env2, perfNow, getNow2, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
