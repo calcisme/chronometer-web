@@ -323,30 +323,23 @@ const RING_VALUE_KEYS: (keyof ObsValueSet)[] = [
 /**
  * Update the planet ring cache from ObsValues.
  *
- * Reads pre-computed rise/set/transit angles from the ObsValueSet.
- * NaN rise/set = planet doesn't rise/set (always above or below horizon).
- * The aboveHorizon check uses the env function when needed.
+ * Reads pre-computed rise/set/transit angles and validity flags from the ObsValueSet.
+ * Validity flags come from the dayNightLeafAngleIsRiseSet and dayNightLeafAngleAboveHorizon
+ * expression functions, which share the compute-once cache in astro-env.ts.
  */
 function updateRingCache(env: Environment, vs: ObsValueSet): void {
     for (let i = 0; i < PLANET_RINGS.length; i++) {
         const ring = PLANET_RINGS[i];
         const ringValues = vs[RING_VALUE_KEYS[i]] as { currentValue: number }[];
 
-        // Ring array: [rise, set, transit]
+        // Ring array: [rise, set, transit, riseValid, setValid, aboveHorizon]
         const riseAngle = ringValues[0].currentValue;
         const setAngle = ringValues[1].currentValue;
         const transitAngle = ringValues[2].currentValue;
 
-        const riseValid = isFinite(riseAngle) && !isNaN(riseAngle);
-        const setValid = isFinite(setAngle) && !isNaN(setAngle);
-
-        let aboveHorizon = false;
-        if (!riseValid || !setValid) {
-            const altFn = env.functions.get('altitudeOfPlanet') as ((n: number) => number) | undefined;
-            if (altFn) {
-                aboveHorizon = altFn(ring.planet) > 0;
-            }
-        }
+        const riseValid = ringValues[3].currentValue > 0.5;   // dayNightLeafAngleIsRiseSet(pn, 0)
+        const setValid = ringValues[4].currentValue > 0.5;     // dayNightLeafAngleIsRiseSet(pn, 1)
+        const aboveHorizon = ringValues[5].currentValue > 0.5; // dayNightLeafAngleAboveHorizon(pn, 0)
 
         ringCache.set(ring.planet, {
             riseAngle,

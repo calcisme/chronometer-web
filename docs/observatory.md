@@ -100,14 +100,36 @@ compression logic mirrors the watch-face `tickAnimations`:
 | Solar subdial | hour, minute, second | 1–60s | second: 2π/60 |
 | Sidereal subdial | hour, minute, second | 1–60s | second: 2π/60 |
 | Planet hands | saturn, jupiter, mars, earth, venus, mercury, moonOffset | 3600s | 0 |
-| Planet rings | 6 × (rise, set, transit) | Sentinel (rise↔set) | 0 |
+| Planet rings | 6 × (rise, set, transit, riseValid, setValid, aboveHorizon) | Sentinel (rise↔set) | 0 |
 | Sun ring | 14 altitude stops + noon + midnight | Sentinel (rise↔set) | 0 |
 
-### NaN Convention
+### Planet Ring Validity Flags
+
+Planet rings use explicit validity flags rather than `NaN` or `isFinite()` checks.
+When a planet doesn't rise or set (polar regions), `dayNightLeafAngle` returns
+the transit angle as a fallback — a finite value that would draw a phantom ring
+if not gated. Each ring therefore carries three metadata ObsValues:
+
+| ObsValue | Expression | Meaning |
+|----------|------------|---------|
+| `riseValid` | `dayNightLeafAngleIsRiseSet(pn, 0)` | 1 if planet actually rises, 0 if angle is a transit fallback |
+| `setValid` | `dayNightLeafAngleIsRiseSet(pn, 1)` | 1 if planet actually sets, 0 if angle is a transit fallback |
+| `aboveHorizon` | `dayNightLeafAngleAboveHorizon(pn, 0)` | 1 if planet is always above horizon (polar summer), 0 if always below |
+
+The ring renderer uses these flags to decide:
+- **Both valid**: draw the arc from rise to set (normal case)
+- **Invalid + aboveHorizon**: draw a full-circle ring (planet never sets)
+- **Invalid + !aboveHorizon**: draw only the planet label (planet never rises)
+
+These values come from the iOS `isRiseSet` and `aboveHorizon` output parameters
+of `dayNightLeafAngleForPlanetNumber`, propagated through a compute-once cache
+in `astro-env.ts`. See [Astronomy — Planet Rise/Set Cache](astronomy.md#planet-riseset-cache).
+
+### NaN Convention (Sun Ring and Hands)
 
 `NaN` means "don't display this element." Sun event hands (e.g., sunrise in
-polar regions) and planet rings (never-rising planets) use NaN to suppress
-rendering. Draw functions check `isNaN(value)` before drawing.
+polar regions) and sun ring altitude stops use NaN to suppress rendering.
+Draw functions check `isNaN(value)` before drawing.
 
 Sun ring altitude stops also use NaN — if the sun never reaches a given
 altitude (e.g., -18° during polar summer), that gradient stop is skipped

@@ -662,7 +662,7 @@ function registerTerraFunctions(
                 return computeDayNightLeafAngle(
                     planetNumber, leafNumber, numLeaves,
                     getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds,
-                );
+                ).angle;
             }
             const slotLat = slot.lat * Math.PI / 180;
             const slotLon = slot.lon * Math.PI / 180;
@@ -670,7 +670,7 @@ function registerTerraFunctions(
             return computeDayNightLeafAngle(
                 planetNumber, leafNumber, numLeaves,
                 getNow, slotLat, slotLon, pool, slotTzOffset,
-            );
+            ).angle;
         },
     );
 }

@@ -125,6 +125,18 @@ export const EXPR_METADATA: ExprEntry[] = [
     { name: 'min',   category: 'Math', desc: 'Minimum',                   kind: 'fn', sig: '(a, b)' },
     { name: 'max',   category: 'Math', desc: 'Maximum',                   kind: 'fn', sig: '(a, b)' },
     { name: 'fmod',  category: 'Math', desc: 'Floating-point modulus',    kind: 'fn', sig: '(a, b)' },
+
+    // ── Day/Night Ring ──────────────────────────────────────────────────
+    { name: 'dayNightLeafAngle',              category: 'Day/Night Ring', desc: 'Rise/set/leaf angle for planet ring',                kind: 'fn', sig: '(planet, leaf, numLeaves)' },
+    { name: 'dayNightLeafAngleLST',           category: 'Day/Night Ring', desc: 'Rise/set/leaf angle (LST time base)',               kind: 'fn', sig: '(planet, leaf, numLeaves)' },
+    { name: 'dayNightLeafAngleIsRiseSet',     category: 'Day/Night Ring', desc: '1 if planet actually rises/sets, 0 if transit fallback', kind: 'fn', sig: '(planet, leaf)' },
+    { name: 'dayNightLeafAngleAboveHorizon',  category: 'Day/Night Ring', desc: '1 if planet always above horizon (polar), 0 otherwise',  kind: 'fn', sig: '(planet, leaf)' },
+    { name: 'planettransit24HourIndicatorAngle', category: 'Day/Night Ring', desc: 'Planet transit angle on 24h dial',               kind: 'fn', sig: '(planet)' },
+    { name: 'planetTransitAngle',             category: 'Day/Night Ring', desc: 'Planet high transit angle on 24h dial',             kind: 'fn', sig: '(planet)' },
+    { name: 'sunSpecialAngle',                category: 'Day/Night Ring', desc: 'Sun altitude crossing angle (rise/set/twilight)',    kind: 'fn', sig: '(kind)' },
+    { name: 'solarNoonAngle',                 category: 'Day/Night Ring', desc: 'Solar noon angle on 24h dial',                      kind: 'fn' },
+    { name: 'polarSummer',                    category: 'Day/Night Ring', desc: '1 if sun always above horizon',                     kind: 'fn' },
+    { name: 'polarWinter',                    category: 'Day/Night Ring', desc: '1 if sun always below horizon',                     kind: 'fn' },
 ];
 
 /**
@@ -138,6 +150,7 @@ export const CATEGORY_ORDER = [
     'Moon Position',
     'Clock',
     'Astronomical',
+    'Day/Night Ring',
     'Planet Constants',
     'Math Constants',
     'Math',

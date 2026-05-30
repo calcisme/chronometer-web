@@ -11338,38 +11338,46 @@
   }
   function planetaryRiseSetTimeRefined(calculationDateInterval, observerLatitude, observerLongitude, riseNotSet, planetNumber, overrideAltitudeDesired, cachePool) {
     let tryDate = calculationDateInterval;
-    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
-    const numIterations = 20;
-    const tryDates = new Array(numIterations + 11);
-    const results = new Array(numIterations + 11);
-    let fitTries = 0;
     let lastValidResultDate = NaN;
+    let lastValidTryDate = NaN;
+    let convergedToInvalid = false;
+    const polarSpecial = Math.abs(observerLatitude) > Math.PI / 180 * 89;
+    let precision = planetNumber === 1 /* Moon */ ? 0 /* Low */ : 2 /* Full */;
+    if (polarSpecial) {
+      precision = 2 /* Full */;
+    }
+    const numIterations = 20;
+    const numPolarTries = 10;
+    const tryDates = new Array(numIterations + numPolarTries + 1);
+    const results = new Array(numIterations + numPolarTries + 1);
+    let fitTries = 0;
     let lastDelta = 0;
-    const firstTransit = tryDate;
+    let firstNan = NaN;
+    let firstTransit = tryDate;
     for (let i = 0; i < numIterations; i++) {
       if (planetNumber === 1 /* Moon */ && i === numIterations - 1 && precision !== 2 /* Full */) {
         precision = 2 /* Full */;
         i--;
         fitTries = 0;
       }
-      const priorCache = pushECAstroCacheWithSlopInPool(
+      let priorCache = pushECAstroCacheWithSlopInPool(
         cachePool,
         cachePool.refinementCache,
         tryDate,
         0
       );
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
-      const { rightAscension, declination } = getPlanetRADeclDist(
+      let jcse = julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache).julianCenturiesSince2000Epoch;
+      let radecl = getPlanetRADeclDist(
         planetNumber,
-        julianCenturiesSince2000Epoch,
+        jcse,
         cachePool.currentCache,
         precision
       );
-      const altitude = isNaN(overrideAltitudeDesired) ? altitudeAtRiseSet(julianCenturiesSince2000Epoch, planetNumber, true, cachePool.currentCache, precision) : overrideAltitudeDesired;
-      const newDate = riseSetTime(
+      const altitude = isNaN(overrideAltitudeDesired) ? altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision) : overrideAltitudeDesired;
+      let newDate = riseSetTime(
         riseNotSet,
-        rightAscension,
-        declination,
+        radecl.rightAscension,
+        radecl.declination,
         observerLatitude,
         observerLongitude,
         altitude,
@@ -11378,26 +11386,220 @@
       );
       popECAstroCacheToInPool(cachePool, priorCache);
       if (isNoRiseSet(newDate)) {
-        return { riseSetTime: newDate, transitTime: tryDate };
+        if (!convergedToInvalid) {
+          convergedToInvalid = true;
+          const wantHighTransit = newDate === ALWAYS_BELOW_HORIZON;
+          priorCache = pushECAstroCacheWithSlopInPool(
+            cachePool,
+            cachePool.refinementCache,
+            tryDate,
+            0
+          );
+          const transitT = planettransitTimeRefined(
+            tryDate,
+            observerLatitude,
+            observerLongitude,
+            wantHighTransit,
+            planetNumber,
+            cachePool
+          );
+          popECAstroCacheToInPool(cachePool, priorCache);
+          firstTransit = transitT;
+          firstNan = newDate;
+          priorCache = pushECAstroCacheWithSlopInPool(
+            cachePool,
+            cachePool.refinementCache,
+            transitT,
+            0
+          );
+          jcse = julianCenturiesSince2000EpochForDateInterval(transitT, cachePool.currentCache).julianCenturiesSince2000Epoch;
+          radecl = getPlanetRADeclDist(
+            planetNumber,
+            jcse,
+            cachePool.currentCache,
+            precision
+          );
+          const altit = isNaN(overrideAltitudeDesired) ? altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision) : overrideAltitudeDesired;
+          newDate = riseSetTime(
+            riseNotSet,
+            radecl.rightAscension,
+            radecl.declination,
+            observerLatitude,
+            observerLongitude,
+            altit,
+            transitT,
+            cachePool
+          );
+          popECAstroCacheToInPool(cachePool, priorCache);
+          if (isNoRiseSet(newDate)) {
+            if (polarSpecial) {
+              const priorPolar = transitT - 13 * 3600;
+              priorCache = pushECAstroCacheWithSlopInPool(
+                cachePool,
+                cachePool.refinementCache,
+                priorPolar,
+                0
+              );
+              jcse = julianCenturiesSince2000EpochForDateInterval(priorPolar, cachePool.currentCache).julianCenturiesSince2000Epoch;
+              radecl = getPlanetRADeclDist(
+                planetNumber,
+                jcse,
+                cachePool.currentCache,
+                precision
+              );
+              const priorPolarEvent = riseSetTime(
+                riseNotSet,
+                radecl.rightAscension,
+                radecl.declination,
+                observerLatitude,
+                observerLongitude,
+                altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision),
+                priorPolar,
+                cachePool
+              );
+              popECAstroCacheToInPool(cachePool, priorCache);
+              let binaryLow = NaN;
+              let binaryHigh = NaN;
+              let binaryLowEvent = NaN;
+              let binaryHighEvent = NaN;
+              if (isNoRiseSet(priorPolarEvent)) {
+                if (priorPolarEvent !== newDate) {
+                  binaryLow = priorPolar;
+                  binaryLowEvent = priorPolarEvent;
+                  binaryHigh = transitT;
+                  binaryHighEvent = newDate;
+                }
+                const nextPolar = tryDate + 13 * 3600;
+                priorCache = pushECAstroCacheWithSlopInPool(
+                  cachePool,
+                  cachePool.refinementCache,
+                  nextPolar,
+                  0
+                );
+                jcse = julianCenturiesSince2000EpochForDateInterval(nextPolar, cachePool.currentCache).julianCenturiesSince2000Epoch;
+                radecl = getPlanetRADeclDist(
+                  planetNumber,
+                  jcse,
+                  cachePool.currentCache,
+                  precision
+                );
+                const nextPolarEvent = riseSetTime(
+                  riseNotSet,
+                  radecl.rightAscension,
+                  radecl.declination,
+                  observerLatitude,
+                  observerLongitude,
+                  altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision),
+                  nextPolar,
+                  cachePool
+                );
+                popECAstroCacheToInPool(cachePool, priorCache);
+                if (isNoRiseSet(nextPolarEvent)) {
+                  if (nextPolarEvent !== newDate) {
+                    binaryLow = transitT;
+                    binaryLowEvent = newDate;
+                    binaryHigh = nextPolar;
+                    binaryHighEvent = nextPolarEvent;
+                  } else if (isNaN(binaryLow)) {
+                    return { riseSetTime: newDate, transitTime: transitT };
+                  }
+                } else {
+                  if (nextPolarEvent > tryDate + 24 * 3600) {
+                    return { riseSetTime: newDate, transitTime: transitT };
+                  }
+                  tryDate = nextPolar;
+                  newDate = nextPolarEvent;
+                }
+              } else {
+                if (priorPolarEvent < tryDate - 24 * 3600) {
+                  return { riseSetTime: newDate, transitTime: transitT };
+                }
+                tryDate = priorPolar;
+                newDate = priorPolarEvent;
+              }
+              if (!isNaN(binaryLow)) {
+                let polarTries = numPolarTries;
+                while (polarTries-- > 0) {
+                  const split = (binaryLow + binaryHigh) / 2;
+                  priorCache = pushECAstroCacheWithSlopInPool(
+                    cachePool,
+                    cachePool.refinementCache,
+                    split,
+                    0
+                  );
+                  jcse = julianCenturiesSince2000EpochForDateInterval(split, cachePool.currentCache).julianCenturiesSince2000Epoch;
+                  radecl = getPlanetRADeclDist(
+                    planetNumber,
+                    jcse,
+                    cachePool.currentCache,
+                    precision
+                  );
+                  const splitEvent = riseSetTime(
+                    riseNotSet,
+                    radecl.rightAscension,
+                    radecl.declination,
+                    observerLatitude,
+                    observerLongitude,
+                    altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision),
+                    split,
+                    cachePool
+                  );
+                  popECAstroCacheToInPool(cachePool, priorCache);
+                  if (!isNoRiseSet(splitEvent)) {
+                    firstTransit = split;
+                    newDate = splitEvent;
+                    break;
+                  }
+                  if (splitEvent === binaryLowEvent) {
+                    binaryLow = split;
+                    binaryLowEvent = splitEvent;
+                  } else {
+                    binaryHigh = split;
+                    binaryHighEvent = splitEvent;
+                  }
+                }
+                if (isNoRiseSet(newDate)) {
+                  return { riseSetTime: newDate, transitTime: firstTransit };
+                }
+              }
+            } else {
+              return { riseSetTime: newDate, transitTime: transitT };
+            }
+          }
+          if (!isNoRiseSet(newDate)) {
+            lastValidTryDate = firstTransit;
+            lastValidResultDate = newDate;
+            tryDates[fitTries] = firstTransit;
+            results[fitTries++] = newDate;
+            tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
+          }
+        } else {
+          if (!isNaN(lastValidTryDate)) {
+            tryDate = (tryDate + lastValidTryDate) / 2;
+          } else {
+            return { riseSetTime: newDate, transitTime: tryDate };
+          }
+        }
+      } else {
+        lastValidTryDate = tryDate;
+        lastValidResultDate = newDate;
+        tryDates[fitTries] = tryDate;
+        results[fitTries++] = newDate;
+        tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
       }
-      lastValidResultDate = newDate;
-      lastDelta = newDate - tryDate;
+      lastDelta = lastValidResultDate - lastValidTryDate;
       if (Math.abs(lastDelta) < 0.1) {
         if (planetNumber === 1 /* Moon */ && precision !== 2 /* Full */) {
           precision = 2 /* Full */;
-        } else {
-          return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
+          continue;
         }
+        return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
       }
-      tryDates[fitTries] = tryDate;
-      results[fitTries] = newDate;
-      fitTries++;
-      tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
     }
     if (isNaN(lastValidResultDate)) {
       return { riseSetTime: lastValidResultDate, transitTime: tryDate };
     } else if (Math.abs(lastDelta) > 60) {
-      return { riseSetTime: NaN, transitTime: firstTransit };
+      return { riseSetTime: firstNan, transitTime: firstTransit };
     } else {
       return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
     }
@@ -12633,7 +12835,7 @@
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
-      );
+      ).angle;
     });
     functions.set("sunset24HourIndicatorAngle", () => {
       return computeDayNightLeafAngle(
@@ -12645,7 +12847,7 @@
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
-      );
+      ).angle;
     });
     functions.set("polarSummer", () => {
       return computeDayNightLeafAngle(
@@ -12657,7 +12859,7 @@
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
-      );
+      ).angle;
     });
     functions.set("polarWinter", () => {
       return computeDayNightLeafAngle(
@@ -12669,7 +12871,7 @@
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
-      );
+      ).angle;
     });
     functions.set("sunriseIndicatorValid", () => {
       return isNaN(riseSetForDay(true, 0 /* Sun */)) ? 0 : 1;
@@ -12953,6 +13155,17 @@
       );
     });
     functions.set("dayNightLeafAngle", (planetNumber, leafNumber, numLeaves) => {
+      if (numLeaves === 0 && (leafNumber === 0 || leafNumber === 1)) {
+        const cache = getPlanetRiseSetCache(
+          planetNumber,
+          getNow,
+          OBSERVER_LAT,
+          OBSERVER_LON,
+          pool,
+          tzOffsetSeconds
+        );
+        return leafNumber === 0 ? cache.riseAngle : cache.setAngle;
+      }
       return computeDayNightLeafAngle(
         planetNumber,
         leafNumber,
@@ -12962,7 +13175,7 @@
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
-      );
+      ).angle;
     });
     functions.set("dayNightLeafAngleLST", (planetNumber, leafNumber, numLeaves) => {
       return computeDayNightLeafAngleLST(
@@ -12986,7 +13199,29 @@
         OBSERVER_LON,
         pool,
         tzOffsetSeconds
+      ).angle;
+    });
+    functions.set("dayNightLeafAngleIsRiseSet", (planetNumber, leafNumber) => {
+      const cache = getPlanetRiseSetCache(
+        planetNumber,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
       );
+      return (leafNumber === 0 ? cache.riseIsRiseSet : cache.setIsRiseSet) ? 1 : 0;
+    });
+    functions.set("dayNightLeafAngleAboveHorizon", (planetNumber, leafNumber) => {
+      const cache = getPlanetRiseSetCache(
+        planetNumber,
+        getNow,
+        OBSERVER_LAT,
+        OBSERVER_LON,
+        pool,
+        tzOffsetSeconds
+      );
+      return (leafNumber === 0 ? cache.riseAboveHorizon : cache.setAboveHorizon) ? 1 : 0;
     });
     functions.set("sunSpecialAngle", (kind) => {
       const result = computeSunSpecial24HourAngle(
@@ -13106,6 +13341,91 @@
     );
     return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
   }
+  var planetRiseSetCaches = /* @__PURE__ */ new Map();
+  function riseSetCacheKey(planetNumber, observerLat, observerLon, tzOffsetSeconds) {
+    return `${planetNumber}:${observerLat.toFixed(6)}:${observerLon.toFixed(6)}:${tzOffsetSeconds}`;
+  }
+  function computeAndCachePlanetRiseSet(planetNumber, calcDate, observerLat, observerLon, pool, tzOffsetSeconds) {
+    if (planetNumber === 11 /* MidnightSun */) {
+      planetNumber = 0 /* Sun */;
+    }
+    const fudgeFactorSeconds = 5;
+    const lookahead = 3600 * 13.2;
+    const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
+    const riseResult = nextPrevRiseSetInternal(
+      calcDate,
+      observerLat,
+      observerLon,
+      true,
+      planetNumber,
+      !planetIsUp,
+      -fudgeFactorSeconds,
+      lookahead,
+      pool
+    );
+    const setResult = nextPrevRiseSetInternal(
+      calcDate,
+      observerLat,
+      observerLon,
+      false,
+      planetNumber,
+      planetIsUp,
+      -fudgeFactorSeconds,
+      lookahead,
+      pool
+    );
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
+    let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
+    let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
+    if (isNaN(riseTime) && isAlwaysAbove(riseTime)) {
+      rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
+    }
+    if (isNaN(setTime) && isAlwaysAbove(setTime)) {
+      sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
+    }
+    const riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
+    const setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
+    const riseIsRS = !isNaN(riseTimeAngle);
+    const riseAngle = riseIsRS ? riseTimeAngle : rTransitAngle;
+    const riseAboveH = riseIsRS ? false : isAlwaysAbove(riseTime);
+    const setIsRS = !isNaN(setTimeAngle);
+    const setAngle = setIsRS ? setTimeAngle : sTransitAngle;
+    const setAboveH = setIsRS ? false : isAlwaysAbove(setTime);
+    const cache = {
+      riseAngle,
+      setAngle,
+      rTransitAngle,
+      sTransitAngle,
+      riseIsRiseSet: riseIsRS,
+      setIsRiseSet: setIsRS,
+      riseAboveHorizon: riseAboveH,
+      setAboveHorizon: setAboveH,
+      cachedDateInterval: calcDate
+    };
+    const key = riseSetCacheKey(planetNumber, observerLat, observerLon, tzOffsetSeconds);
+    planetRiseSetCaches.set(key, cache);
+    return cache;
+  }
+  function getPlanetRiseSetCache(planetNumber, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
+    if (planetNumber === 11 /* MidnightSun */) {
+      planetNumber = 0 /* Sun */;
+    }
+    const calcDate = dateToDateInterval(getNow());
+    const key = riseSetCacheKey(planetNumber, observerLat, observerLon, tzOffsetSeconds);
+    const existing = planetRiseSetCaches.get(key);
+    if (existing && existing.cachedDateInterval === calcDate) {
+      return existing;
+    }
+    return computeAndCachePlanetRiseSet(
+      planetNumber,
+      calcDate,
+      observerLat,
+      observerLon,
+      pool,
+      tzOffsetSeconds
+    );
+  }
   function computeDayNightLeafAngle(planetNumber, leafNumber, numLeaves, getNow, observerLat, observerLon, pool, tzOffsetSeconds) {
     const calcDate = dateToDateInterval(getNow());
     const fudgeFactorSeconds = 5;
@@ -13113,6 +13433,44 @@
     const nightTime = planetNumber === 11 /* MidnightSun */;
     if (nightTime) {
       planetNumber = 0 /* Sun */;
+    }
+    if (numLeaves === 0) {
+      const cache = getPlanetRiseSetCache(
+        planetNumber,
+        getNow,
+        observerLat,
+        observerLon,
+        pool,
+        tzOffsetSeconds
+      );
+      if (leafNumber === 0) {
+        return {
+          angle: cache.riseAngle,
+          isRiseSet: cache.riseIsRiseSet,
+          aboveHorizon: cache.riseAboveHorizon
+        };
+      } else if (leafNumber === 1) {
+        return {
+          angle: cache.setAngle,
+          isRiseSet: cache.setIsRiseSet,
+          aboveHorizon: cache.setAboveHorizon
+        };
+      } else if (leafNumber === 4) {
+        const transitDI = planettransitTimeRefined(
+          calcDate,
+          observerLat,
+          observerLon,
+          true,
+          planetNumber,
+          pool
+        );
+        return { angle: angle24HourForDate(transitDI, tzOffsetSeconds), isRiseSet: true, aboveHorizon: false };
+      } else {
+      }
+    }
+    const isSpecial = numLeaves === 0;
+    if (numLeaves < 0) {
+      numLeaves = -numLeaves;
     }
     const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
     const riseResult = nextPrevRiseSetInternal(
@@ -13141,40 +13499,14 @@
     const setTime = setResult.eventTime;
     let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
     let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
-    if (isNaN(riseTime)) {
-      if (isAlwaysAbove(riseTime)) {
-        rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
-      }
+    if (isNaN(riseTime) && isAlwaysAbove(riseTime)) {
+      rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
     }
-    if (isNaN(setTime)) {
-      if (isAlwaysAbove(setTime)) {
-        sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
-      }
+    if (isNaN(setTime) && isAlwaysAbove(setTime)) {
+      sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
     }
     let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
     let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
-    let isSpecial = false;
-    if (numLeaves === 0) {
-      if (leafNumber === 0) {
-        return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
-      } else if (leafNumber === 1) {
-        return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
-      } else if (leafNumber === 4) {
-        const transitDI = planettransitTimeRefined(
-          calcDate,
-          observerLat,
-          observerLon,
-          true,
-          planetNumber,
-          pool
-        );
-        return angle24HourForDate(transitDI, tzOffsetSeconds);
-      } else {
-        isSpecial = true;
-      }
-    } else if (numLeaves < 0) {
-      numLeaves = -numLeaves;
-    }
     const leafWidth = numLeaves > 0 ? 2 * Math.PI / numLeaves : 0;
     let polarSummer = false;
     let polarWinter = false;
@@ -13212,8 +13544,8 @@
       }
     }
     if (isSpecial) {
-      if (leafNumber === 2) return polarSummer ? 1 : 0;
-      if (leafNumber === 3) return polarWinter ? 1 : 0;
+      if (leafNumber === 2) return { angle: polarSummer ? 1 : 0, isRiseSet: true, aboveHorizon: false };
+      if (leafNumber === 3) return { angle: polarWinter ? 1 : 0, isRiseSet: true, aboveHorizon: false };
     }
     riseTimeAngle = fmod(riseTimeAngle, 2 * Math.PI);
     setTimeAngle = fmod(setTimeAngle, 2 * Math.PI);
@@ -13239,7 +13571,7 @@
     if (leafCenterAngle > 2 * Math.PI) {
       leafCenterAngle -= 2 * Math.PI;
     }
-    return leafCenterAngle;
+    return { angle: leafCenterAngle, isRiseSet: true, aboveHorizon: false };
   }
   function getParamsForAltitudeKind(kind) {
     switch (kind) {
@@ -14639,7 +14971,7 @@
             OBSERVER_LON,
             pool,
             tzOffsetSeconds
-          );
+          ).angle;
         }
         const slotLat = slot.lat * Math.PI / 180;
         const slotLon = slot.lon * Math.PI / 180;
@@ -14653,7 +14985,7 @@
           slotLon,
           pool,
           slotTzOffset
-        );
+        ).angle;
       }
     );
   }

@@ -36,7 +36,7 @@ Recursive-descent parser that builds an Abstract Syntax Tree (AST). Handles oper
 
 Walks the AST given a variable/function environment and returns a numeric result. The environment provides:
 - **Variables**: `pi`, `mainR`, and all init-block-defined variables
-- **Functions**: `sin`, `cos`, `hour24Number`, `sunRA`, `moonAgeAngle`, etc.
+- **Functions**: `sin`, `cos`, `hour24Number`, `sunRA`, `moonAgeAngle`, `dayNightLeafAngleIsRiseSet`, etc.
 
 ## Pre-Parsed Expressions
 
@@ -83,7 +83,7 @@ These are:
 | `src/expr/tokenizer.ts` | Expression tokenizer |
 | `src/expr/parser.ts` | Recursive-descent parser → AST |
 | `src/expr/evaluator.ts` | AST walker / evaluator. Default environment includes `pi`, planet constants (`Sun`, `Moon`, `Venus`, etc.), and math functions |
-| `src/shared/astro-env.ts` | Shared astronomy/calendar/time function registry (~159 functions). `createAstroEnvironment()` factory for non-Chronometer apps |
+| `src/shared/astro-env.ts` | Shared astronomy/calendar/time function registry (~160 functions including `dayNightLeafAngleIsRiseSet`, `dayNightLeafAngleAboveHorizon`). Planet rise/set compute-once cache. `createAstroEnvironment()` factory for non-Chronometer apps |
 | `src/watch/watch-env.ts` | Imports `astro-env.ts`, adds Chronometer-specific functions (Terra slots, Kyoto wadokei, Venezia body). `evalAttr()`, `evaluateInit()`, environment creation |
 | `src/watch/xml-parser.ts` | `attrExpr()` helper that parses attributes to `ASTNode` |
 | `src/watch/types.ts` | `ASTNode` type on part attributes |
@@ -93,5 +93,6 @@ These are:
 
 - [XML Parsing](xml-parsing.md) — How attributes are parsed from XML into `ASTNode`
 - [Astronomy](astronomy.md) — Astronomy functions available in the expression environment
+- [Inspector](inspector.md) — Live expression evaluator with autocomplete and reference panel
 - [Animation](animation.md) — How `evalAttr` is called during animation ticks
 - [Architecture Overview](architecture-overview.md) — Shared environment architecture and import discipline

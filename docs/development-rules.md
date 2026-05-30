@@ -146,3 +146,11 @@ The astronomical series approximations (Willmann-Bell planetary/sun tables) are 
 Since the golden files are gitignored, if you regenerate the inappropriately, the previous version will need to be regenerated with an older version of the code, and it is not always obvious which
 version of the code that would need to be. If a test fails and you think you need to regenerate,
 ask the user and do nothing without explicit instruction.
+
+## 13. Keep Inspector Expression Metadata in Sync
+
+When adding or changing expression functions in `src/shared/astro-env.ts` or `src/watch/watch-env.ts`, also update the curated metadata table in `src/inspector/expr-metadata.ts`. This table powers the Inspector's **Reference panel** and **autocomplete** — if a function is missing, developers can still evaluate it manually, but it won't appear in the categorized reference or get a description/signature hint.
+
+Each entry needs: `name`, `category` (for grouping), `desc` (one-line description), `kind` (`'fn'` or `'const'`), and optionally `sig` (parameter signature like `'(planet, leaf)'`). New categories should also be added to `CATEGORY_ORDER`.
+
+See [Inspector](inspector.md) for how the metadata is used.

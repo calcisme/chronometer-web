@@ -91,7 +91,7 @@ See [Development Rules §2](development-rules.md#2-never-simplify-ios-algorithms
 
 ### Rise/Set Two-Step Search (`nextPrevRiseSetInternal`)
 
-Finding the next/previous rise or set event uses the iOS `nextPrevRiseSetInternalWithFudgeInterval` algorithm (a faithful port in `watch-env.ts`):
+Finding the next/previous rise or set event uses the iOS `nextPrevRiseSetInternalWithFudgeInterval` algorithm (a faithful port in `astro-env.ts`):
 
 1. **Fudge**: Offset `calcDate` by a small fudge factor (5 seconds) in the search direction
 2. **First try**: Call `planetaryRiseSetTimeRefined(fudgeDate, ...)` which returns both `riseSetTime` and `transitTime`
@@ -125,6 +125,25 @@ The limit constants are defined in `es-time.ts`:
 
 The time bar displays "⚠ earliest" or "⚠ latest" when at the boundary.
 
+### Planet Rise/Set Cache
+
+`computeDayNightLeafAngle` returns a structured result (`DayNightLeafAngleResult`) containing the angle plus two iOS output parameters: `isRiseSet` and `aboveHorizon`. These metadata values are needed by the Observatory ring renderer to distinguish "planet actually rises/sets" from "angle is a transit fallback."
+
+Since the expression evaluator can only return a single number, the metadata is exposed through a **compute-once cache** pattern that mirrors iOS `ESAstronomy.cpp` L5032-5096:
+
+1. **`computeAndCachePlanetRiseSet(planet, calcDate, ...)`** performs the expensive double `nextPrevRiseSetInternal` search and caches all results (angles, validity flags, above-horizon flags) in a `PlanetRiseSetCache` keyed by `(planet, observerLat, observerLon, tzOffset)`.
+
+2. **`getPlanetRiseSetCache(planet, getNow, ...)`** returns the cached data if the `calcDate` matches, otherwise calls `computeAndCachePlanetRiseSet`.
+
+3. **Three expression functions** consume the cache independently:
+   - `dayNightLeafAngle(pn, leaf, 0)` → returns the angle (rise or set)
+   - `dayNightLeafAngleIsRiseSet(pn, leaf)` → returns 1 if the planet actually rises/sets, 0 if the angle is a transit fallback
+   - `dayNightLeafAngleAboveHorizon(pn, leaf)` → returns 1 if the planet is always above horizon, 0 if always below
+
+Since all three functions hit the same cache, the expensive rise/set search runs at most once per planet per `calcDate`. There is no ordering dependency between the functions — any one can trigger the cache computation.
+
+The `MidnightSun` pseudo-planet (used for inverted day/night rings) is transparently substituted to `Sun` in both cache functions.
+
 ## Key Source Files
 
 | File | Purpose |
@@ -133,7 +152,7 @@ The time bar displays "⚠ earliest" or "⚠ latest" when at the boundary.
 | `src/astronomy/astro-cache.ts` | Per-frame result caching |
 | `src/astronomy/es-time.ts` | Date range constants (`ES_MIN_ASTRO_DATE`, `ES_MAX_ASTRO_DATE`) |
 | `src/watch/astro-stepper.ts` | Astronomical event stepping (rise/set, moon phase, transit search) |
-| `src/watch/watch-env.ts` | Wires astronomy functions into the expression environment |
+| `src/shared/astro-env.ts` | Wires astronomy functions into the expression environment; planet rise/set cache |
 
 ## Related Docs
 

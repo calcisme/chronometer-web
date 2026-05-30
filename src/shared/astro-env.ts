@@ -1259,13 +1259,13 @@ export function registerAstroFunctions(
         return computeDayNightLeafAngle(
             ECPlanetNumber.Sun, 0, 0,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
-        );
+        ).angle;
     });
     functions.set('sunset24HourIndicatorAngle', () => {
         return computeDayNightLeafAngle(
             ECPlanetNumber.Sun, 1, 0,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
-        );
+        ).angle;
     });
 
     // --- Polar summer/winter detection ---
@@ -1274,13 +1274,13 @@ export function registerAstroFunctions(
         return computeDayNightLeafAngle(
             ECPlanetNumber.Sun, 2, 0,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
-        );
+        ).angle;
     });
     functions.set('polarWinter', () => {
         return computeDayNightLeafAngle(
             ECPlanetNumber.Sun, 3, 0,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
-        );
+        ).angle;
     });
 
     // --- Sunrise/sunset indicator validity (special ops for Mauna Kea) ---
@@ -1667,10 +1667,17 @@ export function registerAstroFunctions(
 
     // --- Day/night ring leaf angle function (used by QdayNightRing) ---
     functions.set('dayNightLeafAngle', (planetNumber: number, leafNumber: number, numLeaves: number) => {
+        if (numLeaves === 0 && (leafNumber === 0 || leafNumber === 1)) {
+            // Use the compute-once cache for rise/set indicator angles
+            const cache = getPlanetRiseSetCache(
+                planetNumber, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds,
+            );
+            return leafNumber === 0 ? cache.riseAngle : cache.setAngle;
+        }
         return computeDayNightLeafAngle(
             planetNumber, leafNumber, numLeaves,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
-        );
+        ).angle;
     });
 
     // --- Day/night ring leaf angle function with LST time base (used by QdayNightRing with timeBase='LST') ---
@@ -1690,7 +1697,24 @@ export function registerAstroFunctions(
         return computeDayNightLeafAngle(
             planetNumber, 4, 0,
             getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds
+        ).angle;
+    });
+
+    // --- Output parameter expression functions for dayNightLeafAngle ---
+    // These provide the iOS output parameters (isRiseSet, aboveHorizon) via
+    // the compute-once cache. Each independently checks the cache and computes
+    // if needed — no ordering dependency.
+    functions.set('dayNightLeafAngleIsRiseSet', (planetNumber: number, leafNumber: number) => {
+        const cache = getPlanetRiseSetCache(
+            planetNumber, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds,
         );
+        return (leafNumber === 0 ? cache.riseIsRiseSet : cache.setIsRiseSet) ? 1 : 0;
+    });
+    functions.set('dayNightLeafAngleAboveHorizon', (planetNumber: number, leafNumber: number) => {
+        const cache = getPlanetRiseSetCache(
+            planetNumber, getNow, OBSERVER_LAT, OBSERVER_LON, pool, tzOffsetSeconds,
+        );
+        return (leafNumber === 0 ? cache.riseAboveHorizon : cache.setAboveHorizon) ? 1 : 0;
     });
     // --- Sun special angle (sunrise/sunset/twilight/golden) ---
     // Wraps computeSunSpecial24HourAngle for expression evaluation.
@@ -1883,44 +1907,91 @@ function nextPrevRiseSetInternal(
     return { eventTime: result2.riseSetTime, transitTime: result2.transitTime };
 }
 
+// ============================================================================
+// DayNightLeafAngle structured result and iOS-style cache
+// ============================================================================
+
 /**
- * Full day/night leaf angle computation.
- * iOS: dayNightLeafAngleForPlanetNumber:leafNumber:numLeaves:timeBaseKind:ECTimeBaseKindLT
+ * Structured result from computeDayNightLeafAngle, matching the full iOS
+ * contract of dayNightLeafAngleForPlanetNumber (return value + output params).
  *
- * Uses nextPrevRiseSetInternal (matching iOS nextPrevRiseSetInternalWithFudgeInterval)
- * with two-step search and transit-time validation.
- *
- * numLeaves == 0: special indicator angles (rise/set/polar)
- * numLeaves > 0: individual leaf positions for day/night ring
+ * iOS output parameters (valid only when numLeaves == 0):
+ *   *isRiseSet    → false when there is no rise or set (angle is the transit)
+ *   *aboveHorizon → true if planet is always above horizon (polar summer)
  */
-export function computeDayNightLeafAngle(
+export interface DayNightLeafAngleResult {
+    /** The computed angle (same value iOS returns from the function). */
+    angle: number;
+    /** false when planet doesn't rise/set and angle is the transit fallback.
+     *  Valid only when numLeaves === 0. */
+    isRiseSet: boolean;
+    /** When isRiseSet is false: true if always above horizon, false if always below.
+     *  Valid only when numLeaves === 0. */
+    aboveHorizon: boolean;
+}
+
+/**
+ * Per-planet cached rise/set data, populated by computeAndCachePlanetRiseSet().
+ *
+ * Ports the iOS cache pattern at ESAstronomy.cpp L5032-5096 where all per-planet
+ * values are computed on the first call and returned from cache on subsequent calls.
+ */
+interface PlanetRiseSetCache {
+    riseAngle: number;         // dayNightLeafAngle(pn, 0, 0).angle
+    setAngle: number;          // dayNightLeafAngle(pn, 1, 0).angle
+    rTransitAngle: number;     // transit angle from rise search
+    sTransitAngle: number;     // transit angle from set search
+    riseIsRiseSet: boolean;    // dayNightLeafAngle(pn, 0, 0).isRiseSet
+    setIsRiseSet: boolean;     // dayNightLeafAngle(pn, 1, 0).isRiseSet
+    riseAboveHorizon: boolean; // dayNightLeafAngle(pn, 0, 0).aboveHorizon
+    setAboveHorizon: boolean;  // dayNightLeafAngle(pn, 1, 0).aboveHorizon
+    cachedDateInterval: number; // calcDate when this was computed
+}
+
+/** Per-(planet, observer) cache map. Keyed by a string combining planet number,
+ *  observer lat/lon, and tzOffset to avoid cross-location stale data. */
+const planetRiseSetCaches = new Map<string, PlanetRiseSetCache>();
+
+/** Build a cache key that includes planet, observer position, and timezone. */
+function riseSetCacheKey(
     planetNumber: number,
-    leafNumber: number,
-    numLeaves: number,
-    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    tzOffsetSeconds: number,
+): string {
+    return `${planetNumber}:${observerLat.toFixed(6)}:${observerLon.toFixed(6)}:${tzOffsetSeconds}`;
+}
+
+/**
+ * Compute and cache all rise/set data for a given planet.
+ *
+ * This is the expensive operation: two calls to nextPrevRiseSetInternal.
+ * All results are stored so that subsequent expression function calls
+ * (dayNightLeafAngle, dayNightLeafAngleIsRiseSet, dayNightLeafAngleAboveHorizon)
+ * return cached data without recomputing.
+ *
+ * Ports iOS ESAstronomy.cpp L5032-5096 cache-slot pattern.
+ */
+function computeAndCachePlanetRiseSet(
+    planetNumber: number,
+    calcDate: number,
     observerLat: number,
     observerLon: number,
     pool: AstroCachePool,
     tzOffsetSeconds: number,
-): number {
-    const calcDate = dateToDateInterval(getNow());
-    const fudgeFactorSeconds = 5;  // iOS: fudgeFactorSeconds = 5
-    const lookahead = 3600 * 13.2;
-
-    // iOS ECAstronomy.m line 4567-4570: planetMidnightSun is a special flag
-    // that inverts the day/night ring (shows night leaves instead of day).
-    // Substitute Sun for the actual rise/set calculations.
-    const nightTime = planetNumber === ECPlanetNumber.MidnightSun;
-    if (nightTime) {
+): PlanetRiseSetCache {
+    // MidnightSun is a flag for inverting the day/night ring — actual rise/set uses Sun
+    if (planetNumber === ECPlanetNumber.MidnightSun) {
         planetNumber = ECPlanetNumber.Sun;
     }
 
-    // iOS: [self planetIsUp:planetNumber] — compares against altitudeAtRiseSet, not zero
+    const fudgeFactorSeconds = 5;
+    const lookahead = 3600 * 13.2;
+
+    // iOS: [self planetIsUp:planetNumber]
     const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
 
-    // iOS lines 4598-4612: search for rise and set using nextPrevRiseSetInternal
-    // Rise: isNext = !planetIsUp (if planet is up, search backward for the most recent rise)
-    // Set:  isNext = planetIsUp  (if planet is up, search forward for the next set)
+    // iOS lines 4598-4612: search for rise and set
     const riseResult = nextPrevRiseSetInternal(
         calcDate, observerLat, observerLon,
         true, planetNumber, !planetIsUp, -fudgeFactorSeconds, lookahead, pool,
@@ -1933,34 +2004,130 @@ export function computeDayNightLeafAngle(
     const riseTime = riseResult.eventTime;
     const setTime = setResult.eventTime;
 
-    // iOS lines 4616-4631: get transit angles from the search results
-    // (iOS uses riseSetOrTransit from the search, NOT local noon/midnight)
+    // iOS lines 4616-4631: transit angles
     let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
     let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
 
-    // iOS lines 4619-4624: if rise is always-above, transit was for low transit → add PI
-    if (isNaN(riseTime)) {
-        if (isAlwaysAbove(riseTime)) {
-            rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
-        }
+    if (isNaN(riseTime) && isAlwaysAbove(riseTime)) {
+        rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
     }
-    // iOS lines 4626-4631: same for set
-    if (isNaN(setTime)) {
-        if (isAlwaysAbove(setTime)) {
-            sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
-        }
+    if (isNaN(setTime) && isAlwaysAbove(setTime)) {
+        sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
     }
 
-    let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
-    let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
+    const riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
+    const setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
 
-    // Special case: numLeaves == 0 (iOS lines 4655-4725)
-    let isSpecial = false;
+    // iOS L5100-5112: rise indicator
+    const riseIsRS = !isNaN(riseTimeAngle);
+    const riseAngle = riseIsRS ? riseTimeAngle : rTransitAngle;
+    const riseAboveH = riseIsRS ? false : isAlwaysAbove(riseTime);
+
+    // iOS L5113-5125: set indicator
+    const setIsRS = !isNaN(setTimeAngle);
+    const setAngle = setIsRS ? setTimeAngle : sTransitAngle;
+    const setAboveH = setIsRS ? false : isAlwaysAbove(setTime);
+
+    const cache: PlanetRiseSetCache = {
+        riseAngle,
+        setAngle,
+        rTransitAngle,
+        sTransitAngle,
+        riseIsRiseSet: riseIsRS,
+        setIsRiseSet: setIsRS,
+        riseAboveHorizon: riseAboveH,
+        setAboveHorizon: setAboveH,
+        cachedDateInterval: calcDate,
+    };
+
+    const key = riseSetCacheKey(planetNumber, observerLat, observerLon, tzOffsetSeconds);
+    planetRiseSetCaches.set(key, cache);
+    return cache;
+}
+
+/**
+ * Get the cached rise/set data for a planet, computing if not cached or stale.
+ *
+ * Each expression function calls this independently — no ordering dependency.
+ */
+function getPlanetRiseSetCache(
+    planetNumber: number,
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): PlanetRiseSetCache {
+    // MidnightSun is a flag for inverting the day/night ring — actual rise/set uses Sun
+    if (planetNumber === ECPlanetNumber.MidnightSun) {
+        planetNumber = ECPlanetNumber.Sun;
+    }
+
+    const calcDate = dateToDateInterval(getNow());
+    const key = riseSetCacheKey(planetNumber, observerLat, observerLon, tzOffsetSeconds);
+    const existing = planetRiseSetCaches.get(key);
+    if (existing && existing.cachedDateInterval === calcDate) {
+        return existing;
+    }
+    return computeAndCachePlanetRiseSet(
+        planetNumber, calcDate, observerLat, observerLon, pool, tzOffsetSeconds,
+    );
+}
+
+/**
+ * Full day/night leaf angle computation.
+ * iOS: dayNightLeafAngleForPlanetNumber:leafNumber:numLeaves:timeBaseKind:ECTimeBaseKindLT
+ *
+ * Uses nextPrevRiseSetInternal (matching iOS nextPrevRiseSetInternalWithFudgeInterval)
+ * with two-step search and transit-time validation.
+ *
+ * numLeaves == 0: special indicator angles (rise/set/polar)
+ * numLeaves > 0: individual leaf positions for day/night ring
+ *
+ * Returns a DayNightLeafAngleResult with the angle and the iOS output parameters
+ * (isRiseSet, aboveHorizon). For numLeaves > 0, isRiseSet is always true.
+ */
+export function computeDayNightLeafAngle(
+    planetNumber: number,
+    leafNumber: number,
+    numLeaves: number,
+    getNow: () => Date,
+    observerLat: number,
+    observerLon: number,
+    pool: AstroCachePool,
+    tzOffsetSeconds: number,
+): DayNightLeafAngleResult {
+    const calcDate = dateToDateInterval(getNow());
+    const fudgeFactorSeconds = 5;  // iOS: fudgeFactorSeconds = 5
+    const lookahead = 3600 * 13.2;
+
+    // iOS ECAstronomy.m line 4567-4570: planetMidnightSun is a special flag
+    // that inverts the day/night ring (shows night leaves instead of day).
+    // Substitute Sun for the actual rise/set calculations.
+    const nightTime = planetNumber === ECPlanetNumber.MidnightSun;
+    if (nightTime) {
+        planetNumber = ECPlanetNumber.Sun;
+    }
+
+    // For numLeaves === 0, use the cache (iOS cache-slot pattern).
+    // The cache stores pre-computed rise/set/transit angles and metadata.
     if (numLeaves === 0) {
+        const cache = getPlanetRiseSetCache(
+            planetNumber, getNow, observerLat, observerLon, pool, tzOffsetSeconds,
+        );
+
         if (leafNumber === 0) {  // rise indicator angle
-            return isNaN(riseTimeAngle) ? rTransitAngle : riseTimeAngle;
+            return {
+                angle: cache.riseAngle,
+                isRiseSet: cache.riseIsRiseSet,
+                aboveHorizon: cache.riseAboveHorizon,
+            };
         } else if (leafNumber === 1) {  // set indicator angle
-            return isNaN(setTimeAngle) ? sTransitAngle : setTimeAngle;
+            return {
+                angle: cache.setAngle,
+                isRiseSet: cache.setIsRiseSet,
+                aboveHorizon: cache.setAboveHorizon,
+            };
         } else if (leafNumber === 4) {  // transit indicator angle
             // iOS: ESAstronomy.cpp L5182-5190
             // Compute high transit directly using planettransitTimeRefined,
@@ -1969,19 +2136,58 @@ export function computeDayNightLeafAngle(
                 calcDate, observerLat, observerLon,
                 true /* wantHighTransit */, planetNumber, pool,
             );
-            return angle24HourForDate(transitDI, tzOffsetSeconds);
+            return { angle: angle24HourForDate(transitDI, tzOffsetSeconds), isRiseSet: true, aboveHorizon: false };
         } else {
             // leafNumber 2 (polarSummer) or 3 (polarWinter):
             // Must fall through to the NaN resolution logic below to compute
             // polarSummer/polarWinter from the full rise/set analysis.
             // iOS lines 4670-4671, 4717-4724.
-            isSpecial = true;
+            // (fall through — isSpecial handled below)
         }
-    } else if (numLeaves < 0) {
+    }
+
+    // =========================================================================
+    // numLeaves > 0 (leaf distribution) or numLeaves === 0 with leafNumber 2/3 (polar detection).
+    // These paths need the full rise/set search results including the raw sentinel values
+    // (riseTime/setTime) for polar detection, which the cache doesn't store.
+    // =========================================================================
+    const isSpecial = (numLeaves === 0);  // leafNumber 2 or 3 (only remaining case)
+
+    if (numLeaves < 0) {
         // Dawn/dusk indicators; abs(numLeaves) is amount to move backward
         // iOS line 4673-4674
         numLeaves = -numLeaves;
     }
+
+    // iOS: [self planetIsUp:planetNumber]
+    const planetIsUp = planetIsUpForRiseSet(planetNumber, calcDate, observerLat, observerLon);
+
+    // iOS lines 4598-4612: search for rise and set
+    const riseResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        true, planetNumber, !planetIsUp, -fudgeFactorSeconds, lookahead, pool,
+    );
+    const setResult = nextPrevRiseSetInternal(
+        calcDate, observerLat, observerLon,
+        false, planetNumber, planetIsUp, -fudgeFactorSeconds, lookahead, pool,
+    );
+
+    const riseTime = riseResult.eventTime;
+    const setTime = setResult.eventTime;
+
+    // iOS lines 4616-4631: transit angles
+    let rTransitAngle = angle24HourForDate(riseResult.transitTime, tzOffsetSeconds);
+    let sTransitAngle = angle24HourForDate(setResult.transitTime, tzOffsetSeconds);
+
+    if (isNaN(riseTime) && isAlwaysAbove(riseTime)) {
+        rTransitAngle = fmod(rTransitAngle + Math.PI, 2 * Math.PI);
+    }
+    if (isNaN(setTime) && isAlwaysAbove(setTime)) {
+        sTransitAngle = fmod(sTransitAngle + Math.PI, 2 * Math.PI);
+    }
+
+    let riseTimeAngle = isNoRiseSet(riseTime) ? NaN : angle24HourForDate(riseTime, tzOffsetSeconds);
+    let setTimeAngle = isNoRiseSet(setTime) ? NaN : angle24HourForDate(setTime, tzOffsetSeconds);
 
     const leafWidth = numLeaves > 0 ? 2 * Math.PI / numLeaves : 0;
     let polarSummer = false;
@@ -2027,8 +2233,8 @@ export function computeDayNightLeafAngle(
 
     // iOS lines 4717-4724: return polar state for special leafNumber 2/3
     if (isSpecial) {
-        if (leafNumber === 2) return polarSummer ? 1 : 0;
-        if (leafNumber === 3) return polarWinter ? 1 : 0;
+        if (leafNumber === 2) return { angle: polarSummer ? 1 : 0, isRiseSet: true, aboveHorizon: false };
+        if (leafNumber === 3) return { angle: polarWinter ? 1 : 0, isRiseSet: true, aboveHorizon: false };
     }
 
     // Normalize (iOS lines 4726-4732)
@@ -2064,7 +2270,7 @@ export function computeDayNightLeafAngle(
         leafCenterAngle -= 2 * Math.PI;
     }
 
-    return leafCenterAngle;
+    return { angle: leafCenterAngle, isRiseSet: true, aboveHorizon: false };
 }
 
 // ============================================================================

@@ -143,8 +143,10 @@ export interface ObsValueSet {
     mercuryHand: ObsValue;
     moonOffset: ObsValue;
 
-    // -- Planet rings (3 values each: rise angle, set angle, transit angle) --
-    // NaN rise/set = planet doesn't rise/set (always above or below horizon)
+    // -- Planet rings (6 values each: rise angle, set angle, transit angle,
+    //    riseValid, setValid, aboveHorizon) --
+    // riseValid/setValid: 1 if planet actually rises/sets, 0 if angle is transit fallback
+    // aboveHorizon: 1 if planet is always above horizon (polar), 0 otherwise
     saturnRing: ObsValue[];
     jupiterRing: ObsValue[];
     marsRing: ObsValue[];
@@ -251,7 +253,7 @@ function buildValueDefs(): {
         { name: 'moonOffset',  expr: '-moonAgeAngle() + pi',            updateInterval: 3600 },
     ];
 
-    // Planet rings: 5 values each (rise, set, transit, riseValid, setValid)
+    // Planet rings: 6 values each (rise, set, transit, riseValid, setValid, aboveHorizon)
     const ringPlanets = [
         { key: 'saturn',  pn: SATURN },
         { key: 'jupiter', pn: JUPITER },
@@ -265,10 +267,14 @@ function buildValueDefs(): {
     for (const { key, pn } of ringPlanets) {
         // Ring rise angle updates at next planet set (and vice versa)
         // Transit updates at whichever rise/set comes first
+        // Validity/polar flags update at the same cadence as their corresponding angle
         rings.set(key, [
-            { name: `${key}Rise`,    expr: `dayNightLeafAngle(${pn}, 0, 0) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
-            { name: `${key}Set`,     expr: `dayNightLeafAngle(${pn}, 1, 0) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_RISE(pn) },
-            { name: `${key}Transit`, expr: `planetTransitAngle(${pn}) + pi * noonOnTop`,      updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
+            { name: `${key}Rise`,         expr: `dayNightLeafAngle(${pn}, 0, 0) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
+            { name: `${key}Set`,          expr: `dayNightLeafAngle(${pn}, 1, 0) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_PLANET_RISE(pn) },
+            { name: `${key}Transit`,      expr: `planetTransitAngle(${pn}) + pi * noonOnTop`,      updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
+            { name: `${key}RiseValid`,    expr: `dayNightLeafAngleIsRiseSet(${pn}, 0)`,             updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
+            { name: `${key}SetValid`,     expr: `dayNightLeafAngleIsRiseSet(${pn}, 1)`,             updateInterval: EC_UPDATE_NEXT_PLANET_RISE(pn) },
+            { name: `${key}AboveHorizon`, expr: `dayNightLeafAngleAboveHorizon(${pn}, 0)`,          updateInterval: EC_UPDATE_NEXT_PLANET_SET(pn) },
         ]);
     }
 

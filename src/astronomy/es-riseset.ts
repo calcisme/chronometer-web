@@ -261,43 +261,54 @@ export function planetaryRiseSetTimeRefined(
     overrideAltitudeDesired: number,
     cachePool: AstroCachePool,
 ): RiseSetResult {
+    // Full port of iOS ESAstronomy.cpp planetaryRiseSetTimeRefined (lines 1529-1786).
+    // Includes transit-retry, polar binary search, and bisection recovery.
     let tryDate = calculationDateInterval;
+    let lastValidResultDate = NaN;
+    let lastValidTryDate = NaN;
+    let convergedToInvalid = false;
+    const polarSpecial = Math.abs(observerLatitude) > Math.PI / 180 * 89;
+
     let precision: ECWBPrecision = planetNumber === ECPlanetNumber.Moon
         ? ECWBPrecision.Low : ECWBPrecision.Full;
+    if (polarSpecial) {
+        precision = ECWBPrecision.Full;  // iOS: We need all the help we can get at polar latitudes
+    }
 
     const numIterations = 20;
-    const tryDates: number[] = new Array(numIterations + 11);
-    const results: number[] = new Array(numIterations + 11);
+    const numPolarTries = 10;  // Binary-search tries for polar — gets within ~1 minute
+    const tryDates: number[] = new Array(numIterations + numPolarTries + 1);
+    const results: number[] = new Array(numIterations + numPolarTries + 1);
     let fitTries = 0;
-    let lastValidResultDate = NaN;
     let lastDelta = 0;
-    const firstTransit = tryDate;  // iOS: firstTransit = tryDate
+    let firstNan = NaN;
+    let firstTransit = tryDate;
 
     for (let i = 0; i < numIterations; i++) {
         // Upgrade Moon precision near the end
         if (planetNumber === ECPlanetNumber.Moon && i === numIterations - 1 && precision !== ECWBPrecision.Full) {
             precision = ECWBPrecision.Full;
-            i--;
-            fitTries = 0;
+            i--;  // Give two more shots with full precision
+            fitTries = 0;  // Ignore low-precision prior values
         }
 
-        const priorCache = pushECAstroCacheWithSlopInPool(
+        let priorCache = pushECAstroCacheWithSlopInPool(
             cachePool, cachePool.refinementCache, tryDate, 0,
         );
 
-        const { julianCenturiesSince2000Epoch } =
-            julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache);
+        let jcse =
+            julianCenturiesSince2000EpochForDateInterval(tryDate, cachePool.currentCache).julianCenturiesSince2000Epoch;
 
-        const { rightAscension, declination } = getPlanetRADeclDist(
-            planetNumber, julianCenturiesSince2000Epoch, cachePool.currentCache, precision,
+        let radecl = getPlanetRADeclDist(
+            planetNumber, jcse, cachePool.currentCache, precision,
         );
 
         const altitude = isNaN(overrideAltitudeDesired)
-            ? altitudeAtRiseSet(julianCenturiesSince2000Epoch, planetNumber, true, cachePool.currentCache, precision)
+            ? altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision)
             : overrideAltitudeDesired;
 
-        const newDate = riseSetTime(
-            riseNotSet, rightAscension, declination,
+        let newDate = riseSetTime(
+            riseNotSet, radecl.rightAscension, radecl.declination,
             observerLatitude, observerLongitude,
             altitude, tryDate, cachePool,
         );
@@ -305,35 +316,221 @@ export function planetaryRiseSetTimeRefined(
         popECAstroCacheToInPool(cachePool, priorCache);
 
         if (isNoRiseSet(newDate)) {
-            // No rise/set at this time — the object is always above or below.
-            // iOS: *riseSetOrTransit = transitT (or tryDate if no transit computed)
-            return { riseSetTime: newDate, transitTime: tryDate };
+            // iOS lines 1577-1733: no rise/set — attempt transit-retry and polar recovery
+            if (!convergedToInvalid) {
+                // First time hitting invalid — try from the transit point
+                convergedToInvalid = true;
+
+                // iOS: if below horizon, want high transit to check highest point;
+                //      if above horizon, want low transit to check lowest point
+                const wantHighTransit = newDate === ALWAYS_BELOW_HORIZON;
+
+                priorCache = pushECAstroCacheWithSlopInPool(
+                    cachePool, cachePool.refinementCache, tryDate, 0,
+                );
+                const transitT = planettransitTimeRefined(
+                    tryDate, observerLatitude, observerLongitude,
+                    wantHighTransit, planetNumber, cachePool,
+                );
+                popECAstroCacheToInPool(cachePool, priorCache);
+                firstTransit = transitT;
+                firstNan = newDate;
+
+                // Retry rise/set from the transit point
+                priorCache = pushECAstroCacheWithSlopInPool(
+                    cachePool, cachePool.refinementCache, transitT, 0,
+                );
+                jcse = julianCenturiesSince2000EpochForDateInterval(transitT, cachePool.currentCache).julianCenturiesSince2000Epoch;
+                radecl = getPlanetRADeclDist(
+                    planetNumber, jcse, cachePool.currentCache, precision,
+                );
+                const altit = isNaN(overrideAltitudeDesired)
+                    ? altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision)
+                    : overrideAltitudeDesired;
+                newDate = riseSetTime(
+                    riseNotSet, radecl.rightAscension, radecl.declination,
+                    observerLatitude, observerLongitude,
+                    altit, transitT, cachePool,
+                );
+                popECAstroCacheToInPool(cachePool, priorCache);
+
+                if (isNoRiseSet(newDate)) {
+                    if (polarSpecial) {
+                        // iOS lines 1600-1703: Polar binary search
+                        // Go ±13 hours from transit and look for an above/below transition
+
+                        // Check -13 hrs
+                        const priorPolar = transitT - 13 * 3600;
+                        priorCache = pushECAstroCacheWithSlopInPool(
+                            cachePool, cachePool.refinementCache, priorPolar, 0,
+                        );
+                        jcse = julianCenturiesSince2000EpochForDateInterval(priorPolar, cachePool.currentCache).julianCenturiesSince2000Epoch;
+                        radecl = getPlanetRADeclDist(
+                            planetNumber, jcse, cachePool.currentCache, precision,
+                        );
+                        const priorPolarEvent = riseSetTime(
+                            riseNotSet, radecl.rightAscension, radecl.declination,
+                            observerLatitude, observerLongitude,
+                            altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision),
+                            priorPolar, cachePool,
+                        );
+                        popECAstroCacheToInPool(cachePool, priorCache);
+
+                        let binaryLow = NaN;
+                        let binaryHigh = NaN;
+                        let binaryLowEvent = NaN;
+                        let binaryHighEvent = NaN;
+
+                        if (isNoRiseSet(priorPolarEvent)) {
+                            // Prior event is also NaN — check if it's a different kind of NaN
+                            if (priorPolarEvent !== newDate) {
+                                // Different sentinel: one is always-above, other always-below → transition between them
+                                binaryLow = priorPolar;
+                                binaryLowEvent = priorPolarEvent;
+                                binaryHigh = transitT;
+                                binaryHighEvent = newDate;
+                            }
+
+                            // Check +13 hrs
+                            const nextPolar = tryDate + 13 * 3600;
+                            priorCache = pushECAstroCacheWithSlopInPool(
+                                cachePool, cachePool.refinementCache, nextPolar, 0,
+                            );
+                            jcse = julianCenturiesSince2000EpochForDateInterval(nextPolar, cachePool.currentCache).julianCenturiesSince2000Epoch;
+                            radecl = getPlanetRADeclDist(
+                                planetNumber, jcse, cachePool.currentCache, precision,
+                            );
+                            const nextPolarEvent = riseSetTime(
+                                riseNotSet, radecl.rightAscension, radecl.declination,
+                                observerLatitude, observerLongitude,
+                                altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision),
+                                nextPolar, cachePool,
+                            );
+                            popECAstroCacheToInPool(cachePool, priorCache);
+
+                            if (isNoRiseSet(nextPolarEvent)) {
+                                if (nextPolarEvent !== newDate) {
+                                    // Different sentinel → transition between transit and +13h
+                                    binaryLow = transitT;
+                                    binaryLowEvent = newDate;
+                                    binaryHigh = nextPolar;
+                                    binaryHighEvent = nextPolarEvent;
+                                } else if (isNaN(binaryLow)) {
+                                    // Both sides same as transit → truly no rise/set
+                                    return { riseSetTime: newDate, transitTime: transitT };
+                                }
+                            } else {
+                                // +13h has a valid event
+                                if (nextPolarEvent > tryDate + 24 * 3600) {
+                                    // Too far ahead, doesn't count
+                                    return { riseSetTime: newDate, transitTime: transitT };
+                                }
+                                tryDate = nextPolar;
+                                newDate = nextPolarEvent;
+                            }
+                        } else {
+                            // Prior polar event is valid (not NaN)
+                            if (priorPolarEvent < tryDate - 24 * 3600) {
+                                // Too long ago, doesn't count
+                                return { riseSetTime: newDate, transitTime: transitT };
+                            }
+                            tryDate = priorPolar;
+                            newDate = priorPolarEvent;
+                        }
+
+                        // Binary search between binaryLow and binaryHigh if set
+                        if (!isNaN(binaryLow)) {
+                            let polarTries = numPolarTries;
+                            while (polarTries-- > 0) {
+                                const split = (binaryLow + binaryHigh) / 2;
+                                priorCache = pushECAstroCacheWithSlopInPool(
+                                    cachePool, cachePool.refinementCache, split, 0,
+                                );
+                                jcse = julianCenturiesSince2000EpochForDateInterval(split, cachePool.currentCache).julianCenturiesSince2000Epoch;
+                                radecl = getPlanetRADeclDist(
+                                    planetNumber, jcse, cachePool.currentCache, precision,
+                                );
+                                const splitEvent = riseSetTime(
+                                    riseNotSet, radecl.rightAscension, radecl.declination,
+                                    observerLatitude, observerLongitude,
+                                    altitudeAtRiseSet(jcse, planetNumber, true, cachePool.currentCache, precision),
+                                    split, cachePool,
+                                );
+                                popECAstroCacheToInPool(cachePool, priorCache);
+
+                                if (!isNoRiseSet(splitEvent)) {
+                                    // Found a valid rise/set — use split as pseudo "transit"
+                                    firstTransit = split;
+                                    newDate = splitEvent;
+                                    break;
+                                }
+                                // Narrow the binary search
+                                if (splitEvent === binaryLowEvent) {
+                                    binaryLow = split;
+                                    binaryLowEvent = splitEvent;
+                                } else {
+                                    binaryHigh = split;
+                                    binaryHighEvent = splitEvent;
+                                }
+                            }
+                            if (isNoRiseSet(newDate)) {
+                                // Binary search didn't find a valid point
+                                return { riseSetTime: newDate, transitTime: firstTransit };
+                            }
+                        }
+                    } else {
+                        // Not polarSpecial — no further recovery possible
+                        return { riseSetTime: newDate, transitTime: transitT };
+                    }
+                } // end if isNoRiseSet(newDate) at transit
+
+                // Transit retry succeeded — add (transitT, newDate) as a fit point
+                // and continue iterating
+                if (!isNoRiseSet(newDate)) {
+                    lastValidTryDate = firstTransit;
+                    lastValidResultDate = newDate;
+                    tryDates[fitTries] = firstTransit;
+                    results[fitTries++] = newDate;
+                    tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
+                }
+            } else {
+                // iOS lines 1724-1733: already did the convergedToInvalid case
+                // Bisect between last valid date and current invalid tryDate
+                if (!isNaN(lastValidTryDate)) {
+                    tryDate = (tryDate + lastValidTryDate) / 2;
+                } else {
+                    // No valid try date — can't recover
+                    return { riseSetTime: newDate, transitTime: tryDate };
+                }
+                // We have no curve info here, so don't add to fitTries arrays
+            }
+        } else {
+            // iOS lines 1734-1743: valid rise/set result
+            lastValidTryDate = tryDate;
+            lastValidResultDate = newDate;
+            tryDates[fitTries] = tryDate;
+            results[fitTries++] = newDate;
+            tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
         }
 
-        lastValidResultDate = newDate;
-        lastDelta = newDate - tryDate;
-
+        // iOS lines 1748-1766: convergence check (outside NaN handling)
+        lastDelta = lastValidResultDate - lastValidTryDate;
         if (Math.abs(lastDelta) < 0.1) {
             if (planetNumber === ECPlanetNumber.Moon && precision !== ECWBPrecision.Full) {
                 precision = ECWBPrecision.Full;
-            } else {
-                // Converged: iOS sets *riseSetOrTransit = lastValidResultDate
-                return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
+                continue;
             }
+            // Converged
+            return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
         }
-
-        tryDates[fitTries] = tryDate;
-        results[fitTries] = newDate;
-        fitTries++;
-        tryDate = extrapolateToYEqualX(tryDates, results, fitTries);
     }
 
-    // Did not converge — match iOS fallback logic (lines 1699-1711)
+    // iOS lines 1773-1785: Did not converge
     if (isNaN(lastValidResultDate)) {
         return { riseSetTime: lastValidResultDate, transitTime: tryDate };
     } else if (Math.abs(lastDelta) > 60) {
         // Still futzing around — return firstNan with firstTransit
-        return { riseSetTime: NaN, transitTime: firstTransit };
+        return { riseSetTime: firstNan, transitTime: firstTransit };
     } else {
         return { riseSetTime: lastValidResultDate, transitTime: lastValidResultDate };
     }
