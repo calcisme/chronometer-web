@@ -620,14 +620,20 @@ function updateObsValueScrub(
 
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
 
-    // Compress if needed, otherwise use natural speed.
+    // Compress if needed, stretch if too fast, otherwise use natural speed.
     // With schedule skipping functional (rebuildEnv no longer resets
     // schedules every tick), timeUntilNextUpdateMs is meaningful:
     // sentinel values genuinely skip ticks until their event boundary.
     if (naturalDurationMs > timeUntilNextUpdateMs) {
+        // Too slow — compress to finish before next re-evaluation
         startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
             timeUntilNextUpdateMs);
+    } else if (naturalDurationMs < tickIntervalMs) {
+        // Too fast — stretch to fill one tick (prevents sub-frame snaps)
+        startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
+            tickIntervalMs);
     } else {
+        // Natural speed falls between one tick and next update — use as-is
         startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
     }
 

@@ -17055,6 +17055,14 @@
         multiplier,
         timeUntilNextUpdateMs
       );
+    } else if (naturalDurationMs < tickIntervalMs) {
+      startAnimationRaw(
+        v.anim,
+        newTarget,
+        perfNow,
+        multiplier,
+        tickIntervalMs
+      );
     } else {
       startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
     }
