@@ -17144,6 +17144,8 @@
 
   // src/observatory/observatory-entry.ts
   var noonOnTop = false;
+  var lastFrameTime = 0;
+  var fps = 0;
   var layout;
   var canvas;
   var ctx;
@@ -17259,12 +17261,21 @@
     });
     ctx.fillText(`Observatory \xB7 ${timeStr}`, 10, 10);
     ctx.fillText(`${layout.viewW}\xD7${layout.viewH} \xB7 mainR=${L.mainR.toFixed(0)}`, 10, 24);
+    ctx.fillText(`${fps.toFixed(1)} fps`, 10, 38);
     ctx.restore();
   }
   function tick() {
-    timeController.checkTick(performance.now());
-    timeController.beginFrame();
     const perfNow = performance.now();
+    if (lastFrameTime > 0) {
+      const delta = perfNow - lastFrameTime;
+      if (delta > 0 && delta < 1e3) {
+        const instantFps = 1e3 / delta;
+        fps = fps === 0 ? instantFps : fps * 0.95 + instantFps * 0.05;
+      }
+    }
+    lastFrameTime = perfNow;
+    timeController.checkTick(perfNow);
+    timeController.beginFrame();
     if (obsValues) {
       const rate = timeController.currentRate;
       const tickIntervalMs = rate ? TICK_INTERVAL_MS : null;

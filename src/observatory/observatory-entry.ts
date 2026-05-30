@@ -42,6 +42,10 @@ import {
 /** Noon-on-top toggle: when true, 12 is at top; when false, 24 is at top. */
 let noonOnTop = false;
 
+/** FPS tracking state */
+let lastFrameTime = 0;
+let fps = 0;
+
 /** Current layout parameters (recomputed on resize) */
 let layout: LayoutParams;
 
@@ -246,18 +250,28 @@ function drawFrame(): void {
     });
     ctx.fillText(`Observatory · ${timeStr}`, 10, 10);
     ctx.fillText(`${layout.viewW}×${layout.viewH} · mainR=${L.mainR.toFixed(0)}`, 10, 24);
+    ctx.fillText(`${fps.toFixed(1)} fps`, 10, 38);
 
     ctx.restore();
 }
 
 function tick(): void {
+    const perfNow = performance.now();
+    if (lastFrameTime > 0) {
+        const delta = perfNow - lastFrameTime;
+        if (delta > 0 && delta < 1000) {
+            const instantFps = 1000 / delta;
+            fps = fps === 0 ? instantFps : fps * 0.95 + instantFps * 0.05;
+        }
+    }
+    lastFrameTime = perfNow;
+
     // Check for quantized tick (time controller)
-    timeController.checkTick(performance.now());
+    timeController.checkTick(perfNow);
 
     // Begin frame snapshot (all parts see same time)
     timeController.beginFrame();
 
-    const perfNow = performance.now();
 
     // Pass 1 & 2: Update + animate Observatory values
     if (obsValues) {
