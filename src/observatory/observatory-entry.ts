@@ -309,11 +309,6 @@ function rebuildEnv(): void {
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
     invalidateRingCache();
     needsStaticRedraw = true;
-
-    // Reset Observatory value schedules so they re-evaluate immediately
-    if (obsValues) {
-        resetObsValueSchedules(obsValues);
-    }
 }
 
 function setupLocationDialog(): void {

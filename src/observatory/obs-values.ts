@@ -620,14 +620,16 @@ function updateObsValueScrub(
 
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
 
-    // Always use the tick interval as animation duration during scrub.
-    // For large-delta values (clock hands), this compresses the animation
-    // to fit in one tick — same as before.
-    // For small-delta values (planet ring edges), this stretches the
-    // animation across the full tick interval (~6 frames), preventing
-    // the near-instant snap that causes visible jumpiness.
-    startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
-        timeUntilNextUpdateMs);
+    // Compress if needed, otherwise use natural speed.
+    // With schedule skipping functional (rebuildEnv no longer resets
+    // schedules every tick), timeUntilNextUpdateMs is meaningful:
+    // sentinel values genuinely skip ticks until their event boundary.
+    if (naturalDurationMs > timeUntilNextUpdateMs) {
+        startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
+            timeUntilNextUpdateMs);
+    } else {
+        startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+    }
 
     // No pending sweep during scrub — just snap-to-target with compression
     v.pendingSweep = null;

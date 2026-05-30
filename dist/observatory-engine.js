@@ -17047,13 +17047,17 @@
     if (angleDelta > Math.PI) angleDelta = TWO_PI11 - angleDelta;
     const naturalDurationMs = speed > 0 ? angleDelta / speed * 1e3 : 0;
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
-    startAnimationRaw(
-      v.anim,
-      newTarget,
-      perfNow,
-      multiplier,
-      timeUntilNextUpdateMs
-    );
+    if (naturalDurationMs > timeUntilNextUpdateMs) {
+      startAnimationRaw(
+        v.anim,
+        newTarget,
+        perfNow,
+        multiplier,
+        timeUntilNextUpdateMs
+      );
+    } else {
+      startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+    }
     v.pendingSweep = null;
   }
   function updateObsValues(vs, env2, perfNow, getNow2, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1) {
@@ -17296,9 +17300,6 @@
     env.variables.set("noonOnTop", noonOnTop ? 1 : 0);
     invalidateRingCache();
     needsStaticRedraw = true;
-    if (obsValues) {
-      resetObsValueSchedules(obsValues);
-    }
   }
   function setupLocationDialog() {
     const setLocationBtn = document.getElementById("set-location-btn");
