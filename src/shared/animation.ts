@@ -770,6 +770,17 @@ export function startAnimationRaw(
     // Normalize target to [0, 2π)
     newTarget = fmod(newTarget, 2 * Math.PI);
 
+    // NaN transition: snap immediately when either endpoint is NaN.
+    // Animation isn't meaningful when transitioning to/from "don't display".
+    // This handles polar-region stops that become NaN when the sun doesn't
+    // reach a given altitude, and must recover when the latitude changes.
+    if (isNaN(newTarget) || isNaN(val.currentValue)) {
+        val.currentValue = newTarget;
+        val.targetValue = newTarget;
+        val.animating = false;
+        return;
+    }
+
     if (speed === 0) {
         val.currentValue = newTarget;
         val.targetValue = newTarget;

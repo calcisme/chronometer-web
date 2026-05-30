@@ -13911,6 +13911,12 @@
   function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
     const speed = kECGLAngleAnimationSpeed2 * animSpeed;
     newTarget = fmod3(newTarget, 2 * Math.PI);
+    if (isNaN(newTarget) || isNaN(val.currentValue)) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
     if (speed === 0) {
       val.currentValue = newTarget;
       val.targetValue = newTarget;
