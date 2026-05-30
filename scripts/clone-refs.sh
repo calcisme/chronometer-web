@@ -26,6 +26,7 @@ clone_if_missing .chronometer-ref https://github.com/EmeraldSequoia/Chronometer.
 clone_if_missing .esastro-ref    https://github.com/EmeraldSequoia/esastro.git
 clone_if_missing .eslocation-ref https://github.com/EmeraldSequoia/eslocation.git
 clone_if_missing .estime-ref     https://github.com/EmeraldSequoia/estime.git
+clone_if_missing .observatory-ref https://github.com/EmeraldSequoia/Observatory.git
 
 echo ""
 echo "All reference repos ready."

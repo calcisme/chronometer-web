@@ -1,8 +1,8 @@
 # iOS/Android Reference Repositories
 
-The Chronometer Web codebase was ported from the original Emerald Chronometer iOS app and its supporting libraries. The original source code is available in four GitHub repositories that can be cloned locally for reference.
+The Chronometer Web codebase was ported from the original Emerald Chronometer iOS app and its supporting libraries. The original source code is available in five GitHub repositories that can be cloned locally for reference.
 
-> **Setup**: Run `scripts/clone-refs.sh` from the project root to clone all four reference repos. They are cloned into dot-prefixed directories that are listed in `.gitignore`.
+> **Setup**: Run `scripts/clone-refs.sh` from the project root to clone all five reference repos. They are cloned into dot-prefixed directories that are listed in `.gitignore`.
 
 ## Reference Repositories
 
@@ -12,6 +12,7 @@ The Chronometer Web codebase was ported from the original Emerald Chronometer iO
 | `.esastro-ref/` | [EmeraldSequoia/esastro](https://github.com/EmeraldSequoia/esastro) | Astronomy library — sun/moon/planet calculations |
 | `.eslocation-ref/` | [EmeraldSequoia/eslocation](https://github.com/EmeraldSequoia/eslocation) | Location services — city database, timezone lookup |
 | `.estime-ref/` | [EmeraldSequoia/estime](https://github.com/EmeraldSequoia/estime) | Time library — NTP, calendar, date arithmetic |
+| `.observatory-ref/` | [EmeraldSequoia/Observatory](https://github.com/EmeraldSequoia/Observatory) | Observatory (Emerald Observatory) app — orrery, rings, planet assets |
 
 ## Key Files in `.chronometer-ref/`
 
@@ -74,6 +75,25 @@ The Chronometer Web codebase was ported from the original Emerald Chronometer iO
 |------|---------|
 | `src/ESLocation.cpp` | Device location management |
 | `data/` | City database source files |
+
+## Key Files in `.observatory-ref/`
+
+### Assets
+
+| File | Purpose |
+|------|---------|
+| `Resources/saturn.png`, `jupiter.png`, etc. | Planet icons for the orrery hands |
+| `Resources/zodiac.png` | Zodiac constellation dial image |
+| `Resources/sun.png` | Sun icon for orrery |
+| `EO-Sidereal-constellation-names-0-at-top@2x.png` | Sidereal constellation name ring (Retina) |
+
+### Source (Objective-C)
+
+| File | Purpose |
+|------|---------|
+| `Classes/EORingView.mm` | Rise/set ring rendering — planet arcs, sun altitude ring, gradient |
+| `Classes/EOClock.mm` | Main clock rendering — hands, subdials, ring configuration |
+| `Classes/EOHandView.mm` | Hand drawing — clock hands, sun event hands, planet hands |
 
 ## Tracing an Expression to Its Implementation
 
