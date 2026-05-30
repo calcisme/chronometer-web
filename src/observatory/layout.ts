@@ -196,11 +196,11 @@ export function computeLayout(viewW: number, viewH: number): LayoutParams {
     const s = mainR / REF_MAIN_R;
 
     // --- Derived dimensions (proportional to mainR, matching iOS ratios) ---
-    const mainFontSize = Math.max(10, 32 * s);
+    const mainFontSize = 32 * s;
     const tickHeight = mainFontSize / 2.5;
-    const zodiacFontSize = Math.max(8, 36 * s);
-    const smallZodiacFontSize = Math.max(6, 11 * s);
-    const subdialFontSize = Math.max(6, 10 * s);
+    const zodiacFontSize = 36 * s;
+    const smallZodiacFontSize = 11 * s;
+    const subdialFontSize = 10 * s;
 
     const plR = Math.max(100, 332 * s);         // iOS: mainR-mainFontSize-1 = 365-32-1=332
     const sunRingWidth = Math.max(16, 64 * s);
@@ -296,9 +296,9 @@ export function computeLayout(viewW: number, viewH: number): LayoutParams {
     const logoCY = viewH - 15;
 
     // Peripheral font sizes
-    const extFontSize = Math.max(7, 10 * s);
-    const eclipseFontSize = Math.max(7, 10 * s);
-    const eotFontSize = Math.max(6, 8 * s);
+    const extFontSize = 10 * s;
+    const eclipseFontSize = 10 * s;
+    const eotFontSize = 8 * s;
 
     return {
         viewW, viewH, dpr,
