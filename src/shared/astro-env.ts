@@ -1731,9 +1731,12 @@ export function registerAstroFunctions(
         return result.valid ? result.angle : NaN;
     });
 
-    // --- Solar noon angle on the 24h dial ---
+    // --- Solar noon angle on the 24h dial (raw, no wadokei +π offset) ---
     // Port of iOS: watchTimeWithSuntransitForDay()->hour24Value * 2π/24
-    functions.set('solarNoonAngle', () => {
+    // NOTE: This is distinct from 'solarNoonAngle' (used by Kyoto wadokei),
+    // which adds +π for the wadokei dial convention. Observatory uses this
+    // raw version and adds its own noonOnTop offset in the expressions.
+    functions.set('solarNoonAngle24h', () => {
         const di = dateToDateInterval(getNow());
         const transitDI = planettransitTimeRefined(
             di, OBSERVER_LAT, OBSERVER_LON,
@@ -1782,6 +1785,32 @@ export function registerAstroFunctions(
 
     // --- Timezone offset in seconds (callable from expressions) ---
     functions.set('tzOffset', () => tzOffsetSeconds);
+
+    // --- Sub-solar point (Observatory earth view) ---
+    // subSolarLatitude: sun declination in radians (= sub-solar latitude)
+    functions.set('subSolarLatitude', () => {
+        const di = dateToDateInterval(getNow());
+        return sunRAandDecl(di, null).declination;
+    });
+    // subSolarLongitude: longitude of the point where the sun is directly
+    // overhead, in radians [-π, π]. Port of iOS sslng calculation:
+    //   sslng = π - solarTimeAtGreenwich × π / (12 × 3600)
+    // solarTimeAtGreenwich = secondsSinceMidnight - tzOffset + EOT
+    functions.set('subSolarLongitude', () => {
+        const di = dateToDateInterval(getNow());
+        const eotSec = EOTSeconds(di, null);
+        // Compute seconds since local midnight in the target timezone
+        const utcMs = getNow().getTime();
+        const localSeconds = ((utcMs / 1000) + tzOffsetSeconds) % 86400;
+        const secSinceMidnight = ((localSeconds % 86400) + 86400) % 86400;
+        // Solar time at Greenwich meridian
+        const solarTimeAtGreenwich = secSinceMidnight - tzOffsetSeconds + eotSec;
+        let sslng = Math.PI - solarTimeAtGreenwich * Math.PI / (12 * 3600);
+        // Normalize to [-π, π]
+        while (sslng < -Math.PI) sslng += 2 * Math.PI;
+        while (sslng > Math.PI) sslng -= 2 * Math.PI;
+        return sslng;
+    });
 
     // --- noonOnTop variable (0 or 1, set by Observatory toggle) ---
     if (!env.variables.has('noonOnTop')) {

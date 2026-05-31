@@ -1052,115 +1052,6 @@
     return Math.floor(weekday);
   }
 
-  // src/astronomy/es-sidereal.ts
-  var TWO_PI = Math.PI * 2;
-  function convertLSTtoGST(lst, observerLongitude) {
-    let gst = lst - observerLongitude;
-    let dayOffset = 0;
-    if (gst < 0) {
-      gst += TWO_PI;
-      dayOffset = -1;
-    } else if (gst > TWO_PI) {
-      gst -= TWO_PI;
-      dayOffset = 1;
-    }
-    return { gst, dayOffset };
-  }
-  function convertGSTtoLST(gst, observerLongitude) {
-    let lst = gst + observerLongitude;
-    if (lst < 0) {
-      lst += TWO_PI;
-    } else if (lst > TWO_PI) {
-      lst -= TWO_PI;
-    }
-    return lst;
-  }
-  function convertUTToGSTP03x(centuriesSinceEpochTDT, deltaTSeconds, utSinceMidnightRadians, _priorUTMidnight) {
-    const t = centuriesSinceEpochTDT;
-    const tu = t - deltaTSeconds / (24 * 3600 * 36525);
-    const t2 = t * t;
-    const t3 = t2 * t;
-    const t4 = t2 * t2;
-    const t5 = t3 * t2;
-    let gmst = 24110.5493771 + 864018479447825e-8 * tu + 307.4771013 * (t - tu) + 0.09277211 * t2 - 2926e-10 * t3 - 199708e-11 * t4 - 2454e-12 * t5;
-    gmst *= Math.PI / (12 * 3600);
-    gmst += utSinceMidnightRadians;
-    gmst = fmod(gmst, TWO_PI);
-    if (gmst < 0) {
-      gmst += TWO_PI;
-    }
-    return gmst;
-  }
-  function convertUTToGSTP03(calculationDate, cache) {
-    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(calculationDate, cache);
-    const priorUTMidnightD = priorUTMidnightForDateInterval(calculationDate, cache);
-    const utRadiansSinceMidnight = (calculationDate - priorUTMidnightD) * Math.PI / (12 * 3600);
-    return convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, utRadiansSinceMidnight, priorUTMidnightD);
-  }
-  function convertGSTtoUT(gst, priorUTMidnight, cachePool) {
-    let priorCache = null;
-    if (cachePool) {
-      priorCache = pushECAstroCacheInPool(cachePool, cachePool.midnightCache, priorUTMidnight);
-    }
-    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(
-      priorUTMidnight,
-      cachePool ? cachePool.currentCache : null
-    );
-    const T0 = convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, 0, priorUTMidnight);
-    if (cachePool && priorCache !== void 0) {
-      popECAstroCacheToInPool(cachePool, priorCache);
-    }
-    let ut = gst - T0;
-    if (ut < 0) {
-      ut += TWO_PI;
-    } else if (ut > TWO_PI) {
-      ut -= TWO_PI;
-    }
-    ut *= kECUTUnitsPerGSTUnit;
-    let ut2 = ut + kECUTUnitsPerGSTUnit * TWO_PI;
-    if (ut2 > TWO_PI) {
-      ut2 = -1;
-    }
-    return { ut, ut2 };
-  }
-  function convertGSTtoUTclosest(gst, closestToThisDate, cachePool) {
-    let priorUTMidnightD = priorUTMidnightForDateInterval(
-      closestToThisDate,
-      cachePool ? cachePool.currentCache : null
-    );
-    let { ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool);
-    let utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
-    let utD = priorUTMidnightD + utSecondsSinceMidnight;
-    if (utD < closestToThisDate - 12 * 3600 * kECUTUnitsPerGSTUnit) {
-      if (ut0_2 > 0) {
-        ut0 = ut0_2;
-        utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
-        utD = priorUTMidnightD + utSecondsSinceMidnight;
-      } else {
-        priorUTMidnightD += 24 * 3600;
-        ({ ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool));
-        utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
-        utD = priorUTMidnightD + utSecondsSinceMidnight;
-      }
-    } else if (utD > closestToThisDate + 12 * 3600 * kECUTUnitsPerGSTUnit) {
-      priorUTMidnightD -= 24 * 3600;
-      ({ ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool));
-      if (ut0_2 > 0) {
-        ut0 = ut0_2;
-      }
-      utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
-      utD = priorUTMidnightD + utSecondsSinceMidnight;
-    }
-    return utD;
-  }
-  function GSTDifferenceForDate(dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const priorUTMidnightD = priorUTMidnightForDateInterval(dateInterval, cache);
-    const utRadiansSinceMidnight = (dateInterval - priorUTMidnightD) * Math.PI / (12 * 3600);
-    const gst = convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, utRadiansSinceMidnight, priorUTMidnightD);
-    return gst - utRadiansSinceMidnight;
-  }
-
   // src/astronomy/planet-tables.ts
   var sunData = [
     { li: 403406, ali: 4.721964, bli: 1.621043, ri: 0 },
@@ -9626,7 +9517,7 @@
   }
 
   // src/astronomy/es-coordinates.ts
-  var TWO_PI2 = Math.PI * 2;
+  var TWO_PI = Math.PI * 2;
   function raAndDeclO(eclipticLatitude, eclipticLongitude, obliquity) {
     const sinDelta = Math.sin(eclipticLatitude) * Math.cos(obliquity) + Math.cos(eclipticLatitude) * Math.sin(obliquity) * Math.sin(eclipticLongitude);
     const declination = Math.asin(sinDelta);
@@ -9648,7 +9539,7 @@
     const q = Math.sqrt(A * A + B * B + C * C);
     let Hprime = Math.atan2(A, B);
     if (Hprime < 0) {
-      Hprime += TWO_PI2;
+      Hprime += TWO_PI;
     }
     const declPrime = Math.asin(C / q);
     return { Hprime, declPrime };
@@ -9743,6 +9634,115 @@
     const dist = distanceOfPlanetInAU(planetNumber, julianCenturiesSince2000Epoch, cache, moonPrecision);
     const { angularSize: angularDiameter, parallax } = planetSizeAndParallax(planetNumber, dist);
     return (wantGeocentricAltitude ? parallax : 0) - kECRefractionAtHorizonX - angularDiameter / 2;
+  }
+
+  // src/astronomy/es-sidereal.ts
+  var TWO_PI2 = Math.PI * 2;
+  function convertLSTtoGST(lst, observerLongitude) {
+    let gst = lst - observerLongitude;
+    let dayOffset = 0;
+    if (gst < 0) {
+      gst += TWO_PI2;
+      dayOffset = -1;
+    } else if (gst > TWO_PI2) {
+      gst -= TWO_PI2;
+      dayOffset = 1;
+    }
+    return { gst, dayOffset };
+  }
+  function convertGSTtoLST(gst, observerLongitude) {
+    let lst = gst + observerLongitude;
+    if (lst < 0) {
+      lst += TWO_PI2;
+    } else if (lst > TWO_PI2) {
+      lst -= TWO_PI2;
+    }
+    return lst;
+  }
+  function convertUTToGSTP03x(centuriesSinceEpochTDT, deltaTSeconds, utSinceMidnightRadians, _priorUTMidnight) {
+    const t = centuriesSinceEpochTDT;
+    const tu = t - deltaTSeconds / (24 * 3600 * 36525);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const t4 = t2 * t2;
+    const t5 = t3 * t2;
+    let gmst = 24110.5493771 + 864018479447825e-8 * tu + 307.4771013 * (t - tu) + 0.09277211 * t2 - 2926e-10 * t3 - 199708e-11 * t4 - 2454e-12 * t5;
+    gmst *= Math.PI / (12 * 3600);
+    gmst += utSinceMidnightRadians;
+    gmst = fmod(gmst, TWO_PI2);
+    if (gmst < 0) {
+      gmst += TWO_PI2;
+    }
+    return gmst;
+  }
+  function convertUTToGSTP03(calculationDate, cache) {
+    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(calculationDate, cache);
+    const priorUTMidnightD = priorUTMidnightForDateInterval(calculationDate, cache);
+    const utRadiansSinceMidnight = (calculationDate - priorUTMidnightD) * Math.PI / (12 * 3600);
+    return convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, utRadiansSinceMidnight, priorUTMidnightD);
+  }
+  function convertGSTtoUT(gst, priorUTMidnight, cachePool) {
+    let priorCache = null;
+    if (cachePool) {
+      priorCache = pushECAstroCacheInPool(cachePool, cachePool.midnightCache, priorUTMidnight);
+    }
+    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(
+      priorUTMidnight,
+      cachePool ? cachePool.currentCache : null
+    );
+    const T0 = convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, 0, priorUTMidnight);
+    if (cachePool && priorCache !== void 0) {
+      popECAstroCacheToInPool(cachePool, priorCache);
+    }
+    let ut = gst - T0;
+    if (ut < 0) {
+      ut += TWO_PI2;
+    } else if (ut > TWO_PI2) {
+      ut -= TWO_PI2;
+    }
+    ut *= kECUTUnitsPerGSTUnit;
+    let ut2 = ut + kECUTUnitsPerGSTUnit * TWO_PI2;
+    if (ut2 > TWO_PI2) {
+      ut2 = -1;
+    }
+    return { ut, ut2 };
+  }
+  function convertGSTtoUTclosest(gst, closestToThisDate, cachePool) {
+    let priorUTMidnightD = priorUTMidnightForDateInterval(
+      closestToThisDate,
+      cachePool ? cachePool.currentCache : null
+    );
+    let { ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool);
+    let utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+    let utD = priorUTMidnightD + utSecondsSinceMidnight;
+    if (utD < closestToThisDate - 12 * 3600 * kECUTUnitsPerGSTUnit) {
+      if (ut0_2 > 0) {
+        ut0 = ut0_2;
+        utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+        utD = priorUTMidnightD + utSecondsSinceMidnight;
+      } else {
+        priorUTMidnightD += 24 * 3600;
+        ({ ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool));
+        utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+        utD = priorUTMidnightD + utSecondsSinceMidnight;
+      }
+    } else if (utD > closestToThisDate + 12 * 3600 * kECUTUnitsPerGSTUnit) {
+      priorUTMidnightD -= 24 * 3600;
+      ({ ut: ut0, ut2: ut0_2 } = convertGSTtoUT(gst, priorUTMidnightD, cachePool));
+      if (ut0_2 > 0) {
+        ut0 = ut0_2;
+      }
+      utSecondsSinceMidnight = ut0 * (12 * 3600) / Math.PI;
+      utD = priorUTMidnightD + utSecondsSinceMidnight;
+    }
+    return utD;
+  }
+  function GSTDifferenceForDate(dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch, deltaT } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const priorUTMidnightD = priorUTMidnightForDateInterval(dateInterval, cache);
+    const utRadiansSinceMidnight = (dateInterval - priorUTMidnightD) * Math.PI / (12 * 3600);
+    const gst = convertUTToGSTP03x(julianCenturiesSince2000Epoch, deltaT, utRadiansSinceMidnight, priorUTMidnightD);
+    return gst - utRadiansSinceMidnight;
   }
 
   // src/astronomy/wb-planets.ts
@@ -10649,6 +10649,8 @@
   var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
   var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
   var SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
+  var SSLAT_THRESHOLD = 0.1 * Math.PI / 180;
+  var SSLAT_SEARCH_RANGE = 2 * 86400;
 
   // src/astronomy/es-astro.ts
   var TWO_PI4 = Math.PI * 2;
@@ -12432,7 +12434,7 @@
       );
       return result.valid ? result.angle : NaN;
     });
-    functions.set("solarNoonAngle", () => {
+    functions.set("solarNoonAngle24h", () => {
       const di = dateToDateInterval(getNow2());
       const transitDI = planettransitTimeRefined(
         di,
@@ -12473,6 +12475,22 @@
     });
     functions.set("utcSecondAngle", () => liveTime().s * 2 * Math.PI / 60);
     functions.set("tzOffset", () => tzOffsetSeconds);
+    functions.set("subSolarLatitude", () => {
+      const di = dateToDateInterval(getNow2());
+      return sunRAandDecl(di, null).declination;
+    });
+    functions.set("subSolarLongitude", () => {
+      const di = dateToDateInterval(getNow2());
+      const eotSec = EOTSeconds(di, null);
+      const utcMs = getNow2().getTime();
+      const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
+      const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
+      const solarTimeAtGreenwich = secSinceMidnight - tzOffsetSeconds + eotSec;
+      let sslng = Math.PI - solarTimeAtGreenwich * Math.PI / (12 * 3600);
+      while (sslng < -Math.PI) sslng += 2 * Math.PI;
+      while (sslng > Math.PI) sslng -= 2 * Math.PI;
+      return sslng;
+    });
     if (!env2.variables.has("noonOnTop")) {
       env2.variables.set("noonOnTop", 0);
     }
@@ -14004,6 +14022,8 @@
     { name: "sunRA", category: "Sun Position", desc: "Sun right ascension (radians)", kind: "fn" },
     { name: "sunDecl", category: "Sun Position", desc: "Sun declination (radians)", kind: "fn" },
     { name: "sunEclipticLongitude", category: "Sun Position", desc: "Sun ecliptic longitude (radians)", kind: "fn" },
+    { name: "subSolarLatitude", category: "Sun Position", desc: "Sub-solar point latitude (= sun declination, radians)", kind: "fn" },
+    { name: "subSolarLongitude", category: "Sun Position", desc: "Sub-solar point longitude (radians, [-\u03C0, \u03C0])", kind: "fn" },
     // ── Moon Position ───────────────────────────────────────────────────
     { name: "moonAltitude", category: "Moon Position", desc: "Moon altitude (radians)", kind: "fn" },
     { name: "moonAzimuth", category: "Moon Position", desc: "Moon azimuth (radians)", kind: "fn" },
@@ -14055,7 +14075,8 @@
     { name: "planettransit24HourIndicatorAngle", category: "Day/Night Ring", desc: "Planet transit angle on 24h dial", kind: "fn", sig: "(planet)" },
     { name: "planetTransitAngle", category: "Day/Night Ring", desc: "Planet high transit angle on 24h dial", kind: "fn", sig: "(planet)" },
     { name: "sunSpecialAngle", category: "Day/Night Ring", desc: "Sun altitude crossing angle (rise/set/twilight)", kind: "fn", sig: "(kind)" },
-    { name: "solarNoonAngle", category: "Day/Night Ring", desc: "Solar noon angle on 24h dial", kind: "fn" },
+    { name: "solarNoonAngle", category: "Day/Night Ring", desc: "Solar noon angle on wadokei dial (+\u03C0 offset)", kind: "fn" },
+    { name: "solarNoonAngle24h", category: "Day/Night Ring", desc: "Solar noon angle on 24h dial (raw, no offset)", kind: "fn" },
     { name: "polarSummer", category: "Day/Night Ring", desc: "1 if sun always above horizon", kind: "fn" },
     { name: "polarWinter", category: "Day/Night Ring", desc: "1 if sun always below horizon", kind: "fn" }
   ];

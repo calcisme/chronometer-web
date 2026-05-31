@@ -281,11 +281,11 @@ export function computeLayout(viewW: number, viewH: number): LayoutParams {
     const moonCX = mainCX - mainR * 0.5;
     const moonCY = mainCY - mainR - moonR * 0.4;
 
-    // Earth map: upper-center area
+    // Earth map: upper-center area, pinned to top of window
     const earthW = Math.max(80, 300 * s);
     const earthH = earthW / 2;
     const earthCX = mainCX + mainR * 0.15;
-    const earthCY = mainCY - mainR - earthH * 0.3;
+    const earthCY = earthH / 2 + 5;  // pin to top with a small margin
 
     // Date display: right of earth
     const dateCX = mainCX + mainR * 0.6;

@@ -193,7 +193,7 @@ When holding a step button, `timeController.setRate()` starts quantized scrubbin
 | `initHandStates(watch, env, now, getNow)` | Build animation state for all dynamic parts |
 | `tickAnimations(states, env, now, tickMs, deltaSec, timeDir)` | Per-frame: re-evaluate + start animations |
 | `startValueAnimation(val, target, now, speed, durationOverride?)` | Core: begin/restart an animation on an abstract value |
-| `startAnimationRaw(val, target, now, speed, durationOverride?)` | Angle wrapper: unwraps for shortest-path, then calls core |
+| `startAnimationRaw(val, target, now, speed, durationOverride?, linear?)` | Angle wrapper: unwraps for shortest-path, then calls core. If `linear` is true, skips `fmod` normalization and angular unwrapping (used for Observatory earth view's sun declination) |
 | `startLinearAnimation(val, target, now, speed, durationOverride?)` | Linear wrapper: calls core without angle wrapping |
 | `interpolateValue(val, now)` | Advance currentValue toward target (abstract, semantics-free) |
 | `interpolateRaw(val, now)` | Angle wrapper: calls core, applies `fmod(2π)` when done |

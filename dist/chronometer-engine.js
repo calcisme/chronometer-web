@@ -13234,7 +13234,7 @@
       );
       return result.valid ? result.angle : NaN;
     });
-    functions.set("solarNoonAngle", () => {
+    functions.set("solarNoonAngle24h", () => {
       const di = dateToDateInterval(getNow());
       const transitDI = planettransitTimeRefined(
         di,
@@ -13275,6 +13275,22 @@
     });
     functions.set("utcSecondAngle", () => liveTime().s * 2 * Math.PI / 60);
     functions.set("tzOffset", () => tzOffsetSeconds);
+    functions.set("subSolarLatitude", () => {
+      const di = dateToDateInterval(getNow());
+      return sunRAandDecl(di, null).declination;
+    });
+    functions.set("subSolarLongitude", () => {
+      const di = dateToDateInterval(getNow());
+      const eotSec = EOTSeconds(di, null);
+      const utcMs = getNow().getTime();
+      const localSeconds = (utcMs / 1e3 + tzOffsetSeconds) % 86400;
+      const secSinceMidnight = (localSeconds % 86400 + 86400) % 86400;
+      const solarTimeAtGreenwich = secSinceMidnight - tzOffsetSeconds + eotSec;
+      let sslng = Math.PI - solarTimeAtGreenwich * Math.PI / (12 * 3600);
+      while (sslng < -Math.PI) sslng += 2 * Math.PI;
+      while (sslng > Math.PI) sslng -= 2 * Math.PI;
+      return sslng;
+    });
     if (!env.variables.has("noonOnTop")) {
       env.variables.set("noonOnTop", 0);
     }
@@ -13877,6 +13893,7 @@
   var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
   var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
   var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
+  var EC_UPDATE_NEXT_SSLAT_CHANGE = -1018;
   var PLANET_SENTINEL_BASE = -2e3;
   function isPlanetRiseSetSentinel(sentinel) {
     return sentinel <= PLANET_SENTINEL_BASE;
@@ -14240,9 +14257,11 @@
     val.lastAnimationTime = now;
     return val.currentValue;
   }
-  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs) {
+  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs, linear) {
     const speed = kECGLAngleAnimationSpeed2 * animSpeed;
-    newTarget = fmod3(newTarget, 2 * Math.PI);
+    if (!linear) {
+      newTarget = fmod3(newTarget, 2 * Math.PI);
+    }
     if (isNaN(newTarget) || isNaN(val.currentValue)) {
       val.currentValue = newTarget;
       val.targetValue = newTarget;
@@ -14263,10 +14282,12 @@
       val.animating = false;
       return;
     }
-    const TWO_PI6 = 2 * Math.PI;
-    let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI6 * Math.round(delta / TWO_PI6);
-    val.currentValue = newTarget - delta;
+    if (!linear) {
+      const TWO_PI6 = 2 * Math.PI;
+      let delta = newTarget - val.currentValue;
+      delta = delta - TWO_PI6 * Math.round(delta / TWO_PI6);
+      val.currentValue = newTarget - delta;
+    }
     startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
   }
   function interpolateRaw(val, now) {
@@ -14377,6 +14398,30 @@
       return todayMidnightDI + 86400;
     }
   }
+  var SSLAT_THRESHOLD = 0.1 * Math.PI / 180;
+  var SSLAT_SEARCH_RANGE = 2 * 86400;
+  var SSLAT_SEARCH_GRANULARITY = 3600;
+  function nextSslatChange(getNow, timeDirection) {
+    const nowDI = dateToDateInterval(getNow());
+    const currentDecl = sunRAandDecl(nowDI, null).declination;
+    const boundaryDI = nowDI + timeDirection * SSLAT_SEARCH_RANGE;
+    const boundaryDecl = sunRAandDecl(boundaryDI, null).declination;
+    if (Math.abs(boundaryDecl - currentDecl) < SSLAT_THRESHOLD) {
+      return boundaryDI;
+    }
+    let loDI = nowDI;
+    let hiDI = boundaryDI;
+    while (Math.abs(hiDI - loDI) > SSLAT_SEARCH_GRANULARITY) {
+      const midDI = (loDI + hiDI) / 2;
+      const midDecl = sunRAandDecl(midDI, null).declination;
+      if (Math.abs(midDecl - currentDecl) >= SSLAT_THRESHOLD) {
+        hiDI = midDI;
+      } else {
+        loDI = midDI;
+      }
+    }
+    return hiDI;
+  }
   function resolveSentinel(sentinel, getNow, env, timeDirection) {
     const lat = env.observerLatRad ?? 0;
     const lon = env.observerLonRad ?? 0;
@@ -14431,6 +14476,9 @@
         const set = nextPlanetRiseSet(false, 1 /* Moon */, getNow, lat, lon, timeDirection);
         return closerInTimeDirection(rise, set, timeDirection);
       }
+      // Adaptive sslat (sun declination) change sentinel for earth view
+      case EC_UPDATE_NEXT_SSLAT_CHANGE:
+        return nextSslatChange(getNow, timeDirection);
       // Environment change only — effectively never (only explicit reset)
       case 0:
       case EC_UPDATE_ENV_CHANGE_ONLY:

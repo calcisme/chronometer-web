@@ -25,6 +25,7 @@ import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
 import { drawClockHands, drawSubdialHands } from './hand-views.js';
+import { initEarthView, drawEarthView } from './earth-view.js';
 
 import {
     type ObsValueSet,
@@ -223,12 +224,10 @@ function drawFrame(): void {
     ctx.stroke();
     ctx.fillText('MOON', L.moonCX, L.moonCY);
 
-    // Earth map placeholder
-    ctx.strokeRect(
-        L.earthCX - L.earthW / 2, L.earthCY - L.earthH / 2,
-        L.earthW, L.earthH,
-    );
-    ctx.fillText('EARTH', L.earthCX, L.earthCY);
+    // Earth map (Phase 5: day/night terminator)
+    if (obsValues) {
+        drawEarthView(ctx, L, obsValues, lat, lon, getNow);
+    }
 
     // ================================================================
     // 6. Logo
@@ -398,6 +397,9 @@ function init(): void {
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
     obsValues = initObsValues(env, performance.now(), getNow);
     invalidateObsValueCache();
+
+    // Initialize earth view (altitude table + Blue Marble images)
+    initEarthView();
 
     // --- Wire time controller UI ---
     timeUI = initTimeControls({

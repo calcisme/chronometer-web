@@ -34,6 +34,7 @@ import {
     EC_UPDATE_NEXT_SUNRISE_OR_SUNSET,
     EC_UPDATE_NEXT_PLANET_RISE,
     EC_UPDATE_NEXT_PLANET_SET,
+    EC_UPDATE_NEXT_SSLAT_CHANGE,
 } from '../shared/animation.js';
 import { SunAltitudeKind } from '../shared/astro-env.js';
 
@@ -92,6 +93,10 @@ export interface ObsValue {
     /** Pending Phase 2 sweep animation (only for naturalSpeed > 0).
      *  Set during update pass; consumed during animate pass when Phase 1 ends. */
     pendingSweep: { target: number; durationMs: number } | null;
+
+    /** If true, this value is linear (not an angle) — skip fmod wrapping.
+     *  Used for earth view values like sun declination. */
+    linear: boolean;
 }
 
 /**
@@ -157,6 +162,10 @@ export interface ObsValueSet {
     // -- Sun ring gradient stops (angular positions with fixed colors) --
     // NaN = sun doesn't reach this altitude (polar regions)
     sunRing: ObsValue[];
+
+    // -- Earth view (sub-solar point) --
+    earthSslat: ObsValue;
+    earthSslng: ObsValue;
 }
 
 // ============================================================================
@@ -169,6 +178,7 @@ interface ObsValueDef {
     updateInterval: number;  // seconds
     animSpeed?: number;      // catch-up speed in rad/s; default 2.0
     naturalSpeed?: number;   // sweep speed in rad/s; default 0 (snap-to-target)
+    linear?: boolean;        // if true, value is not an angle — skip fmod wrapping
 }
 
 /**
@@ -218,8 +228,8 @@ function buildValueDefs(): {
         { name: 'nautTwiEvening',   expr: `sunSpecialAngle(${SK.SunNauticalTwilightEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
         { name: 'astroTwiMorning',  expr: `sunSpecialAngle(${SK.SunAstroTwilightMorning}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNSET },
         { name: 'astroTwiEvening',  expr: `sunSpecialAngle(${SK.SunAstroTwilightEvening}) + pi * noonOnTop`, updateInterval: EC_UPDATE_NEXT_SUNRISE },
-        { name: 'solarNoon',        expr: 'solarNoonAngle() + pi * noonOnTop',     updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
-        { name: 'solarMidnight',    expr: 'solarNoonAngle() + pi + pi * noonOnTop', updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+        { name: 'solarNoon',        expr: 'solarNoonAngle24h() + pi * noonOnTop',     updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+        { name: 'solarMidnight',    expr: 'solarNoonAngle24h() + pi + pi * noonOnTop', updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
     ];
 
     const utc: ObsValueDef[] = [
@@ -305,12 +315,23 @@ function buildValueDefs(): {
         { name: 'ring9BelowEve',     expr: `sunSpecialAngle(${SK.SunRing9BelowEvening}) + pi * noonOnTop`,    updateInterval: EC_UPDATE_NEXT_SUNRISE },
         { name: 'ring18BelowEve',    expr: `sunSpecialAngle(${SK.SunRing18BelowEvening}) + pi * noonOnTop`,   updateInterval: EC_UPDATE_NEXT_SUNRISE },
         // Anchor points: solar noon and midnight (positions always valid, colors computed at render time)
-        { name: 'ringNoon',     expr: 'solarNoonAngle() + pi * noonOnTop',      updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
-        { name: 'ringMidnight', expr: 'solarNoonAngle() + pi + pi * noonOnTop',  updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+        { name: 'ringNoon',     expr: 'solarNoonAngle24h() + pi * noonOnTop',      updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
+        { name: 'ringMidnight', expr: 'solarNoonAngle24h() + pi + pi * noonOnTop',  updateInterval: EC_UPDATE_NEXT_SUNRISE_OR_SUNSET },
     ];
 
     return { clock, sunEvents, utc, solar, sidereal, planets, rings, sunRing };
 }
+
+// Earth view defs are separate because they use a different sentinel and
+// their values are linear (radians), not angular (no wrapping).
+const earthDefs: ObsValueDef[] = [
+    // subSolarLatitude changes slowly; the sentinel binary-searches for
+    // when it changes by ≥0.1° (see nextSslatChange in animation.ts).
+    { name: 'earthSslat', expr: 'subSolarLatitude()', updateInterval: EC_UPDATE_NEXT_SSLAT_CHANGE, linear: true },
+    // subSolarLongitude changes ~1°/4min; update every 60s.
+    // NOT linear — sslng is angular and wraps at ±π (dateline).
+    { name: 'earthSslng', expr: 'subSolarLongitude()', updateInterval: 60 },
+];
 
 // ============================================================================
 // Initialization
@@ -342,6 +363,7 @@ function createObsValue(
         nextUpdateDisplayTime: 0,
         nextUpdateTime: 0,
         pendingSweep: null,
+        linear: def.linear ?? false,
     };
 }
 
@@ -428,6 +450,10 @@ export function initObsValues(
 
         // Sun ring gradient stops
         sunRing: defs.sunRing.map(make),
+
+        // Earth view
+        earthSslat: findAndMake(earthDefs, 'earthSslat'),
+        earthSslng: findAndMake(earthDefs, 'earthSslng'),
     };
 }
 
@@ -458,6 +484,7 @@ export function getAllValues(vs: ObsValueSet): ObsValue[] {
         ...vs.saturnRing, ...vs.jupiterRing, ...vs.marsRing,
         ...vs.venusRing, ...vs.mercuryRing, ...vs.moonRing,
         ...vs.sunRing,
+        vs.earthSslat, vs.earthSslng,
     ];
 
     allValuesCache = all;
@@ -501,7 +528,7 @@ function updateNaturalSpeedValue(
     if (dtToNextUpdateSec <= 0 || !isFinite(dtToNextUpdateSec)) {
         // Edge case: next update is now or in the past — snap
         startAnimationRaw(v.anim, currentCorrectAngle, perfNow,
-            v.animSpeed / K_ANGLE_ANIM_SPEED);
+            v.animSpeed / K_ANGLE_ANIM_SPEED, undefined, v.linear);
         v.pendingSweep = null;
         return;
     }
@@ -527,7 +554,7 @@ function updateNaturalSpeedValue(
         const sweepAngle = effNaturalSpeed * dtToNextUpdateSec;
         const finalTarget = currentCorrectAngle + sweepAngle;
         startAnimationRaw(v.anim, finalTarget, perfNow,
-            v.naturalSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs);
+            v.naturalSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs, v.linear);
         v.pendingSweep = null;
         return;
     }
@@ -541,7 +568,7 @@ function updateNaturalSpeedValue(
         const sweepAngle = effNaturalSpeed * dtToNextUpdateSec;
         const finalTarget = currentCorrectAngle + sweepAngle;
         startAnimationRaw(v.anim, finalTarget, perfNow,
-            v.animSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs);
+            v.animSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs, v.linear);
         v.pendingSweep = null;
         return;
     }
@@ -554,7 +581,7 @@ function updateNaturalSpeedValue(
         const sweepAngle = effNaturalSpeed * dtToNextUpdateSec;
         const finalTarget = currentCorrectAngle + sweepAngle;
         startAnimationRaw(v.anim, finalTarget, perfNow,
-            v.animSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs);
+            v.animSpeed / K_ANGLE_ANIM_SPEED, dtToNextUpdateMs, v.linear);
         v.pendingSweep = null;
         return;
     }
@@ -562,7 +589,7 @@ function updateNaturalSpeedValue(
     // Phase 1 target: where the correct position will be when catch-up ends
     const catchUpTarget = currentCorrectAngle + effNaturalSpeed * catchUpSec;
     startAnimationRaw(v.anim, catchUpTarget, perfNow,
-        v.animSpeed / K_ANGLE_ANIM_SPEED, catchUpMs);
+        v.animSpeed / K_ANGLE_ANIM_SPEED, catchUpMs, v.linear);
 
     // Store Phase 2 for the animate pass to pick up
     const remainingMs = dtToNextUpdateMs - catchUpMs;
@@ -611,11 +638,17 @@ function updateObsValueScrub(
 
     // Compute natural animation duration
     const speed = v.animSpeed;  // rad/s
-    const TWO_PI = 2 * Math.PI;
-    const normalizedTarget = ((newTarget % TWO_PI) + TWO_PI) % TWO_PI;
-    const normalizedCurrent = ((v.anim.currentValue % TWO_PI) + TWO_PI) % TWO_PI;
-    let angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
-    if (angleDelta > Math.PI) angleDelta = TWO_PI - angleDelta;
+    let angleDelta: number;
+    if (v.linear) {
+        // Linear values: straight-line delta (no angular wrapping)
+        angleDelta = Math.abs(newTarget - v.anim.currentValue);
+    } else {
+        const TWO_PI = 2 * Math.PI;
+        const normalizedTarget = ((newTarget % TWO_PI) + TWO_PI) % TWO_PI;
+        const normalizedCurrent = ((v.anim.currentValue % TWO_PI) + TWO_PI) % TWO_PI;
+        angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+        if (angleDelta > Math.PI) angleDelta = TWO_PI - angleDelta;
+    }
     const naturalDurationMs = speed > 0 ? (angleDelta / speed) * 1000 : 0;
 
     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
@@ -627,14 +660,15 @@ function updateObsValueScrub(
     if (naturalDurationMs > timeUntilNextUpdateMs) {
         // Too slow — compress to finish before next re-evaluation
         startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
-            timeUntilNextUpdateMs);
+            timeUntilNextUpdateMs, v.linear);
     } else if (naturalDurationMs < tickIntervalMs) {
         // Too fast — stretch to fill one tick (prevents sub-frame snaps)
         startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
-            tickIntervalMs);
+            tickIntervalMs, v.linear);
     } else {
         // Natural speed falls between one tick and next update — use as-is
-        startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+        startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
+            undefined, v.linear);
     }
 
     // No pending sweep during scrub — just snap-to-target with compression
@@ -690,7 +724,7 @@ export function updateObsValues(
                     v.nextUpdateTime = perfNow + 100;
                     v.pendingSweep = null;
                     startAnimationRaw(v.anim, newTarget, perfNow,
-                        v.animSpeed / K_ANGLE_ANIM_SPEED);
+                        v.animSpeed / K_ANGLE_ANIM_SPEED, undefined, v.linear);
                 } else {
                     const nextDisplayMs = computeNextBoundary(
                         v.updateInterval * 1000, getNow, timeDirection, env);
@@ -698,7 +732,8 @@ export function updateObsValues(
                     v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
                     v.pendingSweep = null;
                     const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
-                    startAnimationRaw(v.anim, newTarget, perfNow, multiplier);
+                    startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
+                        undefined, v.linear);
                 }
             }
         }
@@ -728,7 +763,7 @@ export function animateObsValues(
             v.pendingSweep = null;
             const sweepMultiplier = v.naturalSpeed / K_ANGLE_ANIM_SPEED;
             startAnimationRaw(v.anim, sweep.target, perfNow,
-                sweepMultiplier, sweep.durationMs);
+                sweepMultiplier, sweep.durationMs, v.linear);
             // Re-interpolate to pick up the new animation immediately
             v.currentValue = interpolateValue(v.anim, perfNow);
         }

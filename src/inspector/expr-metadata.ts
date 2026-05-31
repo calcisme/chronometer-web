@@ -78,6 +78,8 @@ export const EXPR_METADATA: ExprEntry[] = [
     { name: 'sunRA',              category: 'Sun Position',  desc: 'Sun right ascension (radians)',    kind: 'fn' },
     { name: 'sunDecl',            category: 'Sun Position',  desc: 'Sun declination (radians)',        kind: 'fn' },
     { name: 'sunEclipticLongitude', category: 'Sun Position', desc: 'Sun ecliptic longitude (radians)', kind: 'fn' },
+    { name: 'subSolarLatitude',  category: 'Sun Position',  desc: 'Sub-solar point latitude (= sun declination, radians)', kind: 'fn' },
+    { name: 'subSolarLongitude', category: 'Sun Position',  desc: 'Sub-solar point longitude (radians, [-π, π])',           kind: 'fn' },
 
     // ── Moon Position ───────────────────────────────────────────────────
     { name: 'moonAltitude',       category: 'Moon Position', desc: 'Moon altitude (radians)',          kind: 'fn' },
@@ -134,7 +136,8 @@ export const EXPR_METADATA: ExprEntry[] = [
     { name: 'planettransit24HourIndicatorAngle', category: 'Day/Night Ring', desc: 'Planet transit angle on 24h dial',               kind: 'fn', sig: '(planet)' },
     { name: 'planetTransitAngle',             category: 'Day/Night Ring', desc: 'Planet high transit angle on 24h dial',             kind: 'fn', sig: '(planet)' },
     { name: 'sunSpecialAngle',                category: 'Day/Night Ring', desc: 'Sun altitude crossing angle (rise/set/twilight)',    kind: 'fn', sig: '(kind)' },
-    { name: 'solarNoonAngle',                 category: 'Day/Night Ring', desc: 'Solar noon angle on 24h dial',                      kind: 'fn' },
+    { name: 'solarNoonAngle',                 category: 'Day/Night Ring', desc: 'Solar noon angle on wadokei dial (+π offset)',      kind: 'fn' },
+    { name: 'solarNoonAngle24h',              category: 'Day/Night Ring', desc: 'Solar noon angle on 24h dial (raw, no offset)',     kind: 'fn' },
     { name: 'polarSummer',                    category: 'Day/Night Ring', desc: '1 if sun always above horizon',                     kind: 'fn' },
     { name: 'polarWinter',                    category: 'Day/Night Ring', desc: '1 if sun always below horizon',                     kind: 'fn' },
 ];

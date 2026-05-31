@@ -26,6 +26,7 @@ import {
     weekdayFromTimeInterval,
 } from '../astronomy/es-calendar.js';
 import { dateToDateInterval } from '../astronomy/es-time.js';
+import { sunRAandDecl } from '../astronomy/es-coordinates.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
@@ -59,6 +60,7 @@ export const EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT  = -1008;
 export const EC_UPDATE_ENV_CHANGE_ONLY           = -1013;
 export const EC_UPDATE_NEXT_SUNRISE_OR_SUNSET    = -1016;
 export const EC_UPDATE_NEXT_MOONRISE_OR_MOONSET  = -1017;
+export const EC_UPDATE_NEXT_SSLAT_CHANGE         = -1018;
 
 // --- Generic planet rise/set sentinels (Observatory) ---
 // Encoding: -2000 - planetNumber*2 - (set ? 1 : 0)
@@ -764,11 +766,14 @@ export function startAnimationRaw(
     now: number,
     animSpeed: number = 1.0,
     durationOverrideMs?: number,
+    linear?: boolean,
 ): void {
     const speed = kECGLAngleAnimationSpeed * animSpeed;
 
-    // Normalize target to [0, 2π)
-    newTarget = fmod(newTarget, 2 * Math.PI);
+    if (!linear) {
+        // Normalize target to [0, 2π)
+        newTarget = fmod(newTarget, 2 * Math.PI);
+    }
 
     // NaN transition: snap immediately when either endpoint is NaN.
     // Animation isn't meaningful when transitioning to/from "don't display".
@@ -792,12 +797,14 @@ export function startAnimationRaw(
     if (val.animating) { interpolateValue(val, now); }
     if (val.currentValue === newTarget) { val.animating = false; return; }
 
-    // Unwrap currentValue so |currentValue - targetValue| ≤ π.
-    // This avoids the animation flipping direction when crossing 0°/360°.
-    const TWO_PI = 2 * Math.PI;
-    let delta = newTarget - val.currentValue;
-    delta = delta - TWO_PI * Math.round(delta / TWO_PI);
-    val.currentValue = newTarget - delta;
+    if (!linear) {
+        // Unwrap currentValue so |currentValue - targetValue| ≤ π.
+        // This avoids the animation flipping direction when crossing 0°/360°.
+        const TWO_PI = 2 * Math.PI;
+        let delta = newTarget - val.currentValue;
+        delta = delta - TWO_PI * Math.round(delta / TWO_PI);
+        val.currentValue = newTarget - delta;
+    }
 
     startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
 }
@@ -1016,6 +1023,59 @@ function nextMidnightDI(
 }
 
 /**
+ * Binary search for the next time the sun's declination (sub-solar latitude)
+ * has changed by ≥ SSLAT_THRESHOLD from its current value.
+ *
+ * This adaptive sentinel gives correct scrub compression behavior:
+ * - Near equinoxes (fast declination change ~0.4°/day): ~6 hour updates
+ * - Near solstices (slow change ~0.01°/day): ~2 day updates
+ *
+ * The search extends ±2 days from now (in timeDirection), converging to
+ * ~1 hour granularity in ~6 iterations of sunRAandDecl().
+ *
+ * Returns a dateInterval (Apple epoch seconds).
+ */
+const SSLAT_THRESHOLD = 0.1 * Math.PI / 180;  // 0.1° in radians
+const SSLAT_SEARCH_RANGE = 2 * 86400;          // 2 days in seconds
+const SSLAT_SEARCH_GRANULARITY = 3600;          // stop when within 1 hour
+
+function nextSslatChange(
+    getNow: () => Date,
+    timeDirection: 1 | -1,
+): number {
+    const nowDI = dateToDateInterval(getNow());
+    const currentDecl = sunRAandDecl(nowDI, null).declination;
+
+    // Search boundary: 2 days in the direction time is flowing
+    const boundaryDI = nowDI + timeDirection * SSLAT_SEARCH_RANGE;
+    const boundaryDecl = sunRAandDecl(boundaryDI, null).declination;
+
+    // If declination hasn't changed enough at 2 days, return the boundary
+    if (Math.abs(boundaryDecl - currentDecl) < SSLAT_THRESHOLD) {
+        return boundaryDI;
+    }
+
+    // Binary search: find when |decl(t) - currentDecl| first exceeds threshold
+    // lo = now (threshold not yet exceeded), hi = boundary (threshold exceeded)
+    let loDI = nowDI;
+    let hiDI = boundaryDI;
+
+    while (Math.abs(hiDI - loDI) > SSLAT_SEARCH_GRANULARITY) {
+        const midDI = (loDI + hiDI) / 2;
+        const midDecl = sunRAandDecl(midDI, null).declination;
+
+        if (Math.abs(midDecl - currentDecl) >= SSLAT_THRESHOLD) {
+            hiDI = midDI;  // threshold crossed before mid
+        } else {
+            loDI = midDI;  // threshold not yet crossed
+        }
+    }
+
+    // Return hi (conservative: slightly after the actual crossing)
+    return hiDI;
+}
+
+/**
  * Resolve a sentinel constant to its next display-time event.
  * Returns a dateInterval (Apple epoch seconds), or Infinity for envChangeOnly.
  *
@@ -1075,6 +1135,10 @@ function resolveSentinel(
             const set = nextPlanetRiseSet(false, ECPlanetNumber.Moon, getNow, lat, lon, timeDirection);
             return closerInTimeDirection(rise, set, timeDirection);
         }
+
+        // Adaptive sslat (sun declination) change sentinel for earth view
+        case EC_UPDATE_NEXT_SSLAT_CHANGE:
+            return nextSslatChange(getNow, timeDirection);
 
         // Environment change only — effectively never (only explicit reset)
         case 0:
