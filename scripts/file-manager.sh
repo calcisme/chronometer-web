@@ -247,99 +247,107 @@ cmd_list() {
             byCat[cat].push(fp);
         }
 
-        // Helper: collapse directory trees
-        function collapseEntries(files) {
-            // Group by top-level directory
-            const dirs = new Map();
-            const topLevel = [];
-            for (const f of files) {
-                const idx = f.indexOf('/');
-                if (idx === -1) {
-                    topLevel.push(f);
-                } else {
-                    const dir = f.substring(0, idx);
-                    if (!dirs.has(dir)) dirs.set(dir, []);
-                    dirs.get(dir).push(f);
-                }
-            }
+        // Helper: collapse directory trees recursively.
+        // For a given category's file list, build a trie from path segments,
+        // then collapse bottom-up: if ALL files under a dir (across ALL categories)
+        // share the same category, show just the directory.
+        function collapseEntries(catFiles, cat) {
+            // Build a set of files belonging to this category for fast lookup
+            const catFileSet = new Set(catFiles);
 
+            // Collect all unique directory prefixes we need to check
+            // For each file, walk up its path and check if the directory is uniform
             const result = [];
-            for (const f of topLevel) {
-                result.push({ path: f, count: null });
+
+            // Build a trie of the catFiles
+            const root = { children: new Map(), files: [] };
+            for (const f of catFiles) {
+                const parts = f.split('/');
+                let node = root;
+                for (let i = 0; i < parts.length - 1; i++) {
+                    if (!node.children.has(parts[i])) {
+                        node.children.set(parts[i], { children: new Map(), files: [] });
+                    }
+                    node = node.children.get(parts[i]);
+                }
+                node.files.push(f);
             }
 
-            for (const [dir, dirFiles] of dirs) {
-                // Check if ALL files in this directory (across all categories) belong to the same category
-                const allDirFiles = allFiles.filter(f => f.startsWith(dir + '/') || f === dir);
-                const catSet = new Set();
-                for (const df of allDirFiles) {
-                    const c = fileCats.get(df);
-                    if (c) catSet.add(c);
+            // Check if ALL files under a directory path (across all categories) belong to cat
+            function isDirUniform(dirPath) {
+                const prefix = dirPath + '/';
+                for (const f of allFiles) {
+                    if (f.startsWith(prefix)) {
+                        if (fileCats.get(f) !== cat) return false;
+                    }
+                }
+                return true;
+            }
+
+            // Count files under a directory that belong to this category
+            function countFiles(dirPath) {
+                const prefix = dirPath + '/';
+                let n = 0;
+                for (const f of catFiles) {
+                    if (f.startsWith(prefix)) n++;
+                }
+                return n;
+            }
+
+            // Walk the trie and emit entries
+            function walk(node, pathPrefix) {
+                // Emit leaf files at this level
+                for (const f of node.files) {
+                    result.push({ path: f, count: null });
                 }
 
-                if (catSet.size === 1) {
-                    // All same category — collapse
-                    const size = dirFiles.length;
-                    result.push({ path: dir + '/', count: size });
-                } else {
-                    // Mixed — try one level deeper
-                    const subDirs = new Map();
-                    const subTopLevel = [];
-                    for (const f of dirFiles) {
-                        const rest = f.substring(dir.length + 1);
-                        const idx2 = rest.indexOf('/');
-                        if (idx2 === -1) {
-                            subTopLevel.push(f);
-                        } else {
-                            const subDir = dir + '/' + rest.substring(0, idx2);
-                            if (!subDirs.has(subDir)) subDirs.set(subDir, []);
-                            subDirs.get(subDir).push(f);
-                        }
-                    }
+                // Process child directories
+                for (const [name, child] of node.children) {
+                    const dirPath = pathPrefix ? pathPrefix + '/' + name : name;
 
-                    for (const f of subTopLevel) {
-                        result.push({ path: f, count: null });
-                    }
-
-                    for (const [sd, sdFiles] of subDirs) {
-                        // Check if all files under this sub-dir belong to same category
-                        const allSubFiles = allFiles.filter(f => f.startsWith(sd + '/') || f === sd);
-                        const subCatSet = new Set();
-                        for (const sf of allSubFiles) {
-                            const c = fileCats.get(sf);
-                            if (c) subCatSet.add(c);
-                        }
-
-                        if (subCatSet.size === 1) {
-                            result.push({ path: sd + '/', count: sdFiles.length });
-                        } else {
-                            // List individually
-                            for (const f of sdFiles) {
-                                result.push({ path: f, count: null });
-                            }
-                        }
+                    if (isDirUniform(dirPath)) {
+                        // All files under this dir are the same category — collapse
+                        const n = countFiles(dirPath);
+                        result.push({ path: dirPath + '/', count: n });
+                    } else {
+                        // Mixed — recurse deeper
+                        walk(child, dirPath);
                     }
                 }
             }
 
+            walk(root, '');
             result.sort((a, b) => a.path.localeCompare(b.path));
             return result;
         }
 
         // Helper: human-readable file size
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+        }
+
+        // Human-readable file size for a single file
         function fileSize(fp) {
             try {
                 const stat = fs.statSync(fp);
-                if (stat.isDirectory()) {
-                    // Get total size recursively — too slow, skip
-                    return '';
-                }
-                const bytes = stat.size;
-                if (bytes < 1024) return bytes + ' B';
-                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
-                if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-                return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+                if (stat.isDirectory()) return '';
+                return formatBytes(stat.size);
             } catch { return ''; }
+        }
+
+        // Total size of all files under a directory
+        function dirSize(dirPath) {
+            const prefix = dirPath.endsWith('/') ? dirPath : dirPath + '/';
+            let total = 0;
+            for (const f of allFiles) {
+                if (f.startsWith(prefix)) {
+                    try { total += fs.statSync(f).size; } catch {}
+                }
+            }
+            return formatBytes(total);
         }
 
         // Print results
@@ -351,11 +359,12 @@ cmd_list() {
             console.log();
             console.log('Category ' + cat + ' (' + catNames[cat] + '):');
 
-            const entries = collapseEntries(files);
+            const entries = collapseEntries(files, cat);
             for (const entry of entries) {
                 let line = '  ' + entry.path;
                 if (entry.count !== null) {
-                    line += '  (' + entry.count + ' files)';
+                    const sz = dirSize(entry.path);
+                    line += '  (' + entry.count + ' files, ' + sz + ')';
                 } else {
                     const sz = fileSize(entry.path);
                     if (sz) line += '  (' + sz + ')';
