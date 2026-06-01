@@ -232,13 +232,6 @@ cmd_list() {
             fileCats.set(fp, cat);
         }
 
-        // Build tree for collapsing: group by top-level directory
-        // For each directory, if ALL descendant files share the same category,
-        // collapse to just show the directory.
-        function getTopDir(fp) {
-            const idx = fp.indexOf('/');
-            return idx === -1 ? null : fp.substring(0, idx);
-        }
 
         // Group files by category
         const byCat = {};
@@ -252,11 +245,6 @@ cmd_list() {
         // then collapse bottom-up: if ALL files under a dir (across ALL categories)
         // share the same category, show just the directory.
         function collapseEntries(catFiles, cat) {
-            // Build a set of files belonging to this category for fast lookup
-            const catFileSet = new Set(catFiles);
-
-            // Collect all unique directory prefixes we need to check
-            // For each file, walk up its path and check if the directory is uniform
             const result = [];
 
             // Build a trie of the catFiles
@@ -616,7 +604,7 @@ cmd_restore() {
     local conflicts=()
     while IFS= read -r line; do
         local file
-        file=$(echo "$line" | sed 's/^[a-f0-9]* \*/\?//' | awk '{print $2}')
+        file=$(echo "$line" | awk '{print $2}')
         if [ -f "$file" ]; then
             conflicts+=("$file")
         fi
