@@ -1,0 +1,64 @@
+{
+  "categories": {
+    "1": "Ephemeral build output",
+    "2": "Rebuildable without Internet",
+    "3": "Git-tracked",
+    "4": "Reference (not build sources)",
+    "5": "Internet-downloaded"
+  },
+  "rules": [
+    {
+      "category": 4,
+      "comment": "iOS/Android reference repos cloned via scripts/clone-refs.sh",
+      "paths": [
+        ".chronometer-ref/",
+        ".esastro-ref/",
+        ".esgl-ref/",
+        ".eslocation-ref/",
+        ".estime-ref/",
+        ".observatory-ref/",
+        ".observatory-opengl-ref/"
+      ]
+    },
+    {
+      "category": 5,
+      "comment": "Files that must be downloaded from the Internet",
+      "paths": [
+        "node_modules/",
+        "scripts/geonames-data/cities1000.zip",
+        "scripts/geonames-data/alternateNamesV2.zip",
+        "scripts/geonames-data/allCountries.zip",
+        "scripts/geonames-data/admin1CodesASCII.txt",
+        "scripts/geonames-data/admin2Codes.txt"
+      ]
+    },
+    {
+      "category": 2,
+      "comment": "Test golden files — archived/restored separately via archive-golden/restore-golden",
+      "paths": [
+        "src/__tests__/snapshots/"
+      ]
+    },
+    {
+      "category": 1,
+      "comment": "Regenerated every build or derived from other files",
+      "paths": [
+        "src/faces/generated/",
+        "scripts/geonames-data/cities1000.txt",
+        "scripts/geonames-data/alternateNamesV2.txt",
+        "scripts/geonames-data/allCountries.txt"
+      ]
+    }
+  ],
+  "archiveExclude": [
+    "node_modules/"
+  ],
+  "ignore": [
+    ".git/",
+    ".DS_Store"
+  ],
+  "notes": {
+    "fallback": "Any file tracked by git (git ls-files) and not matched by an explicit rule above is category 3.",
+    "dist": "dist/ is git-tracked (category 3) but flagged in listing output as 'git-tracked build output'."
+  }
+}

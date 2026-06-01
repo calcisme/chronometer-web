@@ -154,3 +154,29 @@ When adding or changing expression functions in `src/shared/astro-env.ts` or `sr
 Each entry needs: `name`, `category` (for grouping), `desc` (one-line description), `kind` (`'fn'` or `'const'`), and optionally `sig` (parameter signature like `'(planet, leaf)'`). New categories should also be added to `CATEGORY_ORDER`.
 
 See [Inspector](inspector.md) for how the metadata is used.
+
+## 14. Never Make Build Behavior Conditional on Output File Existence
+
+Build steps must either always run or always check that required *inputs* exist and fail if missing. Never skip generating an output because it already exists; never silently use a stale output when inputs are unavailable.
+
+**Prohibited patterns:**
+```bash
+# BAD: Skips generation if output already exists
+if [ ! -f "output.js" ]; then
+  generate_output
+fi
+
+# BAD: Silently skips missing files
+[ -f "$f" ] && cp "$f" dest/
+```
+
+**Acceptable patterns:**
+```bash
+# GOOD: Guard — validates input exists, fails fast
+if [ ! -f "required-input.txt" ]; then
+  echo "ERROR: missing required-input.txt" >&2
+  exit 1
+fi
+```
+
+See [Build System — File Categories](build-system.md#file-categories-and-archival) for the full categorization system and archival workflow. The agent skill `audit-build-hygiene` can be used to scan the build process for violations of this rule.

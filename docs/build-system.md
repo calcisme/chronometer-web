@@ -168,9 +168,69 @@ npx vitest
 | `version.txt` | Current build version, read and updated by `build.sh` |
 | `tsconfig.json` | TypeScript configuration |
 | `package.json` | Dependencies (esbuild) |
+| `file-categories.json` | Canonical file categorization registry |
+| `scripts/file-manager.sh` | File categorization, archival, and restoration CLI tool |
+
+## File Categories and Archival
+
+Every file in the project directory belongs to exactly one of five categories:
+
+| Cat | Label | Description | Archived? |
+|-----|-------|-------------|-----------|
+| 1 | **Ephemeral** | Intermediate build output regenerated every build | No |
+| 2 | **Rebuildable (offline)** | Can be rebuilt without Internet but rarely changes | Yes (golden) |
+| 3 | **Git-tracked** | Committed to the GitHub repository | No (git handles) |
+| 4 | **Reference** | iOS/Android reference repos; not build sources | No |
+| 5 | **Internet-downloaded** | Must be downloaded from the Internet | Yes (main) |
+
+The canonical registry of categorization rules lives in [`file-categories.json`](../file-categories.json) at the project root. Rules are evaluated in order; first match wins. Files tracked by `git ls-files` that don't match any explicit rule default to category 3.
+
+### `file-manager.sh` CLI Tool
+
+The tool at [`scripts/file-manager.sh`](../scripts/file-manager.sh) provides five subcommands:
+
+```bash
+# List all files by category (subtrees collapsed)
+bash scripts/file-manager.sh list
+
+# Archive category-5 files (excl. node_modules) to a destination
+bash scripts/file-manager.sh archive /path/to/dest
+
+# Restore archived files into a clean checkout
+bash scripts/file-manager.sh restore /path/to/source
+
+# Archive test golden files (category 2) separately
+bash scripts/file-manager.sh archive-golden /path/to/dest
+
+# Restore test golden files
+bash scripts/file-manager.sh restore-golden /path/to/source
+```
+
+**Archive rules:**
+- Destination must be specified (no default) and must NOT be inside the project tree
+- Archives include a `MANIFEST.sha256` for checksum verification
+- `restore` refuses to overwrite existing files — stops with a detailed error listing conflicts
+
+### Fresh Checkout Workflow
+
+To set up a complete working directory from a clean `git clone`:
+
+```bash
+git clone <repo-url>
+cd chronometer-web
+npm install                                          # category 5: node_modules
+bash scripts/file-manager.sh restore /path/to/archive  # category 5: geonames data
+bash scripts/file-manager.sh restore-golden /path/to/golden  # category 2: test snapshots
+bash build.sh                                        # generates category 1 files + dist
+```
+
+### `dist/` Special Case
+
+`dist/` is committed to git (category 3) even though it contains build output. This is intentional — it allows deploy tooling outside the VM to access built files and lets GitHub repo browsers see the output structure. The `list` command flags it as "git-tracked build output".
 
 ## Related Docs
 
 - [Face Porting Guide](face-porting-guide.md) — How to add a new face (includes build steps)
 - [Architecture Overview](architecture-overview.md) — Overall app structure
 - [Help System](help-system.md) — Help content architecture
+- [Development Rules](development-rules.md) — Critical invariants including build hygiene rules
