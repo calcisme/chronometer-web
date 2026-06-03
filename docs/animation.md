@@ -86,6 +86,8 @@ Updates fire on **local-time-aligned clock boundaries**, not relative to page lo
 
 **Sentinel-based scheduling**: Named sentinel values (e.g., `updateAtNextSunriseOrMidnight`) compute the true next astronomical event time (sunrise, sunset, moonrise, moonset) in display time and schedule the part to re-evaluate at that boundary. The `OrMidnight` variants clamp the event time to the next local midnight, so the part updates at whichever comes first. This works correctly in forward, backward (-1×), and quantized (scrubbing) modes. See `computeNextBoundary()` and `resolveSentinel()` in `animation.ts`.
 
+> **Battery-driven parts**: A part whose angle reads `batteryLevel()` should use the `update` mechanism to re-evaluate no more than about once per minute (Milano's power-reserve hand uses `update='60'`). Battery level changes slowly, so a coarse interval avoids needless re-evaluation/animation churn. The async `levelchange` listener (in `astro-env.ts` / `watch-env.ts`) only refreshes the cached value — it does not itself trigger a re-eval; the value is picked up on the part's next scheduled update.
+
 ## Animation Speed (`animSpeed` attribute)
 
 Controls **how** the hand moves to its new position:
@@ -183,8 +185,17 @@ When holding a step button, `timeController.setRate()` starts quantized scrubbin
 | **Single tap** | Stop time, snap in-flight animations, step by one unit, animate at natural speed |
 | **Astro tap** | Stop time, snap in-flight, compute next event, `setTime()`, animate all hands to new positions |
 | **Hold → scrub** | After 300ms hold delay, enter quantized mode. `resetHandSchedules()` forces immediate re-eval |
-| **Pause** | Freeze display time. `finishAnimations()` snaps all hands to targets |
+| **Pause** | Freeze display time. `finishAnimations()` snaps all hands to targets **and freezes their schedules** (`nextUpdateTime = Infinity`). Schedules are **not** re-armed on stop |
 | **Resume (Play)** | Unfreeze at 1×. `resetHandSchedules()` forces immediate re-eval with normal scheduling |
+
+### Stopped state: no re-evaluation, full idle
+
+While the clock is stopped, display time is frozen, so every hand expression returns a constant — there is nothing to re-evaluate. Two mechanisms keep a stopped face from doing needless work:
+
+1. The stop-transition handlers (`onTransportChange`, `onScrubEnd` in `engine-entry.ts`) call `finishAllAnimations()` (which freezes schedules) but **do not** call `resetAllSchedules()` while `timeController.isStopped` — re-arming would defeat the freeze and cause every-frame re-evaluation.
+2. `armIdle()` is a no-op while stopped, so once any in-flight settle animation completes the requestAnimationFrame loop goes **fully idle** rather than busy-waiting on per-hand update boundaries. Resuming (play / step / env change) re-arms the loop via `ensureSchedulerRunning()`.
+
+This was added to fix faces rendering continuously (or busy-looping the idle scheduler) while stopped. See [planning/2026-06-03-stopped-clock-rendering.md](../planning/2026-06-03-stopped-clock-rendering.md).
 
 ## Key Functions
 

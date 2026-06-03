@@ -1186,6 +1186,12 @@ async function main() {
 
     function armIdle() {
         if (idleTimerId !== null) return;
+        // A stopped clock never needs a re-evaluation wakeup: display time is
+        // frozen, so hand expressions return constant values. Bailing here lets
+        // the loop go fully idle once any in-flight animation settles, instead
+        // of busy-waiting on per-hand update schedules. Resuming (play/step/env
+        // change) re-arms the loop via ensureSchedulerRunning().
+        if (timeController.isStopped) return;
         let earliest = Infinity;
         for (const face of faces) {
             if (!face.enabled || face.handStates.length === 0) continue;
@@ -2362,7 +2368,12 @@ async function main() {
             timeController.stop();
             rebuildEnvironments();
             finishAllAnimations();
-            resetAllSchedules();
+            // While stopped, finishAllAnimations() has already snapped hands to
+            // their final positions and frozen the schedules. Re-arming here
+            // (resetAllSchedules) would defeat that freeze and make hands
+            // re-evaluate every frame while stopped — see
+            // planning/2026-06-03-stopped-clock-rendering.md.
+            if (!timeController.isStopped) resetAllSchedules();
         },
         onNowClicked: () => {
             timeController.reset();
@@ -2374,7 +2385,10 @@ async function main() {
         onTransportChange: () => {
             rebuildEnvironments();
             finishAllAnimations();
-            resetAllSchedules();
+            // Only re-arm schedules when resuming (play / direction change). When
+            // transitioning INTO the stopped state, leave the freeze from
+            // finishAllAnimations() in place so we don't re-evaluate while stopped.
+            if (!timeController.isStopped) resetAllSchedules();
         },
         ensureSchedulerRunning,
         writeTimeState,

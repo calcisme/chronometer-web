@@ -41,7 +41,7 @@
   <Qhand name='mon hn'	    x='0' y='0'	modes='front'		                   type='rect' length='monL' width='1'  tail=' 0' update='86400'    dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='(monthNumber()+1)  *2*pi/26 -    pi/2'  strokeColor='monClr'   fillColor='monClr' />
   <Qhand name='date hn'	    x='0' y='0'	modes='front'		                   type='rect' length='datL' width='1'  tail=' 0' update='86400'    dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='(31-dayNumber())   *2*pi/64 +    pi/2'  strokeColor='dateClr'  fillColor='dateClr' />
   <Qhand name='wkday hn'    x='0' y='0'	modes='front'		                   type='rect' length='wkdL' width='1'  tail=' 0' update='86400'    dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='(7-weekdayNumber())*2*pi/28 + 20*pi/28' strokeColor='wkdayClr' fillColor='wkdayClr' />
-  <Qhand name='pwr h'	    x='0' y='0'	modes='front'				   type='rect' length='batteryLevelSupported() ? prL : 0'  width='1'  tail=' 0' update='600'       dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='batteryLevel() >=  0 ? batteryLevel()*pi/3-pi/6 : -pi/6' strokeColor='pwrClr'  fillColor='pwrClr' />
+  <Qhand name='pwr h'	    x='0' y='0'	modes='front'				   type='rect' length='batteryLevelSupported() ? prL : 0'  width='1'  tail=' 0' update='60'        dragAnimationType='dragAnimationAlways' animSpeed='5.0' angle='batteryLevel() >=  0 ? batteryLevel()*pi/3-pi/6 : -pi/6' strokeColor='pwrClr'  fillColor='pwrClr' />
 
 <!-- time hands -->
   <Qhand name='hr'	    x='0' y='0'	modes='front'		kind='hour12Kind'  type='tri'  length=' hrL' width='7'  tail=' 8' update=' 1'	    angle='hour12ValueAngle()'	strokeColor='timClr'	fillColor='timFill' lineWidth='1' />

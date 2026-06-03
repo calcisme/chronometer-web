@@ -20700,6 +20700,7 @@
     }
     function armIdle() {
       if (idleTimerId !== null) return;
+      if (timeController.isStopped) return;
       let earliest = Infinity;
       for (const face of faces) {
         if (!face.enabled || face.handStates.length === 0) continue;
@@ -21544,7 +21545,7 @@
         timeController.stop();
         rebuildEnvironments();
         finishAllAnimations();
-        resetAllSchedules();
+        if (!timeController.isStopped) resetAllSchedules();
       },
       onNowClicked: () => {
         timeController.reset();
@@ -21556,7 +21557,7 @@
       onTransportChange: () => {
         rebuildEnvironments();
         finishAllAnimations();
-        resetAllSchedules();
+        if (!timeController.isStopped) resetAllSchedules();
       },
       ensureSchedulerRunning,
       writeTimeState,
