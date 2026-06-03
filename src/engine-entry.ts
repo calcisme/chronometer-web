@@ -814,6 +814,69 @@ async function main() {
     let idleTimerId: ReturnType<typeof setTimeout> | null = null;
     let rafId: number | null = null;
 
+    // --- FPS indicator (page-level, enabled via the ?fps URL parameter) ---
+    // One readout for the whole page: every face renders in a single frame()
+    // call, so frames-per-second is a page metric, not a per-face one.
+    //
+    // Two numbers are shown — "<A> fps · <B> avg":
+    //   A = active render rate. The fps sustained *while continuously
+    //       animating* — the capability/responsiveness metric. It is only
+    //       meaningful during a continuous-render stretch, so it is dimmed
+    //       (held, not live) whenever the app is idle.
+    //   B = throughput. Frames rendered per wall-clock second over the last
+    //       watchdog window, *including* idle gaps. ~0 when idle, ~1 when only
+    //       the once-per-second housekeeping wakeups fire, high only when work
+    //       is genuinely happening — the "are we doing work too often?" metric.
+    //
+    // The watchdog (not frame()) owns all text updates, so the readout refreshes
+    // on its own cadence even when frame() has stopped running while idle.
+    const FPS_WATCHDOG_MS = 1000;     // throughput window + display refresh interval
+    const FPS_ACTIVE_MIN = 15;        // throughput above this ⇒ "actively animating" (A is live)
+    const _fpsEnabled = urlState.fps;
+    let _fpsActive = 0;               // A: EWMA of fps across continuous-render frames
+    let _fpsActiveLastTime = 0;       // previous frame timestamp (for A's frame-to-frame delta)
+    let _fpsWasContinuous = false;    // did the previous frame stay in continuous-render mode?
+    let _fpsFrameCount = 0;           // B: frames rendered since the last watchdog tick
+    let _fpsWindowStart = 0;          // wall-clock start of the current throughput window
+    let _fpsActiveEl: HTMLSpanElement | null = null;
+    let _fpsThruEl: HTMLSpanElement | null = null;
+    if (_fpsEnabled) {
+        const el = document.createElement('div');
+        el.id = 'fps-indicator';
+        el.title =
+            'left: render rate while animating (dimmed when idle) · ' +
+            'right: average fps over the last second (low = idle / little work)';
+        el.style.cssText =
+            'position:fixed;bottom:8px;left:8px;z-index:9999;pointer-events:none;' +
+            'font:11px "JetBrains Mono",monospace;color:rgba(255,255,255,0.5);' +
+            'background:rgba(0,0,0,0.35);padding:2px 6px;border-radius:4px;';
+        _fpsActiveEl = document.createElement('span');
+        _fpsThruEl = document.createElement('span');
+        const sep = document.createElement('span');
+        sep.textContent = ' · ';
+        sep.style.opacity = '0.5';
+        _fpsActiveEl.textContent = '– fps';
+        _fpsActiveEl.style.opacity = '0.4';
+        _fpsThruEl.textContent = '0 avg';
+        el.append(_fpsActiveEl, sep, _fpsThruEl);
+        document.body.appendChild(el);
+
+        _fpsWindowStart = performance.now();
+        setInterval(() => {
+            const nowW = performance.now();
+            const elapsedSec = (nowW - _fpsWindowStart) / 1000;
+            const throughput = elapsedSec > 0 ? _fpsFrameCount / elapsedSec : 0;
+            _fpsFrameCount = 0;
+            _fpsWindowStart = nowW;
+
+            // A is "live" only while genuinely animating; otherwise hold + dim it.
+            const active = throughput >= FPS_ACTIVE_MIN;
+            _fpsActiveEl!.style.opacity = active ? '1' : '0.4';
+            _fpsActiveEl!.textContent = `${_fpsActive.toFixed(0)} fps`;
+            _fpsThruEl!.textContent = `${throughput.toFixed(0)} avg`;
+        }, FPS_WATCHDOG_MS);
+    }
+
     function stopScheduler() {
         if (idleTimerId !== null) { clearTimeout(idleTimerId); idleTimerId = null; }
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
@@ -852,6 +915,24 @@ async function main() {
         const now = performance.now();
         const frameStart = now;
         let stillAnimating = false;
+
+        // FPS metrics bookkeeping (only when ?fps is set). The active-rate EWMA
+        // (A) counts deltas *only* between consecutive continuous-render frames
+        // — _fpsWasContinuous was set at the end of the previous frame — so an
+        // idle gap is never mis-measured as one slow frame (this replaces the
+        // old <1000ms guard). Throughput (B) is just a running frame count that
+        // the 1s watchdog consumes; the watchdog owns the on-screen text.
+        if (_fpsEnabled) {
+            _fpsFrameCount++;
+            if (_fpsWasContinuous && _fpsActiveLastTime > 0) {
+                const delta = now - _fpsActiveLastTime;
+                if (delta > 0) {
+                    const instantFps = 1000 / delta;
+                    _fpsActive = _fpsActive === 0 ? instantFps : _fpsActive * 0.9 + instantFps * 0.1;
+                }
+            }
+            _fpsActiveLastTime = now;
+        }
 
         const isScrubbing = timeController.currentRate !== null && !timeController.isStopped;
         let willTick = false;
@@ -1094,7 +1175,9 @@ async function main() {
 
 
         // Decide whether to keep the RAF loop running
-        if (timeController.needsContinuousRender || stillAnimating) {
+        const willContinue = timeController.needsContinuousRender || stillAnimating;
+        if (_fpsEnabled) _fpsWasContinuous = willContinue;
+        if (willContinue) {
             rafId = requestAnimationFrame(frame);
         } else {
             armIdle();

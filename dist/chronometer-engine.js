@@ -20427,6 +20427,44 @@
     timeController.onTick = rebuildEnvironments;
     let idleTimerId = null;
     let rafId = null;
+    const FPS_WATCHDOG_MS = 1e3;
+    const FPS_ACTIVE_MIN = 15;
+    const _fpsEnabled = urlState.fps;
+    let _fpsActive = 0;
+    let _fpsActiveLastTime = 0;
+    let _fpsWasContinuous = false;
+    let _fpsFrameCount = 0;
+    let _fpsWindowStart = 0;
+    let _fpsActiveEl = null;
+    let _fpsThruEl = null;
+    if (_fpsEnabled) {
+      const el = document.createElement("div");
+      el.id = "fps-indicator";
+      el.title = "left: render rate while animating (dimmed when idle) \xB7 right: average fps over the last second (low = idle / little work)";
+      el.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;pointer-events:none;font:11px "JetBrains Mono",monospace;color:rgba(255,255,255,0.5);background:rgba(0,0,0,0.35);padding:2px 6px;border-radius:4px;';
+      _fpsActiveEl = document.createElement("span");
+      _fpsThruEl = document.createElement("span");
+      const sep = document.createElement("span");
+      sep.textContent = " \xB7 ";
+      sep.style.opacity = "0.5";
+      _fpsActiveEl.textContent = "\u2013 fps";
+      _fpsActiveEl.style.opacity = "0.4";
+      _fpsThruEl.textContent = "0 avg";
+      el.append(_fpsActiveEl, sep, _fpsThruEl);
+      document.body.appendChild(el);
+      _fpsWindowStart = performance.now();
+      setInterval(() => {
+        const nowW = performance.now();
+        const elapsedSec = (nowW - _fpsWindowStart) / 1e3;
+        const throughput = elapsedSec > 0 ? _fpsFrameCount / elapsedSec : 0;
+        _fpsFrameCount = 0;
+        _fpsWindowStart = nowW;
+        const active = throughput >= FPS_ACTIVE_MIN;
+        _fpsActiveEl.style.opacity = active ? "1" : "0.4";
+        _fpsActiveEl.textContent = `${_fpsActive.toFixed(0)} fps`;
+        _fpsThruEl.textContent = `${throughput.toFixed(0)} avg`;
+      }, FPS_WATCHDOG_MS);
+    }
     function stopScheduler() {
       if (idleTimerId !== null) {
         clearTimeout(idleTimerId);
@@ -20463,6 +20501,17 @@
       const now = performance.now();
       const frameStart = now;
       let stillAnimating = false;
+      if (_fpsEnabled) {
+        _fpsFrameCount++;
+        if (_fpsWasContinuous && _fpsActiveLastTime > 0) {
+          const delta = now - _fpsActiveLastTime;
+          if (delta > 0) {
+            const instantFps = 1e3 / delta;
+            _fpsActive = _fpsActive === 0 ? instantFps : _fpsActive * 0.9 + instantFps * 0.1;
+          }
+        }
+        _fpsActiveLastTime = now;
+      }
       const isScrubbing = timeController.currentRate !== null && !timeController.isStopped;
       let willTick = false;
       if (isScrubbing) {
@@ -20641,7 +20690,9 @@
       }
       timeUI?.updateTimeUI();
       timeController.endFrame();
-      if (timeController.needsContinuousRender || stillAnimating) {
+      const willContinue = timeController.needsContinuousRender || stillAnimating;
+      if (_fpsEnabled) _fpsWasContinuous = willContinue;
+      if (willContinue) {
         rafId = requestAnimationFrame(frame);
       } else {
         armIdle();
