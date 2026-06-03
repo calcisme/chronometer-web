@@ -18445,6 +18445,7 @@
       picks: params.get("picks") || null,
       tp: params.get("tp") === "a" ? "a" : "d",
       embed: params.get("embed") === "1",
+      fps: params.has("fps"),
       kyhand: params.get("kyhand"),
       kmode: params.get("kmode")
     };

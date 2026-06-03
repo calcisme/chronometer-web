@@ -17,6 +17,7 @@
  *   picks - Compact face selection: concatenated 2-letter abbreviations (e.g. "bbmktr")
  *   tp    - Time panel lower tab: 'd' = date (default), 'a' = astro events
  *   embed - Embed mode: 1 = Terra-only minimal embed (no chrome, transparent bg)
+ *   fps   - FPS indicator: present (any/no value) = show the Observatory fps readout
  */
 
 export interface UrlState {
@@ -35,6 +36,8 @@ export interface UrlState {
     tp: 'd' | 'a';
     /** Embed mode: minimal UI, transparent background (Terra only). */
     embed: boolean;
+    /** FPS indicator: true when the `fps` param is present (Observatory only). */
+    fps: boolean;
     /** Kyoto hand mode: '1' = fixed hand at top, null/absent = moving hand. */
     kyhand: string | null;
     /** Kyoto rate mode: '1' = constant rate, null/absent = variable rate. */
@@ -74,6 +77,7 @@ export function readUrlState(): UrlState {
         picks: params.get('picks') || null,
         tp: params.get('tp') === 'a' ? 'a' : 'd',
         embed: params.get('embed') === '1',
+        fps: params.has('fps'),
         kyhand: params.get('kyhand'),
         kmode: params.get('kmode'),
     };

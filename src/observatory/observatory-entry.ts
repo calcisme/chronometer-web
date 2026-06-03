@@ -249,7 +249,9 @@ function drawFrame(): void {
     });
     ctx.fillText(`Observatory · ${timeStr}`, 10, 10);
     ctx.fillText(`${layout.viewW}×${layout.viewH} · mainR=${L.mainR.toFixed(0)}`, 10, 24);
-    ctx.fillText(`${fps.toFixed(1)} fps`, 10, 38);
+    if (urlState.fps) {
+        ctx.fillText(`${fps.toFixed(1)} fps`, 10, 38);
+    }
 
     ctx.restore();
 }
