@@ -81,8 +81,16 @@ export interface LocationChangeInfo {
 }
 
 export interface LocationDialogAPI {
-    /** Show the dialog. */
+    /** Show the full dialog. */
     show: () => void;
+    /**
+     * Show the compact "locating" panel while waiting for browser geolocation
+     * on startup. Non-dismissable; the user can switch to the full dialog.
+     */
+    showLocating: () => void;
+    /** True while the compact locating panel is showing (caller can use this to
+     *  decide whether a late geolocation result should auto-apply). */
+    isLocating: () => boolean;
     /** Hide the dialog. */
     dismiss: () => void;
     /** Update the dialog's internal state (e.g. after location changes externally). */
@@ -192,6 +200,9 @@ export function initLocationDialog(config: LocationDialogConfig): LocationDialog
     const lpOsmAttribution = document.getElementById('lp-osm-attribution')!;
     const lpDoneBtn = document.getElementById('lp-done')!;
     const lpDialogFooter = lpDoneBtn.parentElement!;
+    const lpFullContent = document.getElementById('lp-full-content')!;
+    const lpLocating = document.getElementById('lp-locating')!;
+    const lpLocatingManual = document.getElementById('lp-locating-manual')!;
 
     const isFileProtocol = window.location.protocol === 'file:';
 
@@ -203,6 +214,8 @@ export function initLocationDialog(config: LocationDialogConfig): LocationDialog
     let locationSourceType: LocationSourceType = 'none';
     let needsPrompt = config.needsPrompt ?? false;
     let geoPermission = config.geoPermission ?? 'unknown';
+    /** True while the compact "locating" panel is shown (waiting for browser geolocation). */
+    let locating = false;
     const browserBtnLabel = (lpUseBrowser as HTMLButtonElement).textContent || 'Use device location via browser';
 
     // Preload city database in the background
@@ -298,7 +311,25 @@ export function initLocationDialog(config: LocationDialogConfig): LocationDialog
 
     // --- Show / dismiss ---
 
+    /**
+     * Show the compact "locating" panel while waiting for browser geolocation.
+     * Non-dismissable (treated as a required prompt with no location yet); the
+     * "Enter location manually" button switches to the full dialog.
+     */
+    function showLocating() {
+        locating = true;
+        needsPrompt = true;
+        lpFullContent.style.display = 'none';
+        lpLocating.style.display = '';
+        locationPrompt.style.display = '';
+        config.onShow?.();
+    }
+
     function showDialog() {
+        // Leaving (or never entering) the compact locating panel → show full dialog.
+        locating = false;
+        lpLocating.style.display = 'none';
+        lpFullContent.style.display = '';
         locationPrompt.style.display = '';
         config.onShow?.();
 
@@ -360,6 +391,7 @@ export function initLocationDialog(config: LocationDialogConfig): LocationDialog
     }
 
     function dismissDialog() {
+        locating = false;
         locationPrompt.style.display = 'none';
         config.onDismiss?.();
     }
@@ -404,9 +436,14 @@ export function initLocationDialog(config: LocationDialogConfig): LocationDialog
         if (canDismiss()) dismissDialog();
     });
 
-    // Done button
+    // Done button — respect the non-dismissable (required-prompt) state.
     lpDoneBtn.addEventListener('click', () => {
-        dismissDialog();
+        if (canDismiss()) dismissDialog();
+    });
+
+    // Compact panel: "Enter location manually" → switch to the full dialog.
+    lpLocatingManual.addEventListener('click', () => {
+        showDialog();
     });
 
     // Escape key — only handle if dialog is visible.
@@ -545,6 +582,8 @@ export function initLocationDialog(config: LocationDialogConfig): LocationDialog
 
     return {
         show: showDialog,
+        showLocating,
+        isLocating: () => locating,
         dismiss: dismissDialog,
 
         updateState(lat: number, lon: number, sourceType: LocationSourceType, source: string, fullLabel: string) {

@@ -6,6 +6,31 @@ Follow-on to [2026-06-03-stopped-clock-rendering.md](2026-06-03-stopped-clock-re
 applying the same ideas to Observatory, whose animation system is similar to
 Chronometer's but structured differently.
 
+## Status — ✅ implemented (2026-06-03)
+
+Both goals shipped. Summary of what landed:
+
+- **Goal 1 (stop when stopped):** added `anyObsAnimating()` (`obs-values.ts`); `tick()`
+  now re-arms RAF only while `!isStopped || anyObsAnimating(...)` and otherwise goes
+  fully idle; the previously no-op `ensureSchedulerRunning()` plus `rebuildEnv()`, the
+  resize handler, and image-load now call `scheduleFrame()` to restart an idle loop.
+  No snapping — in-flight animations finish naturally (the existing stopped branch in
+  `updateObsValues` already eases to the frozen-time target).
+- **Goal 2 (FPS indicator):** extracted the shared `src/shared/fps-indicator.ts`
+  (DOM overlay, active+avg, dimming, 1s watchdog); refactored Chronometer
+  (`engine-entry.ts`) to use it (behavior-preserving) and adopted it in Observatory.
+- **Docs:** `docs/observatory.md` updated (render-loop idling + FPS overlay).
+
+**Follow-up bug found & fixed during testing — render-loop re-entrancy.** Scrubbing by
+day showed impossible 400–700 "fps" and the scrub slowing after ~10 s. Cause: during
+scrub, `timeController.onTick = () => rebuildEnv()` runs synchronously inside `tick()`,
+and `rebuildEnv()` → `scheduleFrame()` saw `rafId === null` (nulled at the top of
+`tick()`) and queued a *duplicate* rAF on top of the normal end-of-tick re-arm — one
+extra per frame, growing linearly into hundreds of redundant ticks/frame. Fix: an
+`inTick` guard makes `scheduleFrame()` a no-op during a tick (recording a deferred
+`frameRequestedDuringTick` flag the tick honors on re-arm). After the fix, scrub holds
+a steady real render rate (~refresh) and constant speed.
+
 ## How Observatory differs from Chronometer
 
 | Aspect | Chronometer | Observatory |

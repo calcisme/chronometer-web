@@ -167,6 +167,12 @@
             font-weight: 400;
         }
 
+        #location-prompt .lp-locating-text {
+            font-size: 13px;
+            color: #aab;
+            margin: 4px 0 22px;
+        }
+
         #location-prompt .lp-subtitle {
             font-size: 13px;
             color: #776;
@@ -1701,7 +1707,7 @@
               <div id="help-content">
                 <!-- Populated from help-template on first info click -->
               </div>
-              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.182</div>
+              <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.189</div>
             </div>
 
             <div id="info-sub-view">
@@ -2292,7 +2298,20 @@ available planets.
       <!-- Location prompt overlay (hidden by default) -->
 <div id="location-prompt" style="display: none">
   <div class="lp-backdrop"></div>
-  <div class="lp-dialog">
+
+  <!-- Compact "locating" panel — shown while waiting for browser geolocation on
+       startup (bloc=1). Non-dismissable; offers a path to the full dialog. -->
+  <div class="lp-dialog lp-dialog-locating" id="lp-locating" style="display: none">
+    <h3 class="lp-title">Locating…</h3>
+    <div class="lp-locating-text">Getting your location from the browser…</div>
+    <div class="lp-buttons">
+      <button class="lp-btn" id="lp-locating-manual">
+        Enter location manually
+      </button>
+    </div>
+  </div>
+
+  <div class="lp-dialog" id="lp-full-content">
     <h3 class="lp-title">Location</h3>
 
     <!-- Current location status (map + name) — shown at top when we have a location -->

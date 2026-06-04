@@ -377,6 +377,11 @@ function setupLocationDialog(): void {
                 writeUrlState({ lat: info.lat, lon: info.lon, city: info.source || null, tz: info.timezone || null });
             }
 
+            // Re-evaluate all values at the new location: sentinel-scheduled
+            // values (Sun ring, planet rings) hold a nextUpdateTime computed for
+            // the old location and won't recompute otherwise. (The ring caches
+            // clear implicitly via this reset — see ring-view.invalidateRingCache.)
+            if (obsValues) resetObsValueSchedules(obsValues);
             rebuildEnv();
             updateLocationDisplay();
             timeUI?.updateTimezoneDisplay();
@@ -390,25 +395,68 @@ function setupLocationDialog(): void {
             locationDialog.show();
         }
 
-        // Handle bloc=1: request browser location on startup
+        // Handle bloc=1: request browser location on startup.
+        //
+        // Timing: only show the compact "locating…" panel if the request is still
+        // pending after LOCATING_SHOW_DELAY_MS — a fast geolocation response should
+        // never flash the panel. If we do show it, keep it up for at least
+        // LOCATING_MIN_VISIBLE_MS so it doesn't vanish in a blink (the rings
+        // animate behind it meanwhile).
         if (urlState.bloc && !hasUrlLocation) {
+            const LOCATING_SHOW_DELAY_MS = 1000;
+            const LOCATING_MIN_VISIBLE_MS = 2000;
+            let shownAt: number | null = null;
+            let showTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+                showTimer = null;
+                locationDialog.showLocating();
+                shownAt = performance.now();
+            }, LOCATING_SHOW_DELAY_MS);
+
+            // Run `apply` now if the panel was never shown, otherwise once it has
+            // been visible for the minimum duration.
+            const afterMinVisible = (apply: () => void) => {
+                if (showTimer !== null) {
+                    clearTimeout(showTimer);   // result beat the show delay — never show
+                    showTimer = null;
+                    apply();
+                } else {
+                    const remaining = LOCATING_MIN_VISIBLE_MS - (performance.now() - (shownAt ?? 0));
+                    if (remaining > 0) setTimeout(apply, remaining);
+                    else apply();
+                }
+            };
+
             requestBrowserLocation(10000).then(result => {
                 if (result.status === 'success') {
-                    const tz = resolveTimezone(result.lat, result.lon, null);
-                    lat = result.lat;
-                    lon = result.lon;
-                    locationTimezone = tz;
-                    needsPrompt = false;
-                    locationDialog.updateState(lat, lon, 'browser', '', '');
-                    rebuildEnv();
-                    updateLocationDisplay();
+                    afterMinVisible(() => {
+                        // If we showed the panel and the user switched to manual
+                        // entry, don't override their flow with the late result.
+                        if (shownAt !== null && !locationDialog.isLocating()) return;
+                        const tz = resolveTimezone(result.lat, result.lon, null);
+                        lat = result.lat;
+                        lon = result.lon;
+                        locationTimezone = tz;
+                        needsPrompt = false;
+                        locationDialog.updateState(lat, lon, 'browser', '', '');
+                        // Async location arrived after initObsValues ran at the
+                        // startup default — re-evaluate everything (esp. the
+                        // sentinel-scheduled Sun/planet rings) at the real location.
+                        if (obsValues) resetObsValueSchedules(obsValues);
+                        rebuildEnv();
+                        updateLocationDisplay();
+                        locationDialog.dismiss();
+                    });
                 } else {
-                    needsPrompt = true;
-                    locationDialog.setNeedsPrompt(true);
-                    if (result.status === 'denied') {
-                        locationDialog.setGeoPermission('denied');
-                    }
-                    locationDialog.show();
+                    afterMinVisible(() => {
+                        // Browser location failed/timed out — show the full dialog
+                        // (non-dismissable until a location is chosen).
+                        needsPrompt = true;
+                        locationDialog.setNeedsPrompt(true);
+                        if (result.status === 'denied') {
+                            locationDialog.setGeoPermission('denied');
+                        }
+                        locationDialog.show();
+                    });
                 }
             });
         }

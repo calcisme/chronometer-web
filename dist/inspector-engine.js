@@ -13678,6 +13678,9 @@
     const lpOsmAttribution = document.getElementById("lp-osm-attribution");
     const lpDoneBtn = document.getElementById("lp-done");
     const lpDialogFooter = lpDoneBtn.parentElement;
+    const lpFullContent = document.getElementById("lp-full-content");
+    const lpLocating = document.getElementById("lp-locating");
+    const lpLocatingManual = document.getElementById("lp-locating-manual");
     const isFileProtocol = window.location.protocol === "file:";
     let currentLat = config.initialLat ?? 0;
     let currentLon = config.initialLon ?? 0;
@@ -13686,6 +13689,7 @@
     let locationSourceType = "none";
     let needsPrompt2 = config.needsPrompt ?? false;
     let geoPermission = config.geoPermission ?? "unknown";
+    let locating = false;
     const browserBtnLabel = lpUseBrowser.textContent || "Use device location via browser";
     loadCityData().catch(() => {
     });
@@ -13757,7 +13761,18 @@
       lpDialogFooter.classList.add("visible");
       needsPrompt2 = false;
     }
+    function showLocating() {
+      locating = true;
+      needsPrompt2 = true;
+      lpFullContent.style.display = "none";
+      lpLocating.style.display = "";
+      locationPrompt.style.display = "";
+      config.onShow?.();
+    }
     function showDialog() {
+      locating = false;
+      lpLocating.style.display = "none";
+      lpFullContent.style.display = "";
       locationPrompt.style.display = "";
       config.onShow?.();
       lpLatInput.value = currentLat !== 0 || currentLon !== 0 ? currentLat.toFixed(3) : "";
@@ -13808,6 +13823,7 @@
       lpLonInput.oninput = validateCoordInputs;
     }
     function dismissDialog() {
+      locating = false;
       locationPrompt.style.display = "none";
       config.onDismiss?.();
     }
@@ -13841,7 +13857,10 @@
       if (canDismiss()) dismissDialog();
     });
     lpDoneBtn.addEventListener("click", () => {
-      dismissDialog();
+      if (canDismiss()) dismissDialog();
+    });
+    lpLocatingManual.addEventListener("click", () => {
+      showDialog();
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && locationPrompt.style.display !== "none") {
@@ -13953,6 +13972,8 @@
     });
     return {
       show: showDialog,
+      showLocating,
+      isLocating: () => locating,
       dismiss: dismissDialog,
       updateState(lat2, lon2, sourceType, source, fullLabel) {
         currentLat = lat2;

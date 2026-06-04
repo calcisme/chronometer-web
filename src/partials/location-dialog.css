@@ -47,6 +47,12 @@
             font-weight: 400;
         }
 
+        #location-prompt .lp-locating-text {
+            font-size: 13px;
+            color: #aab;
+            margin: 4px 0 22px;
+        }
+
         #location-prompt .lp-subtitle {
             font-size: 13px;
             color: #776;
