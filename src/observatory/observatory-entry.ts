@@ -33,8 +33,10 @@ import {
     updateObsValues,
     animateObsValues,
     resetObsValueSchedules,
+    anyObsAnimating,
     invalidateObsValueCache,
 } from './obs-values.js';
+import { createFpsIndicator, type FpsIndicator } from '../shared/fps-indicator.js';
 
 // ============================================================================
 // State
@@ -43,9 +45,22 @@ import {
 /** Noon-on-top toggle: when true, 12 is at top; when false, 24 is at top. */
 let noonOnTop = false;
 
-/** FPS tracking state */
-let lastFrameTime = 0;
-let fps = 0;
+/** RAF id for the render loop; null means the loop is idle (stopped + settled). */
+let rafId: number | null = null;
+
+/**
+ * True while tick() is executing. scheduleFrame() must not queue a frame during
+ * a tick — tick()'s own re-arm handles continuation. Without this guard, a
+ * scheduleFrame() called synchronously from within a tick (e.g. timeController
+ * `onTick` → rebuildEnv() during scrubbing) queues a duplicate rAF every frame,
+ * compounding into hundreds of redundant ticks per frame.
+ */
+let inTick = false;
+/** Set when scheduleFrame() is called during a tick, so the tick re-arms even if it would otherwise idle. */
+let frameRequestedDuringTick = false;
+
+/** Page-level FPS indicator overlay (created when the ?fps URL param is set). */
+let fpsIndicator: FpsIndicator | null = null;
 
 /** Current layout parameters (recomputed on resize) */
 let layout: LayoutParams;
@@ -113,6 +128,8 @@ function resizeCanvas(): void {
     invalidateMainDialCache();
     invalidateRingCache();
     needsStaticRedraw = true;
+    // The loop may be idle (stopped); a resize must trigger a redraw.
+    scheduleFrame();
 }
 
 let needsStaticRedraw = true;
@@ -249,23 +266,26 @@ function drawFrame(): void {
     });
     ctx.fillText(`Observatory · ${timeStr}`, 10, 10);
     ctx.fillText(`${layout.viewW}×${layout.viewH} · mainR=${L.mainR.toFixed(0)}`, 10, 24);
-    if (urlState.fps) {
-        ctx.fillText(`${fps.toFixed(1)} fps`, 10, 38);
-    }
+    // FPS is shown via the shared DOM overlay (createFpsIndicator), bottom-left.
 
     ctx.restore();
 }
 
-function tick(): void {
-    const perfNow = performance.now();
-    if (lastFrameTime > 0) {
-        const delta = perfNow - lastFrameTime;
-        if (delta > 0 && delta < 1000) {
-            const instantFps = 1000 / delta;
-            fps = fps === 0 ? instantFps : fps * 0.95 + instantFps * 0.05;
-        }
+/** Start the render loop if it is currently idle (no-op if already running). */
+function scheduleFrame(): void {
+    if (inTick) {
+        // The running tick will decide whether to re-arm; just record the request.
+        frameRequestedDuringTick = true;
+        return;
     }
-    lastFrameTime = perfNow;
+    if (rafId === null) rafId = requestAnimationFrame(tick);
+}
+
+function tick(): void {
+    rafId = null;
+    inTick = true;
+    frameRequestedDuringTick = false;
+    const perfNow = performance.now();
 
     // Check for quantized tick (time controller)
     timeController.checkTick(perfNow);
@@ -273,6 +293,7 @@ function tick(): void {
     // Begin frame snapshot (all parts see same time)
     timeController.beginFrame();
 
+    let animating = false;
 
     // Pass 1 & 2: Update + animate Observatory values
     if (obsValues) {
@@ -284,6 +305,7 @@ function tick(): void {
         updateObsValues(obsValues, env, perfNow, getNow,
             tickIntervalMs, displayDelta, timeDirection);
         animateObsValues(obsValues, perfNow);
+        animating = anyObsAnimating(obsValues);
     }
 
     drawFrame();
@@ -293,7 +315,16 @@ function tick(): void {
 
     timeController.endFrame();
 
-    requestAnimationFrame(tick);
+    // Keep rendering while running (the second-hand sweep needs it) or while an
+    // animation is still settling; otherwise go fully idle. A stopped, settled
+    // clock has nothing to re-render — display time is frozen. The loop is
+    // restarted by scheduleFrame()/ensureSchedulerRunning() on the next change.
+    const continuous = !timeController.isStopped || animating;
+    fpsIndicator?.recordFrame(continuous);
+    inTick = false;
+    if (continuous || frameRequestedDuringTick) {
+        rafId = requestAnimationFrame(tick);
+    }
 }
 
 // ============================================================================
@@ -324,6 +355,8 @@ function rebuildEnv(): void {
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
     invalidateRingCache();
     needsStaticRedraw = true;
+    // The loop may be idle (stopped); env changes must trigger a redraw.
+    scheduleFrame();
 }
 
 function setupLocationDialog(): void {
@@ -433,7 +466,8 @@ function init(): void {
             if (obsValues) resetObsValueSchedules(obsValues);
         },
         ensureSchedulerRunning: () => {
-            // Observatory uses a continuous RAF loop — nothing to kick
+            // The loop idles when stopped + settled; restart it on transport changes.
+            scheduleFrame();
         },
         writeTimeState: () => {
             // For now, Observatory doesn't persist time state to URL
@@ -448,14 +482,20 @@ function init(): void {
 
     console.log('[Observatory] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone);
 
+    // Page-level FPS overlay (enabled via ?fps) — shared with Chronometer.
+    fpsIndicator = createFpsIndicator(urlState.fps);
+
     // Wait for images to load, then invalidate cache so first real draw occurs
     Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
         invalidateMainDialCache();
+        // Image load can complete after the loop has idled — kick it so the
+        // first real frame draws.
+        scheduleFrame();
         console.log('[Observatory] All images loaded');
     });
 
     // Start render loop
-    requestAnimationFrame(tick);
+    scheduleFrame();
 }
 
 // Boot when DOM is ready

@@ -33,6 +33,31 @@ tick()
  └── drawFrame()         — renderers read obsValue.currentValue
 ```
 
+### Render loop idling
+
+`tick()` re-requests `requestAnimationFrame` only while the loop is doing useful
+work: `!timeController.isStopped || anyObsAnimating(obsValues)`. When the clock is
+**stopped and all animations have settled**, the loop goes fully idle (no wasted
+rendering on a frozen dial). In-flight animations are *not* snapped on stop — they
+finish naturally (e.g. a sweep hand eases the remaining distance), then the loop
+idles.
+
+The loop is restarted via `scheduleFrame()` (a no-op if already running):
+- The shared time-controls UI calls `ensureSchedulerRunning()` after every transport
+  action (play / step / scrub / now).
+- `rebuildEnv()` and the canvas resize handler call it directly, so location /
+  timezone / `noonOnTop` changes redraw even when stopped.
+
+This mirrors Chronometer's stopped-state behavior — see
+[planning/2026-06-03-observatory-stop-and-fps.md](../planning/2026-06-03-observatory-stop-and-fps.md).
+
+### FPS overlay (`?fps`)
+
+The `?fps` URL parameter shows a page-level FPS readout (`<active> fps · <avg> avg`)
+via the shared `src/shared/fps-indicator.ts` helper — the same overlay Chronometer
+uses. `active` (render rate while animating, dimmed when idle) is fed
+`recordFrame(!isStopped || anyObsAnimating(...))` each frame; `avg` is throughput.
+
 ### ObsValue Fields
 
 | Field | Description |

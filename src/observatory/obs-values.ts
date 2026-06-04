@@ -783,6 +783,20 @@ export function resetObsValueSchedules(vs: ObsValueSet): void {
 }
 
 /**
+ * Returns true if any value is still animating (mid-interpolation) or has a
+ * pending Phase-2 sweep. The render loop uses this to decide whether to keep
+ * rendering while the clock is stopped — letting in-flight animations finish
+ * naturally — and to go idle once everything has settled.
+ */
+export function anyObsAnimating(vs: ObsValueSet): boolean {
+    const all = getAllValues(vs);
+    for (const v of all) {
+        if (v.anim.animating || v.pendingSweep) return true;
+    }
+    return false;
+}
+
+/**
  * Invalidate the cached flat value list (call after re-creating ObsValueSet).
  */
 export function invalidateObsValueCache(): void {
