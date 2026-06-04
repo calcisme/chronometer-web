@@ -20428,11 +20428,11 @@
     let idleTimerId = null;
     let rafId = null;
     const FPS_WATCHDOG_MS = 1e3;
-    const FPS_ACTIVE_MIN = 15;
     const _fpsEnabled = urlState.fps;
     let _fpsActive = 0;
     let _fpsActiveLastTime = 0;
     let _fpsWasContinuous = false;
+    let _fpsContinuousFrames = 0;
     let _fpsFrameCount = 0;
     let _fpsWindowStart = 0;
     let _fpsActiveEl = null;
@@ -20459,7 +20459,8 @@
         const throughput = elapsedSec > 0 ? _fpsFrameCount / elapsedSec : 0;
         _fpsFrameCount = 0;
         _fpsWindowStart = nowW;
-        const active = throughput >= FPS_ACTIVE_MIN;
+        const active = _fpsContinuousFrames > 0;
+        _fpsContinuousFrames = 0;
         _fpsActiveEl.style.opacity = active ? "1" : "0.4";
         _fpsActiveEl.textContent = `${_fpsActive.toFixed(0)} fps`;
         _fpsThruEl.textContent = `${throughput.toFixed(0)} avg`;
@@ -20691,7 +20692,10 @@
       timeUI?.updateTimeUI();
       timeController.endFrame();
       const willContinue = timeController.needsContinuousRender || stillAnimating;
-      if (_fpsEnabled) _fpsWasContinuous = willContinue;
+      if (_fpsEnabled) {
+        _fpsWasContinuous = willContinue;
+        if (willContinue) _fpsContinuousFrames++;
+      }
       if (willContinue) {
         rafId = requestAnimationFrame(frame);
       } else {

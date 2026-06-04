@@ -831,11 +831,11 @@ async function main() {
     // The watchdog (not frame()) owns all text updates, so the readout refreshes
     // on its own cadence even when frame() has stopped running while idle.
     const FPS_WATCHDOG_MS = 1000;     // throughput window + display refresh interval
-    const FPS_ACTIVE_MIN = 15;        // throughput above this ⇒ "actively animating" (A is live)
     const _fpsEnabled = urlState.fps;
     let _fpsActive = 0;               // A: EWMA of fps across continuous-render frames
     let _fpsActiveLastTime = 0;       // previous frame timestamp (for A's frame-to-frame delta)
     let _fpsWasContinuous = false;    // did the previous frame stay in continuous-render mode?
+    let _fpsContinuousFrames = 0;     // # of continuous-render frames since the last watchdog tick
     let _fpsFrameCount = 0;           // B: frames rendered since the last watchdog tick
     let _fpsWindowStart = 0;          // wall-clock start of the current throughput window
     let _fpsActiveEl: HTMLSpanElement | null = null;
@@ -869,8 +869,13 @@ async function main() {
             _fpsFrameCount = 0;
             _fpsWindowStart = nowW;
 
-            // A is "live" only while genuinely animating; otherwise hold + dim it.
-            const active = throughput >= FPS_ACTIVE_MIN;
+            // A is "live" while the loop is genuinely in continuous-render mode
+            // (scrubbing or animating), regardless of how high the achieved frame
+            // rate is — a heavy all-faces scrub can run well under any fps
+            // threshold yet is clearly active. Gate on whether any continuous
+            // frames occurred this window, not on throughput; otherwise hold + dim.
+            const active = _fpsContinuousFrames > 0;
+            _fpsContinuousFrames = 0;
             _fpsActiveEl!.style.opacity = active ? '1' : '0.4';
             _fpsActiveEl!.textContent = `${_fpsActive.toFixed(0)} fps`;
             _fpsThruEl!.textContent = `${throughput.toFixed(0)} avg`;
@@ -1176,7 +1181,10 @@ async function main() {
 
         // Decide whether to keep the RAF loop running
         const willContinue = timeController.needsContinuousRender || stillAnimating;
-        if (_fpsEnabled) _fpsWasContinuous = willContinue;
+        if (_fpsEnabled) {
+            _fpsWasContinuous = willContinue;
+            if (willContinue) _fpsContinuousFrames++;
+        }
         if (willContinue) {
             rafId = requestAnimationFrame(frame);
         } else {
