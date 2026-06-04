@@ -19441,8 +19441,8 @@
         return olsonId;
       }
     }
-    let _lastTransportReal = true;
-    let _lastTransportStopped = false;
+    let _lastTransportReal = null;
+    let _lastTransportStopped = null;
     function renderTransport() {
       const isReal = timeController.isRealTime;
       const isStopped = timeController.isStopped;

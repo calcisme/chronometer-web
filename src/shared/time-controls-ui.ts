@@ -331,9 +331,12 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
     // ===================================================================
 
     // Track transport state to avoid rebuilding buttons every frame
-    // (rebuilding destroys event listeners, causing click events to be lost)
-    let _lastTransportReal = true;
-    let _lastTransportStopped = false;
+    // (rebuilding destroys event listeners, causing click events to be lost).
+    // Initialized to null (not the real-time defaults) so the FIRST render always
+    // builds the buttons — otherwise the initial 1×-forward state (isReal=true,
+    // isStopped=false) matches the cache and the pause button is never created.
+    let _lastTransportReal: boolean | null = null;
+    let _lastTransportStopped: boolean | null = null;
 
     function renderTransport() {
         const isReal = timeController.isRealTime;
