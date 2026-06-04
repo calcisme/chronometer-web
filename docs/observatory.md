@@ -9,7 +9,8 @@ hands, rise/set rings, and a sun altitude ring.
 ```
 src/observatory/
 ├── observatory-entry.ts   Main tick loop, init, draw orchestration
-├── obs-values.ts          Expression-driven value system (ObsValue/ObsValueSet)
+├── obs-values.ts          Observatory ObsValue catalog (ObsValueSet, defs, initObsValues)
+│                            + thin wrappers over the shared updater
 ├── hand-views.ts          Clock hands + sun event hands + subdial hands
 ├── planet-hands.ts        Planet hands on the orrery
 ├── ring-view.ts           Rise/set rings (sun altitude ring + planet arcs)
@@ -23,6 +24,16 @@ src/observatory/
 All dynamic elements on the Observatory dial are driven by **ObsValue** objects —
 expression-driven values that are parsed once, evaluated on a schedule, and
 smoothly animated between updates.
+
+> **The ObsValue core is shared.** The generic value type + construction live in
+> [src/shared/obs-value.ts](../src/shared/obs-value.ts), and the per-frame
+> update/animate passes (snap-to-target, two-phase `naturalSpeed` sweep, scrub
+> compression, and lag-free eval-ahead) live in
+> [src/shared/updater.ts](../src/shared/updater.ts) — the embryonic "updater"
+> subsystem, also used by the Inspector. `obs-values.ts` keeps the
+> Observatory-specific **catalog** (`ObsValueSet`, the value definitions,
+> `initObsValues`, `getAllValues`) and thin `ObsValueSet` wrappers that delegate
+> to the shared array-based passes.
 
 ### Architecture
 
@@ -72,6 +83,7 @@ uses. `active` (render rate while animating, dimmed when idle) is fed
 | `nextUpdateTime` | performance.now() of next scheduled re-evaluation |
 | `pendingSweep` | Phase 2 sweep params (target + duration), or null |
 | `linear` | If true, value is not an angle — skip fmod wrapping (see [Earth Map](#earth-map-with-terminator)) |
+| `evalAhead` | If true, use lag-free eval-ahead updates (evaluate the next boundary, sweep there). Not used by Observatory values today; powers the Inspector |
 
 ### Update Scheduling
 

@@ -10636,6 +10636,7 @@
   }
 
   // src/shared/animation.ts
+  var kECGLAngleAnimationSpeed = 2;
   var kECGLFrameRate = 1 / 240;
   var EC_UPDATE_NEXT_SUNRISE = -1001;
   var EC_UPDATE_NEXT_SUNSET = -1002;
@@ -10648,9 +10649,305 @@
   var EC_UPDATE_ENV_CHANGE_ONLY = -1013;
   var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
   var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
+  var EC_UPDATE_NEXT_SSLAT_CHANGE = -1018;
+  var PLANET_SENTINEL_BASE = -2e3;
+  function isPlanetRiseSetSentinel(sentinel) {
+    return sentinel <= PLANET_SENTINEL_BASE;
+  }
+  function decodePlanetSentinel(sentinel) {
+    const offset = -sentinel + PLANET_SENTINEL_BASE;
+    return { planet: offset >> 1, isRise: (offset & 1) === 0 };
+  }
+  function makeAnimatingValue(initial, now) {
+    return {
+      currentValue: initial,
+      targetValue: initial,
+      lastAnimationTime: now,
+      animationStopTime: now,
+      animating: false
+    };
+  }
+  function startValueAnimation(val, newTarget, now, speed, durationOverrideMs) {
+    if (speed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateValue(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    val.targetValue = newTarget;
+    const delta = Math.abs(newTarget - val.currentValue);
+    const durationMs = durationOverrideMs ?? delta / speed * 1e3;
+    if (durationMs < kECGLFrameRate * 1e3) {
+      val.currentValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    val.lastAnimationTime = now;
+    val.animating = true;
+    val.animationStopTime = now + durationMs;
+  }
+  function interpolateValue(val, now) {
+    if (!val.animating) {
+      return val.currentValue;
+    }
+    if (now >= val.animationStopTime) {
+      val.animating = false;
+      val.currentValue = val.targetValue;
+      return val.currentValue;
+    }
+    const fraction = (now - val.lastAnimationTime) / (val.animationStopTime - val.lastAnimationTime);
+    val.currentValue += (val.targetValue - val.currentValue) * fraction;
+    val.lastAnimationTime = now;
+    return val.currentValue;
+  }
+  function startAnimationRaw(val, newTarget, now, animSpeed = 1, durationOverrideMs, linear) {
+    const speed = kECGLAngleAnimationSpeed * animSpeed;
+    if (!linear) {
+      newTarget = fmod2(newTarget, 2 * Math.PI);
+    }
+    if (isNaN(newTarget) || isNaN(val.currentValue)) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (speed === 0) {
+      val.currentValue = newTarget;
+      val.targetValue = newTarget;
+      val.animating = false;
+      return;
+    }
+    if (val.animating && val.targetValue === newTarget) return;
+    if (val.animating) {
+      interpolateValue(val, now);
+    }
+    if (val.currentValue === newTarget) {
+      val.animating = false;
+      return;
+    }
+    if (!linear) {
+      const TWO_PI5 = 2 * Math.PI;
+      let delta = newTarget - val.currentValue;
+      delta = delta - TWO_PI5 * Math.round(delta / TWO_PI5);
+      val.currentValue = newTarget - delta;
+    }
+    startValueAnimation(val, newTarget, now, speed, durationOverrideMs);
+  }
+  function computeNextBoundary(updateIntervalMs, getNow2, timeDirection, env2) {
+    if (updateIntervalMs > 0) {
+      const tzOffsetMs = (env2.tzOffsetSec ?? 0) * 1e3;
+      const displayNowMs = getNow2().getTime();
+      const localNowMs = displayNowMs + tzOffsetMs;
+      if (timeDirection === -1) {
+        const localBoundary = Math.floor(localNowMs / updateIntervalMs) * updateIntervalMs;
+        const boundary = (localBoundary === localNowMs ? localBoundary - updateIntervalMs : localBoundary) - tzOffsetMs;
+        return boundary;
+      } else {
+        const localBoundary = Math.ceil(localNowMs / updateIntervalMs) * updateIntervalMs;
+        return localBoundary - tzOffsetMs;
+      }
+    }
+    const sentinel = updateIntervalMs / 1e3;
+    const eventDI = resolveSentinel(sentinel, getNow2, env2, timeDirection);
+    if (!isFinite(eventDI)) {
+      return Infinity;
+    }
+    return (eventDI + 978307200) * 1e3;
+  }
+  function displayTimeToPerfNow(displayTimeMs, getNow2) {
+    if (!isFinite(displayTimeMs)) return Infinity;
+    const deltaMs = Math.abs(displayTimeMs - getNow2().getTime());
+    return performance.now() + deltaMs;
+  }
+  var SENTINEL_FUDGE_SECONDS = 5;
   var SENTINEL_LOOKAHEAD_SECONDS = 3600 * 13.2;
+  function nextPlanetRiseSet(riseNotSet, planetNumber, getNow2, lat2, lon2, timeDirection) {
+    const calculationDI = dateToDateInterval(getNow2());
+    const searchForward = timeDirection === 1;
+    const fudge = searchForward ? SENTINEL_FUDGE_SECONDS : -SENTINEL_FUDGE_SECONDS;
+    const lookahead = searchForward ? SENTINEL_LOOKAHEAD_SECONDS : -SENTINEL_LOOKAHEAD_SECONDS;
+    const fudgeDate = calculationDI + fudge;
+    const pool = new AstroCachePool();
+    initializeCachePool(pool, fudgeDate, lat2, lon2, !searchForward);
+    try {
+      const result = planetaryRiseSetTimeRefined(
+        fudgeDate,
+        lat2,
+        lon2,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result.riseSetTime)) {
+        return NaN;
+      }
+      const inRightDirection = searchForward ? result.transitTime >= fudgeDate : result.transitTime < fudgeDate;
+      if (inRightDirection) {
+        return result.riseSetTime;
+      }
+      const tryDate = fudgeDate + lookahead;
+      releaseCachePool(pool);
+      initializeCachePool(pool, tryDate, lat2, lon2, !searchForward);
+      const result2 = planetaryRiseSetTimeRefined(
+        tryDate,
+        lat2,
+        lon2,
+        riseNotSet,
+        planetNumber,
+        NaN,
+        pool
+      );
+      if (isNoRiseSet(result2.riseSetTime)) {
+        return NaN;
+      }
+      return result2.riseSetTime;
+    } finally {
+      releaseCachePool(pool);
+    }
+  }
+  function nextOrMidnight(eventDI, getNow2, tzOffsetSec, timeDirection) {
+    if (isNaN(eventDI)) {
+      return nextMidnightDI(getNow2, tzOffsetSec, timeDirection);
+    }
+    const nowDI = dateToDateInterval(getNow2());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+    if (timeDirection === -1) {
+      if (eventDI < todayMidnightDI) {
+        return todayMidnightDI;
+      }
+    } else {
+      const tomorrowMidnightDI = todayMidnightDI + 86400;
+      if (eventDI > tomorrowMidnightDI) {
+        return tomorrowMidnightDI;
+      }
+    }
+    return eventDI;
+  }
+  function nextMidnightDI(getNow2, tzOffsetSec, timeDirection) {
+    const nowDI = dateToDateInterval(getNow2());
+    const localNowSec = nowDI + tzOffsetSec;
+    const dayStartLocal = Math.floor(localNowSec / 86400) * 86400;
+    const todayMidnightDI = dayStartLocal - tzOffsetSec;
+    if (timeDirection === -1) {
+      return todayMidnightDI;
+    } else {
+      return todayMidnightDI + 86400;
+    }
+  }
   var SSLAT_THRESHOLD = 0.1 * Math.PI / 180;
   var SSLAT_SEARCH_RANGE = 2 * 86400;
+  var SSLAT_SEARCH_GRANULARITY = 3600;
+  function nextSslatChange(getNow2, timeDirection) {
+    const nowDI = dateToDateInterval(getNow2());
+    const currentDecl = sunRAandDecl(nowDI, null).declination;
+    const boundaryDI = nowDI + timeDirection * SSLAT_SEARCH_RANGE;
+    const boundaryDecl = sunRAandDecl(boundaryDI, null).declination;
+    if (Math.abs(boundaryDecl - currentDecl) < SSLAT_THRESHOLD) {
+      return boundaryDI;
+    }
+    let loDI = nowDI;
+    let hiDI = boundaryDI;
+    while (Math.abs(hiDI - loDI) > SSLAT_SEARCH_GRANULARITY) {
+      const midDI = (loDI + hiDI) / 2;
+      const midDecl = sunRAandDecl(midDI, null).declination;
+      if (Math.abs(midDecl - currentDecl) >= SSLAT_THRESHOLD) {
+        hiDI = midDI;
+      } else {
+        loDI = midDI;
+      }
+    }
+    return hiDI;
+  }
+  function resolveSentinel(sentinel, getNow2, env2, timeDirection) {
+    const lat2 = env2.observerLatRad ?? 0;
+    const lon2 = env2.observerLonRad ?? 0;
+    const tzOff = env2.tzOffsetSec ?? 0;
+    switch (sentinel) {
+      // Bare rise/set (no midnight clamp)
+      case EC_UPDATE_NEXT_SUNRISE:
+        return nextPlanetRiseSet(true, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+      case EC_UPDATE_NEXT_SUNSET:
+        return nextPlanetRiseSet(false, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+      case EC_UPDATE_NEXT_MOONRISE:
+        return nextPlanetRiseSet(true, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+      case EC_UPDATE_NEXT_MOONSET:
+        return nextPlanetRiseSet(false, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+      // Rise/set clamped to midnight
+      case EC_UPDATE_NEXT_SUNRISE_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(true, 0 /* Sun */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_SUNSET_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(false, 0 /* Sun */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_MOONRISE_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(true, 1 /* Moon */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      case EC_UPDATE_NEXT_MOONSET_OR_MIDNIGHT:
+        return nextOrMidnight(
+          nextPlanetRiseSet(false, 1 /* Moon */, getNow2, lat2, lon2, timeDirection),
+          getNow2,
+          tzOff,
+          timeDirection
+        );
+      // Combined: whichever comes first in the direction of flow
+      case EC_UPDATE_NEXT_SUNRISE_OR_SUNSET: {
+        const rise = nextPlanetRiseSet(true, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+        const set = nextPlanetRiseSet(false, 0 /* Sun */, getNow2, lat2, lon2, timeDirection);
+        return closerInTimeDirection(rise, set, timeDirection);
+      }
+      case EC_UPDATE_NEXT_MOONRISE_OR_MOONSET: {
+        const rise = nextPlanetRiseSet(true, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+        const set = nextPlanetRiseSet(false, 1 /* Moon */, getNow2, lat2, lon2, timeDirection);
+        return closerInTimeDirection(rise, set, timeDirection);
+      }
+      // Adaptive sslat (sun declination) change sentinel for earth view
+      case EC_UPDATE_NEXT_SSLAT_CHANGE:
+        return nextSslatChange(getNow2, timeDirection);
+      // Environment change only — effectively never (only explicit reset)
+      case 0:
+      case EC_UPDATE_ENV_CHANGE_ONLY:
+        return Infinity;
+      default:
+        if (isPlanetRiseSetSentinel(sentinel)) {
+          const { planet, isRise } = decodePlanetSentinel(sentinel);
+          return nextPlanetRiseSet(isRise, planet, getNow2, lat2, lon2, timeDirection);
+        }
+        console.warn(`Unknown update sentinel: ${sentinel}, defaulting to daily`);
+        return nextMidnightDI(getNow2, tzOff, timeDirection);
+    }
+  }
+  function closerInTimeDirection(a, b, timeDirection) {
+    if (isNaN(a)) return b;
+    if (isNaN(b)) return a;
+    return timeDirection === 1 ? Math.min(a, b) : Math.max(a, b);
+  }
+  function fmod2(value, modulus) {
+    const result = value % modulus;
+    return result < 0 ? result + modulus : result;
+  }
 
   // src/astronomy/es-astro.ts
   var TWO_PI4 = Math.PI * 2;
@@ -11107,7 +11404,7 @@
       return 0 + indexWithinQuadrant / leavesPerQuadrant * (Math.PI / 2);
     }
   }
-  function fmod2(a, b) {
+  function fmod3(a, b) {
     return (a % b + b) % b;
   }
   function terminatorAngle(phase, quad, indexWithinQuad, leavesPerQuad, incr) {
@@ -11115,7 +11412,7 @@
     const indexWithinQuadrant = indexWithinQuad;
     const leavesPerQuadrant = leavesPerQuad;
     const incremental = incr;
-    phase = fmod2(phase, Math.PI * 2);
+    phase = fmod3(phase, Math.PI * 2);
     const halfLeafSpan = 0.5 / leavesPerQuadrant * (Math.PI / 2);
     if (phase > Math.PI) {
       phase -= halfLeafSpan;
@@ -11216,6 +11513,10 @@
       targetOffsetSec = browserOffsetSec;
     }
     return (targetOffsetSec - browserOffsetSec) * 1e3;
+  }
+  function evalAttr(expr, env2) {
+    if (!expr) return 0;
+    return evaluate(expr, env2);
   }
   function createAstroEnvironment(observerLatDeg = DEFAULT_LAT_DEG, observerLonDeg = DEFAULT_LON_DEG, getNow2 = () => /* @__PURE__ */ new Date(), olsonTimezone) {
     const OBSERVER_LAT = observerLatDeg * Math.PI / 180;
@@ -13077,6 +13378,362 @@
     return leafCenterAngle;
   }
 
+  // src/shared/obs-value.ts
+  function createObsValue(def, env2, perfNow, _getNow) {
+    const expr = parse(def.expr);
+    const initialValue = evalAttr(expr, env2);
+    const animSpeed = def.animSpeed ?? 2;
+    const naturalSpeed = def.naturalSpeed ?? 0;
+    return {
+      name: def.name,
+      expr,
+      updateInterval: def.updateInterval,
+      animSpeed,
+      naturalSpeed,
+      currentValue: initialValue,
+      anim: makeAnimatingValue(initialValue, perfNow),
+      // Schedule immediate update on first frame so animation starts right away.
+      nextUpdateDisplayTime: 0,
+      nextUpdateTime: 0,
+      pendingSweep: null,
+      linear: def.linear ?? false,
+      evalAhead: def.evalAhead ?? false
+    };
+  }
+
+  // src/shared/updater.ts
+  var K_ANGLE_ANIM_SPEED = 2;
+  var NATURAL_ERROR_THRESHOLD = 2e-3;
+  function makeOverridableGetNow(base) {
+    let overrideMs = null;
+    const getNow2 = () => overrideMs != null ? new Date(overrideMs) : base();
+    function withDisplayTime2(displayMs, fn) {
+      const prev = overrideMs;
+      overrideMs = displayMs;
+      try {
+        return fn();
+      } finally {
+        overrideMs = prev;
+      }
+    }
+    return { getNow: getNow2, withDisplayTime: withDisplayTime2 };
+  }
+  function updateObsValueEvalAhead(v, env2, perfNow, getNow2, timeDirection, withDisplayTime2) {
+    const dir = timeDirection === -1 ? -1 : 1;
+    const nextDisplayMs = computeNextBoundary(
+      v.updateInterval * 1e3,
+      getNow2,
+      dir,
+      env2
+    );
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+    const budgetMs = v.nextUpdateTime - perfNow;
+    const target = withDisplayTime2 ? withDisplayTime2(nextDisplayMs, () => evalAttr(v.expr, env2)) : evalAttr(v.expr, env2);
+    v.pendingSweep = null;
+    const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+    if (budgetMs > 0 && isFinite(budgetMs)) {
+      startAnimationRaw(v.anim, target, perfNow, multiplier, budgetMs, v.linear);
+    } else {
+      startAnimationRaw(v.anim, target, perfNow, multiplier, void 0, v.linear);
+    }
+  }
+  function updateNaturalSpeedValue(v, env2, perfNow, getNow2, timeDirection) {
+    const currentCorrectAngle = evalAttr(v.expr, env2);
+    const nextDisplayMs = computeNextBoundary(
+      v.updateInterval * 1e3,
+      getNow2,
+      timeDirection,
+      env2
+    );
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+    const dtToNextUpdateMs = v.nextUpdateTime - perfNow;
+    const dtToNextUpdateSec = dtToNextUpdateMs / 1e3;
+    if (dtToNextUpdateSec <= 0 || !isFinite(dtToNextUpdateSec)) {
+      startAnimationRaw(
+        v.anim,
+        currentCorrectAngle,
+        perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED,
+        void 0,
+        v.linear
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const effNaturalSpeed = v.naturalSpeed * timeDirection;
+    const TWO_PI5 = 2 * Math.PI;
+    let error;
+    if (timeDirection === 1) {
+      error = currentCorrectAngle - v.anim.currentValue;
+      error = (error % TWO_PI5 + TWO_PI5) % TWO_PI5;
+    } else {
+      error = v.anim.currentValue - currentCorrectAngle;
+      error = (error % TWO_PI5 + TWO_PI5) % TWO_PI5;
+    }
+    if (error < NATURAL_ERROR_THRESHOLD) {
+      const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
+      const finalTarget = currentCorrectAngle + sweepAngle2;
+      startAnimationRaw(
+        v.anim,
+        finalTarget,
+        perfNow,
+        v.naturalSpeed / K_ANGLE_ANIM_SPEED,
+        dtToNextUpdateMs,
+        v.linear
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const differentialSpeed = v.animSpeed - v.naturalSpeed;
+    if (differentialSpeed <= 0) {
+      const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
+      const finalTarget = currentCorrectAngle + sweepAngle2;
+      startAnimationRaw(
+        v.anim,
+        finalTarget,
+        perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED,
+        dtToNextUpdateMs,
+        v.linear
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const catchUpSec = error / differentialSpeed;
+    const catchUpMs = catchUpSec * 1e3;
+    if (catchUpMs >= dtToNextUpdateMs) {
+      const sweepAngle2 = effNaturalSpeed * dtToNextUpdateSec;
+      const finalTarget = currentCorrectAngle + sweepAngle2;
+      startAnimationRaw(
+        v.anim,
+        finalTarget,
+        perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED,
+        dtToNextUpdateMs,
+        v.linear
+      );
+      v.pendingSweep = null;
+      return;
+    }
+    const catchUpTarget = currentCorrectAngle + effNaturalSpeed * catchUpSec;
+    startAnimationRaw(
+      v.anim,
+      catchUpTarget,
+      perfNow,
+      v.animSpeed / K_ANGLE_ANIM_SPEED,
+      catchUpMs,
+      v.linear
+    );
+    const remainingMs = dtToNextUpdateMs - catchUpMs;
+    const sweepAngle = effNaturalSpeed * (remainingMs / 1e3);
+    v.pendingSweep = {
+      target: catchUpTarget + sweepAngle,
+      durationMs: remainingMs
+    };
+  }
+  function updateObsValueScrub(v, env2, perfNow, getNow2, timeDirection, tickIntervalMs, displayDeltaPerTickSec) {
+    const newTarget = evalAttr(v.expr, env2);
+    const nextDisplayMs = computeNextBoundary(
+      v.updateInterval * 1e3,
+      getNow2,
+      timeDirection,
+      env2
+    );
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    const displayNowMs = getNow2().getTime();
+    const displayDeltaMs = Math.abs(nextDisplayMs - displayNowMs);
+    const displayDeltaPerTickMs = displayDeltaPerTickSec * 1e3;
+    const ticksUntilUpdate = displayDeltaPerTickMs > 0 ? Math.max(1, Math.ceil(displayDeltaMs / displayDeltaPerTickMs)) : 1;
+    const timeUntilNextUpdateMs = ticksUntilUpdate * tickIntervalMs;
+    v.nextUpdateTime = perfNow + timeUntilNextUpdateMs;
+    const speed = v.animSpeed;
+    let angleDelta;
+    if (v.linear) {
+      angleDelta = Math.abs(newTarget - v.anim.currentValue);
+    } else {
+      const TWO_PI5 = 2 * Math.PI;
+      const normalizedTarget = (newTarget % TWO_PI5 + TWO_PI5) % TWO_PI5;
+      const normalizedCurrent = (v.anim.currentValue % TWO_PI5 + TWO_PI5) % TWO_PI5;
+      angleDelta = Math.abs(normalizedTarget - normalizedCurrent);
+      if (angleDelta > Math.PI) angleDelta = TWO_PI5 - angleDelta;
+    }
+    const naturalDurationMs = speed > 0 ? angleDelta / speed * 1e3 : 0;
+    const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+    if (naturalDurationMs > timeUntilNextUpdateMs) {
+      startAnimationRaw(
+        v.anim,
+        newTarget,
+        perfNow,
+        multiplier,
+        timeUntilNextUpdateMs,
+        v.linear
+      );
+    } else if (naturalDurationMs < tickIntervalMs) {
+      startAnimationRaw(
+        v.anim,
+        newTarget,
+        perfNow,
+        multiplier,
+        tickIntervalMs,
+        v.linear
+      );
+    } else {
+      startAnimationRaw(
+        v.anim,
+        newTarget,
+        perfNow,
+        multiplier,
+        void 0,
+        v.linear
+      );
+    }
+    v.pendingSweep = null;
+  }
+  function updateObsValue(v, env2, perfNow, getNow2, tickIntervalMs, displayDeltaPerTickSec, timeDirection, withDisplayTime2) {
+    if (v.evalAhead) {
+      updateObsValueEvalAhead(v, env2, perfNow, getNow2, timeDirection, withDisplayTime2);
+    } else if (tickIntervalMs !== null && tickIntervalMs > 0) {
+      updateObsValueScrub(
+        v,
+        env2,
+        perfNow,
+        getNow2,
+        timeDirection || 1,
+        tickIntervalMs,
+        displayDeltaPerTickSec
+      );
+    } else if (v.naturalSpeed > 0 && timeDirection !== 0) {
+      updateNaturalSpeedValue(v, env2, perfNow, getNow2, timeDirection);
+    } else {
+      const newTarget = evalAttr(v.expr, env2);
+      if (timeDirection === 0) {
+        v.nextUpdateTime = perfNow + 100;
+        v.pendingSweep = null;
+        startAnimationRaw(
+          v.anim,
+          newTarget,
+          perfNow,
+          v.animSpeed / K_ANGLE_ANIM_SPEED,
+          void 0,
+          v.linear
+        );
+      } else {
+        const nextDisplayMs = computeNextBoundary(
+          v.updateInterval * 1e3,
+          getNow2,
+          timeDirection,
+          env2
+        );
+        v.nextUpdateDisplayTime = nextDisplayMs;
+        v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+        v.pendingSweep = null;
+        const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
+        startAnimationRaw(
+          v.anim,
+          newTarget,
+          perfNow,
+          multiplier,
+          void 0,
+          v.linear
+        );
+      }
+    }
+  }
+  function updateObsValues(values, env2, perfNow, getNow2, tickIntervalMs = null, displayDeltaPerTickSec = 0, timeDirection = 1, withDisplayTime2) {
+    for (const v of values) {
+      if (perfNow >= v.nextUpdateTime) {
+        updateObsValue(
+          v,
+          env2,
+          perfNow,
+          getNow2,
+          tickIntervalMs,
+          displayDeltaPerTickSec,
+          timeDirection,
+          withDisplayTime2
+        );
+      }
+    }
+  }
+  function animateObsValue(v, perfNow) {
+    v.currentValue = interpolateValue(v.anim, perfNow);
+    if (!v.anim.animating && v.pendingSweep) {
+      const sweep = v.pendingSweep;
+      v.pendingSweep = null;
+      const sweepMultiplier = v.naturalSpeed / K_ANGLE_ANIM_SPEED;
+      startAnimationRaw(
+        v.anim,
+        sweep.target,
+        perfNow,
+        sweepMultiplier,
+        sweep.durationMs,
+        v.linear
+      );
+      v.currentValue = interpolateValue(v.anim, perfNow);
+    }
+  }
+  function animateObsValues(values, perfNow) {
+    for (const v of values) {
+      animateObsValue(v, perfNow);
+    }
+  }
+
+  // src/shared/fps-indicator.ts
+  var FPS_WATCHDOG_MS = 1e3;
+  function createFpsIndicator(enabled) {
+    if (!enabled || typeof document === "undefined") return null;
+    let active = 0;
+    let activeLastTime = 0;
+    let wasContinuous = false;
+    let continuousFrames = 0;
+    let frameCount = 0;
+    let windowStart = performance.now();
+    const el = document.createElement("div");
+    el.id = "fps-indicator";
+    el.title = "left: render rate while animating (dimmed when idle) \xB7 right: average fps over the last second (low = idle / little work)";
+    el.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;pointer-events:none;font:11px "JetBrains Mono",monospace;color:rgba(255,255,255,0.5);background:rgba(0,0,0,0.35);padding:2px 6px;border-radius:4px;';
+    const activeEl = document.createElement("span");
+    const thruEl = document.createElement("span");
+    const sep = document.createElement("span");
+    sep.textContent = " \xB7 ";
+    sep.style.opacity = "0.5";
+    activeEl.textContent = "\u2013 fps";
+    activeEl.style.opacity = "0.4";
+    thruEl.textContent = "0 avg";
+    el.append(activeEl, sep, thruEl);
+    document.body.appendChild(el);
+    setInterval(() => {
+      const nowW = performance.now();
+      const elapsedSec = (nowW - windowStart) / 1e3;
+      const throughput = elapsedSec > 0 ? frameCount / elapsedSec : 0;
+      frameCount = 0;
+      windowStart = nowW;
+      const isActive = continuousFrames > 0;
+      continuousFrames = 0;
+      activeEl.style.opacity = isActive ? "1" : "0.4";
+      activeEl.textContent = `${active.toFixed(0)} fps`;
+      thruEl.textContent = `${throughput.toFixed(0)} avg`;
+    }, FPS_WATCHDOG_MS);
+    return {
+      recordFrame(continuous) {
+        const now = performance.now();
+        frameCount++;
+        if (wasContinuous && activeLastTime > 0) {
+          const delta = now - activeLastTime;
+          if (delta > 0) {
+            const instantFps = 1e3 / delta;
+            active = active === 0 ? instantFps : active * 0.9 + instantFps * 0.1;
+          }
+        }
+        activeLastTime = now;
+        if (continuous) continuousFrames++;
+        wasContinuous = continuous;
+      }
+    };
+  }
+
   // src/shared/url-state.ts
   function readUrlState() {
     const params = new URLSearchParams(window.location.search);
@@ -14207,6 +14864,7 @@
       lastSunUpdateMinute = -1;
       updateSunData();
       updateTimeDisplay();
+      rebuildExprValues();
     }
   });
   if (locationDialog) {
@@ -14231,6 +14889,7 @@
           lastSunUpdateMinute = -1;
           updateSunData();
           updateTimeDisplay();
+          rebuildExprValues();
         } else {
           needsPrompt = true;
           locationDialog.setNeedsPrompt(true);
@@ -14242,7 +14901,7 @@
       });
     }
   }
-  var getNow = () => /* @__PURE__ */ new Date();
+  var { getNow, withDisplayTime } = makeOverridableGetNow(() => /* @__PURE__ */ new Date());
   var env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
   function formatTime(date) {
     const h = date.getHours().toString().padStart(2, "0");
@@ -14337,74 +14996,103 @@
     sunriseValue.textContent = formatRiseSetTime(sunrise);
     sunsetValue.textContent = formatRiseSetTime(sunset);
   }
+  var EXPR_UPDATE_INTERVAL_SEC = 0.1;
   var lastExprText = "";
-  var lastExprAST = null;
-  var lastExprError = false;
-  function updateExpressionEvaluator() {
+  var exprAngleVal = null;
+  var exprLinearVal = null;
+  var exprValues = [];
+  function rebuildExprValues() {
     const text = exprInput.value.trim();
     if (!text) {
       exprResults.classList.remove("visible");
       exprError.classList.remove("visible");
       lastExprText = "";
-      lastExprAST = null;
-      lastExprError = false;
+      exprAngleVal = null;
+      exprLinearVal = null;
+      exprValues = [];
       return;
     }
-    if (text !== lastExprText) {
-      lastExprText = text;
-      try {
-        lastExprAST = parse(text);
-        lastExprError = false;
-      } catch (e) {
-        lastExprAST = null;
-        lastExprError = true;
-        exprResults.classList.remove("visible");
-        exprError.textContent = e.message || "Parse error";
-        exprError.classList.add("visible");
-        return;
-      }
-    }
-    if (lastExprError || !lastExprAST) return;
+    lastExprText = text;
+    const now = performance.now();
     try {
-      const value = evaluate(lastExprAST, env);
+      const base = { name: "expr", expr: text, updateInterval: EXPR_UPDATE_INTERVAL_SEC, evalAhead: true };
+      exprAngleVal = createObsValue({ ...base, linear: false }, env, now, getNow);
+      exprLinearVal = createObsValue({ ...base, linear: true }, env, now, getNow);
+      exprValues = [exprAngleVal, exprLinearVal];
       exprError.classList.remove("visible");
       exprResults.classList.add("visible");
-      if (Number.isInteger(value) && Math.abs(value) < 1e15) {
-        exprNumber.textContent = value.toString();
-      } else {
-        exprNumber.textContent = value.toPrecision(10);
-      }
-      const degrees = value * 180 / Math.PI;
-      exprAngle.textContent = `${degrees.toFixed(4)}\xB0`;
-      const dateMs = value * 1e3 + EPOCH_2001_MS;
-      if (isFinite(dateMs) && dateMs > -62e12 && dateMs < 25e13) {
-        const d = new Date(dateMs);
-        if (locationTimezone) {
-          try {
-            const fmt = new Intl.DateTimeFormat("en-US", {
-              timeZone: locationTimezone,
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-              hour12: false
-            });
-            const tzAbbr = new Intl.DateTimeFormat("en-US", {
-              timeZone: locationTimezone,
-              timeZoneName: "short"
-            }).formatToParts(d).find((p) => p.type === "timeZoneName")?.value || "";
-            exprDate.textContent = `${fmt.format(d)} ${tzAbbr}`;
-          } catch {
-            exprDate.textContent = d.toISOString().replace("T", " ").replace("Z", " UTC");
-          }
-        } else {
+      renderExprValues();
+    } catch (e) {
+      exprAngleVal = null;
+      exprLinearVal = null;
+      exprValues = [];
+      exprResults.classList.remove("visible");
+      exprError.textContent = e.message || "Parse error";
+      exprError.classList.add("visible");
+    }
+  }
+  function renderExprValues() {
+    if (!exprAngleVal || !exprLinearVal) return;
+    const value = exprLinearVal.currentValue;
+    const angleRad = exprAngleVal.currentValue;
+    if (Number.isInteger(value) && Math.abs(value) < 1e15) {
+      exprNumber.textContent = value.toString();
+    } else {
+      exprNumber.textContent = value.toPrecision(10);
+    }
+    const degrees = angleRad * 180 / Math.PI;
+    exprAngle.textContent = `${degrees.toFixed(4)}\xB0`;
+    const dateMs = value * 1e3 + EPOCH_2001_MS;
+    if (isFinite(dateMs) && dateMs > -62e12 && dateMs < 25e13) {
+      const d = new Date(dateMs);
+      if (locationTimezone) {
+        try {
+          const fmt = new Intl.DateTimeFormat("en-US", {
+            timeZone: locationTimezone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+          });
+          const tzAbbr = new Intl.DateTimeFormat("en-US", {
+            timeZone: locationTimezone,
+            timeZoneName: "short"
+          }).formatToParts(d).find((p) => p.type === "timeZoneName")?.value || "";
+          exprDate.textContent = `${fmt.format(d)} ${tzAbbr}`;
+        } catch {
           exprDate.textContent = d.toISOString().replace("T", " ").replace("Z", " UTC");
         }
       } else {
-        exprDate.textContent = "\u2014";
+        exprDate.textContent = d.toISOString().replace("T", " ").replace("Z", " UTC");
       }
+    } else {
+      exprDate.textContent = "\u2014";
+    }
+  }
+  function tickExprValues() {
+    if (exprValues.length === 0) return;
+    const now = performance.now();
+    try {
+      updateObsValues(
+        exprValues,
+        env,
+        now,
+        getNow,
+        /* tickIntervalMs */
+        null,
+        /* displayDeltaPerTickSec */
+        0,
+        /* timeDirection */
+        1,
+        withDisplayTime
+      );
+      animateObsValues(exprValues, now);
+      exprError.classList.remove("visible");
+      exprResults.classList.add("visible");
+      renderExprValues();
     } catch (e) {
       exprResults.classList.remove("visible");
       exprError.textContent = e.message || "Evaluation error";
@@ -14412,7 +15100,7 @@
     }
   }
   exprInput.addEventListener("input", () => {
-    updateExpressionEvaluator();
+    rebuildExprValues();
     updateAutocomplete();
   });
   var acDropdown = document.getElementById("expr-autocomplete");
@@ -14495,7 +15183,7 @@
     exprInput.setSelectionRange(cursorPos, cursorPos);
     acDropdown.classList.remove("visible");
     acItems = [];
-    updateExpressionEvaluator();
+    rebuildExprValues();
   }
   exprInput.addEventListener("keydown", (e) => {
     if (!acDropdown.classList.contains("visible")) return;
@@ -14587,7 +15275,7 @@
         const cursorPos = kind === "fn" && sig && sig !== "()" ? exprInput.value.indexOf(insert) + name.length + 1 : exprInput.value.indexOf(insert) + insert.length;
         exprInput.setSelectionRange(cursorPos, cursorPos);
         exprInput.focus();
-        updateExpressionEvaluator();
+        rebuildExprValues();
       });
     });
   }
@@ -14599,17 +15287,17 @@
     }
   });
   var lastSunUpdateMinute = -1;
+  var fpsIndicator = createFpsIndicator(urlState.fps);
   function tick() {
     updateTimeDisplay();
-    if (lastExprText) {
-      updateExpressionEvaluator();
-    }
+    tickExprValues();
     const now = getNow();
     const currentMinute = now.getMinutes();
     if (currentMinute !== lastSunUpdateMinute) {
       lastSunUpdateMinute = currentMinute;
       updateSunData();
     }
+    fpsIndicator?.recordFrame(exprValues.length > 0);
     requestAnimationFrame(tick);
   }
   updateSunData();

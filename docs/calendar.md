@@ -150,7 +150,7 @@ The `rotationForCalendarWheel012B` and `rotationForCalendarWheel3456` functions 
 |---|---|
 | [es-calendar.ts](../src/astronomy/es-calendar.ts) | Core hybrid calendar: decomposition, recomposition, julian↔gregorian conversion |
 | [watch-env.ts](../src/watch/watch-env.ts) | Registers calendar functions for XML expressions |
-| [animation.ts](../src/watch/animation.ts) | Calendar cover offset computation (Babylon) |
+| [animation.ts](../src/shared/animation.ts) | Calendar cover offset computation (Babylon) |
 | [renderer.ts](../src/watch/renderer.ts) | Calendar wheel rendering (Babylon grid, Oct 1582 handling) |
 | [time-controller.ts](../src/time-controller.ts) | Time scrubbing with month/year steps |
 | [engine-entry.ts](../src/engine-entry.ts) | Time bar display (`formatSimTime`), date input, offset formatting |

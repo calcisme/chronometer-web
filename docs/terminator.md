@@ -73,7 +73,7 @@ Terminator leaves have their own `nextUpdateTime` and `resetLeafSchedules()` fun
 |------|---------|
 | `src/watch/terminator.ts` | `terminatorAngle()`, `expandTerminatorToLeaves()`, `drawTerminatorLeaf()` |
 | `src/watch/renderer.ts` | Terminator dispatch in dynamic drawing loop |
-| `src/watch/animation.ts` | Leaf hand state initialization and ticking |
+| `src/shared/animation.ts` | Leaf hand state initialization and ticking |
 | `src/watch/watch-env.ts` | `terminatorAngle` function registration |
 
 ## Related Docs

@@ -873,7 +873,7 @@ Sentinel functions compute the true next astronomical event time in display time
 | [renderer.ts](../src/watch/renderer.ts) | Draws each part type to canvas (including `drawEotDial()`) |
 | [analemma.ts](../src/watch/analemma.ts) | Analemma state, path computation, Sun position, and rendering |
 | [watch-env.ts](../src/watch/watch-env.ts) | Expression evaluator with time/astronomy functions |
-| [animation.ts](../src/watch/animation.ts) | Hand state machine, kind→angle mapping |
+| [animation.ts](../src/shared/animation.ts) | Hand state machine, kind→angle mapping |
 
 ## Related Docs
 

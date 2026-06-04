@@ -17,7 +17,7 @@
  *   picks - Compact face selection: concatenated 2-letter abbreviations (e.g. "bbmktr")
  *   tp    - Time panel lower tab: 'd' = date (default), 'a' = astro events
  *   embed - Embed mode: 1 = Terra-only minimal embed (no chrome, transparent bg)
- *   fps   - FPS indicator: present (any/no value) = show the fps readout (Observatory + Chronometer)
+ *   fps   - FPS indicator: present (any/no value) = show the fps readout (Chronometer + Observatory + Inspector)
  */
 
 export interface UrlState {
@@ -36,7 +36,7 @@ export interface UrlState {
     tp: 'd' | 'a';
     /** Embed mode: minimal UI, transparent background (Terra only). */
     embed: boolean;
-    /** FPS indicator: true when the `fps` param is present (Observatory + Chronometer). */
+    /** FPS indicator: true when the `fps` param is present (Chronometer + Observatory + Inspector). */
     fps: boolean;
     /** Kyoto hand mode: '1' = fixed hand at top, null/absent = moving hand. */
     kyhand: string | null;

@@ -12,7 +12,9 @@ The Inspector serves two roles:
 
 1. **Debugging tool**: Type any expression from a watch face XML or Observatory
    ObsValue and see its live value — as a number, angle (degrees), and date
-   (interpreting the value as a dateInterval). Values update every frame.
+   (interpreting the value as a dateInterval). The expression is fully
+   re-evaluated 10×/s and **smoothly animated between updates** via the shared
+   `ObsValue` system (see [Expression Evaluator](#expression-evaluator)).
 
 2. **Reference**: The Reference panel lists all curated expression functions
    with descriptions and signatures, grouped by category. Clicking an entry
@@ -59,15 +61,46 @@ minute (they're daily values).
 The expression input accepts any valid expression (same syntax as watch XML
 attributes). The result is displayed three ways simultaneously:
 
-| Format | Description |
-|--------|-------------|
-| Number | Raw numeric value (integer or 10-digit precision) |
-| Angle | Value converted to degrees (× 180/π) |
-| Date | Value interpreted as a dateInterval (seconds since 2001-01-01T00:00:00Z) |
+| Format | Description | Semantics |
+|--------|-------------|-----------|
+| Number | Raw numeric value (integer or 10-digit precision) | linear |
+| Angle | Value converted to degrees (× 180/π), wrapped to [0,360°) | angular |
+| Date | Value interpreted as a dateInterval (seconds since 2001-01-01T00:00:00Z) | linear |
 
-The expression is **re-parsed only when the text changes** (not every frame).
-The AST is cached and re-evaluated every frame against the current environment
-to show live-updating values.
+#### ObsValue-driven, eval-ahead
+
+The result is driven by the shared **`ObsValue`** system
+([src/shared/obs-value.ts](../src/shared/obs-value.ts) +
+[src/shared/updater.ts](../src/shared/updater.ts)) rather than a bare per-frame
+`evaluate()`. The expression text is parsed once (re-parsed only on change) into
+**two** ObsValues sharing the AST:
+
+- an **angle**-semantics value (`linear:false` — shortest-path wrap) feeding the
+  Angle° readout, and
+- a **linear**-semantics value (`linear:true` — straight-line) feeding the Number
+  and Date readouts.
+
+Both use **eval-ahead** (`evalAhead:true`, `updateInterval` 0.1 s): each 0.1 s
+boundary the expression is evaluated *one interval into the future* and the value
+sweeps there, arriving exactly as that boundary occurs. The readouts therefore
+update only 10×/s but **animate smoothly at the full frame rate with no
+perceptible lag** vs. wall-clock time. Changing the expression text or the
+location **snaps** (rebuilds the ObsValues) rather than animating across
+expressions. A per-frame evaluation error is caught and surfaced without
+breaking the render loop.
+
+The lag-free future-target idea generalizes Observatory's `naturalSpeed` sweep;
+see [Animation — Eval-ahead](animation.md#eval-ahead-lag-free-tracking).
+
+### FPS overlay (`?fps`)
+
+The `?fps` URL parameter shows the same page-level FPS readout
+(`<active> fps · <avg> avg`) as Chronometer and Observatory, via the shared
+[src/shared/fps-indicator.ts](../src/shared/fps-indicator.ts). `active` is fed
+`recordFrame(exprValues.length > 0)` each frame — live while an expression is
+animating (eval-ahead keeps an in-flight 0.1 s sweep), dimmed when no expression
+is entered. Useful for confirming the readouts interpolate at the full frame
+rate while the expression is fully re-evaluated only 10×/s.
 
 ### Autocomplete
 
@@ -136,6 +169,8 @@ environment and refresh all displays.
 | `src/inspector/inspector-entry.ts` | Main app: tick loop, expression evaluator, autocomplete, reference panel |
 | `src/inspector/inspector.html` | HTML template |
 | `src/inspector/expr-metadata.ts` | Curated function/constant metadata |
+| `src/shared/obs-value.ts` | ObsValue type + `createObsValue` (shared with Observatory) |
+| `src/shared/updater.ts` | ObsValue update/animate passes + `makeOverridableGetNow` (eval-ahead) |
 | `src/shared/astro-env.ts` | Astronomy environment factory (shared with Chronometer and Observatory) |
 | `src/expr/parser.ts` | Expression parser |
 | `src/expr/evaluator.ts` | Expression evaluator |

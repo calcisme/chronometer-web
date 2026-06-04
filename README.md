@@ -30,7 +30,7 @@ Serve all files in the `dist/` directory from any static web server. To support 
 
 ### Building from source
 
-The build requires a **current LTS version of Node.js** — specifically `npx`, which invokes [esbuild](https://esbuild.github.io/) to bundle TypeScript into browser-ready JavaScript. **Bash** and **zip** are also needed (both are pre-installed on macOS and most Linux distributions).
+The build requires **Node.js ≥ 22** (pinned in `package.json` `engines` and `.nvmrc`; run `nvm use` to select it) — specifically `npx`, which invokes [esbuild](https://esbuild.github.io/) to bundle TypeScript into browser-ready JavaScript. Older versions (e.g. Node 20.12) fail because a test/build dependency requires `require(ESM)` support, available only in Node ≥ 22 (or ≥ 20.17). **Bash** and **zip** are also needed (both are pre-installed on macOS and most Linux distributions).
 
 ```bash
 ./build.sh

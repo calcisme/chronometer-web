@@ -236,11 +236,28 @@ Specialized wrappers add type-specific behavior:
 
 The terminator leaf system (`terminator.ts`) also uses the unified core via `startAnimationRaw` for leaf angles and rotations.
 
+## ObsValue Layer
+
+Built on the primitives above, **`ObsValue`** ([src/shared/obs-value.ts](../src/shared/obs-value.ts)) is a general-purpose, expression-driven animated value: a parsed AST + update interval + animation speeds + an `AnimatingValue`. The per-frame logic that drives ObsValues lives in [src/shared/updater.ts](../src/shared/updater.ts) — the embryonic "updater" subsystem — and runs two passes:
+
+1. **`updateObsValues(values, env, perfNow, getNow, …)`** — for each value whose timer expired, re-evaluate the expression and start an animation. Dispatches to one of: eval-ahead, scrub compression, two-phase `naturalSpeed` sweep, or snap-to-target.
+2. **`animateObsValues(values, perfNow)`** — interpolate every value toward its target (and hand off Phase-2 sweeps).
+
+Both operate on a flat `ObsValue[]`. Observatory wraps these with its `ObsValueSet`; the Inspector drives a small array directly. See [Observatory — ObsValue System](observatory.md#obsvalue-system).
+
+### Eval-ahead (lag-free tracking)
+
+A value sampled every Δ and interpolated between *past* samples lags real time by Δ. **Eval-ahead** (`evalAhead: true`) removes that lag: at each update it evaluates the target at the **next** boundary (one interval into the future in display time) and sweeps there, arriving exactly as that boundary occurs. Because an expression is a pure function of display time, the future target is obtained by direct evaluation — no rate estimate needed. Each interval is then the chord `A(T) → A(T+Δ)`: symmetric curvature error, **no time lag**. For a constant-rate value this reproduces the `naturalSpeed` sweep exactly, so eval-ahead is its general form.
+
+Eval-ahead evaluates the expression at a shifted display time via **`makeOverridableGetNow(base)`** (updater.ts), which returns a `getNow` plus a `withDisplayTime(displayMs, fn)` that transiently overrides the clock for the duration of `fn`. The display time enters expressions only through `getNow`, so shifting it shifts the whole evaluation — no second environment needed. The Inspector uses eval-ahead to show smooth, lag-free readouts while fully re-evaluating only 10×/s; see [Inspector — Expression Evaluator](inspector.md#expression-evaluator).
+
 ## Key Source Files
 
 | File | Purpose |
 |------|---------|
-| `src/watch/animation.ts` | All animation logic: hand states, ticking, interpolation, unified core |
+| `src/shared/animation.ts` | All animation logic: hand states, ticking, interpolation, unified core |
+| `src/shared/obs-value.ts` | `ObsValue` — general expression-driven animated value (type + `createObsValue`) |
+| `src/shared/updater.ts` | ObsValue per-frame update/animate passes + `makeOverridableGetNow` (eval-ahead) |
 | `src/watch/astro-stepper.ts` | Astronomical event stepping: rise/set, moon phase, transit search |
 | `src/watch/terminator.ts` | Moon-phase leaf animation (uses unified core) |
 | `src/time-controller.ts` | Display time management, rate control, tick scheduling |

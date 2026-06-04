@@ -19,6 +19,8 @@ src/
 ├── shared/              # Shared: infrastructure modules used by multiple apps
 │   ├── astro-env.ts         # Astronomy function registry + createAstroEnvironment() factory
 │   ├── animation.ts         # Full animation system (AnimatingValue, HandState, scheduling)
+│   ├── obs-value.ts         # ObsValue: general expression-driven animated value (type + createObsValue)
+│   ├── updater.ts           # Embryonic "updater": ObsValue update/animate passes + eval-ahead time helper
 │   ├── time-controller.ts   # Time scrubbing, stepping, play/pause
 │   ├── city-search.ts       # City name lookup against GeoNames database
 │   ├── location-dialog.ts   # Self-contained location picker (DOM, search, mini-map)

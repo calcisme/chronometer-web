@@ -11,9 +11,9 @@
  */
 
 import { createAstroEnvironment, computeTzDeltaMs } from '../shared/astro-env.js';
-import { evaluate, type Environment } from '../expr/evaluator.js';
-import { parse } from '../expr/parser.js';
-import type { ASTNode } from '../expr/parser.js';
+import { createObsValue, type ObsValue } from '../shared/obs-value.js';
+import { updateObsValues, animateObsValues, makeOverridableGetNow } from '../shared/updater.js';
+import { createFpsIndicator } from '../shared/fps-indicator.js';
 import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
 import { findClosestCity } from '../shared/city-search.js';
@@ -147,6 +147,7 @@ const locationDialog = initLocationDialog({
         lastSunUpdateMinute = -1;  // force sunrise/sunset recalc
         updateSunData();
         updateTimeDisplay();
+        rebuildExprValues();  // snap expression to the new environment
     },
 });
 
@@ -177,6 +178,7 @@ if (locationDialog) {
                 lastSunUpdateMinute = -1;
                 updateSunData();
                 updateTimeDisplay();
+                rebuildExprValues();  // snap expression to the new environment
             } else {
                 // Browser denied or timed out — show location prompt
                 needsPrompt = true;
@@ -191,8 +193,10 @@ if (locationDialog) {
 }
 
 // --- Create the astronomy environment ---
-// getNow returns real time for now (Phase 4 will add time controller)
-const getNow = (): Date => new Date();
+// getNow returns real time (Phase 4 will add a time controller). It is wrapped
+// so the updater can transiently evaluate "ahead" at a future display-time
+// boundary (eval-ahead) — giving lag-free interpolated readouts.
+const { getNow, withDisplayTime } = makeOverridableGetNow(() => new Date());
 
 let env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
 
@@ -314,82 +318,119 @@ function updateSunData(): void {
 // Expression evaluator
 // ============================================================================
 
-let lastExprText = '';
-let lastExprAST: ASTNode | null = null;
-let lastExprError = false;
+// The expression result is driven by two ObsValues sharing the same parsed
+// expression: one with **angle** semantics (for the Angle° readout — shortest-
+// path wrap to [0,360°)) and one with **linear** semantics (for the Number and
+// Date readouts — raw straight-line interpolation). Both use lag-free eval-ahead
+// (evaluate the next 0.1s boundary, sweep there), so the readouts track real
+// time with no perceptible lag while updating only 10×/s.
+const EXPR_UPDATE_INTERVAL_SEC = 0.1;  // full re-eval cadence (epoch-aligned)
 
-function updateExpressionEvaluator(): void {
+let lastExprText = '';
+let exprAngleVal: ObsValue | null = null;   // linear:false → Angle readout
+let exprLinearVal: ObsValue | null = null;  // linear:true  → Number + Date readouts
+let exprValues: ObsValue[] = [];
+
+/**
+ * Rebuild (and snap) the expression ObsValues. Called when the expression text
+ * or the location/environment changes — we never animate from the old
+ * expression's value to the new one. Parse/eval errors are surfaced here.
+ */
+function rebuildExprValues(): void {
     const text = exprInput.value.trim();
 
     if (!text) {
         exprResults.classList.remove('visible');
         exprError.classList.remove('visible');
         lastExprText = '';
-        lastExprAST = null;
-        lastExprError = false;
+        exprAngleVal = null;
+        exprLinearVal = null;
+        exprValues = [];
         return;
     }
 
-    // Re-parse only if text changed
-    if (text !== lastExprText) {
-        lastExprText = text;
-        try {
-            lastExprAST = parse(text);
-            lastExprError = false;
-        } catch (e: any) {
-            lastExprAST = null;
-            lastExprError = true;
-            exprResults.classList.remove('visible');
-            exprError.textContent = e.message || 'Parse error';
-            exprError.classList.add('visible');
-            return;
-        }
-    }
-
-    if (lastExprError || !lastExprAST) return;
-
+    lastExprText = text;
+    const now = performance.now();
     try {
-        const value = evaluate(lastExprAST, env);
+        const base = { name: 'expr', expr: text, updateInterval: EXPR_UPDATE_INTERVAL_SEC, evalAhead: true };
+        exprAngleVal = createObsValue({ ...base, linear: false }, env, now, getNow);
+        exprLinearVal = createObsValue({ ...base, linear: true }, env, now, getNow);
+        exprValues = [exprAngleVal, exprLinearVal];
         exprError.classList.remove('visible');
         exprResults.classList.add('visible');
+        renderExprValues();
+    } catch (e: any) {
+        exprAngleVal = null;
+        exprLinearVal = null;
+        exprValues = [];
+        exprResults.classList.remove('visible');
+        exprError.textContent = e.message || 'Parse error';
+        exprError.classList.add('visible');
+    }
+}
 
-        // Number format
-        if (Number.isInteger(value) && Math.abs(value) < 1e15) {
-            exprNumber.textContent = value.toString();
-        } else {
-            exprNumber.textContent = value.toPrecision(10);
-        }
+/** Format the current (interpolated) ObsValue values into the three readouts. */
+function renderExprValues(): void {
+    if (!exprAngleVal || !exprLinearVal) return;
+    const value = exprLinearVal.currentValue;     // raw number / date interval
+    const angleRad = exprAngleVal.currentValue;   // angle, wrapped to [0,2π)
 
-        // Angle format (radians → degrees)
-        const degrees = value * 180 / Math.PI;
-        exprAngle.textContent = `${degrees.toFixed(4)}°`;
+    // Number format (raw, linear)
+    if (Number.isInteger(value) && Math.abs(value) < 1e15) {
+        exprNumber.textContent = value.toString();
+    } else {
+        exprNumber.textContent = value.toPrecision(10);
+    }
 
-        // Date format: interpret as a dateInterval (seconds since 2001-01-01T00:00:00Z)
-        const dateMs = value * 1000 + EPOCH_2001_MS;
-        if (isFinite(dateMs) && dateMs > -6.2e13 && dateMs < 2.5e14) {
-            const d = new Date(dateMs);
-            if (locationTimezone) {
-                try {
-                    const fmt = new Intl.DateTimeFormat('en-US', {
-                        timeZone: locationTimezone,
-                        year: 'numeric', month: '2-digit', day: '2-digit',
-                        hour: '2-digit', minute: '2-digit', second: '2-digit',
-                        hour12: false,
-                    });
-                    const tzAbbr = new Intl.DateTimeFormat('en-US', {
-                        timeZone: locationTimezone,
-                        timeZoneName: 'short',
-                    }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value || '';
-                    exprDate.textContent = `${fmt.format(d)} ${tzAbbr}`;
-                } catch {
-                    exprDate.textContent = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
-                }
-            } else {
+    // Angle format (radians → degrees, angle semantics)
+    const degrees = angleRad * 180 / Math.PI;
+    exprAngle.textContent = `${degrees.toFixed(4)}°`;
+
+    // Date format: interpret the raw value as a dateInterval (seconds since
+    // 2001-01-01T00:00:00Z)
+    const dateMs = value * 1000 + EPOCH_2001_MS;
+    if (isFinite(dateMs) && dateMs > -6.2e13 && dateMs < 2.5e14) {
+        const d = new Date(dateMs);
+        if (locationTimezone) {
+            try {
+                const fmt = new Intl.DateTimeFormat('en-US', {
+                    timeZone: locationTimezone,
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    hour12: false,
+                });
+                const tzAbbr = new Intl.DateTimeFormat('en-US', {
+                    timeZone: locationTimezone,
+                    timeZoneName: 'short',
+                }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value || '';
+                exprDate.textContent = `${fmt.format(d)} ${tzAbbr}`;
+            } catch {
                 exprDate.textContent = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
             }
         } else {
-            exprDate.textContent = '—';
+            exprDate.textContent = d.toISOString().replace('T', ' ').replace('Z', ' UTC');
         }
+    } else {
+        exprDate.textContent = '—';
+    }
+}
+
+/**
+ * Per-frame drive of the expression ObsValues: full re-eval at the 0.1s
+ * boundary (eval-ahead), smooth interpolation every frame, then render.
+ * Guards evaluation so a per-frame eval error can't break the rAF loop.
+ */
+function tickExprValues(): void {
+    if (exprValues.length === 0) return;
+    const now = performance.now();
+    try {
+        updateObsValues(exprValues, env, now, getNow,
+            /* tickIntervalMs */ null, /* displayDeltaPerTickSec */ 0,
+            /* timeDirection */ 1, withDisplayTime);
+        animateObsValues(exprValues, now);
+        exprError.classList.remove('visible');
+        exprResults.classList.add('visible');
+        renderExprValues();
     } catch (e: any) {
         exprResults.classList.remove('visible');
         exprError.textContent = e.message || 'Evaluation error';
@@ -399,7 +440,7 @@ function updateExpressionEvaluator(): void {
 
 // Listen for input changes
 exprInput.addEventListener('input', () => {
-    updateExpressionEvaluator();
+    rebuildExprValues();
     updateAutocomplete();
 });
 
@@ -504,7 +545,7 @@ function acceptAutocomplete(idx: number): void {
     exprInput.setSelectionRange(cursorPos, cursorPos);
     acDropdown.classList.remove('visible');
     acItems = [];
-    updateExpressionEvaluator();
+    rebuildExprValues();
 }
 
 // Keyboard navigation for autocomplete
@@ -621,7 +662,7 @@ function buildReferencePanel(): void {
                 : exprInput.value.indexOf(insert) + insert.length;
             exprInput.setSelectionRange(cursorPos, cursorPos);
             exprInput.focus();
-            updateExpressionEvaluator();
+            rebuildExprValues();
         });
     });
 }
@@ -640,13 +681,14 @@ refToggle.addEventListener('click', () => {
 
 let lastSunUpdateMinute = -1;
 
+// Page-level FPS overlay (enabled via ?fps) — shared with Chronometer/Observatory.
+const fpsIndicator = createFpsIndicator(urlState.fps);
+
 function tick(): void {
     updateTimeDisplay();
 
-    // Update expression evaluator (live, every tick)
-    if (lastExprText) {
-        updateExpressionEvaluator();
-    }
+    // Drive the expression ObsValues: 0.1s eval-ahead re-eval + smooth animation
+    tickExprValues();
 
     // Update sunrise/sunset only when the minute changes (they're daily values)
     const now = getNow();
@@ -655,6 +697,10 @@ function tick(): void {
         lastSunUpdateMinute = currentMinute;
         updateSunData();
     }
+
+    // "active" is live while an expression is animating (eval-ahead always has an
+    // in-flight 0.1s sweep); dim when no expression is being evaluated.
+    fpsIndicator?.recordFrame(exprValues.length > 0);
 
     requestAnimationFrame(tick);
 }
