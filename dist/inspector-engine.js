@@ -14788,6 +14788,11 @@
   var exprDate = document.getElementById("expr-date");
   var exprError = document.getElementById("expr-error");
   var tzDisplay = document.getElementById("tz-display");
+  var timeMainEl = document.createElement("span");
+  var timeSubsecEl = document.createElement("span");
+  timeSubsecEl.className = "time-subsec";
+  timeDisplay.textContent = "";
+  timeDisplay.append(timeMainEl, timeSubsecEl);
   var urlState = readUrlState();
   var hasUrlLocation = urlState.lat !== null && urlState.lon !== null;
   var lat = urlState.lat ?? 0;
@@ -14922,7 +14927,8 @@
   function updateTimeDisplay() {
     const now = getNow();
     const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
-    timeDisplay.textContent = formatTime(shifted);
+    timeMainEl.textContent = formatTime(shifted);
+    timeSubsecEl.textContent = `.${shifted.getMilliseconds().toString().padStart(3, "0")}`;
     dateDisplay.textContent = formatDate(now);
     tzDisplay.textContent = formatTimezoneInfo(locationTimezone, now);
   }

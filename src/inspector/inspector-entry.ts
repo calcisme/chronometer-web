@@ -44,6 +44,14 @@ const exprDate = document.getElementById('expr-date')!;
 const exprError = document.getElementById('expr-error')!;
 const tzDisplay = document.getElementById('tz-display')!;
 
+// Split the time display into a main HH:MM:SS span and a dimmer subsecond span
+// (updated per-frame, so the millisecond motion is visible at the full frame rate).
+const timeMainEl = document.createElement('span');
+const timeSubsecEl = document.createElement('span');
+timeSubsecEl.className = 'time-subsec';
+timeDisplay.textContent = '';
+timeDisplay.append(timeMainEl, timeSubsecEl);
+
 // --- Resolve location from URL params ---
 const urlState = readUrlState();
 const hasUrlLocation = urlState.lat !== null && urlState.lon !== null;
@@ -226,7 +234,9 @@ function updateTimeDisplay(): void {
     const now = getNow();
     // Shift to target timezone for display
     const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
-    timeDisplay.textContent = formatTime(shifted);
+    timeMainEl.textContent = formatTime(shifted);
+    // Subsecond portion (to the nearest ms), dimmer via the .time-subsec class.
+    timeSubsecEl.textContent = `.${shifted.getMilliseconds().toString().padStart(3, '0')}`;
     dateDisplay.textContent = formatDate(now);
     tzDisplay.textContent = formatTimezoneInfo(locationTimezone, now);
 }
