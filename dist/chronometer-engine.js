@@ -10759,6 +10759,28 @@
         return NaN;
     }
   }
+  function WB_planetHeliocentricLatitude(planetNumber, U) {
+    switch (planetNumber) {
+      case 4 /* Earth */:
+        return 0;
+      case 2 /* Mercury */:
+        return mercuryHeliocentricLatitude(U);
+      case 3 /* Venus */:
+        return venusHeliocentricLatitude(U);
+      case 5 /* Mars */:
+        return marsHeliocentricLatitude(U);
+      case 6 /* Jupiter */:
+        return jupiterHeliocentricLatitude(U);
+      case 7 /* Saturn */:
+        return saturnHeliocentricLatitude(U);
+      case 8 /* Uranus */:
+        return uranusHeliocentricLatitude(U);
+      case 9 /* Neptune */:
+        return neptuneHeliocentricLatitude(U);
+      default:
+        return NaN;
+    }
+  }
   function WB_planetHeliocentricRadius(planetNumber, U, cache) {
     switch (planetNumber) {
       case 4 /* Earth */:
@@ -12082,6 +12104,7 @@
     functions.set("secondNumberAngle", () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
     functions.set("secondValue", () => liveTime().s);
     functions.set("hour24Number", () => liveTime().h24);
+    functions.set("minuteNumber", () => Math.floor(liveTime().m));
     functions.set("hour24Value", () => {
       const t = liveTime();
       return t.h24 + t.m / 60;
@@ -12352,6 +12375,23 @@
       }
       const pos = WB_planetApparentPosition(planetNumber, julianCenturiesSince2000Epoch / 100);
       return pos.apparentRightAscension;
+    });
+    functions.set("declinationOfPlanet", (planetNumber) => {
+      const di = dateToDateInterval(getNow());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      if (planetNumber === 0 /* Sun */) {
+        return sunRAandDecl(di, null).declination;
+      }
+      if (planetNumber === 1 /* Moon */) {
+        return moonRAAndDecl(di, null).declination;
+      }
+      const pos = WB_planetApparentPosition(planetNumber, julianCenturiesSince2000Epoch / 100);
+      return pos.apparentDeclination;
+    });
+    functions.set("HLatitudeOfPlanet", (n) => {
+      const di = dateToDateInterval(getNow());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      return WB_planetHeliocentricLatitude(n, julianCenturiesSince2000Epoch / 100);
     });
     function transitForDay(planetNumber) {
       const now2 = getNow();
@@ -12881,8 +12921,7 @@
     });
     functions.set("planetIsUp", (n) => {
       const di = dateToDateInterval(getNow());
-      const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
-      return alt > 0 ? 1 : 0;
+      return planetIsUpForRiseSet(n, di, OBSERVER_LAT, OBSERVER_LON) ? 1 : 0;
     });
     function sunriseHour24ForDay() {
       const sr = riseSetForDay(true, 0 /* Sun */);

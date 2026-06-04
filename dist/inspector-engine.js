@@ -10175,6 +10175,28 @@
         return NaN;
     }
   }
+  function WB_planetHeliocentricLatitude(planetNumber, U) {
+    switch (planetNumber) {
+      case 4 /* Earth */:
+        return 0;
+      case 2 /* Mercury */:
+        return mercuryHeliocentricLatitude(U);
+      case 3 /* Venus */:
+        return venusHeliocentricLatitude(U);
+      case 5 /* Mars */:
+        return marsHeliocentricLatitude(U);
+      case 6 /* Jupiter */:
+        return jupiterHeliocentricLatitude(U);
+      case 7 /* Saturn */:
+        return saturnHeliocentricLatitude(U);
+      case 8 /* Uranus */:
+        return uranusHeliocentricLatitude(U);
+      case 9 /* Neptune */:
+        return neptuneHeliocentricLatitude(U);
+      default:
+        return NaN;
+    }
+  }
   function WB_planetHeliocentricRadius(planetNumber, U, cache) {
     switch (planetNumber) {
       case 4 /* Earth */:
@@ -11583,6 +11605,7 @@
     functions.set("secondNumberAngle", () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
     functions.set("secondValue", () => liveTime().s);
     functions.set("hour24Number", () => liveTime().h24);
+    functions.set("minuteNumber", () => Math.floor(liveTime().m));
     functions.set("hour24Value", () => {
       const t = liveTime();
       return t.h24 + t.m / 60;
@@ -11853,6 +11876,23 @@
       }
       const pos = WB_planetApparentPosition(planetNumber, julianCenturiesSince2000Epoch / 100);
       return pos.apparentRightAscension;
+    });
+    functions.set("declinationOfPlanet", (planetNumber) => {
+      const di = dateToDateInterval(getNow2());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      if (planetNumber === 0 /* Sun */) {
+        return sunRAandDecl(di, null).declination;
+      }
+      if (planetNumber === 1 /* Moon */) {
+        return moonRAAndDecl(di, null).declination;
+      }
+      const pos = WB_planetApparentPosition(planetNumber, julianCenturiesSince2000Epoch / 100);
+      return pos.apparentDeclination;
+    });
+    functions.set("HLatitudeOfPlanet", (n) => {
+      const di = dateToDateInterval(getNow2());
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+      return WB_planetHeliocentricLatitude(n, julianCenturiesSince2000Epoch / 100);
     });
     function transitForDay(planetNumber) {
       const now2 = getNow2();
@@ -12382,8 +12422,7 @@
     });
     functions.set("planetIsUp", (n) => {
       const di = dateToDateInterval(getNow2());
-      const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
-      return alt > 0 ? 1 : 0;
+      return planetIsUpForRiseSet(n, di, OBSERVER_LAT, OBSERVER_LON) ? 1 : 0;
     });
     function sunriseHour24ForDay() {
       const sr = riseSetForDay(true, 0 /* Sun */);
@@ -13397,7 +13436,8 @@
       nextUpdateTime: 0,
       pendingSweep: null,
       linear: def.linear ?? false,
-      evalAhead: def.evalAhead ?? false
+      evalAhead: def.evalAhead ?? false,
+      discrete: def.discrete ?? false
     };
   }
 
@@ -13417,6 +13457,21 @@
       }
     }
     return { getNow: getNow2, withDisplayTime: withDisplayTime2 };
+  }
+  function updateObsValueDiscrete(v, env2, perfNow, getNow2, timeDirection) {
+    const newTarget = evalAttr(v.expr, env2);
+    if (timeDirection === 0) {
+      v.nextUpdateTime = perfNow + 100;
+    } else {
+      const dir = timeDirection === -1 ? -1 : 1;
+      const nextDisplayMs = computeNextBoundary(v.updateInterval * 1e3, getNow2, dir, env2);
+      v.nextUpdateDisplayTime = nextDisplayMs;
+      v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow2);
+    }
+    v.pendingSweep = null;
+    v.anim.currentValue = newTarget;
+    v.anim.targetValue = newTarget;
+    v.anim.animating = false;
   }
   function updateObsValueEvalAhead(v, env2, perfNow, getNow2, timeDirection, withDisplayTime2) {
     const dir = timeDirection === -1 ? -1 : 1;
@@ -13592,7 +13647,9 @@
     v.pendingSweep = null;
   }
   function updateObsValue(v, env2, perfNow, getNow2, tickIntervalMs, displayDeltaPerTickSec, timeDirection, withDisplayTime2) {
-    if (v.evalAhead) {
+    if (v.discrete) {
+      updateObsValueDiscrete(v, env2, perfNow, getNow2, timeDirection);
+    } else if (v.evalAhead) {
       updateObsValueEvalAhead(v, env2, perfNow, getNow2, timeDirection, withDisplayTime2);
     } else if (tickIntervalMs !== null && tickIntervalMs > 0) {
       updateObsValueScrub(
@@ -13677,6 +13734,12 @@
   function animateObsValues(values, perfNow) {
     for (const v of values) {
       animateObsValue(v, perfNow);
+    }
+  }
+  function resetObsValueSchedules(values) {
+    for (const v of values) {
+      v.nextUpdateDisplayTime = 0;
+      v.nextUpdateTime = 0;
     }
   }
 
@@ -14709,10 +14772,22 @@
     { name: "moonAgeAngle", category: "Moon Position", desc: "Moon phase angle (radians, 0=new)", kind: "fn" },
     { name: "realMoonAgeAngle", category: "Moon Position", desc: "Moon age in days since new moon", kind: "fn" },
     { name: "moonRelativeAngle", category: "Moon Position", desc: "Moon relative angle (radians)", kind: "fn" },
+    // ── Planet Position ─────────────────────────────────────────────────
+    { name: "RAOfPlanet", category: "Planet Position", desc: "Right ascension (radians)", kind: "fn", sig: "(planet)" },
+    { name: "declinationOfPlanet", category: "Planet Position", desc: "Geocentric apparent declination (radians)", kind: "fn", sig: "(planet)" },
+    { name: "altitudeOfPlanet", category: "Planet Position", desc: "Topocentric altitude (radians)", kind: "fn", sig: "(planet)" },
+    { name: "azimuthOfPlanet", category: "Planet Position", desc: "Topocentric azimuth (radians)", kind: "fn", sig: "(planet)" },
+    { name: "ELongitudeOfPlanet", category: "Planet Position", desc: "Geocentric ecliptic longitude (radians)", kind: "fn", sig: "(planet)" },
+    { name: "ELatitudeOfPlanet", category: "Planet Position", desc: "Geocentric ecliptic latitude (radians)", kind: "fn", sig: "(planet)" },
+    { name: "HLongitudeOfPlanet", category: "Planet Position", desc: "Heliocentric longitude (radians)", kind: "fn", sig: "(planet)" },
+    { name: "HLatitudeOfPlanet", category: "Planet Position", desc: "Heliocentric latitude (radians)", kind: "fn", sig: "(planet)" },
+    { name: "distanceFromEarthOfPlanet", category: "Planet Position", desc: "Geocentric distance (AU)", kind: "fn", sig: "(planet)" },
+    { name: "planetIsUp", category: "Planet Position", desc: "1 if planet is above the horizon, else 0", kind: "fn", sig: "(planet)" },
     // ── Clock / Calendar ────────────────────────────────────────────────
     { name: "hour24Value", category: "Clock", desc: "Current hour (0\u201323, fractional)", kind: "fn" },
     { name: "hour24Number", category: "Clock", desc: "Current hour (integer 0\u201323)", kind: "fn" },
     { name: "minuteValue", category: "Clock", desc: "Current minute (fractional)", kind: "fn" },
+    { name: "minuteNumber", category: "Clock", desc: "Current minute (integer 0\u201359)", kind: "fn" },
     { name: "secondValue", category: "Clock", desc: "Current second (fractional)", kind: "fn" },
     { name: "dayOfWeekNumber", category: "Clock", desc: "Day of week (0=Sun, 6=Sat)", kind: "fn" },
     { name: "dayOfMonthNumber", category: "Clock", desc: "Day of month (1\u201331)", kind: "fn" },
@@ -14765,6 +14840,7 @@
     "Planet Times",
     "Sun Position",
     "Moon Position",
+    "Planet Position",
     "Clock",
     "Astronomical",
     "Day/Night Ring",
@@ -14773,14 +14849,179 @@
     "Math"
   ];
 
+  // src/inspector/catalog.ts
+  function tagIsAngular(tag) {
+    return tag === "A";
+  }
+  function tagIsDiscrete(tag) {
+    return tag === "Int" || tag === "BOOL" || tag === "WD" || tag === "MO" || tag === "DAY" || tag === "HM" || tag === "LT";
+  }
+  var FAST = 0.1;
+  var NORMAL = 1;
+  var SLOW = 60;
+  var TIME_GROUP = {
+    name: "Time",
+    rows: [
+      {
+        rowLabel: "Date",
+        layout: "fields",
+        cells: [
+          { label: "Year", expr: "yearNumber()", tag: "Int", updateInterval: NORMAL },
+          { label: "Month", expr: "monthNumber()", tag: "MO", updateInterval: NORMAL },
+          { label: "Day Index", expr: "dayNumber()", tag: "DAY", updateInterval: NORMAL }
+        ]
+      },
+      {
+        // Weekday on its own line, aligned under Year (empty label fills the
+        // label column so the field starts at the same x).
+        layout: "fields",
+        cells: [
+          { label: "Weekday", expr: "weekdayNumber()", tag: "WD", updateInterval: NORMAL }
+        ]
+      },
+      {
+        rowLabel: "Clock",
+        layout: "fields",
+        cells: [
+          { label: "Hour", expr: "hour24Number()", tag: "Int", updateInterval: NORMAL },
+          { label: "Minute", expr: "minuteNumber()", tag: "Int", updateInterval: NORMAL },
+          { label: "Second", expr: "secondValue()", tag: "Num", updateInterval: FAST }
+        ]
+      },
+      { rowLabel: "Sidereal time", cells: [{ label: "", expr: "lstValue()", tag: "HMS", updateInterval: FAST }] },
+      { rowLabel: "Solar time", cells: [{ label: "", expr: "solarTimeSec()", tag: "HMS", updateInterval: FAST }] },
+      { rowLabel: "TZ offset", cells: [{ label: "", expr: "tzOffset()", tag: "HM", updateInterval: SLOW }] },
+      {
+        rowLabel: "Equation of time",
+        cells: [
+          { label: "\u0394t", expr: "EOTSeconds()", tag: "MS", updateInterval: SLOW },
+          { label: "angle", expr: "EOTAngle()", tag: "A", updateInterval: SLOW }
+        ]
+      }
+    ]
+  };
+  var SUN_GROUP = {
+    name: "Sun",
+    rows: [
+      { rowLabel: "RA / Dec", cells: [
+        { label: "RA", expr: "sunRA()", tag: "A", updateInterval: NORMAL },
+        { label: "Dec", expr: "declinationOfPlanet(0)", tag: "Ldeg", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Alt / Az", cells: [
+        { label: "Alt", expr: "sunAltitude()", tag: "Ldeg", updateInterval: NORMAL },
+        { label: "Az", expr: "sunAzimuth()", tag: "A", updateInterval: NORMAL },
+        { label: "Up?", expr: "planetIsUp(0)", tag: "BOOL", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Ecliptic", cells: [
+        { label: "Lon", expr: "ELongitudeOfPlanet(0)", tag: "A", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Sub-solar pt", cells: [
+        { label: "Lat", expr: "subSolarLatitude()", tag: "Ldeg", updateInterval: NORMAL },
+        { label: "Lon", expr: "subSolarLongitude()", tag: "A", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Solar-noon angle", cells: [
+        { label: "", expr: "solarNoonAngle24h()", tag: "A", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Rise / Set / Transit", cells: [
+        { label: "Rise", expr: "sunriseForDayTime()", tag: "LT", updateInterval: SLOW },
+        { label: "Set", expr: "sunsetForDayTime()", tag: "LT", updateInterval: SLOW },
+        { label: "Transit", expr: "sunTransitForDayTime()", tag: "LT", updateInterval: SLOW }
+      ] }
+    ]
+  };
+  var MOON_GROUP = {
+    name: "Moon",
+    rows: [
+      { rowLabel: "RA / Dec", cells: [
+        { label: "RA", expr: "moonRA()", tag: "A", updateInterval: NORMAL },
+        { label: "Dec", expr: "declinationOfPlanet(1)", tag: "Ldeg", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Alt / Az", cells: [
+        { label: "Alt", expr: "moonAltitude()", tag: "Ldeg", updateInterval: NORMAL },
+        { label: "Az", expr: "moonAzimuth()", tag: "A", updateInterval: NORMAL },
+        { label: "Up?", expr: "planetIsUp(1)", tag: "BOOL", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Ecliptic", cells: [
+        { label: "Lon", expr: "ELongitudeOfPlanet(1)", tag: "A", updateInterval: NORMAL },
+        { label: "Lat", expr: "ELatitudeOfPlanet(1)", tag: "Ldeg", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Phase", cells: [
+        { label: "Age", expr: "moonAgeAngle()", tag: "A", updateInterval: NORMAL },
+        { label: "Elongation", expr: "moonElongation()", tag: "A", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Position", cells: [
+        { label: "Relative", expr: "moonRelativeAngle()", tag: "A", updateInterval: NORMAL },
+        { label: "Rel-position", expr: "moonRelativePositionAngle()", tag: "A", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Asc. node", cells: [
+        { label: "Lon", expr: "lunarAscendingNodeLongitude()", tag: "A", updateInterval: NORMAL },
+        { label: "RA", expr: "lunarAscendingNodeRA()", tag: "A", updateInterval: NORMAL }
+      ] },
+      { rowLabel: "Distance", cells: [
+        { label: "", expr: "distanceFromEarthOfPlanet(1)", tag: "DIST", updateInterval: SLOW }
+      ] },
+      { rowLabel: "Rise / Set / Transit", cells: [
+        { label: "Rise", expr: "moonriseForDayTime()", tag: "LT", updateInterval: SLOW },
+        { label: "Set", expr: "moonsetForDayTime()", tag: "LT", updateInterval: SLOW },
+        { label: "Transit", expr: "moonTransitForDayTime()", tag: "LT", updateInterval: SLOW }
+      ] }
+    ]
+  };
+  var PLANETS = [
+    { name: "Mercury", n: 2 },
+    { name: "Venus", n: 3 },
+    { name: "Mars", n: 5 },
+    { name: "Jupiter", n: 6 },
+    { name: "Saturn", n: 7 },
+    { name: "Uranus", n: 8 },
+    { name: "Neptune", n: 9 }
+  ];
+  function planetGroup(name, n) {
+    return {
+      name,
+      rows: [
+        { rowLabel: "RA / Dec", cells: [
+          { label: "RA", expr: `RAOfPlanet(${n})`, tag: "A", updateInterval: NORMAL },
+          { label: "Dec", expr: `declinationOfPlanet(${n})`, tag: "Ldeg", updateInterval: NORMAL }
+        ] },
+        { rowLabel: "Alt / Az", cells: [
+          { label: "Alt", expr: `altitudeOfPlanet(${n})`, tag: "Ldeg", updateInterval: NORMAL },
+          { label: "Az", expr: `azimuthOfPlanet(${n})`, tag: "A", updateInterval: NORMAL },
+          { label: "Up?", expr: `planetIsUp(${n})`, tag: "BOOL", updateInterval: NORMAL }
+        ] },
+        { rowLabel: "Ecliptic (geo)", cells: [
+          { label: "Lon", expr: `ELongitudeOfPlanet(${n})`, tag: "A", updateInterval: NORMAL },
+          { label: "Lat", expr: `ELatitudeOfPlanet(${n})`, tag: "Ldeg", updateInterval: NORMAL }
+        ] },
+        { rowLabel: "Ecliptic (helio)", cells: [
+          { label: "Lon", expr: `HLongitudeOfPlanet(${n})`, tag: "A", updateInterval: NORMAL },
+          { label: "Lat", expr: `HLatitudeOfPlanet(${n})`, tag: "Ldeg", updateInterval: NORMAL }
+        ] },
+        { rowLabel: "Distance", cells: [
+          { label: "", expr: `distanceFromEarthOfPlanet(${n})`, tag: "DIST", updateInterval: SLOW }
+        ] },
+        { rowLabel: "Rise / Set / Transit", cells: [
+          { label: "Rise", expr: `riseOfPlanetForDayTime(${n})`, tag: "LT", updateInterval: SLOW },
+          { label: "Set", expr: `setOfPlanetForDayTime(${n})`, tag: "LT", updateInterval: SLOW },
+          { label: "Transit", expr: `transitOfPlanetForDayTime(${n})`, tag: "LT", updateInterval: SLOW }
+        ] }
+      ]
+    };
+  }
+  var CATALOG = [
+    TIME_GROUP,
+    SUN_GROUP,
+    MOON_GROUP,
+    ...PLANETS.map((p) => planetGroup(p.name, p.n))
+  ];
+
   // src/inspector/inspector-entry.ts
   var timeDisplay = document.getElementById("time-display");
   var dateDisplay = document.getElementById("date-display");
   var locationName = document.getElementById("location-name");
   var locationDetail = document.getElementById("location-detail");
   var setLocationBtn = document.getElementById("set-location-btn");
-  var sunriseValue = document.getElementById("sunrise-value");
-  var sunsetValue = document.getElementById("sunset-value");
+  var catalogEl = document.getElementById("catalog");
   var exprInput = document.getElementById("expr-input");
   var exprResults = document.getElementById("expr-results");
   var exprNumber = document.getElementById("expr-number");
@@ -14866,10 +15107,9 @@
       }
       env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
       updateLocationDisplay();
-      lastSunUpdateMinute = -1;
-      updateSunData();
       updateTimeDisplay();
       rebuildExprValues();
+      resetCatalogSchedules();
     }
   });
   if (locationDialog) {
@@ -14891,10 +15131,9 @@
           locationDialog.updateState(lat, lon, "browser", "", "");
           env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
           updateLocationDisplay();
-          lastSunUpdateMinute = -1;
-          updateSunData();
           updateTimeDisplay();
           rebuildExprValues();
+          resetCatalogSchedules();
         } else {
           needsPrompt = true;
           locationDialog.setNeedsPrompt(true);
@@ -14933,74 +15172,24 @@
     tzDisplay.textContent = formatTimezoneInfo(locationTimezone, now);
   }
   var EPOCH_2001_MS = 9783072e5;
-  function findTodayRiseSet(riseNotSet) {
-    const now = getNow();
-    const di = dateToDateInterval(now);
-    const observerLatRad = lat * Math.PI / 180;
-    const observerLonRad = lon * Math.PI / 180;
-    const tzOffsetSeconds = (/* @__PURE__ */ new Date()).getTimezoneOffset() * -60 + tzDeltaMs / 1e3;
-    const pool = new AstroCachePool();
-    initializeCachePool(pool, di, observerLatRad, observerLonRad, false, tzOffsetSeconds);
-    const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
-    const localNoon = new Date(
-      shifted.getFullYear(),
-      shifted.getMonth(),
-      shifted.getDate(),
-      12,
-      0,
-      0
-    );
-    const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
-    const fwdResult = planetaryRiseSetTimeRefined(
-      noonDI,
-      observerLatRad,
-      observerLonRad,
-      riseNotSet,
-      0 /* Sun */,
-      NaN,
-      pool
-    ).riseSetTime;
-    releaseCachePool(pool);
-    if (isNoRiseSet(fwdResult)) return null;
-    const resultDate = new Date(fwdResult * 1e3 + EPOCH_2001_MS + tzDeltaMs);
-    if (resultDate.getDate() !== shifted.getDate() || resultDate.getMonth() !== shifted.getMonth()) {
-      const pool2 = new AstroCachePool();
-      initializeCachePool(pool2, di, observerLatRad, observerLonRad, false, tzOffsetSeconds);
-      const bwdResult = planetaryRiseSetTimeRefined(
-        noonDI - 24 * 3600,
-        observerLatRad,
-        observerLonRad,
-        riseNotSet,
-        0 /* Sun */,
-        NaN,
-        pool2
-      ).riseSetTime;
-      releaseCachePool(pool2);
-      if (isNoRiseSet(bwdResult)) return null;
-      const bwdDate = new Date(bwdResult * 1e3 + EPOCH_2001_MS + tzDeltaMs);
-      if (bwdDate.getDate() !== shifted.getDate() || bwdDate.getMonth() !== shifted.getMonth()) {
-        return null;
+  function formatDateIntervalTime(value) {
+    const dateMs = value * 1e3 + EPOCH_2001_MS;
+    if (!isFinite(dateMs) || dateMs <= -62e12 || dateMs >= 25e13) return "\u2014";
+    const d = new Date(dateMs);
+    if (locationTimezone) {
+      try {
+        return new Intl.DateTimeFormat("en-US", {
+          timeZone: locationTimezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false
+        }).format(d);
+      } catch {
+        return d.toISOString().slice(11, 19);
       }
-      return new Date(bwdResult * 1e3 + EPOCH_2001_MS);
     }
-    return new Date(fwdResult * 1e3 + EPOCH_2001_MS);
-  }
-  function formatRiseSetTime(date) {
-    if (!date) return "\u2014";
-    const options = {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZone: locationTimezone,
-      hour12: false
-    };
-    return date.toLocaleTimeString("en-US", options);
-  }
-  function updateSunData() {
-    const sunrise = findTodayRiseSet(true);
-    const sunset = findTodayRiseSet(false);
-    sunriseValue.textContent = formatRiseSetTime(sunrise);
-    sunsetValue.textContent = formatRiseSetTime(sunset);
+    return d.toISOString().slice(11, 19);
   }
   var EXPR_UPDATE_INTERVAL_SEC = 0.1;
   var lastExprText = "";
@@ -15292,22 +15481,250 @@
       buildReferencePanel();
     }
   });
-  var lastSunUpdateMinute = -1;
+  var catalogObsValues = [];
+  var catalogHandles = [];
+  var WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  var MONTH_NAMES = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+  ];
+  var KM_PER_AU = 1495978707e-1;
+  var MINUS = "\u2212";
+  var APOS = "\u2019";
+  function buildCatalog() {
+    const now = performance.now();
+    for (const group of CATALOG) {
+      const groupEl = document.createElement("section");
+      groupEl.className = "cat-group";
+      const nameEl = document.createElement("h2");
+      nameEl.className = "cat-group-name";
+      nameEl.textContent = group.name;
+      groupEl.appendChild(nameEl);
+      for (const row of group.rows) {
+        const rowEl = document.createElement("div");
+        rowEl.className = row.layout === "fields" ? "cat-row cat-row-fields" : "cat-row";
+        const lbl = document.createElement("span");
+        lbl.className = "cat-row-label";
+        lbl.textContent = row.rowLabel ?? "";
+        rowEl.appendChild(lbl);
+        for (const cell of row.cells) {
+          const cellEl = document.createElement("div");
+          cellEl.className = cell.tag === "DIST" ? "cat-cell dist-cell" : "cat-cell";
+          if (cell.label) {
+            const cl = document.createElement("span");
+            cl.className = "cat-cell-label";
+            cl.textContent = cell.label;
+            cellEl.appendChild(cl);
+          }
+          const valueEl = document.createElement("span");
+          valueEl.className = "cat-cell-value";
+          valueEl.textContent = "\u2014";
+          cellEl.appendChild(valueEl);
+          rowEl.appendChild(cellEl);
+          const discrete = tagIsDiscrete(cell.tag);
+          const obs = createObsValue(
+            {
+              name: cell.expr,
+              expr: cell.expr,
+              updateInterval: cell.updateInterval,
+              evalAhead: !discrete,
+              discrete,
+              linear: !tagIsAngular(cell.tag)
+            },
+            env,
+            now,
+            getNow
+          );
+          catalogObsValues.push(obs);
+          catalogHandles.push({ cell, obs, valueEl, last: "" });
+        }
+        groupEl.appendChild(rowEl);
+      }
+      catalogEl.appendChild(groupEl);
+    }
+  }
+  function resetCatalogSchedules() {
+    resetObsValueSchedules(catalogObsValues);
+  }
+  function pad2(n) {
+    return n.toString().padStart(2, "0");
+  }
+  function pad3(n) {
+    return n.toString().padStart(3, "0");
+  }
+  function groupThousands(digits) {
+    let out = "";
+    for (let i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 === 0) out += `<span class="kilo-sep">${APOS}</span>`;
+      out += digits[i];
+    }
+    return out;
+  }
+  function fmtAngle(v) {
+    if (!isFinite(v)) return "\u2014";
+    let deg = v * 180 / Math.PI;
+    deg = (deg % 360 + 360) % 360;
+    return `${deg.toFixed(2)}\xB0`;
+  }
+  function fmtDeg(v) {
+    if (!isFinite(v)) return "\u2014";
+    const deg = v * 180 / Math.PI;
+    return `${deg < 0 ? MINUS : ""}${Math.abs(deg).toFixed(2)}\xB0`;
+  }
+  function fmtInt(v) {
+    if (!isFinite(v)) return "\u2014";
+    return Math.round(v).toString();
+  }
+  function fmtNum(v) {
+    if (!isFinite(v)) return "\u2014";
+    return Number.isInteger(v) ? v.toString() : v.toFixed(3);
+  }
+  function fmtBool(v) {
+    if (!isFinite(v)) return "\u2014";
+    return Math.round(v) !== 0 ? "yes" : "no";
+  }
+  function fmtWeekday(v) {
+    if (!isFinite(v)) return "\u2014";
+    const idx = (Math.round(v) % 7 + 7) % 7;
+    return `${idx} (${WEEKDAY_NAMES[idx]})`;
+  }
+  function fmtMonth(v) {
+    if (!isFinite(v)) return "\u2014";
+    const idx = (Math.round(v) % 12 + 12) % 12;
+    return `${idx} (${MONTH_NAMES[idx]})`;
+  }
+  function ordinal(n) {
+    const v = n % 100;
+    const suffix = v >= 11 && v <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th";
+    return `${n}${suffix}`;
+  }
+  function fmtDay(v) {
+    if (!isFinite(v)) return "\u2014";
+    const n = Math.round(v);
+    return `${n} (${ordinal(n + 1)})`;
+  }
+  function fmtHMS(seconds) {
+    if (!isFinite(seconds)) return "\u2014";
+    const sign = seconds < 0 ? MINUS : "";
+    const totalMs = Math.round(Math.abs(seconds) * 1e3);
+    const ms = totalMs % 1e3;
+    let rem = Math.floor(totalMs / 1e3);
+    const ss = rem % 60;
+    rem = Math.floor(rem / 60);
+    const m = rem % 60;
+    const h = Math.floor(rem / 60);
+    return `${sign}${pad2(h)}:${pad2(m)}:${pad2(ss)}.${pad3(ms)}`;
+  }
+  function fmtHM(seconds) {
+    if (!isFinite(seconds)) return "\u2014";
+    const sign = seconds < 0 ? MINUS : "+";
+    const totalMin = Math.round(Math.abs(seconds) / 60);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `${sign}${pad2(h)}:${pad2(m)}`;
+  }
+  function fmtMS(seconds) {
+    if (!isFinite(seconds)) return "\u2014";
+    const sign = seconds < 0 ? MINUS : "+";
+    const totalMs = Math.round(Math.abs(seconds) * 1e3);
+    const ms = totalMs % 1e3;
+    let rem = Math.floor(totalMs / 1e3);
+    const ss = rem % 60;
+    const m = Math.floor(rem / 60);
+    return `${sign}${pad2(m)}:${pad2(ss)}.${pad3(ms)}`;
+  }
+  function fmtDist(au) {
+    if (!isFinite(au)) return "\u2014";
+    const auStr = `${au.toFixed(au < 1 ? 5 : 4)} AU`;
+    const kmStr = `${groupThousands(Math.round(au * KM_PER_AU).toString())} km`;
+    return `${auStr}<span class="dist-km">${kmStr}</span>`;
+  }
+  function tagIsHtml(tag) {
+    return tag === "DIST";
+  }
+  function formatCell(tag, v) {
+    switch (tag) {
+      case "A":
+        return fmtAngle(v);
+      case "Ldeg":
+        return fmtDeg(v);
+      case "Num":
+        return fmtNum(v);
+      case "Int":
+        return fmtInt(v);
+      case "BOOL":
+        return fmtBool(v);
+      case "WD":
+        return fmtWeekday(v);
+      case "MO":
+        return fmtMonth(v);
+      case "DAY":
+        return fmtDay(v);
+      case "HMS":
+        return fmtHMS(v);
+      case "HM":
+        return fmtHM(v);
+      case "MS":
+        return fmtMS(v);
+      case "LT":
+        return formatDateIntervalTime(v);
+      case "DIST":
+        return fmtDist(v);
+    }
+  }
+  function tickCatalog(perfNow) {
+    updateObsValues(
+      catalogObsValues,
+      env,
+      perfNow,
+      getNow,
+      /* tickIntervalMs */
+      null,
+      /* displayDeltaPerTickSec */
+      0,
+      /* timeDirection */
+      1,
+      withDisplayTime
+    );
+    animateObsValues(catalogObsValues, perfNow);
+    for (const h of catalogHandles) {
+      const str = formatCell(h.cell.tag, h.obs.currentValue);
+      if (str === h.last) continue;
+      h.last = str;
+      if (tagIsHtml(h.cell.tag)) h.valueEl.innerHTML = str;
+      else h.valueEl.textContent = str;
+    }
+  }
   var fpsIndicator = createFpsIndicator(urlState.fps);
   function tick() {
+    const perfNow = performance.now();
     updateTimeDisplay();
     tickExprValues();
-    const now = getNow();
-    const currentMinute = now.getMinutes();
-    if (currentMinute !== lastSunUpdateMinute) {
-      lastSunUpdateMinute = currentMinute;
-      updateSunData();
-    }
-    fpsIndicator?.recordFrame(exprValues.length > 0);
+    tickCatalog(perfNow);
+    fpsIndicator?.recordFrame(true);
     requestAnimationFrame(tick);
   }
-  updateSunData();
+  buildCatalog();
   updateTimeDisplay();
   requestAnimationFrame(tick);
-  console.log("[Inspector] Initialized \u2014 lat:", lat, "lon:", lon, "tz:", locationTimezone);
+  console.log(
+    "[Inspector] Initialized \u2014 lat:",
+    lat,
+    "lon:",
+    lon,
+    "tz:",
+    locationTimezone,
+    "\u2014 catalog values:",
+    catalogObsValues.length
+  );
 })();

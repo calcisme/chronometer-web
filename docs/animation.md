@@ -251,6 +251,10 @@ A value sampled every Δ and interpolated between *past* samples lags real time 
 
 Eval-ahead evaluates the expression at a shifted display time via **`makeOverridableGetNow(base)`** (updater.ts), which returns a `getNow` plus a `withDisplayTime(displayMs, fn)` that transiently overrides the clock for the duration of `fn`. The display time enters expressions only through `getNow`, so shifting it shifts the whole evaluation — no second environment needed. The Inspector uses eval-ahead to show smooth, lag-free readouts while fully re-evaluating only 10×/s; see [Inspector — Expression Evaluator](inspector.md#expression-evaluator).
 
+### Discrete values (snap, no interpolation)
+
+Some values have no meaningful state *between* two samples — today's sunrise time, an integer hour, a floored timezone offset. The **`ObsValue.discrete`** flag marks these: the updater evaluates them at the **current** display time and sets the value directly (no eval-ahead, no interpolation), letting the function's own semantics decide which value applies now. Eval-ahead would be wrong for them (it crosses the value's change-point early — e.g. showing tomorrow's sunrise before midnight), and interpolating a step value produces nonexistent in-between readings. `discrete` takes precedence over `evalAhead`. The Inspector's ephemeris catalog drives rise/set/transit, integer date/clock fields, weekday, planet up/down, and TZ offset this way.
+
 ## Key Source Files
 
 | File | Purpose |

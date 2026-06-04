@@ -24,8 +24,9 @@ The Inspector serves two roles:
 
 ```
 src/inspector/
-├── inspector-entry.ts    Main app: time display, expression evaluator, autocomplete, reference panel
+├── inspector-entry.ts    Main app: time display, expression evaluator, autocomplete, reference, catalog
 ├── inspector.html        HTML template with all UI elements
+├── catalog.ts            Declarative ephemeris catalog (groups → rows → cells)
 └── expr-metadata.ts      Curated function/constant metadata for autocomplete and reference
 ```
 
@@ -50,11 +51,10 @@ functions registered by `createAstroEnvironment()` are available for evaluation.
 
 ## Main Features
 
-### Time and Sun Display
+### Time Display
 
-The top section shows the current time, date, timezone, and today's
-sunrise/sunset in the configured location. Sunrise/sunset update once per
-minute (they're daily values).
+The top section shows the current time (to the millisecond — the subsecond
+portion is dimmed), date, and timezone in the configured location.
 
 ### Expression Evaluator
 
@@ -119,6 +119,52 @@ and constants. Built lazily on first open from `EXPR_METADATA` merged with
 the live environment. Categories are collapsible. Clicking an entry inserts
 it into the expression input.
 
+### Ephemeris Catalog
+
+Below the expression evaluator, a scrolling **catalog** shows ~130 live
+astronomical / time values grouped **Time → Sun → Moon → Planets (Mercury →
+Neptune)**. Each value is one shared **`ObsValue`** (eval-ahead, lag-free):
+fully re-evaluated on its cadence (seconds 0.1 s, coordinates 1 s,
+rise/set/distance 60 s) and smoothly interpolated every frame — the
+"evaluate rarely, interpolate often" pattern at ~130 values (see
+[planning/2026-06-03-inspector-obsvalue-animation.md](../planning/2026-06-03-inspector-obsvalue-animation.md)
+and [planning/2026-06-04-inspector-ephemeris-catalog.md](../planning/2026-06-04-inspector-ephemeris-catalog.md)).
+
+The catalog is **defined declaratively** in
+[`catalog.ts`](../src/inspector/catalog.ts) (groups → rows → cells, each cell an
+expression + a display **tag** + an update interval). Coordinate rows use a
+3-column grid (label + three value columns) so columns line up across rows — the
+rightmost value (e.g. `Up?` on the Alt/Az row) aligns under `Transit`; the
+Distance cell spans all three columns for its `AU` + `km` reading. Date/Clock
+numbers use a compact "fields" row.
+
+Each tag is either **continuous** (eval-ahead, smoothly interpolated) or
+**discrete** — a value with no meaningful state between two of its samples
+(today's sunrise, an integer hour, a floored TZ offset). Discrete values are
+evaluated at the *current* display time and **snapped** (no eval-ahead, no
+interpolation), because interpolating them is meaningless and eval-ahead would
+cross their change-point early. Discreteness is determined by the tag
+(`tagIsDiscrete`) and flows to the `ObsValue.discrete` flag.
+
+| Tag | Kind | `linear` | Display |
+|-----|------|----------|---------|
+| `A` | continuous | `false` | full-circle angle, `0–360°` |
+| `Ldeg` | continuous | `true` | bounded signed angle (declination, altitude, latitude) |
+| `Num` | continuous | `true` | fractional number (minute, second — 3 decimals) |
+| `DIST` | continuous | `true` | distance as `AU` + `km` (km grouped with a compressed apostrophe) |
+| `HMS` | continuous | `true` | clock seconds → `HH:MM:SS.sss` (sidereal, solar time) |
+| `MS` | continuous | `true` | small signed seconds → `±MM:SS.sss` (equation of time) |
+| `Int` | **discrete** | `true` | integer (year/month/day/hour) |
+| `BOOL` | **discrete** | `true` | 0/1 → `yes`/`no` (planet up?) |
+| `WD` | **discrete** | `true` | weekday → `0 (Sunday)` |
+| `HM` | **discrete** | `true` | signed clock offset → `±HH:MM` (TZ offset) |
+| `LT` | **discrete** | `true` | dateInterval → local time, `—` for polar no-event (rise/set/transit) |
+
+Per frame the Inspector runs `updateObsValues` + `animateObsValues` over the
+catalog's `ObsValue[]` and writes each changed cell (a per-cell string compare
+skips redundant DOM writes). Location changes call `resetObsValueSchedules` so
+the catalog re-evaluates against the new environment.
+
 ## Expression Metadata (`expr-metadata.ts`)
 
 The curated metadata table drives both autocomplete descriptions and the
@@ -148,6 +194,7 @@ panel. Categories not in this list appear at the end.
 | Planet Times | Next/prev/today rise, set, transit for any planet |
 | Sun Position | Altitude, azimuth, RA, declination, ecliptic longitude |
 | Moon Position | Altitude, azimuth, age angle, relative angle |
+| Planet Position | RA/declination, alt/az, ecliptic & heliocentric lon/lat, distance, up |
 | Clock | Hour, minute, second, day/month/year, timezone |
 | Astronomical | Sidereal time, Julian day, equation of time, precession |
 | Day/Night Ring | Rise/set angles, leaf angles, polar detection, transit angles |
@@ -166,8 +213,9 @@ environment and refresh all displays.
 
 | File | Purpose |
 |------|---------|
-| `src/inspector/inspector-entry.ts` | Main app: tick loop, expression evaluator, autocomplete, reference panel |
+| `src/inspector/inspector-entry.ts` | Main app: tick loop, expression evaluator, autocomplete, reference, catalog |
 | `src/inspector/inspector.html` | HTML template |
+| `src/inspector/catalog.ts` | Declarative ephemeris catalog definition |
 | `src/inspector/expr-metadata.ts` | Curated function/constant metadata |
 | `src/shared/obs-value.ts` | ObsValue type + `createObsValue` (shared with Observatory) |
 | `src/shared/updater.ts` | ObsValue update/animate passes + `makeOverridableGetNow` (eval-ahead) |

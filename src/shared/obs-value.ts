@@ -77,6 +77,13 @@ export interface ObsValue {
      *  of interpolating between past samples. Requires a `withDisplayTime` helper
      *  to be supplied to the updater (see updater.ts / makeOverridableGetNow). */
     evalAhead: boolean;
+
+    /** If true, this value is **discrete** — there is no meaningful value between
+     *  two of its states (e.g. today's sunrise, an integer hour, a floored TZ
+     *  offset). The updater evaluates it at the *current* display time and snaps
+     *  (no eval-ahead, no interpolation), so the underlying function's semantics
+     *  decide which value applies now. Takes precedence over `evalAhead`. */
+    discrete: boolean;
 }
 
 /** Declarative definition used to construct an ObsValue. */
@@ -88,6 +95,7 @@ export interface ObsValueDef {
     naturalSpeed?: number;   // sweep speed in rad/s; default 0 (snap-to-target)
     linear?: boolean;        // if true, value is not an angle — skip fmod wrapping
     evalAhead?: boolean;     // if true, use lag-free eval-ahead update
+    discrete?: boolean;      // if true, evaluate at current time and snap (no interpolation)
 }
 
 // ============================================================================
@@ -120,5 +128,6 @@ export function createObsValue(
         pendingSweep: null,
         linear: def.linear ?? false,
         evalAhead: def.evalAhead ?? false,
+        discrete: def.discrete ?? false,
     };
 }

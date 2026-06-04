@@ -12,17 +12,14 @@
 
 import { createAstroEnvironment, computeTzDeltaMs } from '../shared/astro-env.js';
 import { createObsValue, type ObsValue } from '../shared/obs-value.js';
-import { updateObsValues, animateObsValues, makeOverridableGetNow } from '../shared/updater.js';
+import { updateObsValues, animateObsValues, resetObsValueSchedules, makeOverridableGetNow } from '../shared/updater.js';
 import { createFpsIndicator } from '../shared/fps-indicator.js';
 import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
 import { findClosestCity } from '../shared/city-search.js';
 import { initLocationDialog, requestBrowserLocation } from '../shared/location-dialog.js';
-import { dateToDateInterval } from '../astronomy/es-time.js';
-import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
-import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
-import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
 import { EXPR_METADATA, CATEGORY_ORDER, type ExprEntry } from './expr-metadata.js';
+import { CATALOG, tagIsAngular, tagIsDiscrete, type CatalogCell, type Tag } from './catalog.js';
 
 // ============================================================================
 // Initialization
@@ -34,8 +31,7 @@ const dateDisplay = document.getElementById('date-display')!;
 const locationName = document.getElementById('location-name')!;
 const locationDetail = document.getElementById('location-detail')!;
 const setLocationBtn = document.getElementById('set-location-btn')!;
-const sunriseValue = document.getElementById('sunrise-value')!;
-const sunsetValue = document.getElementById('sunset-value')!;
+const catalogEl = document.getElementById('catalog')!;
 const exprInput = document.getElementById('expr-input') as HTMLInputElement;
 const exprResults = document.getElementById('expr-results')!;
 const exprNumber = document.getElementById('expr-number')!;
@@ -152,10 +148,9 @@ const locationDialog = initLocationDialog({
 
         // Refresh all displays
         updateLocationDisplay();
-        lastSunUpdateMinute = -1;  // force sunrise/sunset recalc
-        updateSunData();
         updateTimeDisplay();
-        rebuildExprValues();  // snap expression to the new environment
+        rebuildExprValues();      // snap expression to the new environment
+        resetCatalogSchedules();  // re-evaluate the catalog against the new env
     },
 });
 
@@ -183,10 +178,9 @@ if (locationDialog) {
                 locationDialog.updateState(lat, lon, 'browser', '', '');
                 env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
                 updateLocationDisplay();
-                lastSunUpdateMinute = -1;
-                updateSunData();
                 updateTimeDisplay();
-                rebuildExprValues();  // snap expression to the new environment
+                rebuildExprValues();      // snap expression to the new environment
+                resetCatalogSchedules();  // re-evaluate the catalog against the new env
             } else {
                 // Browser denied or timed out — show location prompt
                 needsPrompt = true;
@@ -242,86 +236,32 @@ function updateTimeDisplay(): void {
 }
 
 // ============================================================================
-// Sunrise / Sunset
+// Date-interval formatting (shared by the expression box and catalog LT cells)
 // ============================================================================
 
 /** Epoch reference for date interval conversion: 2001-01-01T00:00:00Z */
 const EPOCH_2001_MS = 978307200000;
 
 /**
- * Find today's sunrise or sunset time. Returns a Date, or null if
- * no event occurs today (polar conditions).
+ * Format a value interpreted as a dateInterval (seconds since 2001-01-01Z) as a
+ * local time-of-day in the configured timezone. Returns '—' when out of range /
+ * NaN (e.g. a polar no-rise-set sentinel).
  */
-function findTodayRiseSet(riseNotSet: boolean): Date | null {
-    const now = getNow();
-    const di = dateToDateInterval(now);
-    const observerLatRad = lat * Math.PI / 180;
-    const observerLonRad = lon * Math.PI / 180;
-    const tzOffsetSeconds = (new Date().getTimezoneOffset() * -60) + tzDeltaMs / 1000;
-
-    // Create a temporary cache pool for the calculation
-    const pool = new AstroCachePool();
-    initializeCachePool(pool, di, observerLatRad, observerLonRad, false, tzOffsetSeconds);
-
-    // Compute local noon in the target timezone
-    const shifted = tzDeltaMs !== 0 ? new Date(now.getTime() + tzDeltaMs) : now;
-    const localNoon = new Date(
-        shifted.getFullYear(), shifted.getMonth(), shifted.getDate(), 12, 0, 0,
-    );
-    const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
-
-    // Search from local noon
-    const fwdResult = planetaryRiseSetTimeRefined(
-        noonDI, observerLatRad, observerLonRad,
-        riseNotSet, ECPlanetNumber.Sun, NaN, pool,
-    ).riseSetTime;
-
-    releaseCachePool(pool);
-
-    if (isNoRiseSet(fwdResult)) return null;
-
-    // Check if result is on the same local day
-    const resultDate = new Date(fwdResult * 1000 + EPOCH_2001_MS + tzDeltaMs);
-    if (resultDate.getDate() !== shifted.getDate() ||
-        resultDate.getMonth() !== shifted.getMonth()) {
-        // Try searching from previous noon
-        const pool2 = new AstroCachePool();
-        initializeCachePool(pool2, di, observerLatRad, observerLonRad, false, tzOffsetSeconds);
-        const bwdResult = planetaryRiseSetTimeRefined(
-            noonDI - 24 * 3600, observerLatRad, observerLonRad,
-            riseNotSet, ECPlanetNumber.Sun, NaN, pool2,
-        ).riseSetTime;
-        releaseCachePool(pool2);
-
-        if (isNoRiseSet(bwdResult)) return null;
-        const bwdDate = new Date(bwdResult * 1000 + EPOCH_2001_MS + tzDeltaMs);
-        if (bwdDate.getDate() !== shifted.getDate() ||
-            bwdDate.getMonth() !== shifted.getMonth()) {
-            return null;
+function formatDateIntervalTime(value: number): string {
+    const dateMs = value * 1000 + EPOCH_2001_MS;
+    if (!isFinite(dateMs) || dateMs <= -6.2e13 || dateMs >= 2.5e14) return '—';
+    const d = new Date(dateMs);
+    if (locationTimezone) {
+        try {
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: locationTimezone,
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+            }).format(d);
+        } catch {
+            return d.toISOString().slice(11, 19);
         }
-        return new Date(bwdResult * 1000 + EPOCH_2001_MS);
     }
-
-    return new Date(fwdResult * 1000 + EPOCH_2001_MS);
-}
-
-function formatRiseSetTime(date: Date | null): string {
-    if (!date) return '—';
-    const options: Intl.DateTimeFormatOptions = {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        timeZone: locationTimezone,
-        hour12: false,
-    };
-    return date.toLocaleTimeString('en-US', options);
-}
-
-function updateSunData(): void {
-    const sunrise = findTodayRiseSet(true);
-    const sunset = findTodayRiseSet(false);
-    sunriseValue.textContent = formatRiseSetTime(sunrise);
-    sunsetValue.textContent = formatRiseSetTime(sunset);
+    return d.toISOString().slice(11, 19);
 }
 
 // ============================================================================
@@ -686,38 +626,257 @@ refToggle.addEventListener('click', () => {
 });
 
 // ============================================================================
-// Main update loop
+// Ephemeris catalog
 // ============================================================================
 
-let lastSunUpdateMinute = -1;
+interface CatalogHandle {
+    cell: CatalogCell;
+    obs: ObsValue;
+    valueEl: HTMLElement;
+    last: string;  // last rendered string, to skip redundant DOM writes
+}
+
+const catalogObsValues: ObsValue[] = [];
+const catalogHandles: CatalogHandle[] = [];
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+const KM_PER_AU = 149597870.7;
+const MINUS = '−';
+const APOS = '’';
+
+/** Build the catalog DOM and its parallel ObsValue list (once, at startup). */
+function buildCatalog(): void {
+    const now = performance.now();
+    for (const group of CATALOG) {
+        const groupEl = document.createElement('section');
+        groupEl.className = 'cat-group';
+        const nameEl = document.createElement('h2');
+        nameEl.className = 'cat-group-name';
+        nameEl.textContent = group.name;
+        groupEl.appendChild(nameEl);
+
+        for (const row of group.rows) {
+            const rowEl = document.createElement('div');
+            rowEl.className = row.layout === 'fields' ? 'cat-row cat-row-fields' : 'cat-row';
+            // Always render the label span so it occupies grid track 1 (keeps the
+            // value columns aligned even for unlabeled rows).
+            const lbl = document.createElement('span');
+            lbl.className = 'cat-row-label';
+            lbl.textContent = row.rowLabel ?? '';
+            rowEl.appendChild(lbl);
+            for (const cell of row.cells) {
+                const cellEl = document.createElement('div');
+                cellEl.className = cell.tag === 'DIST' ? 'cat-cell dist-cell' : 'cat-cell';
+                if (cell.label) {
+                    const cl = document.createElement('span');
+                    cl.className = 'cat-cell-label';
+                    cl.textContent = cell.label;
+                    cellEl.appendChild(cl);
+                }
+                const valueEl = document.createElement('span');
+                valueEl.className = 'cat-cell-value';
+                valueEl.textContent = '—';
+                cellEl.appendChild(valueEl);
+                rowEl.appendChild(cellEl);
+
+                const discrete = tagIsDiscrete(cell.tag);
+                const obs = createObsValue(
+                    {
+                        name: cell.expr, expr: cell.expr, updateInterval: cell.updateInterval,
+                        evalAhead: !discrete, discrete, linear: !tagIsAngular(cell.tag),
+                    },
+                    env, now, getNow,
+                );
+                catalogObsValues.push(obs);
+                catalogHandles.push({ cell, obs, valueEl, last: '' });
+            }
+            groupEl.appendChild(rowEl);
+        }
+        catalogEl.appendChild(groupEl);
+    }
+}
+
+/** Reset every catalog value's schedule so it re-evaluates against the env. */
+function resetCatalogSchedules(): void {
+    resetObsValueSchedules(catalogObsValues);
+}
+
+// ── Value formatters by tag ─────────────────────────────────────────────────
+
+function pad2(n: number): string { return n.toString().padStart(2, '0'); }
+function pad3(n: number): string { return n.toString().padStart(3, '0'); }
+
+/** Group an integer-digit string with compressed apostrophe thousands separators. */
+function groupThousands(digits: string): string {
+    let out = '';
+    for (let i = 0; i < digits.length; i++) {
+        if (i > 0 && (digits.length - i) % 3 === 0) out += `<span class="kilo-sep">${APOS}</span>`;
+        out += digits[i];
+    }
+    return out;
+}
+
+function fmtAngle(v: number): string {
+    if (!isFinite(v)) return '—';
+    let deg = v * 180 / Math.PI;
+    deg = ((deg % 360) + 360) % 360;
+    return `${deg.toFixed(2)}°`;
+}
+
+function fmtDeg(v: number): string {
+    if (!isFinite(v)) return '—';
+    const deg = v * 180 / Math.PI;
+    return `${deg < 0 ? MINUS : ''}${Math.abs(deg).toFixed(2)}°`;
+}
+
+function fmtInt(v: number): string {
+    if (!isFinite(v)) return '—';
+    return Math.round(v).toString();
+}
+
+function fmtNum(v: number): string {
+    if (!isFinite(v)) return '—';
+    return Number.isInteger(v) ? v.toString() : v.toFixed(3);
+}
+
+function fmtBool(v: number): string {
+    if (!isFinite(v)) return '—';
+    return Math.round(v) !== 0 ? 'yes' : 'no';
+}
+
+function fmtWeekday(v: number): string {
+    if (!isFinite(v)) return '—';
+    const idx = ((Math.round(v) % 7) + 7) % 7;
+    return `${idx} (${WEEKDAY_NAMES[idx]})`;
+}
+
+function fmtMonth(v: number): string {
+    if (!isFinite(v)) return '—';
+    const idx = ((Math.round(v) % 12) + 12) % 12;
+    return `${idx} (${MONTH_NAMES[idx]})`;
+}
+
+/** English ordinal: 1→1st, 2→2nd, 3→3rd, 4→4th, 11→11th, 21→21st… */
+function ordinal(n: number): string {
+    const v = n % 100;
+    const suffix = (v >= 11 && v <= 13) ? 'th'
+        : (['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+    return `${n}${suffix}`;
+}
+
+/** dayNumber is 0-based (0 = 1st); show raw value + the calendar day as ordinal. */
+function fmtDay(v: number): string {
+    if (!isFinite(v)) return '—';
+    const n = Math.round(v);
+    return `${n} (${ordinal(n + 1)})`;
+}
+
+/** Seconds → "HH:MM:SS.sss" with sign. */
+function fmtHMS(seconds: number): string {
+    if (!isFinite(seconds)) return '—';
+    const sign = seconds < 0 ? MINUS : '';
+    const totalMs = Math.round(Math.abs(seconds) * 1000);
+    const ms = totalMs % 1000;
+    let rem = Math.floor(totalMs / 1000);
+    const ss = rem % 60; rem = Math.floor(rem / 60);
+    const m = rem % 60; const h = Math.floor(rem / 60);
+    return `${sign}${pad2(h)}:${pad2(m)}:${pad2(ss)}.${pad3(ms)}`;
+}
+
+/** Signed clock offset in seconds → "±HH:MM" (whole minutes). */
+function fmtHM(seconds: number): string {
+    if (!isFinite(seconds)) return '—';
+    const sign = seconds < 0 ? MINUS : '+';
+    const totalMin = Math.round(Math.abs(seconds) / 60);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `${sign}${pad2(h)}:${pad2(m)}`;
+}
+
+/** Small signed seconds (EOT) → "±MM:SS.sss". */
+function fmtMS(seconds: number): string {
+    if (!isFinite(seconds)) return '—';
+    const sign = seconds < 0 ? MINUS : '+';
+    const totalMs = Math.round(Math.abs(seconds) * 1000);
+    const ms = totalMs % 1000;
+    let rem = Math.floor(totalMs / 1000);
+    const ss = rem % 60; const m = Math.floor(rem / 60);
+    return `${sign}${pad2(m)}:${pad2(ss)}.${pad3(ms)}`;
+}
+
+/** AU value → "X.xxxx AU" + dimmer grouped km (returns HTML). */
+function fmtDist(au: number): string {
+    if (!isFinite(au)) return '—';
+    const auStr = `${au.toFixed(au < 1 ? 5 : 4)} AU`;
+    const kmStr = `${groupThousands(Math.round(au * KM_PER_AU).toString())} km`;
+    return `${auStr}<span class="dist-km">${kmStr}</span>`;
+}
+
+/** Returns true if the formatter emits HTML (vs plain text). */
+function tagIsHtml(tag: Tag): boolean { return tag === 'DIST'; }
+
+function formatCell(tag: Tag, v: number): string {
+    switch (tag) {
+        case 'A': return fmtAngle(v);
+        case 'Ldeg': return fmtDeg(v);
+        case 'Num': return fmtNum(v);
+        case 'Int': return fmtInt(v);
+        case 'BOOL': return fmtBool(v);
+        case 'WD': return fmtWeekday(v);
+        case 'MO': return fmtMonth(v);
+        case 'DAY': return fmtDay(v);
+        case 'HMS': return fmtHMS(v);
+        case 'HM': return fmtHM(v);
+        case 'MS': return fmtMS(v);
+        case 'LT': return formatDateIntervalTime(v);
+        case 'DIST': return fmtDist(v);
+    }
+}
+
+/** Per-frame: advance the catalog ObsValues and render changed cells. */
+function tickCatalog(perfNow: number): void {
+    updateObsValues(catalogObsValues, env, perfNow, getNow,
+        /* tickIntervalMs */ null, /* displayDeltaPerTickSec */ 0,
+        /* timeDirection */ 1, withDisplayTime);
+    animateObsValues(catalogObsValues, perfNow);
+    for (const h of catalogHandles) {
+        const str = formatCell(h.cell.tag, h.obs.currentValue);
+        if (str === h.last) continue;  // skip redundant DOM writes
+        h.last = str;
+        if (tagIsHtml(h.cell.tag)) h.valueEl.innerHTML = str;
+        else h.valueEl.textContent = str;
+    }
+}
+
+// ============================================================================
+// Main update loop
+// ============================================================================
 
 // Page-level FPS overlay (enabled via ?fps) — shared with Chronometer/Observatory.
 const fpsIndicator = createFpsIndicator(urlState.fps);
 
 function tick(): void {
+    const perfNow = performance.now();
     updateTimeDisplay();
 
     // Drive the expression ObsValues: 0.1s eval-ahead re-eval + smooth animation
     tickExprValues();
 
-    // Update sunrise/sunset only when the minute changes (they're daily values)
-    const now = getNow();
-    const currentMinute = now.getMinutes();
-    if (currentMinute !== lastSunUpdateMinute) {
-        lastSunUpdateMinute = currentMinute;
-        updateSunData();
-    }
+    // Drive the ephemeris catalog (eval-ahead at per-value cadence)
+    tickCatalog(perfNow);
 
-    // "active" is live while an expression is animating (eval-ahead always has an
-    // in-flight 0.1s sweep); dim when no expression is being evaluated.
-    fpsIndicator?.recordFrame(exprValues.length > 0);
+    // The catalog is always live, so "active" is always true.
+    fpsIndicator?.recordFrame(true);
 
     requestAnimationFrame(tick);
 }
 
-// Initial update
-updateSunData();
+// Initial build + update
+buildCatalog();
 updateTimeDisplay();
 requestAnimationFrame(tick);
 
-console.log('[Inspector] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone);
+console.log('[Inspector] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone,
+    '— catalog values:', catalogObsValues.length);

@@ -88,10 +88,23 @@ export const EXPR_METADATA: ExprEntry[] = [
     { name: 'realMoonAgeAngle',   category: 'Moon Position', desc: 'Moon age in days since new moon', kind: 'fn' },
     { name: 'moonRelativeAngle',  category: 'Moon Position', desc: 'Moon relative angle (radians)',   kind: 'fn' },
 
+    // ── Planet Position ─────────────────────────────────────────────────
+    { name: 'RAOfPlanet',            category: 'Planet Position', desc: 'Right ascension (radians)',                  kind: 'fn', sig: '(planet)' },
+    { name: 'declinationOfPlanet',   category: 'Planet Position', desc: 'Geocentric apparent declination (radians)', kind: 'fn', sig: '(planet)' },
+    { name: 'altitudeOfPlanet',      category: 'Planet Position', desc: 'Topocentric altitude (radians)',            kind: 'fn', sig: '(planet)' },
+    { name: 'azimuthOfPlanet',       category: 'Planet Position', desc: 'Topocentric azimuth (radians)',             kind: 'fn', sig: '(planet)' },
+    { name: 'ELongitudeOfPlanet',    category: 'Planet Position', desc: 'Geocentric ecliptic longitude (radians)',   kind: 'fn', sig: '(planet)' },
+    { name: 'ELatitudeOfPlanet',     category: 'Planet Position', desc: 'Geocentric ecliptic latitude (radians)',    kind: 'fn', sig: '(planet)' },
+    { name: 'HLongitudeOfPlanet',    category: 'Planet Position', desc: 'Heliocentric longitude (radians)',          kind: 'fn', sig: '(planet)' },
+    { name: 'HLatitudeOfPlanet',     category: 'Planet Position', desc: 'Heliocentric latitude (radians)',           kind: 'fn', sig: '(planet)' },
+    { name: 'distanceFromEarthOfPlanet', category: 'Planet Position', desc: 'Geocentric distance (AU)',              kind: 'fn', sig: '(planet)' },
+    { name: 'planetIsUp',            category: 'Planet Position', desc: '1 if planet is above the horizon, else 0',   kind: 'fn', sig: '(planet)' },
+
     // ── Clock / Calendar ────────────────────────────────────────────────
     { name: 'hour24Value',        category: 'Clock',     desc: 'Current hour (0–23, fractional)',   kind: 'fn' },
     { name: 'hour24Number',       category: 'Clock',     desc: 'Current hour (integer 0–23)',       kind: 'fn' },
     { name: 'minuteValue',        category: 'Clock',     desc: 'Current minute (fractional)',       kind: 'fn' },
+    { name: 'minuteNumber',       category: 'Clock',     desc: 'Current minute (integer 0–59)',     kind: 'fn' },
     { name: 'secondValue',        category: 'Clock',     desc: 'Current second (fractional)',       kind: 'fn' },
     { name: 'dayOfWeekNumber',    category: 'Clock',     desc: 'Day of week (0=Sun, 6=Sat)',        kind: 'fn' },
     { name: 'dayOfMonthNumber',   category: 'Clock',     desc: 'Day of month (1–31)',               kind: 'fn' },
@@ -151,6 +164,7 @@ export const CATEGORY_ORDER = [
     'Planet Times',
     'Sun Position',
     'Moon Position',
+    'Planet Position',
     'Clock',
     'Astronomical',
     'Day/Night Ring',

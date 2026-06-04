@@ -30,10 +30,17 @@
       #app {
           display: flex;
           flex-direction: column;
-          min-height: 100vh;
+          height: 100vh;
           max-width: 600px;
           margin: 0 auto;
-          padding: 24px 20px 40px;
+          padding: 24px 20px 0;
+          overflow: hidden;  /* only the catalog scrolls; the rest is pinned */
+      }
+
+      /* Everything except the catalog is pinned (fixed height); the catalog
+         takes the remaining space and scrolls. */
+      #app > *:not(.catalog) {
+          flex: 0 0 auto;
       }
 
       /* Header with app title */
@@ -181,6 +188,106 @@
 
       .sunset-value {
           color: #f97316;
+      }
+
+      /* ── Ephemeris Catalog ────────────────────────── */
+      .catalog {
+          flex: 1 1 auto;
+          min-height: 0;        /* allow the flex child to shrink so it can scroll */
+          overflow-y: auto;
+          margin-top: 16px;
+          padding-bottom: 16px;
+      }
+
+      .cat-group {
+          margin-bottom: 14px;
+      }
+
+      .cat-group-name {
+          font-size: 19px;
+          font-weight: 600;
+          color: #f9fafb;
+          letter-spacing: 0.5px;
+          margin: 0 0 6px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid #1f2937;
+      }
+
+      /* Coordinate rows: a fixed label column + 3 equal value columns, so the
+         value columns line up across rows (the rightmost — e.g. "Up?" — aligns
+         under "Transit"). */
+      .cat-row {
+          display: grid;
+          grid-template-columns: 116px repeat(3, minmax(0, 1fr));
+          align-items: baseline;
+          column-gap: 14px;
+          padding: 3px 0;
+      }
+
+      /* Subgroup label (grid track 1; the flex-basis is used by 'fields' rows). */
+      .cat-row-label {
+          flex: 0 0 116px;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          color: #6b7280;
+      }
+
+      .cat-cell {
+          min-width: 0;
+          display: flex;
+          align-items: baseline;
+          gap: 6px;
+          white-space: nowrap;
+      }
+
+      /* Distance spans all three value columns so the AU + km reading has room. */
+      .cat-cell.dist-cell {
+          grid-column: 2 / -1;
+      }
+
+      /* "Fields" rows (Date/Clock): compact content-sized cells on a line,
+         wrapping if needed — avoids the big inter-field gaps and weekday clipping
+         that equal-width columns produce. */
+      .cat-row-fields {
+          display: flex;
+          flex-wrap: wrap;
+          column-gap: 20px;
+      }
+      .cat-row-fields .cat-cell {
+          flex: 0 0 auto;
+      }
+      .cat-row-fields .cat-cell-value {
+          overflow: visible;
+      }
+
+      .cat-cell-label {
+          font-size: 11px;
+          color: #9ca3af;
+          flex: 0 0 auto;
+      }
+
+      .cat-cell-value {
+          font-family: 'JetBrains Mono', 'SF Mono', monospace;
+          font-size: 13px;
+          color: #e5e7eb;
+          overflow: hidden;
+          text-overflow: ellipsis;
+      }
+
+      /* Second value field within a DIST cell (the km reading) — dimmer, with
+         clear separation from the AU reading. */
+      .cat-cell-value .dist-km {
+          color: #9ca3af;
+          margin-left: 20px;
+      }
+
+      /* Thousands separator — proportional so it doesn't open a full monospace
+         cell, lightly tightened (but with a little breathing room). */
+      .kilo-sep {
+          font-family: 'Inter', system-ui, sans-serif;
+          margin: 0 -0.03em;
       }
 
       /* ── Expression Evaluator ─────────────────────── */
@@ -452,8 +559,8 @@
 
       /* ── Footer ───────────────────────────────────── */
       .app-footer {
-          margin-top: auto;
-          padding-top: 24px;
+          padding-top: 12px;
+          padding-bottom: 4px;
           text-align: center;
           font-size: 12px;
           color: #4b5563;
@@ -498,21 +605,6 @@
         </div>
       </div>
 
-      <!-- Sun Data -->
-      <div class="section-card">
-        <p class="section-label">Sun</p>
-        <div class="data-grid">
-          <div class="data-item">
-            <span class="data-label">Sunrise</span>
-            <span class="data-value sunrise-value" id="sunrise-value">—</span>
-          </div>
-          <div class="data-item">
-            <span class="data-label">Sunset</span>
-            <span class="data-value sunset-value" id="sunset-value">—</span>
-          </div>
-        </div>
-      </div>
-
       <!-- Expression Evaluator -->
       <div class="section-card expr-section">
         <div class="expr-header">
@@ -546,6 +638,9 @@
         <p id="expr-error">—</p>
         <div id="ref-panel"></div>
       </div>
+
+      <!-- Ephemeris catalog (populated by inspector-entry.ts) -->
+      <div id="catalog" class="catalog"></div>
 
       <!-- Footer -->
       <footer class="app-footer">

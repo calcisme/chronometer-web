@@ -71,6 +71,41 @@ export function makeOverridableGetNow(base: () => Date): {
 // ============================================================================
 
 /**
+ * Update a **discrete** value: evaluate at the *current* display time and snap.
+ *
+ * For values where interpolation is meaningless (today's sunrise, an integer
+ * hour, a floored TZ offset), eval-ahead would cross the value's change-point
+ * early and interpolation would show nonexistent in-between states. So we
+ * evaluate at "now" (the function's own semantics decide which value applies)
+ * and set the value directly with no animation.
+ */
+function updateObsValueDiscrete(
+    v: ObsValue,
+    env: Environment,
+    perfNow: number,
+    getNow: () => Date,
+    timeDirection: 0 | 1 | -1,
+): void {
+    const newTarget = evalAttr(v.expr, env);
+
+    if (timeDirection === 0) {
+        // Stopped: re-check shortly (time may resume).
+        v.nextUpdateTime = perfNow + 100;
+    } else {
+        const dir: 1 | -1 = timeDirection === -1 ? -1 : 1;
+        const nextDisplayMs = computeNextBoundary(v.updateInterval * 1000, getNow, dir, env);
+        v.nextUpdateDisplayTime = nextDisplayMs;
+        v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
+    }
+
+    // Snap — no animation, no interpolation.
+    v.pendingSweep = null;
+    v.anim.currentValue = newTarget;
+    v.anim.targetValue = newTarget;
+    v.anim.animating = false;
+}
+
+/**
  * Update a value using the lag-free **eval-ahead** scheme.
  *
  * Evaluates the target at the *next* update boundary (one interval into the
@@ -299,10 +334,11 @@ function updateObsValueScrub(
  * checked that the value's timer has expired.
  *
  * Branches:
- *   0. Eval-ahead (v.evalAhead): lag-free future-boundary target
- *   1. Scrub mode (tickIntervalMs != null): compress animations to fit tick budget
- *   2. Natural-speed 1× (naturalSpeed > 0): two-phase catch-up + sweep
- *   3. Normal 1× (naturalSpeed === 0): snap-to-target at animSpeed
+ *   0. Discrete (v.discrete): evaluate at current time, snap (no interpolation)
+ *   1. Eval-ahead (v.evalAhead): lag-free future-boundary target
+ *   2. Scrub mode (tickIntervalMs != null): compress animations to fit tick budget
+ *   3. Natural-speed 1× (naturalSpeed > 0): two-phase catch-up + sweep
+ *   4. Normal 1× (naturalSpeed === 0): snap-to-target at animSpeed
  */
 export function updateObsValue(
     v: ObsValue,
@@ -314,7 +350,9 @@ export function updateObsValue(
     timeDirection: 0 | 1 | -1,
     withDisplayTime?: WithDisplayTime,
 ): void {
-    if (v.evalAhead) {
+    if (v.discrete) {
+        updateObsValueDiscrete(v, env, perfNow, getNow, timeDirection);
+    } else if (v.evalAhead) {
         updateObsValueEvalAhead(v, env, perfNow, getNow, timeDirection, withDisplayTime);
     } else if (tickIntervalMs !== null && tickIntervalMs > 0) {
         // Scrub mode: compress as needed

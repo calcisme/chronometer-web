@@ -54,7 +54,7 @@ import { terminatorAngle } from '../watch/terminator.js';
 import { GSTDifferenceForDate, convertUTToGSTP03, convertGSTtoLST } from '../astronomy/es-sidereal.js';
 import { generalPrecessionSinceJ2000, sunRAandDecl, moonRAAndDecl, sunEclipticLongitudeForDate, raAndDeclO, generalObliquity, altitudeAtRiseSet } from '../astronomy/es-coordinates.js';
 import { julianCenturiesSince2000EpochForDateInterval } from '../astronomy/es-time.js';
-import { WB_planetHeliocentricLongitude, WB_planetHeliocentricRadius, WB_planetApparentPosition } from '../astronomy/willmann-bell.js';
+import { WB_planetHeliocentricLongitude, WB_planetHeliocentricLatitude, WB_planetHeliocentricRadius, WB_planetApparentPosition } from '../astronomy/willmann-bell.js';
 import { WB_MoonAscendingNodeLongitude } from '../astronomy/wb-moon.js';
 import { WB_nutationObliquity } from '../astronomy/wb-sun.js';
 
@@ -303,6 +303,9 @@ export function registerAstroFunctions(
     functions.set('secondNumberAngle', () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
     functions.set('secondValue', () => liveTime().s);
     functions.set('hour24Number', () => liveTime().h24);
+    // minuteNumber: integer minute (0–59). Discrete counterpart to minuteValue
+    // (which is the fractional minute used for continuous hands).
+    functions.set('minuteNumber', () => Math.floor(liveTime().m));
     // hour24Value: 24-hour time as continuous float (e.g. 14.5 = 2:30 PM)
     // t.m already includes seconds/60, so t.h24 + t.m/60 gives the full fractional hour.
     functions.set('hour24Value', () => {
@@ -654,6 +657,27 @@ export function registerAstroFunctions(
         }
         const pos = WB_planetApparentPosition(planetNumber as ECPlanetNumber, julianCenturiesSince2000Epoch / 100);
         return pos.apparentRightAscension;
+    });
+    // declinationOfPlanet(body): geocentric apparent declination (radians).
+    // Mirrors RAOfPlanet's Sun/Moon special-casing.
+    functions.set('declinationOfPlanet', (planetNumber: number) => {
+        const di = dateToDateInterval(getNow());
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        if (planetNumber === ECPlanetNumber.Sun) {
+            return sunRAandDecl(di, null).declination;
+        }
+        if (planetNumber === ECPlanetNumber.Moon) {
+            return moonRAAndDecl(di, null).declination;
+        }
+        const pos = WB_planetApparentPosition(planetNumber as ECPlanetNumber, julianCenturiesSince2000Epoch / 100);
+        return pos.apparentDeclination;
+    });
+    // HLatitudeOfPlanet(n): heliocentric latitude (radians). Companion to
+    // HLongitudeOfPlanet.
+    functions.set('HLatitudeOfPlanet', (n: number) => {
+        const di = dateToDateInterval(getNow());
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(di, null);
+        return WB_planetHeliocentricLatitude(n as ECPlanetNumber, julianCenturiesSince2000Epoch / 100);
     });
 
     // --- Planet rise/transit/set for day (Venezia) ---
@@ -1296,8 +1320,10 @@ export function registerAstroFunctions(
     // --- Sun planetIsUp check ---
     functions.set('planetIsUp', (n: number) => {
         const di = dateToDateInterval(getNow());
-        const alt = sunAltitude(di, OBSERVER_LAT, OBSERVER_LON, null);
-        return alt > 0 ? 1 : 0;
+        // Use the iOS-ported rise/set threshold (refraction + semidiameter, plus
+        // Moon parallax), so "up" flips exactly at the body's rise/set — not at a
+        // naive altitude > 0.
+        return planetIsUpForRiseSet(n, di, OBSERVER_LAT, OBSERVER_LON) ? 1 : 0;
     });
 
     // =========================================================================

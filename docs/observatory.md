@@ -84,6 +84,7 @@ uses. `active` (render rate while animating, dimmed when idle) is fed
 | `pendingSweep` | Phase 2 sweep params (target + duration), or null |
 | `linear` | If true, value is not an angle — skip fmod wrapping (see [Earth Map](#earth-map-with-terminator)) |
 | `evalAhead` | If true, use lag-free eval-ahead updates (evaluate the next boundary, sweep there). Not used by Observatory values today; powers the Inspector |
+| `discrete` | If true, evaluate at the current display time and snap (no interpolation) — for step values like event times / integers. Not used by Observatory today; powers the Inspector catalog |
 
 ### Update Scheduling
 
