@@ -17058,6 +17058,22 @@
     },
     writeTimeState
   });
+  function wireAppLink(id, page) {
+    const a = document.getElementById(id);
+    if (!a) return;
+    const setHref = () => {
+      a.href = page + window.location.search;
+    };
+    const flushAndSet = () => {
+      writeTimeState();
+      setHref();
+    };
+    a.addEventListener("pointerdown", flushAndSet);
+    a.addEventListener("focus", flushAndSet);
+    setHref();
+  }
+  wireAppLink("open-observatory", "observatory.html");
+  wireAppLink("open-chronometer", "all.html");
   buildCatalog();
   updateTimeDisplay();
   timeUI?.updateTimeUI();

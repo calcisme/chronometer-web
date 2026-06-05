@@ -956,6 +956,22 @@ const timeUI: TimeControlsAPI | null = initTimeControls({
     writeTimeState,
 });
 
+// --- "Open in <app>" footer links ---
+// Carry the current location + time state to Observatory / Chronometer in a new
+// tab. The URL is flushed (writeTimeState) just before navigation so the link
+// always reflects the exact current time, even mid-scrub.
+function wireAppLink(id: string, page: string): void {
+    const a = document.getElementById(id) as HTMLAnchorElement | null;
+    if (!a) return;
+    const setHref = () => { a.href = page + window.location.search; };
+    const flushAndSet = () => { writeTimeState(); setHref(); };
+    a.addEventListener('pointerdown', flushAndSet);  // before click / middle-click
+    a.addEventListener('focus', flushAndSet);         // before keyboard activation
+    setHref();                                        // initial href (no flush)
+}
+wireAppLink('open-observatory', 'observatory.html');
+wireAppLink('open-chronometer', 'all.html');
+
 // Initial build + start
 buildCatalog();
 updateTimeDisplay();

@@ -80,6 +80,17 @@ let lon = urlState.lon ?? 0;
 let locationTimezone: string | undefined = urlState.tz || undefined;
 let needsPrompt = !hasUrlLocation && !urlState.bloc;
 
+// Restore time state from URL (so deep-links carry the time too — matching
+// Chronometer and the Inspector's "open in <app>" links).
+if (urlState.off !== null && !isNaN(urlState.off)) {
+    timeController.setOffset(urlState.off);
+} else if (urlState.t !== null && !isNaN(urlState.t)) {
+    timeController.setTime(new Date(urlState.t));
+    if (urlState.dir === 1) { timeController.setDirection(1); timeController.setRate(null); }
+    else if (urlState.dir === -1) { timeController.setDirection(-1); timeController.setRate(null); }
+    // dir === 0 stays stopped (setTime already stops)
+}
+
 // If no timezone in URL, resolve it from lat/lon (only if we have a location)
 if (!locationTimezone && hasUrlLocation) {
     locationTimezone = resolveTimezone(lat, lon, null);
