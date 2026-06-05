@@ -19574,11 +19574,12 @@
       const dayEl = document.getElementById("tp-day");
       const hourEl = document.getElementById("tp-hour");
       const minuteEl = document.getElementById("tp-minute");
-      if (yearEl) yearEl.value = simCs.year.toString();
-      if (monthEl) monthEl.value = simCs.month.toString();
-      if (dayEl) dayEl.value = simCs.day.toString();
-      if (hourEl) hourEl.value = simCs.hour.toString();
-      if (minuteEl) minuteEl.value = simCs.minute.toString();
+      const active = document.activeElement;
+      if (yearEl && active !== yearEl) yearEl.value = simCs.year.toString();
+      if (monthEl && active !== monthEl) monthEl.value = simCs.month.toString();
+      if (dayEl && active !== dayEl) dayEl.value = simCs.day.toString();
+      if (hourEl && active !== hourEl) hourEl.value = simCs.hour.toString();
+      if (minuteEl && active !== minuteEl) minuteEl.value = simCs.minute.toString();
       const bceBtn = document.getElementById("tp-bce");
       if (bceBtn) {
         const isBCE = simCs.era === 0;
@@ -19615,6 +19616,7 @@
     function nowClicked() {
       onNowClicked();
       updateTimeUI();
+      ensureSchedulerRunning();
       writeTimeState();
     }
     const HOLD_DELAY_MS = 300;
@@ -19778,6 +19780,7 @@
       timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
       onTimeStep();
       updateTimeUI();
+      ensureSchedulerRunning();
       writeTimeState();
     }
     ["tp-year", "tp-month", "tp-day", "tp-hour", "tp-minute"].forEach((id) => {

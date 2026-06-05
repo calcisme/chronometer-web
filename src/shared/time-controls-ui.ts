@@ -461,11 +461,15 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
         const dayEl = document.getElementById('tp-day') as HTMLInputElement | null;
         const hourEl = document.getElementById('tp-hour') as HTMLInputElement | null;
         const minuteEl = document.getElementById('tp-minute') as HTMLInputElement | null;
-        if (yearEl) yearEl.value = simCs.year.toString();
-        if (monthEl) monthEl.value = simCs.month.toString();
-        if (dayEl) dayEl.value = simCs.day.toString();
-        if (hourEl) hourEl.value = simCs.hour.toString();
-        if (minuteEl) minuteEl.value = simCs.minute.toString();
+        // Don't clobber the field the user is currently editing — otherwise a
+        // running clock (which calls updateTimeUI every frame) overwrites each
+        // keystroke. The auto-apply listeners keep the time in sync as they type.
+        const active = document.activeElement;
+        if (yearEl && active !== yearEl) yearEl.value = simCs.year.toString();
+        if (monthEl && active !== monthEl) monthEl.value = simCs.month.toString();
+        if (dayEl && active !== dayEl) dayEl.value = simCs.day.toString();
+        if (hourEl && active !== hourEl) hourEl.value = simCs.hour.toString();
+        if (minuteEl && active !== minuteEl) minuteEl.value = simCs.minute.toString();
 
         // Update BCE toggle state
         const bceBtn = document.getElementById('tp-bce');
@@ -516,6 +520,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
     function nowClicked() {
         onNowClicked();
         updateTimeUI();
+        ensureSchedulerRunning();  // restart an idle render loop (e.g. Inspector/Observatory)
         writeTimeState();
     }
 
@@ -739,6 +744,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
         timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
         onTimeStep();
         updateTimeUI();
+        ensureSchedulerRunning();  // restart an idle render loop (e.g. Inspector/Observatory)
         writeTimeState();
     }
 
