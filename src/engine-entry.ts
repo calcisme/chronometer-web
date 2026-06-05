@@ -50,7 +50,7 @@ import { renderGlobe, loadOSMTile } from './shared/mini-map.js';
 import { resolveTimezone } from './shared/tz-resolve.js';
 import { findNextDstTransition, findPrevDstTransition } from './shared/dst-detect.js';
 
-import { initTimeControls } from './shared/time-controls-ui.js';
+import { initTimeControls, writeTimeStateToUrl } from './shared/time-controls-ui.js';
 import { MIN_DISPLAY_DATE_MS, MAX_DISPLAY_DATE_MS } from './astronomy/es-time.js';
 import { getBezelBackgroundColor, updateDynamicCompositeIcon } from './shared/composite-icon.js';
 
@@ -2255,23 +2255,9 @@ async function main() {
      * Uses 'off' for 1× forward with offset (stays valid as real time advances),
      * and 't'+'dir' for all other modes (stopped, reverse, accelerated).
      */
+    // Time-state (t/off/dir) URL persistence now lives in the shared layer.
     function writeTimeState() {
-        if (timeController.isRealTime) {
-            writeUrlState({ t: null, off: null, dir: 1 });
-        } else if (
-            !timeController.isStopped &&
-            timeController.currentRate === null &&
-            timeController.currentDirection === 1
-        ) {
-            writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
-        } else {
-            const dir = timeController.isStopped ? 0 : timeController.currentDirection;
-            writeUrlState({
-                t: timeController.getDisplayTime().getTime(),
-                off: null,
-                dir: dir as 0 | 1 | -1,
-            });
-        }
+        writeTimeStateToUrl(timeController);
     }
 
     const timeUI = initTimeControls({
@@ -2293,7 +2279,7 @@ async function main() {
             resetAllSchedules();
         },
         onScrubEnd: () => {
-            timeController.stop();
+            // The shared UI has already called timeController.stop().
             rebuildEnvironments();
             finishAllAnimations();
             // While stopped, finishAllAnimations() has already snapped hands to
@@ -2304,7 +2290,7 @@ async function main() {
             if (!timeController.isStopped) resetAllSchedules();
         },
         onNowClicked: () => {
-            timeController.reset();
+            // The shared UI has already called timeController.reset().
             finishAllAnimations();
             resetAllSchedules();
             stopScheduler();

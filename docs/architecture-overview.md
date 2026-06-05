@@ -20,8 +20,9 @@ src/
 │   ├── astro-env.ts         # Astronomy function registry + createAstroEnvironment() factory
 │   ├── animation.ts         # Full animation system (AnimatingValue, HandState, scheduling)
 │   ├── obs-value.ts         # ObsValue: general expression-driven animated value (type + createObsValue)
-│   ├── updater.ts           # Embryonic "updater": ObsValue update/animate passes + eval-ahead time helper
+│   ├── updater.ts           # Shared updater: name-keyed Updater<K> + ObsValue update/animate passes + eval-ahead/TimingContext seam
 │   ├── time-controller.ts   # Time scrubbing, stepping, play/pause
+│   ├── time-controls-ui.ts  # Shared transport bar/popover; generic controller↔updater seam (auto reset + URL time-state)
 │   ├── city-search.ts       # City name lookup against GeoNames database
 │   ├── location-dialog.ts   # Self-contained location picker (DOM, search, mini-map)
 │   ├── mini-map.ts          # Blue Marble globe renderer

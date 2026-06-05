@@ -17,7 +17,7 @@ import {
     Updater, timingContextForFrame, type TimingContext,
 } from '../shared/updater.js';
 import { TimeController } from '../shared/time-controller.js';
-import { initTimeControls, type TimeControlsAPI } from '../shared/time-controls-ui.js';
+import { initTimeControls, writeTimeStateToUrl, type TimeControlsAPI } from '../shared/time-controls-ui.js';
 import { createFpsIndicator } from '../shared/fps-indicator.js';
 import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
@@ -929,31 +929,34 @@ function tick(): void {
 }
 
 // --- Wire the time-controls UI ---
+// Time-state (t/off/dir) URL persistence lives in the shared layer; the footer
+// "open in <app>" links flush it just before navigating.
 function writeTimeState(): void {
-    if (timeController.isRealTime) {
-        writeUrlState({ t: null, off: null, dir: 1 });
-    } else if (!timeController.isStopped && timeController.currentRate === null
-        && timeController.currentDirection === 1) {
-        writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
-    } else {
-        const dir = timeController.isStopped ? 0 : timeController.currentDirection;
-        writeUrlState({ t: timeController.getDisplayTime().getTime(), off: null, dir: dir as 0 | 1 | -1 });
-    }
+    writeTimeStateToUrl(timeController);
+}
+
+// The free-form expression box lives OUTSIDE the catalog updater (for error
+// isolation), so it needs a custom re-arm hook on transitions. The catalog
+// updater itself is reset automatically by the shared controls (we pass it
+// below), and `writeTimeState` defaults to the shared writer.
+function resetExprBox(): void {
+    rebuildExprValues();                  // re-parse the expression against env
+    resetObsValueSchedules(exprValues);   // re-evaluate the expr box next frame
 }
 
 const timeUI: TimeControlsAPI | null = initTimeControls({
     timeController,
+    updater,
     getTimezone: () => locationTimezone,
     getTzDeltaMs: () => tzDeltaMs,
     getLat: () => lat,
     getLon: () => lon,
-    onTimeStep: () => { rebuildExprValues(); resetAllSchedules(); },
-    onScrubStart: () => { resetAllSchedules(); },
-    onScrubEnd: () => { timeController.stop(); rebuildExprValues(); resetAllSchedules(); },
-    onNowClicked: () => { timeController.reset(); rebuildExprValues(); resetAllSchedules(); },
-    onTransportChange: () => { rebuildExprValues(); resetAllSchedules(); },
+    onTimeStep: resetExprBox,
+    onScrubStart: () => { resetObsValueSchedules(exprValues); },
+    onScrubEnd: resetExprBox,
+    onNowClicked: resetExprBox,
+    onTransportChange: resetExprBox,
     ensureSchedulerRunning: () => { scheduleFrame(); },
-    writeTimeState,
 });
 
 // --- "Open in <app>" footer links ---

@@ -44,7 +44,8 @@ import month12 from '../shared/assets/blue-marble/12@2x.png';
 import nightDataUrl from '../shared/assets/blue-marble/night@2x.png';
 
 import type { LayoutParams } from './layout.js';
-import type { ObsValueSet } from './obs-values.js';
+import type { ObsValueName } from './obs-values.js';
+import type { Updater } from '../shared/updater.js';
 
 // ============================================================================
 // Table constants — must match generate-altitude-table.ts
@@ -295,11 +296,11 @@ function regenerateNightMask(sslat: number, w: number, h: number): void {
  * Draw the earth view into the main canvas.
  *
  * Called from observatory-entry.ts drawFrame().
- * Reads animated values from obsValues for smooth scrubbing.
+ * Reads animated values from the Updater for smooth scrubbing.
  *
  * @param ctx         Main canvas 2D context
  * @param L           Layout params (earthCX, earthCY, earthW, earthH, dpr)
- * @param obsValues   Observatory animated value set
+ * @param u           Observatory animated value updater
  * @param observerLat Observer latitude in degrees (north positive)
  * @param observerLon Observer longitude in degrees (west negative)
  * @param getNow      Time source (for month selection)
@@ -307,15 +308,15 @@ function regenerateNightMask(sslat: number, w: number, h: number): void {
 export function drawEarthView(
     ctx: CanvasRenderingContext2D,
     L: LayoutParams,
-    obsValues: ObsValueSet,
+    u: Updater<ObsValueName>,
     observerLat: number,
     observerLon: number,
     getNow: () => Date,
 ): void {
     if (!imagesReady || !tableReady) return;
 
-    const sslat = obsValues.earthSslat.currentValue;
-    const sslng = obsValues.earthSslng.currentValue;
+    const sslat = u.get('earthSslat').currentValue;
+    const sslng = u.get('earthSslng').currentValue;
 
     // Physical pixel dimensions (accounting for device pixel ratio)
     const physW = Math.round(L.earthW * L.dpr);

@@ -243,7 +243,7 @@ Built on the primitives above, **`ObsValue`** ([src/shared/obs-value.ts](../src/
 1. **`updateObsValues(values, env, perfNow, getNow, …)`** — for each value whose timer expired, re-evaluate the expression and start an animation. Dispatches to one of: eval-ahead, scrub compression, two-phase `naturalSpeed` sweep, or snap-to-target.
 2. **`animateObsValues(values, perfNow)`** — interpolate every value toward its target (and hand off Phase-2 sweeps).
 
-Both operate on a flat `ObsValue[]`. Observatory wraps these with its `ObsValueSet`; the Inspector drives a small array directly. See [Observatory — ObsValue System](observatory.md#obsvalue-system).
+Both operate on a flat `ObsValue[]` and are normally driven through the **`Updater`** (below) rather than called directly. See [Observatory — ObsValue System](observatory.md#obsvalue-system).
 
 ### Eval-ahead (lag-free tracking)
 
@@ -265,7 +265,27 @@ Eval-ahead evaluates the expression at a shifted display time via **`makeOverrid
 
 ### TimingContext and the `Updater`
 
-The per-frame timing state (`tickIntervalMs`, `displayDeltaSec`, `direction`) is bundled as a **`TimingContext`** — the generic seam between the time controller and the updater. `timingContextForFrame(timeController)` builds it; the **`Updater`** object (updater.ts) owns an `ObsValue` collection and advances it each frame via `tick(env, perfNow, getNow, withDisplayTime, ctx)`, exposing `anyAnimating()` and `reset()` (which the time-controls transition callbacks bind to). The Inspector is its first consumer; Observatory's `ObsValueSet` wrappers will converge onto it later.
+The per-frame timing state (`tickIntervalMs`, `displayDeltaSec`, `direction`) is bundled as a **`TimingContext`** — the generic seam between the time controller and the updater. `timingContextForFrame(timeController)` builds it; the **`Updater`** object (updater.ts) owns an `ObsValue` collection and advances it each frame via `tick(env, perfNow, getNow, withDisplayTime, ctx)`, exposing `anyAnimating()` and `reset()`.
+
+The `Updater<K extends string = string>` is **name-keyed**: `add(v)` registers a value (keyed by `v.name`) and `get(name: K)` looks one up (throwing on a miss). `K` is a pure client-side convenience — the shared updater stores values in a plain `Map<string, ObsValue>` and never references any client's key union, so the shared layer stays unaware of client-specific types. Observatory instantiates `Updater<ObsValueName>` so its renderers get typo-checked lookups; the Inspector uses the default `Updater` (`K = string`) for its catalog and never calls `get()`. Both Observatory and the Inspector are consumers.
+
+**The controller↔updater seam is generic.** A client constructs an `Updater` with its values and hands it to `initTimeControls({ updater, … })`. From then on the shared time-controls UI performs the generic work on **every** transition (scrub start/end, single-step, astro-step, date-input, Now, transport): it runs the controller action (`reset()`/`stop()`/etc.), calls `updater.reset()` to re-arm all schedules, and writes the time-state URL params (`writeTimeStateToUrl`, the default `writeTimeState`). A client only supplies a transition callback (`onNowClicked`, `onScrubEnd`, …) when it has **custom** work beyond that — e.g. the Inspector re-parses its free-form expression box (which lives outside the updater for error isolation); Observatory rebuilds its astro `env` via the time controller's own `onTick` and so needs **no** transition callbacks at all. See the contract below.
+
+### Time-controls contract
+
+`initTimeControls(config)` ([src/shared/time-controls-ui.ts](../src/shared/time-controls-ui.ts)) owns the transport bar + popover. Its config splits cleanly into *provided* state, an *optional updater*, and *optional* custom-logic notifications:
+
+| Field | Required? | Purpose |
+|-------|-----------|---------|
+| `timeController` | yes | the shared `TimeController` the UI drives |
+| `getTimezone` / `getTzDeltaMs` / `getLat` / `getLon` | yes | read-only accessors for the UI's display + astro stepping |
+| `getSelectedBody` | optional | body selector for astro-step (rise/set/transit) |
+| `updater` | optional | anything with `reset()`; the UI calls it on **every** transition. Pass the client's `Updater` to get automatic schedule re-arming. |
+| `ensureSchedulerRunning` | yes | restart the client's (app-owned) render loop after a transition; the rAF loop differs per app, so there is no generic default |
+| `onTimeStep` / `onScrubStart` / `onScrubEnd` / `onNowClicked` / `onTransportChange` | optional | **notifications for custom logic only** — omit when the client has none |
+| `writeTimeState` | optional | defaults to `writeTimeStateToUrl(timeController)` (the `t`/`off`/`dir` params); override only to change time-state persistence |
+
+The UI performs the generic controller action itself (e.g. `nowClicked()` → `timeController.reset()`, `endHold()` → `timeController.stop()`), then `updater?.reset()`, then the optional notification, then `updateTimeUI()` / `ensureSchedulerRunning()` / `writeTimeState()`. Because every `TimeController` mutation (`reset`/`stop`/`setTime`/`setOffset`/`setRate`/`setDirection`) fires `onTick`, a client that wires `timeController.onTick` to its env rebuild (Observatory, Chronometer) gets a fresh env on every transition for free.
 
 ### Discrete values (snap, no interpolation)
 

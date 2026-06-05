@@ -68,9 +68,11 @@ URL (`t` / `off` / `dir`), so a Chronometer view can deep-link to the Inspector 
 the same instant and location.
 
 Under the hood the catalog's values are owned by a shared **`Updater`** driven by
-a **`TimingContext`** (built each frame from the controller). The transport
-callbacks call `updater.reset()` (and rebuild the expression box) so values
-re-evaluate against the new display time; an **idle scheduler** parks the render
+a **`TimingContext`** (built each frame from the controller). The Inspector hands
+that `Updater` to `initTimeControls`, so the shared UI re-arms the catalog schedules
+on every transition automatically; the Inspector's only transport callback rebuilds
+the **expression box** (which lives outside the updater for error isolation) so it
+re-evaluates against the new display time. An **idle scheduler** parks the render
 loop when the clock is stopped and everything has settled, and restarts it on any
 transport action or edit. Continuous catalog values track the scrubbed time via
 mode-aware eval-ahead (lag-free at each tick); discrete values snap. See

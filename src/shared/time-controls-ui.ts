@@ -41,22 +41,38 @@ export interface TimeControlsConfig {
     /** Currently selected body planet number (for body-* astro events). */
     getSelectedBody?: () => number | undefined;
 
-    // ---- App-specific callbacks ----
+    /**
+     * The app's value updater. When supplied, the UI calls `updater.reset()`
+     * after **every** time transition (scrub / step / now / transport) so the
+     * app's values re-evaluate at the new time — the generic controller→updater
+     * coupling. Apps driving values by hand (Chronometer's `HandState`) omit this
+     * and do their own work in the callbacks below.
+     */
+    updater?: { reset: () => void };
+
+    // ---- App-specific callbacks (all optional — for *custom* work only) ----
+    // The generic parts (the controller action, `updater.reset()`,
+    // `ensureSchedulerRunning`, `writeTimeState`) are handled by the UI; these
+    // fire afterwards only when the app has extra logic to run.
 
     /** Called after a single step (button tap, date input, astro jump). */
-    onTimeStep: () => void;
-    /** Called when hold-to-scrub starts (app should reset schedules). */
-    onScrubStart: () => void;
-    /** Called when hold-to-scrub ends (stop, rebuild, finish animations). */
-    onScrubEnd: () => void;
-    /** Called when "Now" resets to real time. */
-    onNowClicked: () => void;
+    onTimeStep?: () => void;
+    /** Called when hold-to-scrub starts. */
+    onScrubStart?: () => void;
+    /** Called when hold-to-scrub ends (UI has already stopped the clock). */
+    onScrubEnd?: () => void;
+    /** Called when "Now" resets to real time (UI has already reset the clock). */
+    onNowClicked?: () => void;
     /** Called when play/pause/direction transport changes. */
-    onTransportChange: () => void;
-    /** Kick the scheduler if it's idle. */
+    onTransportChange?: () => void;
+    /** Kick the app's (idle) render loop. Required — the rAF loop is app-owned. */
     ensureSchedulerRunning: () => void;
-    /** Write current time state to URL. */
-    writeTimeState: () => void;
+    /**
+     * Write current time state to the URL. Optional — defaults to the shared
+     * `writeTimeStateToUrl(timeController)` (the `t`/`off`/`dir` params, identical
+     * across apps). Pass to override.
+     */
+    writeTimeState?: () => void;
 
     /**
      * Optional callback fired after show/hide so the consumer can relayout.
@@ -108,6 +124,23 @@ const stepMap: Record<string, [TimeUnit, 1 | -1]> = {
  * Looks up DOM elements by ID (must already exist) and wires all handlers.
  * Returns an API for the consumer, or null if required DOM elements are missing.
  */
+/**
+ * Default time-state URL persistence: writes the `t` / `off` / `dir` params from
+ * the controller state. Identical across apps, so it's the default `writeTimeState`
+ * — the time params are the controller's domain (broader URL params are each app's
+ * own business). Exported for reuse / testing.
+ */
+export function writeTimeStateToUrl(tc: TimeController): void {
+    if (tc.isRealTime) {
+        writeUrlState({ t: null, off: null, dir: 1 });
+    } else if (!tc.isStopped && tc.currentRate === null && tc.currentDirection === 1) {
+        writeUrlState({ off: tc.timeOffset, t: null, dir: 1 });
+    } else {
+        const dir = tc.isStopped ? 0 : tc.currentDirection;
+        writeUrlState({ t: tc.getDisplayTime().getTime(), off: null, dir: dir as 0 | 1 | -1 });
+    }
+}
+
 export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | null {
     const {
         timeController,
@@ -116,13 +149,14 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
         getLat,
         getLon,
         getSelectedBody,
-        onTimeStep,
-        onScrubStart,
-        onScrubEnd,
-        onNowClicked,
-        onTransportChange,
+        updater,
+        onTimeStep = () => {},
+        onScrubStart = () => {},
+        onScrubEnd = () => {},
+        onNowClicked = () => {},
+        onTransportChange = () => {},
         ensureSchedulerRunning,
-        writeTimeState,
+        writeTimeState = () => writeTimeStateToUrl(timeController),
         onPopoverToggle,
     } = config;
 
@@ -373,6 +407,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
             pauseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 timeController.stop();
+                updater?.reset();
                 onTransportChange();
                 updateTimeUI();
                 ensureSchedulerRunning();
@@ -397,6 +432,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
                 e.stopPropagation();
                 timeController.setDirection(-1);
                 timeController.setRate(null);
+                updater?.reset();
                 onTransportChange();
                 updateTimeUI();
                 ensureSchedulerRunning();
@@ -410,6 +446,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
                 e.stopPropagation();
                 timeController.setDirection(1);
                 timeController.setRate(null);
+                updater?.reset();
                 onTransportChange();
                 updateTimeUI();
                 ensureSchedulerRunning();
@@ -518,6 +555,8 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
     // ===================================================================
 
     function nowClicked() {
+        timeController.reset();    // generic controller action (was delegated to clients)
+        updater?.reset();
         onNowClicked();
         updateTimeUI();
         ensureSchedulerRunning();  // restart an idle render loop (e.g. Inspector/Observatory)
@@ -542,6 +581,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
         if (rateIdx !== undefined) {
             timeController.setRate(RATE_OPTIONS[rateIdx]);
         }
+        updater?.reset();
         onScrubStart();
         updateTimeUI();
         ensureSchedulerRunning();
@@ -556,7 +596,10 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
             holdingBtn.classList.remove('holding');
             holdingBtn = null;
 
-            // Stop at current position and let the app snap animations
+            // Stop at the current position (generic — was delegated to clients),
+            // then let the app run any custom snap/finish logic.
+            timeController.stop();
+            updater?.reset();
             onScrubEnd();
             updateTimeUI();
             ensureSchedulerRunning();
@@ -582,6 +625,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
             // Stop time and snap in-flight animations before stepping
             timeController.stop();
             timeController.step(unit, dir);
+            updater?.reset();
             onTimeStep();
             updateTimeUI();
             ensureSchedulerRunning();
@@ -690,6 +734,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
         // Same as single-tap time step:
         timeController.stop();
         timeController.setTime(targetDate);
+        updater?.reset();
         onTimeStep();
         updateTimeUI();
         ensureSchedulerRunning();
@@ -742,6 +787,7 @@ export function initTimeControls(config: TimeControlsConfig): TimeControlsAPI | 
         const clampedMs = Math.max(MIN_DISPLAY_DATE_MS,
                                    Math.min(MAX_DISPLAY_DATE_MS, d.getTime()));
         timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
+        updater?.reset();
         onTimeStep();
         updateTimeUI();
         ensureSchedulerRunning();  // restart an idle render loop (e.g. Inspector/Observatory)

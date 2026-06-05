@@ -9,8 +9,7 @@ hands, rise/set rings, and a sun altitude ring.
 ```
 src/observatory/
 ├── observatory-entry.ts   Main tick loop, init, draw orchestration
-├── obs-values.ts          Observatory ObsValue catalog (ObsValueSet, defs, initObsValues)
-│                            + thin wrappers over the shared updater
+├── obs-values.ts          Observatory ObsValue catalog (ObsValueName, defs, buildObsValues)
 ├── hand-views.ts          Clock hands + sun event hands + subdial hands
 ├── planet-hands.ts        Planet hands on the orrery
 ├── ring-view.ts           Rise/set rings (sun altitude ring + planet arcs)
@@ -26,28 +25,39 @@ expression-driven values that are parsed once, evaluated on a schedule, and
 smoothly animated between updates.
 
 > **The ObsValue core is shared.** The generic value type + construction live in
-> [src/shared/obs-value.ts](../src/shared/obs-value.ts), and the per-frame
+> [src/shared/obs-value.ts](../src/shared/obs-value.ts); the per-frame
 > update/animate passes (snap-to-target, two-phase `naturalSpeed` sweep, scrub
-> compression, and lag-free eval-ahead) live in
-> [src/shared/updater.ts](../src/shared/updater.ts) — the embryonic "updater"
-> subsystem, also used by the Inspector. `obs-values.ts` keeps the
-> Observatory-specific **catalog** (`ObsValueSet`, the value definitions,
-> `initObsValues`, `getAllValues`) and thin `ObsValueSet` wrappers that delegate
-> to the shared array-based passes.
+> compression, lag-free eval-ahead) and the **`Updater`** collection live in
+> [src/shared/updater.ts](../src/shared/updater.ts) — the shared updater
+> subsystem, also used by the Inspector. `obs-values.ts` is purely the
+> Observatory **catalog**: it names every value (`ObsValueName`), builds the
+> definitions, and `buildObsValues(env, perfNow, getNow)` registers them on an
+> `Updater<ObsValueName>`, asserting at startup that the full catalog is present
+> exactly once. Renderers read values by name via `updater.get(name)` —
+> see [animation.md → TimingContext and the `Updater`](animation.md#timingcontext-and-the-updater).
 
 ### Architecture
 
 ```
 tick()
- ├── updateObsValues()   — re-eval expired expressions, start animations
- ├── animateObsValues()  — interpolate all values toward targets
- └── drawFrame()         — renderers read obsValue.currentValue
+ ├── updater.tick(env, perfNow, getNow, withDisplayTime, ctx)
+ │      — re-eval expired expressions + animate all values toward targets,
+ │        where ctx = timingContextForFrame(timeController)
+ └── drawFrame()  — renderers read updater.get(name).currentValue
 ```
+
+The whole controller→value path is the generic seam: `buildObsValues` constructs
+the `Updater`, the entry hands it to `initTimeControls({ updater, … })` (so every
+transport transition auto-re-arms the schedules), and `timeController.onTick →
+rebuildEnv()` keeps the astro `env` fresh across both continuous advance and
+discrete jumps. Observatory therefore passes **no** transition callbacks. The
+default `writeTimeState` persists `t`/`off`/`dir` to the URL, so Observatory
+deep-links now round-trip the time as well as the location.
 
 ### Render loop idling
 
 `tick()` re-requests `requestAnimationFrame` only while the loop is doing useful
-work: `!timeController.isStopped || anyObsAnimating(obsValues)`. When the clock is
+work: `!timeController.isStopped || updater.anyAnimating()`. When the clock is
 **stopped and all animations have settled**, the loop goes fully idle (no wasted
 rendering on a frozen dial). In-flight animations are *not* snapped on stop — they
 finish naturally (e.g. a sweep hand eases the remaining distance), then the loop
@@ -67,7 +77,7 @@ This mirrors Chronometer's stopped-state behavior — see
 The `?fps` URL parameter shows a page-level FPS readout (`<active> fps · <avg> avg`)
 via the shared `src/shared/fps-indicator.ts` helper — the same overlay Chronometer
 uses. `active` (render rate while animating, dimmed when idle) is fed
-`recordFrame(!isStopped || anyObsAnimating(...))` each frame; `avg` is throughput.
+`recordFrame(!isStopped || updater.anyAnimating())` each frame; `avg` is throughput.
 
 ### ObsValue Fields
 

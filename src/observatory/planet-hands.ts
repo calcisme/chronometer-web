@@ -18,7 +18,8 @@
  */
 
 import type { LayoutParams } from './layout.js';
-import type { ObsValueSet } from './obs-values.js';
+import type { ObsValueName } from './obs-values.js';
+import type { Updater } from '../shared/updater.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
 
 // Image asset imports (bundled as data URLs by esbuild)
@@ -112,8 +113,8 @@ export function waitForPlanetImages(): Promise<void> {
 // Drawing
 // ---------------------------------------------------------------------------
 
-/** Map from ECPlanetNumber to ObsValueSet field name. */
-const planetValueMap: { planet: ECPlanetNumber; key: keyof ObsValueSet }[] = [
+/** Map from ECPlanetNumber to ObsValue name. */
+const planetValueMap: { planet: ECPlanetNumber; key: ObsValueName }[] = [
     { planet: ECPlanetNumber.Saturn,  key: 'saturnHand' },
     { planet: ECPlanetNumber.Jupiter, key: 'jupiterHand' },
     { planet: ECPlanetNumber.Mars,    key: 'marsHand' },
@@ -125,7 +126,7 @@ const planetValueMap: { planet: ECPlanetNumber; key: keyof ObsValueSet }[] = [
 export function drawPlanetHands(
     ctx: CanvasRenderingContext2D,
     L: LayoutParams,
-    vs: ObsValueSet,
+    u: Updater<ObsValueName>,
 ): void {
     if (!imagesLoaded) return;
 
@@ -136,9 +137,9 @@ export function drawPlanetHands(
         const img = p.img;
         if (!img || !img.complete) continue;
 
-        // Look up the pre-computed angle from ObsValueSet
+        // Look up the pre-computed angle from the Updater
         const mapping = planetValueMap.find(m => m.planet === p.planet);
-        const angle = mapping ? (vs[mapping.key] as { currentValue: number }).currentValue : 0;
+        const angle = mapping ? u.get(mapping.key).currentValue : 0;
 
         // Orbit radius: plR2 - orbitIndex * orbitInc (matching iOS L1983-1997)
         const orbitR = L.plR2 - p.orbitIndex * L.orbitInc;
@@ -168,7 +169,7 @@ export function drawPlanetHands(
 
         // Draw Moon sub-hand if this is Earth
         if (p.planet === ECPlanetNumber.Earth) {
-            drawMoonSubHand(ctx, L, s, orbitR, vs.moonOffset.currentValue);
+            drawMoonSubHand(ctx, L, s, orbitR, u.get('moonOffset').currentValue);
         }
 
         // Reset compositing before restore

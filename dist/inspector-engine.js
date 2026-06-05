@@ -14252,24 +14252,38 @@
   var Updater = class {
     constructor() {
       this.values = [];
+      this.byName = /* @__PURE__ */ new Map();
     }
     /** Register a value; returns it for convenient handle capture. */
     add(v) {
       this.values.push(v);
+      this.byName.set(v.name, v);
       return v;
     }
     addAll(vs) {
-      for (const v of vs) this.values.push(v);
+      for (const v of vs) this.add(v);
     }
     remove(v) {
       const i = this.values.indexOf(v);
       if (i >= 0) this.values.splice(i, 1);
+      this.byName.delete(v.name);
     }
     clear() {
       this.values.length = 0;
+      this.byName.clear();
     }
     get all() {
       return this.values;
+    }
+    /** Look up a registered value by name; throws if no such value exists. */
+    get(name) {
+      const v = this.byName.get(name);
+      if (!v) throw new Error(`Updater.get: no value named "${name}"`);
+      return v;
+    }
+    /** True if a value with this name is registered. */
+    has(name) {
+      return this.byName.has(name);
     }
     /** Per-frame: re-evaluate expired values + animate the whole collection. */
     tick(env2, perfNow, getNow2, withDisplayTime2, ctx) {
@@ -14613,6 +14627,16 @@
     "+month": ["month", 1],
     "+year": ["year", 1]
   };
+  function writeTimeStateToUrl(tc) {
+    if (tc.isRealTime) {
+      writeUrlState({ t: null, off: null, dir: 1 });
+    } else if (!tc.isStopped && tc.currentRate === null && tc.currentDirection === 1) {
+      writeUrlState({ off: tc.timeOffset, t: null, dir: 1 });
+    } else {
+      const dir = tc.isStopped ? 0 : tc.currentDirection;
+      writeUrlState({ t: tc.getDisplayTime().getTime(), off: null, dir });
+    }
+  }
   function initTimeControls(config) {
     const {
       timeController: timeController2,
@@ -14621,13 +14645,19 @@
       getLat,
       getLon,
       getSelectedBody,
-      onTimeStep,
-      onScrubStart,
-      onScrubEnd,
-      onNowClicked,
-      onTransportChange,
+      updater: updater2,
+      onTimeStep = () => {
+      },
+      onScrubStart = () => {
+      },
+      onScrubEnd = () => {
+      },
+      onNowClicked = () => {
+      },
+      onTransportChange = () => {
+      },
       ensureSchedulerRunning,
-      writeTimeState: writeTimeState2,
+      writeTimeState: writeTimeState2 = () => writeTimeStateToUrl(timeController2),
       onPopoverToggle
     } = config;
     const _timeBar = document.getElementById("time-bar");
@@ -14852,6 +14882,7 @@
         pauseBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           timeController2.stop();
+          updater2?.reset();
           onTransportChange();
           updateTimeUI();
           ensureSchedulerRunning();
@@ -14872,6 +14903,7 @@
           e.stopPropagation();
           timeController2.setDirection(-1);
           timeController2.setRate(null);
+          updater2?.reset();
           onTransportChange();
           updateTimeUI();
           ensureSchedulerRunning();
@@ -14884,6 +14916,7 @@
           e.stopPropagation();
           timeController2.setDirection(1);
           timeController2.setRate(null);
+          updater2?.reset();
           onTransportChange();
           updateTimeUI();
           ensureSchedulerRunning();
@@ -14956,6 +14989,8 @@
       onPopoverToggle?.(false);
     }
     function nowClicked() {
+      timeController2.reset();
+      updater2?.reset();
       onNowClicked();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -14972,6 +15007,7 @@
       if (rateIdx !== void 0) {
         timeController2.setRate(RATE_OPTIONS[rateIdx]);
       }
+      updater2?.reset();
       onScrubStart();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -14984,6 +15020,8 @@
       if (holdingBtn) {
         holdingBtn.classList.remove("holding");
         holdingBtn = null;
+        timeController2.stop();
+        updater2?.reset();
         onScrubEnd();
         updateTimeUI();
         ensureSchedulerRunning();
@@ -15002,6 +15040,7 @@
         e.stopPropagation();
         timeController2.stop();
         timeController2.step(unit, dir);
+        updater2?.reset();
         onTimeStep();
         updateTimeUI();
         ensureSchedulerRunning();
@@ -15081,6 +15120,7 @@
       }
       timeController2.stop();
       timeController2.setTime(targetDate);
+      updater2?.reset();
       onTimeStep();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -15120,6 +15160,7 @@
         Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
       );
       timeController2.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
+      updater2?.reset();
       onTimeStep();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -17020,46 +17061,29 @@
     }
   }
   function writeTimeState() {
-    if (timeController.isRealTime) {
-      writeUrlState({ t: null, off: null, dir: 1 });
-    } else if (!timeController.isStopped && timeController.currentRate === null && timeController.currentDirection === 1) {
-      writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
-    } else {
-      const dir = timeController.isStopped ? 0 : timeController.currentDirection;
-      writeUrlState({ t: timeController.getDisplayTime().getTime(), off: null, dir });
-    }
+    writeTimeStateToUrl(timeController);
+  }
+  function resetExprBox() {
+    rebuildExprValues();
+    resetObsValueSchedules(exprValues);
   }
   var timeUI = initTimeControls({
     timeController,
+    updater,
     getTimezone: () => locationTimezone,
     getTzDeltaMs: () => tzDeltaMs,
     getLat: () => lat,
     getLon: () => lon,
-    onTimeStep: () => {
-      rebuildExprValues();
-      resetAllSchedules();
-    },
+    onTimeStep: resetExprBox,
     onScrubStart: () => {
-      resetAllSchedules();
+      resetObsValueSchedules(exprValues);
     },
-    onScrubEnd: () => {
-      timeController.stop();
-      rebuildExprValues();
-      resetAllSchedules();
-    },
-    onNowClicked: () => {
-      timeController.reset();
-      rebuildExprValues();
-      resetAllSchedules();
-    },
-    onTransportChange: () => {
-      rebuildExprValues();
-      resetAllSchedules();
-    },
+    onScrubEnd: resetExprBox,
+    onNowClicked: resetExprBox,
+    onTransportChange: resetExprBox,
     ensureSchedulerRunning: () => {
       scheduleFrame();
-    },
-    writeTimeState
+    }
   });
   function wireAppLink(id, page) {
     const a = document.getElementById(id);

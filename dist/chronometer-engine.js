@@ -19271,6 +19271,16 @@
     "+month": ["month", 1],
     "+year": ["year", 1]
   };
+  function writeTimeStateToUrl(tc) {
+    if (tc.isRealTime) {
+      writeUrlState({ t: null, off: null, dir: 1 });
+    } else if (!tc.isStopped && tc.currentRate === null && tc.currentDirection === 1) {
+      writeUrlState({ off: tc.timeOffset, t: null, dir: 1 });
+    } else {
+      const dir = tc.isStopped ? 0 : tc.currentDirection;
+      writeUrlState({ t: tc.getDisplayTime().getTime(), off: null, dir });
+    }
+  }
   function initTimeControls(config) {
     const {
       timeController,
@@ -19279,13 +19289,19 @@
       getLat,
       getLon,
       getSelectedBody,
-      onTimeStep,
-      onScrubStart,
-      onScrubEnd,
-      onNowClicked,
-      onTransportChange,
+      updater,
+      onTimeStep = () => {
+      },
+      onScrubStart = () => {
+      },
+      onScrubEnd = () => {
+      },
+      onNowClicked = () => {
+      },
+      onTransportChange = () => {
+      },
       ensureSchedulerRunning,
-      writeTimeState,
+      writeTimeState = () => writeTimeStateToUrl(timeController),
       onPopoverToggle
     } = config;
     const _timeBar = document.getElementById("time-bar");
@@ -19510,6 +19526,7 @@
         pauseBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           timeController.stop();
+          updater?.reset();
           onTransportChange();
           updateTimeUI();
           ensureSchedulerRunning();
@@ -19530,6 +19547,7 @@
           e.stopPropagation();
           timeController.setDirection(-1);
           timeController.setRate(null);
+          updater?.reset();
           onTransportChange();
           updateTimeUI();
           ensureSchedulerRunning();
@@ -19542,6 +19560,7 @@
           e.stopPropagation();
           timeController.setDirection(1);
           timeController.setRate(null);
+          updater?.reset();
           onTransportChange();
           updateTimeUI();
           ensureSchedulerRunning();
@@ -19614,6 +19633,8 @@
       onPopoverToggle?.(false);
     }
     function nowClicked() {
+      timeController.reset();
+      updater?.reset();
       onNowClicked();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -19630,6 +19651,7 @@
       if (rateIdx !== void 0) {
         timeController.setRate(RATE_OPTIONS[rateIdx]);
       }
+      updater?.reset();
       onScrubStart();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -19642,6 +19664,8 @@
       if (holdingBtn) {
         holdingBtn.classList.remove("holding");
         holdingBtn = null;
+        timeController.stop();
+        updater?.reset();
         onScrubEnd();
         updateTimeUI();
         ensureSchedulerRunning();
@@ -19660,6 +19684,7 @@
         e.stopPropagation();
         timeController.stop();
         timeController.step(unit, dir);
+        updater?.reset();
         onTimeStep();
         updateTimeUI();
         ensureSchedulerRunning();
@@ -19739,6 +19764,7 @@
       }
       timeController.stop();
       timeController.setTime(targetDate);
+      updater?.reset();
       onTimeStep();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -19778,6 +19804,7 @@
         Math.min(MAX_DISPLAY_DATE_MS, d.getTime())
       );
       timeController.setTime(clampedMs !== d.getTime() ? new Date(clampedMs) : d);
+      updater?.reset();
       onTimeStep();
       updateTimeUI();
       ensureSchedulerRunning();
@@ -21559,18 +21586,7 @@
       }
     }
     function writeTimeState() {
-      if (timeController.isRealTime) {
-        writeUrlState({ t: null, off: null, dir: 1 });
-      } else if (!timeController.isStopped && timeController.currentRate === null && timeController.currentDirection === 1) {
-        writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
-      } else {
-        const dir = timeController.isStopped ? 0 : timeController.currentDirection;
-        writeUrlState({
-          t: timeController.getDisplayTime().getTime(),
-          off: null,
-          dir
-        });
-      }
+      writeTimeStateToUrl(timeController);
     }
     const timeUI = initTimeControls({
       timeController,
@@ -21590,13 +21606,11 @@
         resetAllSchedules();
       },
       onScrubEnd: () => {
-        timeController.stop();
         rebuildEnvironments();
         finishAllAnimations();
         if (!timeController.isStopped) resetAllSchedules();
       },
       onNowClicked: () => {
-        timeController.reset();
         finishAllAnimations();
         resetAllSchedules();
         stopScheduler();

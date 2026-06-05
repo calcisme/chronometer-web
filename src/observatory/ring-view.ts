@@ -27,7 +27,9 @@
 
 import type { LayoutParams } from './layout.js';
 import type { Environment } from '../expr/evaluator.js';
-import type { ObsValueSet } from './obs-values.js';
+import type { ObsValueName, RingPlanetKey } from './obs-values.js';
+import { SUN_RING_NAMES } from './obs-values.js';
+import type { Updater } from '../shared/updater.js';
 import { ECPlanetNumber } from '../astronomy/astro-constants.js';
 import { cachelessPlanetAlt } from '../astronomy/es-astro.js';
 import { drawCircularText } from './draw-utils.js';
@@ -197,7 +199,7 @@ const SUN_RING_COLORS: (string | null)[] = [
  *
  * @param ctx  Canvas 2D context
  * @param L    Layout parameters
- * @param vs   ObsValueSet with sunRing[] values
+ * @param u    Observatory value updater (sun ring stop angles)
  * @param now  Current display time
  * @param lat  Observer latitude in degrees
  * @param lng  Observer longitude in degrees
@@ -206,7 +208,7 @@ const SUN_RING_COLORS: (string | null)[] = [
 function drawSunRingGradient(
     ctx: CanvasRenderingContext2D,
     L: LayoutParams,
-    vs: ObsValueSet,
+    u: Updater<ObsValueName>,
     now: Date,
     lat: number,
     lng: number,
@@ -219,12 +221,12 @@ function drawSunRingGradient(
     const centerR = (outerR + innerR) / 2;
     const ringWidth = outerR - innerR;
 
-    // Collect valid stops: (angle, color) pairs
+    // Collect valid stops: (angle, color) pairs. SUN_RING_NAMES is in the same
+    // order as SUN_RING_COLORS, so index `i` selects matching name + color.
     const stops: { angle: number; color: string }[] = [];
-    const ringValues = vs.sunRing;
 
-    for (let i = 0; i < ringValues.length; i++) {
-        const val = ringValues[i].currentValue;
+    for (let i = 0; i < SUN_RING_NAMES.length; i++) {
+        const val = u.get(SUN_RING_NAMES[i]).currentValue;
         if (isNaN(val)) continue;  // skip invalid stops (polar regions)
 
         let color = SUN_RING_COLORS[i];
@@ -314,32 +316,32 @@ function drawSunRingGradient(
 // ---------------------------------------------------------------------------
 
 /**
- * Map from ring config index to ObsValueSet ring array key.
+ * Map from ring config index (aligned with PLANET_RINGS) to the ObsValue name
+ * prefix for that planet's ring values (e.g. `saturn` → `saturnRise`, …).
  */
-const RING_VALUE_KEYS: (keyof ObsValueSet)[] = [
-    'saturnRing', 'jupiterRing', 'marsRing', 'venusRing', 'mercuryRing', 'moonRing',
+const RING_VALUE_KEYS: RingPlanetKey[] = [
+    'saturn', 'jupiter', 'mars', 'venus', 'mercury', 'moon',
 ];
 
 /**
  * Update the planet ring cache from ObsValues.
  *
- * Reads pre-computed rise/set/transit angles and validity flags from the ObsValueSet.
+ * Reads pre-computed rise/set/transit angles and validity flags from the Updater.
  * Validity flags come from the dayNightLeafAngleIsRiseSet and dayNightLeafAngleAboveHorizon
  * expression functions, which share the compute-once cache in astro-env.ts.
  */
-function updateRingCache(env: Environment, vs: ObsValueSet): void {
+function updateRingCache(env: Environment, u: Updater<ObsValueName>): void {
     for (let i = 0; i < PLANET_RINGS.length; i++) {
         const ring = PLANET_RINGS[i];
-        const ringValues = vs[RING_VALUE_KEYS[i]] as { currentValue: number }[];
+        const key = RING_VALUE_KEYS[i];
 
-        // Ring array: [rise, set, transit, riseValid, setValid, aboveHorizon]
-        const riseAngle = ringValues[0].currentValue;
-        const setAngle = ringValues[1].currentValue;
-        const transitAngle = ringValues[2].currentValue;
+        const riseAngle = u.get(`${key}Rise`).currentValue;
+        const setAngle = u.get(`${key}Set`).currentValue;
+        const transitAngle = u.get(`${key}Transit`).currentValue;
 
-        const riseValid = ringValues[3].currentValue > 0.5;   // dayNightLeafAngleIsRiseSet(pn, 0)
-        const setValid = ringValues[4].currentValue > 0.5;     // dayNightLeafAngleIsRiseSet(pn, 1)
-        const aboveHorizon = ringValues[5].currentValue > 0.5; // dayNightLeafAngleAboveHorizon(pn, 0)
+        const riseValid = u.get(`${key}RiseValid`).currentValue > 0.5;   // dayNightLeafAngleIsRiseSet(pn, 0)
+        const setValid = u.get(`${key}SetValid`).currentValue > 0.5;     // dayNightLeafAngleIsRiseSet(pn, 1)
+        const aboveHorizon = u.get(`${key}AboveHorizon`).currentValue > 0.5; // dayNightLeafAngleAboveHorizon(pn, 0)
 
         ringCache.set(ring.planet, {
             riseAngle,
@@ -484,7 +486,7 @@ function drawPlanetRing(
  * @param lat       Observer latitude in degrees (for sun ring anchor altitude)
  * @param lon       Observer longitude in degrees (for sun ring anchor altitude)
  * @param tzOffsetSeconds  Timezone offset from UTC in seconds
- * @param vs        Observatory values (for planet ring and sun ring angles)
+ * @param u         Observatory value updater (planet ring and sun ring angles)
  */
 export function drawRiseSetRings(
     ctx: CanvasRenderingContext2D,
@@ -495,13 +497,13 @@ export function drawRiseSetRings(
     lat: number,
     lon: number,
     tzOffsetSeconds: number,
-    vs: ObsValueSet,
+    u: Updater<ObsValueName>,
 ): void {
     // Update planet ring cache from ObsValues
-    updateRingCache(env, vs);
+    updateRingCache(env, u);
 
     // 1. Sun ring (conic gradient with animated color stop positions)
-    drawSunRingGradient(ctx, L, vs, now, lat, lon, tzOffsetSeconds);
+    drawSunRingGradient(ctx, L, u, now, lat, lon, tzOffsetSeconds);
 
     // 2. Planet rings (simple rise/set arcs)
     drawPlanetRing(ctx, L);

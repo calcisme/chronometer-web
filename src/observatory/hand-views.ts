@@ -16,7 +16,8 @@
  */
 
 import type { LayoutParams } from './layout.js';
-import type { ObsValueSet } from './obs-values.js';
+import type { ObsValueName } from './obs-values.js';
+import type { Updater } from '../shared/updater.js';
 
 type Ctx2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -300,7 +301,7 @@ function drawTriangleHand(
 export function drawClockHands(
     ctx: Ctx2D,
     L: LayoutParams,
-    vs: ObsValueSet,
+    u: Updater<ObsValueName>,
 ): void {
     const { mainCX, mainCY } = L;
 
@@ -321,34 +322,34 @@ export function drawClockHands(
     };
 
     // Sunrise / Sunset (orange)
-    drawSunHand(vs.sunrise, RISESET_COLOR, RISESET_COLOR);
-    drawSunHand(vs.sunset,  RISESET_COLOR, RISESET_COLOR);
+    drawSunHand(u.get('sunrise'), RISESET_COLOR, RISESET_COLOR);
+    drawSunHand(u.get('sunset'),  RISESET_COLOR, RISESET_COLOR);
 
     // Golden hour (golden with grey arm)
-    drawSunHand(vs.goldenMorning, GOLDEN_COLOR, '#555555');
-    drawSunHand(vs.goldenEvening, GOLDEN_COLOR, '#555555');
+    drawSunHand(u.get('goldenMorning'), GOLDEN_COLOR, '#555555');
+    drawSunHand(u.get('goldenEvening'), GOLDEN_COLOR, '#555555');
 
     // Civil twilight (teal)
-    drawSunHand(vs.civilTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    drawSunHand(vs.civilTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(u.get('civilTwiMorning'), TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(u.get('civilTwiEvening'), TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
 
     // Nautical twilight (teal)
-    drawSunHand(vs.nautTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    drawSunHand(vs.nautTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(u.get('nautTwiMorning'), TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(u.get('nautTwiEvening'), TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
 
     // Astronomical twilight (teal)
-    drawSunHand(vs.astroTwiMorning, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
-    drawSunHand(vs.astroTwiEvening, TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(u.get('astroTwiMorning'), TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
+    drawSunHand(u.get('astroTwiEvening'), TWILIGHT_COLOR, TWILIGHT_ARM_COLOR);
 
     // Solar noon (yellow) — always valid
     drawArrowHand(ctx, mainCX, mainCY,
-        vs.solarNoon.currentValue,
+        u.get('solarNoon').currentValue,
         L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
         SNOON_COLOR, '#555555');
 
     // Solar midnight (blue) — always valid
     drawArrowHand(ctx, mainCX, mainCY,
-        vs.solarMidnight.currentValue,
+        u.get('solarMidnight').currentValue,
         L.sunRiseSetLen, L.len2, 1, L.sunRiseSetArrow, L.sunRiseSetArrow / 2 / Math.sqrt(3),
         SMID_COLOR, '#555555');
 
@@ -357,7 +358,7 @@ export function drawClockHands(
     //    noonOnTop offset is baked into the expression
     // ====================================================================
     drawArrowHand(ctx, mainCX, mainCY,
-        vs.h24.currentValue,
+        u.get('h24').currentValue,
         L.h24Len, 0, 0.75, L.h24Arrow, L.h24Wid,
         HOUR24_COLOR, HOUR24_COLOR);
 
@@ -365,21 +366,21 @@ export function drawClockHands(
     // 3. 12-hour hand (Breguet, gold)
     // ====================================================================
     drawBreguetHand(ctx, mainCX, mainCY,
-        vs.h12.currentValue,
+        u.get('h12').currentValue,
         L.h12Len, L.breH12Width, 'white', HOUR12_COLOR, L.breH12CenterR);
 
     // ====================================================================
     // 4. Minute hand (Breguet, lighter gold)
     // ====================================================================
     drawBreguetHand(ctx, mainCX, mainCY,
-        vs.minute.currentValue,
+        u.get('minute').currentValue,
         L.minLen, L.breMinWidth, 'white', MINUTE_COLOR, L.breMinCenterR);
 
     // ====================================================================
     // 5. Second hand (needle, warm white)
     // ====================================================================
     drawNeedleHand(ctx, mainCX, mainCY,
-        vs.second.currentValue,
+        u.get('second').currentValue,
         L.secLen, L.secWidth, SECOND_COLOR, L.secBallR);
 }
 
@@ -403,7 +404,7 @@ export function drawClockHands(
 export function drawSubdialHands(
     ctx: Ctx2D,
     L: LayoutParams,
-    vs: ObsValueSet,
+    u: Updater<ObsValueName>,
 ): void {
     const { subR } = L;
 
@@ -420,21 +421,21 @@ export function drawSubdialHands(
     // ====================================================================
     // UTC subdial — 24h clock, hands show UTC time
     // ====================================================================
-    drawTriangleHand(ctx, L.utcCX, L.utcCY, vs.utcHour.currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.utcCX, L.utcCY, vs.utcMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.utcCX, L.utcCY, vs.utcSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx, L.utcCX, L.utcCY, u.get('utcHour').currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.utcCX, L.utcCY, u.get('utcMinute').currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.utcCX, L.utcCY, u.get('utcSecond').currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
 
     // ====================================================================
     // Solar subdial — 12h clock, hands show local apparent solar time
     // ====================================================================
-    drawTriangleHand(ctx, L.solarCX, L.solarCY, vs.solarHour.currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.solarCX, L.solarCY, vs.solarMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.solarCX, L.solarCY, vs.solarSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx, L.solarCX, L.solarCY, u.get('solarHour').currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.solarCX, L.solarCY, u.get('solarMinute').currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.solarCX, L.solarCY, u.get('solarSecond').currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
 
     // ====================================================================
     // Sidereal subdial — 24h clock, hands show local sidereal time
     // ====================================================================
-    drawTriangleHand(ctx, L.sidCX, L.sidCY, vs.sidHour.currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.sidCX, L.sidCY, vs.sidMinute.currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
-    drawTriangleHand(ctx, L.sidCX, L.sidCY, vs.sidSecond.currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
+    drawTriangleHand(ctx, L.sidCX, L.sidCY, u.get('sidHour').currentValue,   hourLen,   hourWid,   SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.sidCX, L.sidCY, u.get('sidMinute').currentValue, minuteLen, minuteWid, SUBDIAL_STROKE, SUBDIAL_FILL);
+    drawTriangleHand(ctx, L.sidCX, L.sidCY, u.get('sidSecond').currentValue, secondLen, secondWid, SUBDIAL_SEC_STROKE, SUBDIAL_SEC_FILL);
 }

@@ -17,7 +17,7 @@ import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
 import { findClosestCity } from '../shared/city-search.js';
 import { initLocationDialog, requestBrowserLocation } from '../shared/location-dialog.js';
-import { TimeController, TICK_INTERVAL_MS, displaySecondsPerTick } from '../shared/time-controller.js';
+import { TimeController } from '../shared/time-controller.js';
 import { initTimeControls } from '../shared/time-controls-ui.js';
 import type { TimeControlsAPI } from '../shared/time-controls-ui.js';
 import { computeLayout, type LayoutParams } from './layout.js';
@@ -27,15 +27,8 @@ import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
 import { drawClockHands, drawSubdialHands } from './hand-views.js';
 import { initEarthView, drawEarthView } from './earth-view.js';
 
-import {
-    type ObsValueSet,
-    initObsValues,
-    updateObsValues,
-    animateObsValues,
-    resetObsValueSchedules,
-    anyObsAnimating,
-    invalidateObsValueCache,
-} from './obs-values.js';
+import { type ObsValueName, buildObsValues } from './obs-values.js';
+import { Updater, makeOverridableGetNow, timingContextForFrame } from '../shared/updater.js';
 import { createFpsIndicator, type FpsIndicator } from '../shared/fps-indicator.js';
 
 // ============================================================================
@@ -99,11 +92,15 @@ if (!locationTimezone && hasUrlLocation) {
 let tzDeltaMs = computeTzDeltaMs(locationTimezone);
 
 // --- Astronomy environment ---
-const getNow = (): Date => timeController.getDisplayTime();
+// makeOverridableGetNow lets the Updater's eval-ahead pass temporarily evaluate
+// expressions at a *future* display time (via withDisplayTime) without disturbing
+// the live time source. env captures this getNow, so every astro function reads
+// through the same override seam.
+const { getNow, withDisplayTime } = makeOverridableGetNow(() => timeController.getDisplayTime());
 let env: Environment = createAstroEnvironment(lat, lon, getNow, locationTimezone);
 
 
-let obsValues: ObsValueSet | null = null;
+let updater: Updater<ObsValueName> | null = null;
 
 /** Time controller UI handle (null until DOM is ready) */
 let timeUI: TimeControlsAPI | null = null;
@@ -190,23 +187,23 @@ function drawFrame(): void {
     // ================================================================
     const now = getNow();
     const tzOffsetSec = env.tzOffsetSec ?? 0;
-    if (obsValues) {
-        drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec, obsValues);
+    if (updater) {
+        drawRiseSetRings(ctx, L, env, noonOnTop, now, lat, lon, tzOffsetSec, updater);
     }
 
     // ================================================================
     // 3. Planet hands (dynamic — values update hourly via ObsValues)
     // ================================================================
-    if (obsValues) {
-        drawPlanetHands(ctx, L, obsValues);
+    if (updater) {
+        drawPlanetHands(ctx, L, updater);
     }
 
     // ================================================================
     // 3b. Subdial hands (UTC, Solar, Sidereal)
     //     Drawn before main clock hands so main hands appear on top.
     // ================================================================
-    if (obsValues) {
-        drawSubdialHands(ctx, L, obsValues);
+    if (updater) {
+        drawSubdialHands(ctx, L, updater);
     }
 
     // ================================================================
@@ -214,8 +211,8 @@ function drawFrame(): void {
     //     Drawn last so the three main hands (h, m, s) are on top of
     //     everything else, as they would be physically.
     // ================================================================
-    if (obsValues) {
-        drawClockHands(ctx, L, obsValues);
+    if (updater) {
+        drawClockHands(ctx, L, updater);
     }
 
     // ================================================================
@@ -253,8 +250,8 @@ function drawFrame(): void {
     ctx.fillText('MOON', L.moonCX, L.moonCY);
 
     // Earth map (Phase 5: day/night terminator)
-    if (obsValues) {
-        drawEarthView(ctx, L, obsValues, lat, lon, getNow);
+    if (updater) {
+        drawEarthView(ctx, L, updater, lat, lon, getNow);
     }
 
     // ================================================================
@@ -306,17 +303,13 @@ function tick(): void {
 
     let animating = false;
 
-    // Pass 1 & 2: Update + animate Observatory values
-    if (obsValues) {
-        const rate = timeController.currentRate;
-        const tickIntervalMs = rate ? TICK_INTERVAL_MS : null;
-        const displayDelta = rate ? displaySecondsPerTick(rate.unit) : 0;
-        const isStopped = timeController.isStopped;
-        const timeDirection: 0 | 1 | -1 = isStopped ? 0 : timeController.currentDirection;
-        updateObsValues(obsValues, env, perfNow, getNow,
-            tickIntervalMs, displayDelta, timeDirection);
-        animateObsValues(obsValues, perfNow);
-        animating = anyObsAnimating(obsValues);
+    // Pass 1 & 2: Update + animate Observatory values. The TimingContext (tick
+    // rate, per-tick display delta, direction) is derived generically from the
+    // controller — the shared updater seam, no hand-rolled glue here.
+    if (updater) {
+        updater.tick(env, perfNow, getNow, withDisplayTime,
+            timingContextForFrame(timeController));
+        animating = updater.anyAnimating();
     }
 
     drawFrame();
@@ -392,7 +385,7 @@ function setupLocationDialog(): void {
             // values (Sun ring, planet rings) hold a nextUpdateTime computed for
             // the old location and won't recompute otherwise. (The ring caches
             // clear implicitly via this reset — see ring-view.invalidateRingCache.)
-            if (obsValues) resetObsValueSchedules(obsValues);
+            updater?.reset();
             rebuildEnv();
             updateLocationDisplay();
             timeUI?.updateTimezoneDisplay();
@@ -449,10 +442,10 @@ function setupLocationDialog(): void {
                         locationTimezone = tz;
                         needsPrompt = false;
                         locationDialog.updateState(lat, lon, 'browser', '', '');
-                        // Async location arrived after initObsValues ran at the
+                        // Async location arrived after buildObsValues ran at the
                         // startup default — re-evaluate everything (esp. the
                         // sentinel-scheduled Sun/planet rings) at the real location.
-                        if (obsValues) resetObsValueSchedules(obsValues);
+                        updater?.reset();
                         rebuildEnv();
                         updateLocationDisplay();
                         locationDialog.dismiss();
@@ -484,53 +477,36 @@ function init(): void {
     setupLocationDialog();
     updateLocationDisplay();
 
-    // Wire up time controller env rebuild on tick
+    // Wire up time controller env rebuild on tick. The controller fires onTick on
+    // every transition (reset/stop/setTime/setOffset/setRate/setDirection) as well
+    // as on each quantized tick, so this keeps env (timezone offset, DST) fresh
+    // across both continuous advance and discrete jumps — which is why the time
+    // controls need no transition callbacks of their own (see below).
     timeController.onTick = () => rebuildEnv();
 
     // Initialize Observatory value system
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
-    obsValues = initObsValues(env, performance.now(), getNow);
-    invalidateObsValueCache();
+    updater = buildObsValues(env, performance.now(), getNow);
 
     // Initialize earth view (altitude table + Blue Marble images)
     initEarthView();
 
     // --- Wire time controller UI ---
+    // No transition callbacks: handing the Updater to the shared controls means
+    // every transport transition auto-resets the value schedules, and
+    // `timeController.onTick → rebuildEnv()` (above) refreshes env. The default
+    // writeTimeState persists the t/off/dir params, completing the deep-link
+    // round-trip. ensureSchedulerRunning restarts the idle-parked render loop.
     timeUI = initTimeControls({
         timeController,
+        updater,
         getTimezone: () => locationTimezone,
         getTzDeltaMs: () => tzDeltaMs,
         getLat: () => lat,
         getLon: () => lon,
-        onTimeStep: () => {
-            // Reset value schedules so they re-evaluate at the new time
-            if (obsValues) resetObsValueSchedules(obsValues);
-            rebuildEnv();
-        },
-        onScrubStart: () => {
-            if (obsValues) resetObsValueSchedules(obsValues);
-        },
-        onScrubEnd: () => {
-            timeController.stop();
-            rebuildEnv();
-            if (obsValues) resetObsValueSchedules(obsValues);
-        },
-        onNowClicked: () => {
-            timeController.reset();
-            rebuildEnv();
-            if (obsValues) resetObsValueSchedules(obsValues);
-        },
-        onTransportChange: () => {
-            rebuildEnv();
-            if (obsValues) resetObsValueSchedules(obsValues);
-        },
         ensureSchedulerRunning: () => {
             // The loop idles when stopped + settled; restart it on transport changes.
             scheduleFrame();
-        },
-        writeTimeState: () => {
-            // For now, Observatory doesn't persist time state to URL
-            // (will be added when url-state is extended for Observatory)
         },
     });
 

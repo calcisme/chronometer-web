@@ -545,21 +545,43 @@ export function anyObsAnimating(values: ObsValue[]): boolean {
  * `reset()`. Reading happens through the client's own per-value handles (so the
  * client controls how each value is rendered).
  *
- * This is the embryonic shared "updater subsystem"; the Inspector is its first
- * consumer. Observatory's `ObsValueSet` wrappers will converge onto it later.
+ * This is the embryonic shared "updater subsystem"; the Inspector and Observatory
+ * are its consumers.
+ *
+ * The optional type parameter `K` names the keys a client may look up via
+ * `get(name)`. It is a pure *client-side* convenience: the shared updater stores
+ * values in a plain `Map<string, ObsValue>` and never references any client's key
+ * union. Observatory instantiates `Updater<ObsValueName>` for typo-checked lookup;
+ * the Inspector uses the default `Updater` (`K = string`) and never calls `get()`.
  */
-export class Updater {
+export class Updater<K extends string = string> {
     private values: ObsValue[] = [];
+    private byName = new Map<string, ObsValue>();
 
     /** Register a value; returns it for convenient handle capture. */
-    add<T extends ObsValue>(v: T): T { this.values.push(v); return v; }
-    addAll(vs: ObsValue[]): void { for (const v of vs) this.values.push(v); }
+    add<T extends ObsValue>(v: T): T {
+        this.values.push(v);
+        this.byName.set(v.name, v);
+        return v;
+    }
+    addAll(vs: ObsValue[]): void { for (const v of vs) this.add(v); }
     remove(v: ObsValue): void {
         const i = this.values.indexOf(v);
         if (i >= 0) this.values.splice(i, 1);
+        this.byName.delete(v.name);
     }
-    clear(): void { this.values.length = 0; }
+    clear(): void { this.values.length = 0; this.byName.clear(); }
     get all(): readonly ObsValue[] { return this.values; }
+
+    /** Look up a registered value by name; throws if no such value exists. */
+    get(name: K): ObsValue {
+        const v = this.byName.get(name);
+        if (!v) throw new Error(`Updater.get: no value named "${name}"`);
+        return v;
+    }
+
+    /** True if a value with this name is registered. */
+    has(name: K): boolean { return this.byName.has(name); }
 
     /** Per-frame: re-evaluate expired values + animate the whole collection. */
     tick(
