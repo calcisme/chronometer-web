@@ -11,8 +11,13 @@
  */
 
 import { createAstroEnvironment, computeTzDeltaMs } from '../shared/astro-env.js';
-import { createObsValue, type ObsValue } from '../shared/obs-value.js';
-import { updateObsValues, animateObsValues, resetObsValueSchedules, makeOverridableGetNow } from '../shared/updater.js';
+import { createObsValue, JUMP, type ObsValue } from '../shared/obs-value.js';
+import {
+    updateObsValues, animateObsValues, resetObsValueSchedules, makeOverridableGetNow,
+    Updater, timingContextForFrame, type TimingContext,
+} from '../shared/updater.js';
+import { TimeController } from '../shared/time-controller.js';
+import { initTimeControls, type TimeControlsAPI } from '../shared/time-controls-ui.js';
 import { createFpsIndicator } from '../shared/fps-indicator.js';
 import { readUrlState, writeUrlState } from '../shared/url-state.js';
 import { resolveTimezone } from '../shared/tz-resolve.js';
@@ -149,8 +154,9 @@ const locationDialog = initLocationDialog({
         // Refresh all displays
         updateLocationDisplay();
         updateTimeDisplay();
-        rebuildExprValues();      // snap expression to the new environment
-        resetCatalogSchedules();  // re-evaluate the catalog against the new env
+        rebuildExprValues();   // snap expression to the new environment
+        resetAllSchedules();   // re-evaluate the catalog against the new env
+        scheduleFrame();
     },
 });
 
@@ -179,8 +185,9 @@ if (locationDialog) {
                 env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
                 updateLocationDisplay();
                 updateTimeDisplay();
-                rebuildExprValues();      // snap expression to the new environment
-                resetCatalogSchedules();  // re-evaluate the catalog against the new env
+                rebuildExprValues();   // snap expression to the new environment
+                resetAllSchedules();   // re-evaluate the catalog against the new env
+                scheduleFrame();
             } else {
                 // Browser denied or timed out — show location prompt
                 needsPrompt = true;
@@ -194,13 +201,30 @@ if (locationDialog) {
     }
 }
 
+// --- Time controller ---
+const timeController = new TimeController();
+
+// Restore time state from URL (mirrors Chronometer), enabling deep-links to a
+// specific time (e.g. from Chronometer to the Inspector at the same instant).
+if (urlState.off !== null && !isNaN(urlState.off)) {
+    timeController.setOffset(urlState.off);
+} else if (urlState.t !== null && !isNaN(urlState.t)) {
+    timeController.setTime(new Date(urlState.t));
+    if (urlState.dir === 1) { timeController.setDirection(1); timeController.setRate(null); }
+    else if (urlState.dir === -1) { timeController.setDirection(-1); timeController.setRate(null); }
+    // dir === 0 stays stopped (setTime already stops)
+}
+
 // --- Create the astronomy environment ---
-// getNow returns real time (Phase 4 will add a time controller). It is wrapped
-// so the updater can transiently evaluate "ahead" at a future display-time
-// boundary (eval-ahead) — giving lag-free interpolated readouts.
-const { getNow, withDisplayTime } = makeOverridableGetNow(() => new Date());
+// getNow returns the controller's display time, wrapped so the updater can
+// transiently evaluate "ahead" at a future display time (eval-ahead).
+const { getNow, withDisplayTime } = makeOverridableGetNow(() => timeController.getDisplayTime());
 
 let env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
+
+// The updater owns the catalog's ObsValue collection (the expression box is
+// managed separately — it has user-input error handling and rebuilds on edit).
+const updater = new Updater();
 
 // ============================================================================
 // Time display
@@ -302,13 +326,19 @@ function rebuildExprValues(): void {
     lastExprText = text;
     const now = performance.now();
     try {
-        const base = { name: 'expr', expr: text, updateInterval: EXPR_UPDATE_INTERVAL_SEC, evalAhead: true };
+        // animSpeed: JUMP so a stopped/stepped value jumps to its new value
+        // (digital readout) rather than creeping at a mis-scaled settle speed.
+        const base = {
+            name: 'expr', expr: text, updateInterval: EXPR_UPDATE_INTERVAL_SEC,
+            evalAhead: true, animSpeed: JUMP,
+        };
         exprAngleVal = createObsValue({ ...base, linear: false }, env, now, getNow);
         exprLinearVal = createObsValue({ ...base, linear: true }, env, now, getNow);
         exprValues = [exprAngleVal, exprLinearVal];
         exprError.classList.remove('visible');
         exprResults.classList.add('visible');
         renderExprValues();
+        scheduleFrame();  // restart the loop if idle (e.g. while time is stopped)
     } catch (e: any) {
         exprAngleVal = null;
         exprLinearVal = null;
@@ -366,18 +396,17 @@ function renderExprValues(): void {
 }
 
 /**
- * Per-frame drive of the expression ObsValues: full re-eval at the 0.1s
- * boundary (eval-ahead), smooth interpolation every frame, then render.
- * Guards evaluation so a per-frame eval error can't break the rAF loop.
+ * Per-frame drive of the expression ObsValues. Managed separately from the
+ * Updater because the user-typed expression can fail to evaluate; this guards
+ * evaluation so a per-frame error shows in the UI without breaking the rAF loop
+ * (or aborting the catalog's update pass).
  */
-function tickExprValues(): void {
+function tickExprValues(perfNow: number, ctx: TimingContext): void {
     if (exprValues.length === 0) return;
-    const now = performance.now();
     try {
-        updateObsValues(exprValues, env, now, getNow,
-            /* tickIntervalMs */ null, /* displayDeltaPerTickSec */ 0,
-            /* timeDirection */ 1, withDisplayTime);
-        animateObsValues(exprValues, now);
+        updateObsValues(exprValues, env, perfNow, getNow,
+            ctx.tickIntervalMs, ctx.displayDeltaSec, ctx.direction, withDisplayTime);
+        animateObsValues(exprValues, perfNow);
         exprError.classList.remove('visible');
         exprResults.classList.add('visible');
         renderExprValues();
@@ -636,7 +665,6 @@ interface CatalogHandle {
     last: string;  // last rendered string, to skip redundant DOM writes
 }
 
-const catalogObsValues: ObsValue[] = [];
 const catalogHandles: CatalogHandle[] = [];
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -686,10 +714,13 @@ function buildCatalog(): void {
                     {
                         name: cell.expr, expr: cell.expr, updateInterval: cell.updateInterval,
                         evalAhead: !discrete, discrete, linear: !tagIsAngular(cell.tag),
+                        // Digital readout: jump to the new value on stop/step rather
+                        // than creep at a magnitude-mismatched settle speed.
+                        animSpeed: JUMP,
                     },
                     env, now, getNow,
                 );
-                catalogObsValues.push(obs);
+                updater.add(obs);  // the Updater owns the catalog collection
                 catalogHandles.push({ cell, obs, valueEl, last: '' });
             }
             groupEl.appendChild(rowEl);
@@ -698,9 +729,10 @@ function buildCatalog(): void {
     }
 }
 
-/** Reset every catalog value's schedule so it re-evaluates against the env. */
-function resetCatalogSchedules(): void {
-    resetObsValueSchedules(catalogObsValues);
+/** Re-evaluate the catalog and the expression box against the current env/time. */
+function resetAllSchedules(): void {
+    updater.reset();
+    resetObsValueSchedules(exprValues);
 }
 
 // ── Value formatters by tag ─────────────────────────────────────────────────
@@ -835,12 +867,9 @@ function formatCell(tag: Tag, v: number): string {
     }
 }
 
-/** Per-frame: advance the catalog ObsValues and render changed cells. */
-function tickCatalog(perfNow: number): void {
-    updateObsValues(catalogObsValues, env, perfNow, getNow,
-        /* tickIntervalMs */ null, /* displayDeltaPerTickSec */ 0,
-        /* timeDirection */ 1, withDisplayTime);
-    animateObsValues(catalogObsValues, perfNow);
+/** Per-frame: render changed catalog cells from their (already-advanced) values.
+ *  The Updater advances the ObsValues; this only formats + writes the DOM. */
+function renderCatalog(): void {
     for (const h of catalogHandles) {
         const str = formatCell(h.cell.tag, h.obs.currentValue);
         if (str === h.last) continue;  // skip redundant DOM writes
@@ -857,26 +886,81 @@ function tickCatalog(perfNow: number): void {
 // Page-level FPS overlay (enabled via ?fps) — shared with Chronometer/Observatory.
 const fpsIndicator = createFpsIndicator(urlState.fps);
 
-function tick(): void {
-    const perfNow = performance.now();
-    updateTimeDisplay();
+// --- Idle scheduler (mirrors Observatory) ---
+// The loop runs while time is moving or an animation is settling, then goes idle.
+// Transport actions and edits restart it via scheduleFrame().
+let rafId: number | null = null;
+let inTick = false;
+let frameRequestedDuringTick = false;
 
-    // Drive the expression ObsValues: 0.1s eval-ahead re-eval + smooth animation
-    tickExprValues();
-
-    // Drive the ephemeris catalog (eval-ahead at per-value cadence)
-    tickCatalog(perfNow);
-
-    // The catalog is always live, so "active" is always true.
-    fpsIndicator?.recordFrame(true);
-
-    requestAnimationFrame(tick);
+function scheduleFrame(): void {
+    if (inTick) { frameRequestedDuringTick = true; return; }
+    if (rafId === null) rafId = requestAnimationFrame(tick);
 }
 
-// Initial build + update
+function tick(): void {
+    rafId = null;
+    inTick = true;
+    frameRequestedDuringTick = false;
+    const perfNow = performance.now();
+
+    timeController.checkTick(perfNow);
+    timeController.beginFrame();
+
+    // Advance everything from one timing context (the controller↔updater seam).
+    const ctx = timingContextForFrame(timeController);
+    updater.tick(env, perfNow, getNow, withDisplayTime, ctx);   // catalog
+    tickExprValues(perfNow, ctx);                                // expression box
+
+    updateTimeDisplay();
+    renderCatalog();
+    timeUI?.updateTimeUI();
+
+    timeController.clampDisplayTime();
+    timeController.endFrame();
+
+    const continuous = !timeController.isStopped || updater.anyAnimating();
+    fpsIndicator?.recordFrame(continuous);
+
+    inTick = false;
+    if (continuous || frameRequestedDuringTick) {
+        rafId = requestAnimationFrame(tick);
+    }
+}
+
+// --- Wire the time-controls UI ---
+function writeTimeState(): void {
+    if (timeController.isRealTime) {
+        writeUrlState({ t: null, off: null, dir: 1 });
+    } else if (!timeController.isStopped && timeController.currentRate === null
+        && timeController.currentDirection === 1) {
+        writeUrlState({ off: timeController.timeOffset, t: null, dir: 1 });
+    } else {
+        const dir = timeController.isStopped ? 0 : timeController.currentDirection;
+        writeUrlState({ t: timeController.getDisplayTime().getTime(), off: null, dir: dir as 0 | 1 | -1 });
+    }
+}
+
+const timeUI: TimeControlsAPI | null = initTimeControls({
+    timeController,
+    getTimezone: () => locationTimezone,
+    getTzDeltaMs: () => tzDeltaMs,
+    getLat: () => lat,
+    getLon: () => lon,
+    onTimeStep: () => { rebuildExprValues(); resetAllSchedules(); },
+    onScrubStart: () => { resetAllSchedules(); },
+    onScrubEnd: () => { timeController.stop(); rebuildExprValues(); resetAllSchedules(); },
+    onNowClicked: () => { timeController.reset(); rebuildExprValues(); resetAllSchedules(); },
+    onTransportChange: () => { rebuildExprValues(); resetAllSchedules(); },
+    ensureSchedulerRunning: () => { scheduleFrame(); },
+    writeTimeState,
+});
+
+// Initial build + start
 buildCatalog();
 updateTimeDisplay();
-requestAnimationFrame(tick);
+timeUI?.updateTimeUI();
+scheduleFrame();
 
 console.log('[Inspector] Initialized — lat:', lat, 'lon:', lon, 'tz:', locationTimezone,
-    '— catalog values:', catalogObsValues.length);
+    '— catalog values:', updater.all.length);

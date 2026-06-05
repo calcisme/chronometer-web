@@ -54,7 +54,27 @@ functions registered by `createAstroEnvironment()` are available for evaluation.
 ### Time Display
 
 The top section shows the current time (to the millisecond — the subsecond
-portion is dimmed), date, and timezone in the configured location.
+portion is dimmed), date, and timezone in the configured location. The displayed
+time is the **time controller's** display time, so it reflects scrubbing /
+offset / stopped state (not just `new Date()`).
+
+### Time Controller
+
+The Inspector uses the shared `TimeController` + `initTimeControls` transport bar
+(`{{TIME_CONTROLLER}}` / `{{TIME_CSS}}` partials, pinned under the time display),
+exactly like Chronometer and Observatory: play / pause, reverse, hold-to-scrub at
+various rates, single-step, offset, and "Now". Time state round-trips through the
+URL (`t` / `off` / `dir`), so a Chronometer view can deep-link to the Inspector at
+the same instant and location.
+
+Under the hood the catalog's values are owned by a shared **`Updater`** driven by
+a **`TimingContext`** (built each frame from the controller). The transport
+callbacks call `updater.reset()` (and rebuild the expression box) so values
+re-evaluate against the new display time; an **idle scheduler** parks the render
+loop when the clock is stopped and everything has settled, and restarts it on any
+transport action or edit. Continuous catalog values track the scrubbed time via
+mode-aware eval-ahead (lag-free at each tick); discrete values snap. See
+[Animation — Eval-ahead](animation.md#eval-ahead-lag-free-tracking).
 
 ### Expression Evaluator
 
@@ -97,10 +117,11 @@ see [Animation — Eval-ahead](animation.md#eval-ahead-lag-free-tracking).
 The `?fps` URL parameter shows the same page-level FPS readout
 (`<active> fps · <avg> avg`) as Chronometer and Observatory, via the shared
 [src/shared/fps-indicator.ts](../src/shared/fps-indicator.ts). `active` is fed
-`recordFrame(exprValues.length > 0)` each frame — live while an expression is
-animating (eval-ahead keeps an in-flight 0.1 s sweep), dimmed when no expression
-is entered. Useful for confirming the readouts interpolate at the full frame
-rate while the expression is fully re-evaluated only 10×/s.
+`recordFrame(!timeController.isStopped || updater.anyAnimating())` each frame —
+live while time is moving or an animation is settling, dimmed once the clock is
+stopped and everything has settled (when the idle scheduler parks the loop).
+Useful for confirming the readouts interpolate at the full frame rate while
+expressions are fully re-evaluated only 10×/s.
 
 ### Autocomplete
 

@@ -61,7 +61,7 @@
       /* ── Time Display ─────────────────────────────── */
       .time-section {
           text-align: center;
-          margin-bottom: 24px;
+          margin-bottom: 8px;  /* the time bar sits just below */
       }
 
       #time-display {
@@ -575,12 +575,44 @@
           text-decoration: underline;
       }
 
+      /* ── Time controller injection ────────────────── */
+      {{TIME_CSS}}
+
+      /* Drop the date — the main time display right above shows the same thing. */
+      #time-bar-date {
+          display: none;
+      }
+      /* Keep the bar inline (under the time display) as a plain row: no
+         background/border, nudged up toward the time display and given space
+         below so it's separated from the location card. */
+      #time-bar {
+          background: none;
+          border: none;
+          margin: 0 0 18px;
+          padding: 0;
+      }
+      /* Float the time-controller *popup* at the bottom-right of the viewport,
+         mirroring the ?fps readout at bottom-left. Fixed, so it escapes the
+         catalog's overflow clipping. */
+      #time-popover {
+          position: fixed;
+          right: 8px;
+          bottom: 8px;
+          top: auto;
+          left: auto;
+          transform: none;
+          z-index: 10000;
+      }
+
       /* ── Location dialog injection ─────────────────── */
       {{LOCATION_CSS}}
     </style>
   </head>
   <body>
     <div id="app">
+      <!-- Pinned top section (everything above the scrolling catalog). Positioned
+           so the time-controller popover can anchor to its bottom-right. -->
+      <div class="pinned-top">
       <!-- Header -->
       <header class="app-header">
         <h1 class="app-title">Inspector</h1>
@@ -592,6 +624,9 @@
         <p id="date-display">Loading…</p>
         <p id="tz-display"></p>
       </section>
+
+      <!-- Time controller (transport bar + popover) -->
+      {{TIME_CONTROLLER}}
 
       <!-- Location -->
       <div class="section-card">
@@ -638,6 +673,7 @@
         <p id="expr-error">—</p>
         <div id="ref-panel"></div>
       </div>
+      </div><!-- /.pinned-top -->
 
       <!-- Ephemeris catalog (populated by inspector-entry.ts) -->
       <div id="catalog" class="catalog"></div>

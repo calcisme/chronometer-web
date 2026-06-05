@@ -19,6 +19,15 @@ import type { Environment } from '../expr/evaluator.js';
 import { evalAttr } from './astro-env.js';
 import { type AnimatingValue, makeAnimatingValue } from './animation.js';
 
+/**
+ * An `animSpeed` sentinel meaning "jump instantly to the target on a settle /
+ * snap update" (no animation). Used by clients with digital readouts (the
+ * Inspector), where a value can be any magnitude and a finite settle speed would
+ * either crawl or overshoot. Distinct from "snap", which elsewhere means
+ * "animate at the default speed rather than the slow naturalSpeed sweep".
+ */
+export const JUMP = Infinity;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -37,9 +46,17 @@ export interface ObsValue {
      *  Negative: sentinel (e.g., EC_UPDATE_NEXT_SUNRISE). */
     updateInterval: number;
 
-    /** Catch-up animation speed in rad/s.
-     *  Used for snap-to-target (naturalSpeed=0) and Phase 1 catch-up
-     *  (naturalSpeed>0).  Default 2.0 rad/s. */
+    /** Settle / catch-up animation speed, in units/s (rad/s for angular values).
+     *  Governs the *non-budget* animations — the stopped-state settle and the
+     *  legacy snap-to-target / Phase-1 catch-up. (Eval-ahead and scrub ignore it;
+     *  they animate over an explicit time budget.) Default 2.0.
+     *
+     *  This is the per-app "default animation speed" carried over from
+     *  Chronometer/Observatory, made client-controllable per value. There is no
+     *  meaningful finite speed for an arbitrary linear value (a value in seconds,
+     *  AU, or a dateInterval spans many orders of magnitude), so a client showing
+     *  *digital* readouts sets it to {@link JUMP} (= Infinity) to jump instantly
+     *  to the correct value on settle rather than creep at a mis-scaled rate. */
     animSpeed: number;
 
     /** Steady-state sweep speed in rad/s.
@@ -78,11 +95,18 @@ export interface ObsValue {
      *  to be supplied to the updater (see updater.ts / makeOverridableGetNow). */
     evalAhead: boolean;
 
-    /** If true, this value is **discrete** — there is no meaningful value between
-     *  two of its states (e.g. today's sunrise, an integer hour, a floored TZ
-     *  offset). The updater evaluates it at the *current* display time and snaps
-     *  (no eval-ahead, no interpolation), so the underlying function's semantics
-     *  decide which value applies now. Takes precedence over `evalAhead`. */
+    /** If true, the updater evaluates this value at the *current* display time and
+     *  **snaps** (no eval-ahead, no interpolation), so the underlying function's
+     *  semantics decide which value applies now. Takes precedence over `evalAhead`.
+     *
+     *  This is a **client policy, not a property of the expression.** The client
+     *  sets it when interpolating the value across a change would be meaningless
+     *  *for that display*. Example: when today's sunrise rolls over to the next
+     *  day's, the Inspector's *text* readout should **jump** to the new time, while
+     *  a graphical client **animates** the same quantity — Observatory's sunrise
+     *  hand sweeps smoothly to the new day's position. So `discrete` is rare in
+     *  Observatory/Chronometer (graphical, animate everywhere) and common only in
+     *  the Inspector's text readouts. */
     discrete: boolean;
 }
 

@@ -247,13 +247,35 @@ Both operate on a flat `ObsValue[]`. Observatory wraps these with its `ObsValueS
 
 ### Eval-ahead (lag-free tracking)
 
-A value sampled every Δ and interpolated between *past* samples lags real time by Δ. **Eval-ahead** (`evalAhead: true`) removes that lag: at each update it evaluates the target at the **next** boundary (one interval into the future in display time) and sweeps there, arriving exactly as that boundary occurs. Because an expression is a pure function of display time, the future target is obtained by direct evaluation — no rate estimate needed. Each interval is then the chord `A(T) → A(T+Δ)`: symmetric curvature error, **no time lag**. For a constant-rate value this reproduces the `naturalSpeed` sweep exactly, so eval-ahead is its general form.
+A value sampled every Δ and interpolated between *past* samples lags real time by Δ. **Eval-ahead** (`evalAhead: true`) removes that lag: at each update it evaluates the target at the **next update point** in display time and sweeps there, arriving exactly as display reaches that point. Because an expression is a pure function of display time, the future target is obtained by direct evaluation — no rate estimate needed. Each interval is then the chord `A(now) → A(next)`: symmetric curvature error, **no time lag**.
+
+Eval-ahead is the *single continuous mechanism*, made **mode-aware** by where the next point is — this is what lets it handle the time controller's modes without separate branches:
+
+| Mode | Next point (display time) | Budget (real) |
+|------|---------------------------|---------------|
+| Play 1× / reverse −1× | the value's next epoch boundary | time until it (display↔real 1:1) |
+| **Scrub** | the **next tick**: `now + displayDeltaSec·dir` | `TICK_INTERVAL_MS` |
+| Stopped | — (routed to a settle-at-now branch) | — |
+
+Two things fall out of this:
+- **Scrub needs no compression branch** — it is just eval-ahead with the next point at the next tick, and is **lag-free at every tick** (the displayed value equals the true value when display reaches that point).
+- **`naturalSpeed` falls out** — a constant-rate value's "natural speed" is the slope between `A(now)` and `A(next)`; sweeping the chord over the budget reproduces constant velocity with the rate *inferred*, not configured. The legacy `naturalSpeed` two-phase and scrub-compression branches remain for Observatory but are mechanisms we converge away from.
 
 Eval-ahead evaluates the expression at a shifted display time via **`makeOverridableGetNow(base)`** (updater.ts), which returns a `getNow` plus a `withDisplayTime(displayMs, fn)` that transiently overrides the clock for the duration of `fn`. The display time enters expressions only through `getNow`, so shifting it shifts the whole evaluation — no second environment needed. The Inspector uses eval-ahead to show smooth, lag-free readouts while fully re-evaluating only 10×/s; see [Inspector — Expression Evaluator](inspector.md#expression-evaluator).
 
+### TimingContext and the `Updater`
+
+The per-frame timing state (`tickIntervalMs`, `displayDeltaSec`, `direction`) is bundled as a **`TimingContext`** — the generic seam between the time controller and the updater. `timingContextForFrame(timeController)` builds it; the **`Updater`** object (updater.ts) owns an `ObsValue` collection and advances it each frame via `tick(env, perfNow, getNow, withDisplayTime, ctx)`, exposing `anyAnimating()` and `reset()` (which the time-controls transition callbacks bind to). The Inspector is its first consumer; Observatory's `ObsValueSet` wrappers will converge onto it later.
+
 ### Discrete values (snap, no interpolation)
 
-Some values have no meaningful state *between* two samples — today's sunrise time, an integer hour, a floored timezone offset. The **`ObsValue.discrete`** flag marks these: the updater evaluates them at the **current** display time and sets the value directly (no eval-ahead, no interpolation), letting the function's own semantics decide which value applies now. Eval-ahead would be wrong for them (it crosses the value's change-point early — e.g. showing tomorrow's sunrise before midnight), and interpolating a step value produces nonexistent in-between readings. `discrete` takes precedence over `evalAhead`. The Inspector's ephemeris catalog drives rise/set/transit, integer date/clock fields, weekday, planet up/down, and TZ offset this way.
+The **`ObsValue.discrete`** flag tells the updater to evaluate a value at the **current** display time and set it directly (no eval-ahead, no interpolation), letting the function's own semantics decide which value applies now. Eval-ahead would be wrong here (it crosses the value's change-point early — e.g. showing tomorrow's sunrise before midnight), and interpolating a step value produces nonexistent in-between readings. `discrete` takes precedence over `evalAhead`. Its only mode dependence is **cadence**: it re-evaluates at the value's boundary at 1×/reverse, and **every tick while scrubbing** (so the snapped value tracks the scrubbed time), and keeps instant-snap even when stopped.
+
+### Settle speed and `JUMP` (digital readouts)
+
+`ObsValue.animSpeed` is the per-app "default animation speed" carried over from Chronometer/Observatory. It governs only the **non-budget** animations — the stopped-state *settle* and the legacy snap-to-target (eval-ahead and scrub ignore it, animating over an explicit time budget). For an *angle* a finite speed (2 rad/s) settles in well under a second, but a **linear** value can be any magnitude (seconds-of-day 0–86400, AU, a dateInterval ~7.8×10⁸), so a fixed units/s either crawls or overshoots — e.g. stepping a day jumps sidereal time ~236 s, which at 2 units/s would creep for ~118 s. A client showing **digital** readouts (the Inspector) therefore sets `animSpeed` to the **`JUMP`** sentinel (`= Infinity`, in obs-value.ts), so values *jump* to the correct value on stop/step instead of easing — while play/scrub stay smooth (those are budget-bounded). `JUMP` is deliberately not called "snap" to avoid colliding with the existing "snap = animate at default speed (vs. the slow naturalSpeed sweep)" usage.
+
+**`discrete` is a *client* policy, not a property of the expression.** The client sets it when interpolating a value across a change would be meaningless *for that particular display*. For example, when today's sunrise rolls over to the next day's, the Inspector's *text* readout should **jump** to the new time, whereas a graphical client **animates** the same quantity — Observatory's sunrise hand sweeps smoothly to the new day's position. So `discrete` is rare in Observatory/Chronometer (graphical, animate everywhere) and common only in the Inspector's ephemeris catalog (rise/set/transit, integer date/clock fields, weekday, planet up/down, TZ offset).
 
 ## Key Source Files
 

@@ -317,6 +317,11 @@ expression cost.
 
 ### Shared time-controller integration
 
+> **Realized in [2026-06-04-inspector-time-controller.md](2026-06-04-inspector-time-controller.md)** —
+> that plan covers wiring the time controller into the Inspector and the updater
+> changes needed for `evalAhead`/`discrete` values to behave under scrub / stop /
+> reverse.
+
 `src/shared/time-controller.ts` already exists, but each app re-implements the *glue*
 between it and animation: the transition handlers (`onScrubStart` → reset schedules,
 stop → finish animations + freeze, step → reset + tick once, play → reset) live

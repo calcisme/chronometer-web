@@ -22,6 +22,8 @@ import {
     displayTimeToPerfNow,
 } from './animation.js';
 import type { ObsValue } from './obs-value.js';
+import type { TimeController } from './time-controller.js';
+import { TICK_INTERVAL_MS, displaySecondsPerTick } from './time-controller.js';
 
 // Base angular animation speed (must match kECGLAngleAnimationSpeed in animation.ts).
 // Used to convert ObsValue animSpeed (rad/s) to the multiplier that
@@ -67,6 +69,35 @@ export function makeOverridableGetNow(base: () => Date): {
 }
 
 // ============================================================================
+// Timing context — the per-frame seam between the time controller and updater
+// ============================================================================
+
+/**
+ * The per-frame timing state the updater needs, derived from a `TimeController`.
+ * Bundling it as one value (rather than three loose scalars threaded through
+ * every call) is the generic controller↔updater seam: a client builds it once
+ * per frame and hands it to the updater.
+ */
+export interface TimingContext {
+    /** Scrub tick rate in ms, or `null` at 1× / reverse / stopped. */
+    tickIntervalMs: number | null;
+    /** Display seconds advanced per tick (magnitude); used by scrub eval-ahead. */
+    displayDeltaSec: number;
+    /** 1 = forward, −1 = reverse, 0 = stopped. */
+    direction: 0 | 1 | -1;
+}
+
+/** Build the per-frame `TimingContext` from a `TimeController`. */
+export function timingContextForFrame(tc: TimeController): TimingContext {
+    const rate = tc.currentRate;
+    return {
+        tickIntervalMs: rate ? TICK_INTERVAL_MS : null,
+        displayDeltaSec: rate ? displaySecondsPerTick(rate.unit) : 0,
+        direction: tc.isStopped ? 0 : tc.currentDirection,
+    };
+}
+
+// ============================================================================
 // Update helpers
 // ============================================================================
 
@@ -85,13 +116,21 @@ function updateObsValueDiscrete(
     perfNow: number,
     getNow: () => Date,
     timeDirection: 0 | 1 | -1,
+    tickIntervalMs: number | null,
 ): void {
     const newTarget = evalAttr(v.expr, env);
 
+    // Cadence is the only mode dependence — the value is always evaluated at the
+    // *current* display time and snapped.
     if (timeDirection === 0) {
         // Stopped: re-check shortly (time may resume).
         v.nextUpdateTime = perfNow + 100;
+    } else if (tickIntervalMs !== null && tickIntervalMs > 0) {
+        // Scrubbing: re-evaluate every tick so the snapped value tracks the
+        // scrubbed display time with no stale lag.
+        v.nextUpdateTime = perfNow + tickIntervalMs;
     } else {
+        // 1× / reverse: re-evaluate at this value's next boundary.
         const dir: 1 | -1 = timeDirection === -1 ? -1 : 1;
         const nextDisplayMs = computeNextBoundary(v.updateInterval * 1000, getNow, dir, env);
         v.nextUpdateDisplayTime = nextDisplayMs;
@@ -106,33 +145,48 @@ function updateObsValueDiscrete(
 }
 
 /**
- * Update a value using the lag-free **eval-ahead** scheme.
+ * Update a value using the lag-free **eval-ahead** scheme — the single continuous
+ * mechanism, made *mode-aware* by where the upcoming eval point is:
  *
- * Evaluates the target at the *next* update boundary (one interval into the
- * future in display time) and sweeps the current value there over the real-time
- * budget, arriving exactly when that boundary occurs. Because the previous sweep
- * landed on the value at the current boundary, each interval is the chord
- * A(T) → A(T+Δ): symmetric curvature error, no time lag.
+ *   - **1× / reverse:** the next point is this value's next epoch boundary; the
+ *     budget is the real time until it (display↔real 1:1).
+ *   - **Scrub:** the next point is the **next tick** — its display time is
+ *     `now + displayDeltaSec·dir` and the budget is `tickIntervalMs`.
+ *
+ * Either way we evaluate the target *at the next point's display time* and sweep
+ * `current → target` over the budget, arriving exactly when display reaches that
+ * point. So it is lag-free at every step, and natural-speed sweep falls out: the
+ * implied rate is just the slope between A(now) and A(next). `timeDirection` is
+ * never 0 here (the dispatch routes stopped continuous values to settle).
  */
 function updateObsValueEvalAhead(
     v: ObsValue,
     env: Environment,
     perfNow: number,
     getNow: () => Date,
-    timeDirection: 0 | 1 | -1,
+    timeDirection: 1 | -1,
+    tickIntervalMs: number | null,
+    displayDeltaSec: number,
     withDisplayTime?: WithDisplayTime,
 ): void {
-    const dir: 1 | -1 = timeDirection === -1 ? -1 : 1;
+    let nextDisplayMs: number;
+    let budgetMs: number;
 
-    // Next boundary in display time (computed against the real clock).
-    const nextDisplayMs = computeNextBoundary(
-        v.updateInterval * 1000, getNow, dir, env);
+    if (tickIntervalMs !== null && tickIntervalMs > 0) {
+        // Scrub: the next update is the next tick.
+        nextDisplayMs = getNow().getTime() + displayDeltaSec * 1000 * timeDirection;
+        budgetMs = tickIntervalMs;
+        v.nextUpdateTime = perfNow + tickIntervalMs;
+    } else {
+        // 1× / reverse: the next update is this value's next epoch boundary.
+        nextDisplayMs = computeNextBoundary(v.updateInterval * 1000, getNow, timeDirection, env);
+        v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
+        budgetMs = v.nextUpdateTime - perfNow;
+    }
     v.nextUpdateDisplayTime = nextDisplayMs;
-    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
-    const budgetMs = v.nextUpdateTime - perfNow;
 
-    // Evaluate the target AT the next boundary (eval-ahead). The override only
-    // applies during this evaluation; boundary scheduling above used real time.
+    // Evaluate the target AT the next point's display time (eval-ahead). The
+    // override only applies during this evaluation; scheduling above used real time.
     const target = withDisplayTime
         ? withDisplayTime(nextDisplayMs, () => evalAttr(v.expr, env))
         : evalAttr(v.expr, env);
@@ -143,7 +197,7 @@ function updateObsValueEvalAhead(
         // Sweep to the future target over the real-time budget.
         startAnimationRaw(v.anim, target, perfNow, multiplier, budgetMs, v.linear);
     } else {
-        // Boundary is now/past — snap.
+        // Budget is now/past — snap.
         startAnimationRaw(v.anim, target, perfNow, multiplier, undefined, v.linear);
     }
 }
@@ -325,6 +379,36 @@ function updateObsValueScrub(
     v.pendingSweep = null;
 }
 
+/**
+ * Continuous value, time **stopped**: evaluate at the (frozen) current display
+ * time and animate to it, re-checking shortly in case time resumes. No look-ahead.
+ */
+function settleAtNow(v: ObsValue, env: Environment, perfNow: number): void {
+    const newTarget = evalAttr(v.expr, env);
+    v.nextUpdateTime = perfNow + 100;
+    v.pendingSweep = null;
+    startAnimationRaw(v.anim, newTarget, perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED, undefined, v.linear);
+}
+
+/**
+ * Non-eval-ahead continuous value at 1× / reverse: evaluate at the current time
+ * and animate to it at `animSpeed`, scheduling the next re-eval at the boundary.
+ * (Legacy snap path — Observatory values that don't opt into eval-ahead.)
+ */
+function snapToTargetAtBoundary(
+    v: ObsValue, env: Environment, perfNow: number,
+    getNow: () => Date, timeDirection: 1 | -1,
+): void {
+    const newTarget = evalAttr(v.expr, env);
+    const nextDisplayMs = computeNextBoundary(v.updateInterval * 1000, getNow, timeDirection, env);
+    v.nextUpdateDisplayTime = nextDisplayMs;
+    v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
+    v.pendingSweep = null;
+    startAnimationRaw(v.anim, newTarget, perfNow,
+        v.animSpeed / K_ANGLE_ANIM_SPEED, undefined, v.linear);
+}
+
 // ============================================================================
 // Per-frame passes
 // ============================================================================
@@ -333,12 +417,18 @@ function updateObsValueScrub(
  * UPDATE one value — dispatch to the appropriate branch. Caller has already
  * checked that the value's timer has expired.
  *
- * Branches:
- *   0. Discrete (v.discrete): evaluate at current time, snap (no interpolation)
- *   1. Eval-ahead (v.evalAhead): lag-free future-boundary target
- *   2. Scrub mode (tickIntervalMs != null): compress animations to fit tick budget
- *   3. Natural-speed 1× (naturalSpeed > 0): two-phase catch-up + sweep
- *   4. Normal 1× (naturalSpeed === 0): snap-to-target at animSpeed
+ * Order:
+ *   1. Discrete (`v.discrete`): eval-at-now instant snap; cadence = tick if
+ *      scrubbing, else boundary (the one genuinely distinct, client-chosen mode).
+ *   2. Stopped (`direction === 0`): continuous value settles at the frozen time.
+ *   3. Eval-ahead (`v.evalAhead`): the general continuous mechanism, mode-aware
+ *      (1× boundary or scrub tick) — subsumes scrub and natural-speed.
+ *   4. Legacy scrub-compression (`tickIntervalMs`) — non-eval-ahead values only.
+ *   5. Legacy natural-speed two-phase sweep.
+ *   6. Legacy snap-to-target at a boundary.
+ *
+ * Branches 4–6 are the pre-eval-ahead mechanisms Observatory still uses; we
+ * converge away from them later.
  */
 export function updateObsValue(
     v: ObsValue,
@@ -351,41 +441,19 @@ export function updateObsValue(
     withDisplayTime?: WithDisplayTime,
 ): void {
     if (v.discrete) {
-        updateObsValueDiscrete(v, env, perfNow, getNow, timeDirection);
+        updateObsValueDiscrete(v, env, perfNow, getNow, timeDirection, tickIntervalMs);
+    } else if (timeDirection === 0) {
+        settleAtNow(v, env, perfNow);
     } else if (v.evalAhead) {
-        updateObsValueEvalAhead(v, env, perfNow, getNow, timeDirection, withDisplayTime);
+        updateObsValueEvalAhead(v, env, perfNow, getNow, timeDirection,
+            tickIntervalMs, displayDeltaPerTickSec, withDisplayTime);
     } else if (tickIntervalMs !== null && tickIntervalMs > 0) {
-        // Scrub mode: compress as needed
-        // (timeDirection is always 1 or -1 in scrub mode)
-        updateObsValueScrub(v, env, perfNow, getNow,
-            (timeDirection || 1) as 1 | -1,
+        updateObsValueScrub(v, env, perfNow, getNow, timeDirection,
             tickIntervalMs, displayDeltaPerTickSec);
-    } else if (v.naturalSpeed > 0 && timeDirection !== 0) {
-        // 1×/−1× mode, natural speed: two-phase animation
+    } else if (v.naturalSpeed > 0) {
         updateNaturalSpeedValue(v, env, perfNow, getNow, timeDirection);
     } else {
-        // Snap-to-target at animSpeed.
-        // This branch handles:
-        //   - Normal values (naturalSpeed === 0)
-        //   - Natural-speed values when time is stopped
-        //     (timeDirection === 0, no forward projection)
-        const newTarget = evalAttr(v.expr, env);
-        if (timeDirection === 0) {
-            // Stopped: snap and re-check shortly (time may resume)
-            v.nextUpdateTime = perfNow + 100;
-            v.pendingSweep = null;
-            startAnimationRaw(v.anim, newTarget, perfNow,
-                v.animSpeed / K_ANGLE_ANIM_SPEED, undefined, v.linear);
-        } else {
-            const nextDisplayMs = computeNextBoundary(
-                v.updateInterval * 1000, getNow, timeDirection, env);
-            v.nextUpdateDisplayTime = nextDisplayMs;
-            v.nextUpdateTime = displayTimeToPerfNow(nextDisplayMs, getNow);
-            v.pendingSweep = null;
-            const multiplier = v.animSpeed / K_ANGLE_ANIM_SPEED;
-            startAnimationRaw(v.anim, newTarget, perfNow, multiplier,
-                undefined, v.linear);
-        }
+        snapToTargetAtBoundary(v, env, perfNow, getNow, timeDirection);
     }
 }
 
@@ -464,4 +532,55 @@ export function anyObsAnimating(values: ObsValue[]): boolean {
         if (v.anim.animating || v.pendingSweep) return true;
     }
     return false;
+}
+
+// ============================================================================
+// Updater — owns an ObsValue collection and drives it from a TimingContext
+// ============================================================================
+
+/**
+ * Owns a collection of `ObsValue`s and advances them each frame from a
+ * `TimingContext` — the generic controller↔updater seam. A client registers its
+ * values, calls `tick()` per frame, and reacts to time-controller transitions via
+ * `reset()`. Reading happens through the client's own per-value handles (so the
+ * client controls how each value is rendered).
+ *
+ * This is the embryonic shared "updater subsystem"; the Inspector is its first
+ * consumer. Observatory's `ObsValueSet` wrappers will converge onto it later.
+ */
+export class Updater {
+    private values: ObsValue[] = [];
+
+    /** Register a value; returns it for convenient handle capture. */
+    add<T extends ObsValue>(v: T): T { this.values.push(v); return v; }
+    addAll(vs: ObsValue[]): void { for (const v of vs) this.values.push(v); }
+    remove(v: ObsValue): void {
+        const i = this.values.indexOf(v);
+        if (i >= 0) this.values.splice(i, 1);
+    }
+    clear(): void { this.values.length = 0; }
+    get all(): readonly ObsValue[] { return this.values; }
+
+    /** Per-frame: re-evaluate expired values + animate the whole collection. */
+    tick(
+        env: Environment,
+        perfNow: number,
+        getNow: () => Date,
+        withDisplayTime: WithDisplayTime,
+        ctx: TimingContext,
+    ): void {
+        updateObsValues(this.values, env, perfNow, getNow,
+            ctx.tickIntervalMs, ctx.displayDeltaSec, ctx.direction, withDisplayTime);
+        animateObsValues(this.values, perfNow);
+    }
+
+    /** True while any value is mid-animation (for idle-scheduler decisions). */
+    anyAnimating(): boolean { return anyObsAnimating(this.values); }
+
+    /**
+     * Re-evaluate every value on the next frame. Bind the time-controls transition
+     * callbacks (scrub start/end, step, now, transport change) to this — clients
+     * "react to transitions" without computing how the controller affects values.
+     */
+    reset(): void { resetObsValueSchedules(this.values); }
 }
