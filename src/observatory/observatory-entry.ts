@@ -26,6 +26,7 @@ import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
 import { drawClockHands, drawSubdialHands } from './hand-views.js';
 import { initEarthView, drawEarthView } from './earth-view.js';
+import { initMoonView, drawMoonView } from './moon-view.js';
 
 import { type ObsValueName, buildObsValues } from './obs-values.js';
 import { Updater, makeOverridableGetNow, timingContextForFrame } from '../shared/updater.js';
@@ -243,11 +244,10 @@ function drawFrame(): void {
     // ================================================================
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
 
-    // Moon placeholder
-    ctx.beginPath();
-    ctx.arc(L.moonCX, L.moonCY, L.moonR, 0, 2 * Math.PI);
-    ctx.stroke();
-    ctx.fillText('MOON', L.moonCX, L.moonCY);
+    // Moon phase display (Phase 6)
+    if (updater) {
+        drawMoonView(ctx, L, updater);
+    }
 
     // Earth map (Phase 5: day/night terminator)
     if (updater) {
@@ -490,6 +490,9 @@ function init(): void {
 
     // Initialize earth view (altitude table + Blue Marble images)
     initEarthView();
+
+    // Initialize moon view (moon image)
+    initMoonView();
 
     // --- Wire time controller UI ---
     // No transition callbacks: handing the Updater to the shared controls means

@@ -88,7 +88,9 @@ export type ObsValueName =
     // Sun ring gradient stops
     | SunRingName
     // Earth view (sub-solar point)
-    | 'earthSslat' | 'earthSslng';
+    | 'earthSslat' | 'earthSslng'
+    // Moon phase display
+    | 'moonPhase' | 'moonRotation' | 'moonDistAU';
 
 // ============================================================================
 // Expression definitions
@@ -234,9 +236,19 @@ function buildValueDefs(): ObsValueDef[] {
         { name: 'earthSslng', expr: 'subSolarLongitude()', updateInterval: 60 },
     ];
 
+    // Moon phase display (big moon in the header — port of EOMoonView).
+    const moon: ObsValueDef[] = [
+        // Terminator phase angle (0=new … π=full). Wraps at 2π → NOT linear.
+        { name: 'moonPhase',    expr: 'moonAgeAngle()',      updateInterval: 60 },
+        // View rotation (sky orientation). Angular, wraps → NOT linear.
+        { name: 'moonRotation', expr: 'moonRelativeAngle()', updateInterval: 60 },
+        // Apparent-size driver: geocentric distance in AU. Slowly varying → linear.
+        { name: 'moonDistAU',   expr: `distanceFromEarthOfPlanet(${MOON})`, updateInterval: 3600, linear: true },
+    ];
+
     return [
         ...clock, ...sunEvents, ...utc, ...solar, ...sidereal,
-        ...planets, ...rings, ...sunRing, ...earth,
+        ...planets, ...rings, ...sunRing, ...earth, ...moon,
     ];
 }
 
@@ -268,6 +280,7 @@ function expectedNames(): ObsValueName[] {
         ...rings,
         ...SUN_RING_NAMES,
         'earthSslat', 'earthSslng',
+        'moonPhase', 'moonRotation', 'moonDistAU',
     ];
 }
 

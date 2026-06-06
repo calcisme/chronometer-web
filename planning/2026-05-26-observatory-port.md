@@ -322,10 +322,10 @@ Visual verification will be done by the user after each phase.
 | 0 | App skeleton, entry point, build integration | Low | ✅ Complete |
 | 1 | Main orrery dial background (static) | Medium | ✅ Complete |
 | 2 | Planet hands + rise/set rings | Medium-High | ✅ Complete |
-| 3 | Central clock hands | Medium | Not started |
-| 4 | UTC/Solar/Sidereal subdials (hands + constellation overlay) | Medium | Not started |
-| 5 | Earth map with terminator | Medium-High | Not started |
-| 6 | Moon phase display | Medium | Not started |
+| 3 | Central clock hands | Medium | ✅ Complete |
+| 4 | UTC/Solar/Sidereal subdials (hands + constellation overlay) | Medium | ✅ Complete |
+| 5 | Earth map with terminator | Medium-High | ✅ Complete |
+| 6 | Moon phase display | Medium | ✅ Complete |
 | 7 | Peripheral dials (alt/az/eclipse/EOT) | High (eclipse is complex) | Not started |
 | 8 | Time controls + date display | Medium | Not started |
 
@@ -352,6 +352,15 @@ Visual verification will be done by the user after each phase.
 - **Shared astronomy cleanup**: Moved `cachelessPlanetAlt` from Observatory-specific `ring-view.ts` to the shared astronomy layer (`es-astro.ts`), per the project rule that astronomy knowledge belongs in shared code.
 - **Planet name labels on rings** (`ring-view.ts`): Port of EORingView.mm L367-412. Each planet ring displays its name at rise and set endpoints using `drawCircularText` in demi-radial mode. When the planet is below the horizon (no rise/set), the name is drawn at the transit angle in the ring's day color.
 - **Sidereal constellation abbreviations** (`main-dial.ts`): Port of EOShuffleView.mm L211-218. The pre-rendered `EO-Sidereal-constellation-names@2x.png` (308×308 @2x asset) is overlaid centered on the sidereal subdial, scaled to `149*s` to match iOS reference proportions. Drawn in the static cache (only redrawn on resize).
+
+### Phase 6 — ✅ Complete
+
+- **Moon phase display** (`moon-view.ts`): port of EOMoonView.mm. Full-moon image (`moon300.png`) scaled by apparent angular size from geocentric distance, dark terminator overlay tracing the phase, and whole-display rotation by `moonRelativeAngle()` (the iOS `EOChandra` view rotation).
+- **Animated values** (`obs-values.ts`): added `moonPhase` (`moonAgeAngle()`), `moonRotation` (`moonRelativeAngle()`), and `moonDistAU` (`distanceFromEarthOfPlanet(1)`, linear). No astronomy-layer changes — all functions already existed.
+- **Asset handling**: `moon300.png` copied into `src/shared/assets/` (the `.observatory-ref` reference repo is never a build input).
+- **Entry wiring** (`observatory-entry.ts`): `initMoonView()` + `drawMoonView()` replace the header `MOON` placeholder.
+- **Terminator coordinate fix**: the literal Y-up→Y-down port drew the unlit limb arc around the wrong side, making the dark area the complement of the true phase (>50% dark near full). Inverting the `anticlockwise` flag on the limb arc (`sin(pa) < 0`) makes the dark fraction match `(1 + cos pa)/2`.
+- **Verified** against Selene: phase shape correct at elongation ≈ 242° (thin waning-gibbous crescent), apparent size tracks geocentric distance, smooth 120fps animation.
 
 ### Key Technical Lessons
 

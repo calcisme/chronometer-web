@@ -14,6 +14,7 @@ src/observatory/
 ├── planet-hands.ts        Planet hands on the orrery
 ├── ring-view.ts           Rise/set rings (sun altitude ring + planet arcs)
 ├── earth-view.ts          Earth map with day/night terminator
+├── moon-view.ts           Moon phase display (apparent size, terminator)
 ├── layout.ts              Layout calculations (radii, positions)
 └── draw-utils.ts          Shared drawing utilities (circular text, etc.)
 ```
@@ -152,6 +153,8 @@ compression logic mirrors the watch-face `tickAnimations`:
 | Planet hands | saturn, jupiter, mars, earth, venus, mercury, moonOffset | 3600s | 0 |
 | Planet rings | 6 × (rise, set, transit, riseValid, setValid, aboveHorizon) | Sentinel (rise↔set) | 0 |
 | Sun ring | 14 altitude stops + noon + midnight | Sentinel (rise↔set) | 0 |
+| Earth map | earthSslat (linear), earthSslng | Sentinel / 60s | 0 |
+| Moon | moonPhase, moonRotation, moonDistAU (linear) | 60s / 60s / 3600s | 0 |
 
 ### Planet Ring Validity Flags
 
@@ -403,3 +406,74 @@ The sslat sentinel (`nextSslatChange` in `animation.ts`) binary-searches within
 a ±2 day window to find when the declination changes by more than 0.1° from
 its current value. This avoids unnecessary mask regeneration during slow
 solstice periods while staying responsive during fast equinox transitions.
+
+## Moon Phase Display
+
+The header shows a large photographic moon (`moon-view.ts`, port of
+`EOMoonView.mm`): a full-moon image scaled to the Moon's current apparent size,
+overlaid with a dark terminator tracing the phase, and rotated to its sky
+orientation.
+
+### Architecture
+
+```
+initMoonView()                — load moon300.png
+
+drawMoonView()  [called per frame]
+ ├── pixelRadius from moonDistAU (apparent angular size)
+ ├── translate to (moonCX, moonCY); rotate by moonRotation
+ ├── drawImage(moon, centered, 2·pixelRadius square)
+ └── drawTerminator(pixelRadius, moonPhase)
+```
+
+### Animated Values
+
+| Value | Expression | `linear` | Update | Role |
+|-------|-----------|----------|--------|------|
+| `moonPhase` | `moonAgeAngle()` | false | 60s | Terminator shape: 0 = new, π/2 = first quarter, π = full |
+| `moonRotation` | `moonRelativeAngle()` | false | 60s | Rotates image + terminator to the sky position angle (iOS `EOChandra` view rotation) |
+| `moonDistAU` | `distanceFromEarthOfPlanet(1)` | true | 3600s | Geocentric distance (AU); drives apparent size. Linear — it's a distance, not an angle |
+
+The existing `moonOffset` value (`-moonAgeAngle()+pi`) is unrelated — it drives
+the small moon **hand** on the Earth orbit (Phase 2), not this display.
+
+### Apparent Size
+
+The image radius scales with the Moon's true angular size, which grows at
+perigee and shrinks at apogee (port of `EOMoonView.mm:82-89`):
+
+```
+angularRadiusAtPerigee = atan(lunarRadius / perigeeDistance)   // constant
+angularRadiusNow       = atan(lunarRadius / (distAU · auKm))
+pixelRadius            = L.moonR · angularRadiusNow / angularRadiusAtPerigee
+```
+
+`L.moonR` (= `75·s`, the iOS `ChandraR`) is the radius **at perigee** — i.e. the
+maximum. Constants: `perigeeDistance = 355000 km`, `lunarRadius = 1737.10 km`,
+`auKm = 149600000 km`.
+
+### Terminator and Earthlight
+
+`drawTerminator()` (port of `drawMoonPhaseAt:`) builds a closed path — a
+half-circle along one limb plus a cosine-scaled ellipse for the terminator —
+filled with near-black `rgba(20,20,23,α)`. The alpha
+`α = 0.75 + |sin(pa)|/3` is below 1 near new moon, letting a little of the moon
+image show through to simulate **earthlight**; it reaches full opacity at the
+quarters.
+
+### Coordinate Note (Y-up → Y-down)
+
+iOS draws `EOMoonView` in a Y-up CTM (paired `scale(1,-1)` around the image);
+Canvas 2D is Y-down. Porting the phase math literally drew the unlit limb arc
+around the *wrong* side, so the terminator lune **added** to a half-disk instead
+of subtracting from it — a near-full moon came out more than half dark. The fix
+is to invert the `anticlockwise` flag on the limb arc (pass `sin(pa) < 0`, the
+opposite of the literal CG port). With that flip the dark fraction matches the
+expected `(1 + cos pa)/2` across all phases, verified against Selene: at
+elongation ≈ 242° the moon shows the correct thin waning-gibbous crescent, and
+the apparent diameter tracks the geocentric-distance readout.
+
+### Asset
+
+`moon300.png` lives in `src/shared/assets/` (copied from the reference repo,
+which is never a build input) and is bundled as a data URL by esbuild.
