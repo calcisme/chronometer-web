@@ -14,7 +14,13 @@ import {
     EclipseKind,
     eclipseKindIsMoreSolarThanLunar,
 } from '../../astronomy/es-astro';
-import { nextInterestingEclipseMotion } from '../../shared/animation';
+import {
+    nextInterestingEclipseMotion,
+    EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION,
+} from '../../shared/animation';
+import { createAstroEnvironment } from '../../shared/astro-env';
+import { makeOverridableGetNow, type TimingContext } from '../../shared/updater';
+import { buildObsValues } from '../obs-values';
 
 function appleEpoch(date: Date): number {
     return date.getTime() / 1000 - 978307200;
@@ -91,5 +97,49 @@ describe('eclipse update sentinel resolver', () => {
         const next = nextInterestingEclipseMotion(getNow, lat, lon, -1);
         expect(next).toBeLessThan(nowDI);
         expect(nowDI - next).toBeLessThanOrEqual(3600);
+    });
+});
+
+describe('eclipse sentinel — end-to-end through the updater', () => {
+    // Builds the real Observatory updater and drives one 1×-forward tick, then
+    // reads a registered ecl* value's scheduled next-update time. This exercises
+    // the full path: the value's registered updateInterval → computeNextBoundary
+    // → resolveSentinel's new case → nextInterestingEclipseMotion → display ms.
+
+    // Schedule eclSeparation once at a given time/location and return the gap
+    // (ms) between its next-update display time and "now".
+    function scheduledGapMs(iso: string, latDeg: number, lonDeg: number): number {
+        const base = () => new Date(iso);
+        const { getNow, withDisplayTime } = makeOverridableGetNow(base);
+        const env = createAstroEnvironment(latDeg, lonDeg, getNow);
+        // Variables other Observatory defs reference (mirrors observatory-entry).
+        env.variables.set('noonOnTop', 0);
+        env.variables.set('dialPlanet', 0);
+        const perfNow = performance.now();
+        const updater = buildObsValues(env, perfNow, getNow);
+
+        // Sanity: the value really is registered on the eclipse sentinel.
+        const v = updater.get('eclSeparation');
+        expect(v.updateInterval).toBe(EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION);
+
+        // One 1×-forward tick (no scrub) — schedules nextUpdateDisplayTime.
+        const ctx: TimingContext = { tickIntervalMs: null, displayDeltaSec: 0, direction: 1 };
+        updater.tick(env, perfNow, getNow, withDisplayTime, ctx);
+
+        return v.nextUpdateDisplayTime - getNow().getTime();
+    }
+
+    test('near an eclipse → next update ~1 s out', () => {
+        // N Spain during the 2026-08-12 total solar eclipse (separation < 10°).
+        const gap = scheduledGapMs('2026-08-12T18:30:00Z', 43.0, -6.0);
+        expect(gap).toBeGreaterThan(995);
+        expect(gap).toBeLessThan(1005);
+    });
+
+    test('away from an eclipse → next update > 1 s and ≤ 1 h out', () => {
+        // First quarter, far from any eclipse (separation ≫ 10°).
+        const gap = scheduledGapMs('2026-08-20T12:00:00Z', 43.0, -6.0);
+        expect(gap).toBeGreaterThan(1005);
+        expect(gap).toBeLessThanOrEqual(3600 * 1000);
     });
 });
