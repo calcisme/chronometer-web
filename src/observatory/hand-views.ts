@@ -244,7 +244,7 @@ const SUBDIAL_SEC_FILL   = 'rgba(255, 0, 0, 0.75)';
  * iOS draws in polar coordinates around the angle; we use the same
  * rotate-then-draw-along-minus-y convention as the other hands.
  */
-function drawTriangleHand(
+export function drawTriangleHand(
     ctx: Ctx2D,
     cx: number, cy: number,
     angle: number,

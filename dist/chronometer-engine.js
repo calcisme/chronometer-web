@@ -18486,7 +18486,12 @@
       embed: params.get("embed") === "1",
       fps: params.has("fps"),
       kyhand: params.get("kyhand"),
-      kmode: params.get("kmode")
+      kmode: params.get("kmode"),
+      op: (() => {
+        const s = params.get("op");
+        const n = s !== null ? parseInt(s, 10) : NaN;
+        return Number.isFinite(n) ? n : null;
+      })()
     };
   }
   function writeUrlState(changes) {
@@ -18567,6 +18572,13 @@
         params.set("tp", "a");
       } else {
         params.delete("tp");
+      }
+    }
+    if ("op" in changes) {
+      if (changes.op !== null && changes.op !== void 0 && changes.op !== 0) {
+        params.set("op", changes.op.toString());
+      } else {
+        params.delete("op");
       }
     }
     params.delete("long");

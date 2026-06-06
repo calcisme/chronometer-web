@@ -27,6 +27,9 @@ import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
 import { drawClockHands, drawSubdialHands } from './hand-views.js';
 import { initEarthView, drawEarthView } from './earth-view.js';
 import { initMoonView, drawMoonView } from './moon-view.js';
+import { getPeripheralDialsCache, invalidatePeripheralDialsCache } from './peripheral-dials.js';
+import { drawPeripheralHands, cycleSelectablePlanet } from './peripheral-hands.js';
+import { drawDateView } from './date-view.js';
 
 import { type ObsValueName, buildObsValues } from './obs-values.js';
 import { Updater, makeOverridableGetNow, timingContextForFrame } from '../shared/updater.js';
@@ -106,6 +109,14 @@ let updater: Updater<ObsValueName> | null = null;
 /** Time controller UI handle (null until DOM is ready) */
 let timeUI: TimeControlsAPI | null = null;
 
+/**
+ * Body shown on the altitude/azimuth dials (ECPlanetNumber). Click either dial
+ * to cycle; persisted in the URL `op` param. Invalid/absent → Sun (0).
+ */
+const SELECTABLE_PLANETS = new Set([0, 1, 2, 3, 5, 6, 7]);
+let selectedPlanet: number =
+    urlState.op !== null && SELECTABLE_PLANETS.has(urlState.op) ? urlState.op : 0;
+
 // ============================================================================
 // Canvas setup
 // ============================================================================
@@ -116,8 +127,34 @@ function initCanvas(): void {
     if (!context) throw new Error('Could not get 2D context');
     ctx = context;
 
+    // Click either the altitude or azimuth dial to cycle the displayed body.
+    canvas.addEventListener('click', onCanvasClick);
+
     // Initial size
     resizeCanvas();
+}
+
+/** Cycle the alt/az body when the user clicks within either dial. */
+function onCanvasClick(ev: MouseEvent): void {
+    if (!layout) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    const L = layout;
+    const hit = (cx: number, cy: number, r: number) => Math.hypot(x - cx, y - cy) <= r;
+    // iOS: the altitude dial cycles forward, the azimuth dial backward, so you
+    // can "go back" by clicking the other dial (EOClock.mm:739-762).
+    const onAlt = hit(L.altCX, L.altCY, L.altR);
+    const onAz = hit(L.azCX, L.azCY, L.azR);
+    if (onAlt || onAz) {
+        selectedPlanet = cycleSelectablePlanet(selectedPlanet, onAlt ? 1 : -1);
+        // Move the dial target, then reset so dialAlt/dialAz re-evaluate and
+        // animate to the new body (same sweep as a location change).
+        env.variables.set('dialPlanet', selectedPlanet);
+        writeUrlState({ op: selectedPlanet });
+        updater?.reset();
+        scheduleFrame();
+    }
 }
 
 function resizeCanvas(): void {
@@ -136,6 +173,7 @@ function resizeCanvas(): void {
     // Invalidate static caches so they rebuild at new size
     invalidateMainDialCache();
     invalidateRingCache();
+    invalidatePeripheralDialsCache();
     needsStaticRedraw = true;
     // The loop may be idle (stopped); a resize must trigger a redraw.
     scheduleFrame();
@@ -177,6 +215,9 @@ function drawFrame(): void {
         ctx.drawImage(dialCache, 0, 0);
     }
 
+    // Peripheral dial backgrounds (static, DPR-resolution full-viewport cache).
+    ctx.drawImage(getPeripheralDialsCache(L), 0, 0);
+
     // Scale for DPR for all remaining drawing
     ctx.save();
     ctx.scale(dpr, dpr);
@@ -217,33 +258,16 @@ function drawFrame(): void {
     }
 
     // ================================================================
-    // 4. Peripheral dial placeholders (Phase 7 will replace these)
+    // 4. Peripheral dial hands + labels (backgrounds are in the static cache;
+    //    the eclipse slot is intentionally empty, deferred to its own plan)
     // ================================================================
-    const peripherals = [
-        { cx: L.altCX, cy: L.altCY, r: L.altR, label: 'ALT' },
-        { cx: L.azCX, cy: L.azCY, r: L.azR, label: 'AZ' },
-        { cx: L.eclipseCX, cy: L.eclipseCY, r: L.eclipseR2, label: 'ECL' },
-        { cx: L.eotCX, cy: L.eotCY, r: L.eotR, label: 'EOT' },
-    ];
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.font = '10px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (const p of peripherals) {
-        ctx.beginPath();
-        ctx.arc(p.cx, p.cy, p.r, 0, 2 * Math.PI);
-        ctx.stroke();
-        ctx.fillText(p.label, p.cx, p.cy);
+    if (updater) {
+        drawPeripheralHands(ctx, L, updater, selectedPlanet);
     }
 
     // ================================================================
-    // 5. Header placeholders (Phase 5/6 will replace these)
+    // 5. Header: moon, earth map, date display
     // ================================================================
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-
     // Moon phase display (Phase 6)
     if (updater) {
         drawMoonView(ctx, L, updater);
@@ -253,6 +277,9 @@ function drawFrame(): void {
     if (updater) {
         drawEarthView(ctx, L, updater, lat, lon, getNow);
     }
+
+    // Date display (Phase 7)
+    drawDateView(ctx, L, now, locationTimezone);
 
     // ================================================================
     // 6. Logo
@@ -355,8 +382,9 @@ function updateLocationDisplay(): void {
 function rebuildEnv(): void {
     tzDeltaMs = computeTzDeltaMs(locationTimezone);
     env = createAstroEnvironment(lat, lon, getNow, locationTimezone);
-    // Preserve noonOnTop variable in the new environment
+    // Preserve env variables across the re-created environment.
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
+    env.variables.set('dialPlanet', selectedPlanet);
     invalidateRingCache();
     needsStaticRedraw = true;
     // The loop may be idle (stopped); env changes must trigger a redraw.
@@ -486,6 +514,7 @@ function init(): void {
 
     // Initialize Observatory value system
     env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
+    env.variables.set('dialPlanet', selectedPlanet);
     updater = buildObsValues(env, performance.now(), getNow);
 
     // Initialize earth view (altitude table + Blue Marble images)

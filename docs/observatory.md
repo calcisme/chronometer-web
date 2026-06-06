@@ -15,6 +15,9 @@ src/observatory/
 ├── ring-view.ts           Rise/set rings (sun altitude ring + planet arcs)
 ├── earth-view.ts          Earth map with day/night terminator
 ├── moon-view.ts           Moon phase display (apparent size, terminator)
+├── peripheral-dials.ts    Alt/Az/EOT dial backgrounds (static cache)
+├── peripheral-hands.ts    Alt/Az/EOT hands + selected-body labels
+├── date-view.ts           Header date display (weekday/date/year/leap/tz)
 ├── layout.ts              Layout calculations (radii, positions)
 └── draw-utils.ts          Shared drawing utilities (circular text, etc.)
 ```
@@ -155,6 +158,7 @@ compression logic mirrors the watch-face `tickAnimations`:
 | Sun ring | 14 altitude stops + noon + midnight | Sentinel (rise↔set) | 0 |
 | Earth map | earthSslat (linear), earthSslng | Sentinel / 60s | 0 |
 | Moon | moonPhase, moonRotation, moonDistAU (linear) | 60s / 60s / 3600s | 0 |
+| Dials | dialAlt (linear), dialAz, eotAngle | 60s / 60s / 3600s | 0 |
 
 ### Planet Ring Validity Flags
 
@@ -477,3 +481,78 @@ the apparent diameter tracks the geocentric-distance readout.
 
 `moon300.png` lives in `src/shared/assets/` (copied from the reference repo,
 which is never a build input) and is bundled as a data URL by esbuild.
+
+## Peripheral Dials
+
+The three corner dials — **Altitude**, **Azimuth**, **Equation of Time** —
+live in `peripheral-dials.ts` (static backgrounds) and `peripheral-hands.ts`
+(hands + labels). The eclipse-simulator slot (`eclipseCX/CY/R1/R2`) is
+intentionally empty, deferred to its own future plan.
+
+### Architecture
+
+```
+getPeripheralDialsCache(L)   — full-viewport OffscreenCanvas @ DPR, like main-dial
+ ├── drawAltitudeDial   (port EOShuffleView.mm EOAltitudeDialShuffleView)
+ ├── drawAzimuthDial    (port EOShuffleView.mm EOAzimuthDialShuffleView)
+ └── drawEOTDial        (asymmetric real-range design, see below)
+invalidatePeripheralDialsCache()  — called on resize
+
+drawPeripheralHands(ctx, L, u, selectedPlanet)  [per frame]
+ ├── altitude triangle hand  ({body}Alt)  + body name label
+ ├── azimuth triangle hand   ({body}Az)   + body name label
+ └── EOT triangle hand       (eotAngle)
+```
+
+### Hand angles (port of EOHandView.mm)
+
+| Hand | Angle | Notes |
+|------|-------|-------|
+| Azimuth | `azimuthOfPlanet(p)` | 0 = North at top, CW |
+| Altitude | `altitudeOfPlanet(p) − π/2` | left half-gauge; zenith up, horizon at 9 o'clock |
+| EOT | `24 · EOTAngle()` | 0 at top, + to the right (π/30 per minute) |
+
+### Planet selection (and its animation)
+
+The alt/az dials share one selected body (`ECPlanetNumber`), skipping Earth.
+Matching iOS (`EOClock.mm:739-762`), the two dials cycle in **opposite
+directions** (via `cycleSelectablePlanet(current, dir)`): clicking the
+**altitude** dial advances (Sun→Moon→…→Saturn→Sun) and clicking the **azimuth**
+dial reverses (Sun→Saturn→…→Moon→Sun) — so you "go back" by clicking the other
+dial. The choice persists in the URL `op` param (0 = Sun is the default, omitted
+from the URL).
+
+The hands track **one** value per axis — `dialAlt` / `dialAz` — whose expression
+reads the selected body from the `dialPlanet` **env variable** (set alongside
+`noonOnTop` in `init()` and `rebuildEnv()`), e.g. `altitudeOfPlanet(dialPlanet)`.
+On a click the entry point updates `dialPlanet` and calls `updater.reset()`, so
+the two values re-evaluate and **animate** to the new body — the same sweep used
+when the location changes. (A per-body value scheme would instead *snap*, because
+switching bodies would swap which value is read rather than move a target.)
+`dialAz` is angular, so the animator takes the shortest-path wrap (e.g. a
+Sun→Saturn switch crossing North).
+
+### Asymmetric EOT dial
+
+Unlike the symmetric ±15-minute iOS dial, the Observatory EOT dial adopts the
+real-range design from the Mauna Kea / Vienna faces (`renderer.ts drawEotDial`),
+rendered in the Observatory subdial style:
+
+- Scale `radPerMin = π/30` (15 min = 90°), `0` at top, `+` right / `−` left.
+- Real extremes `EOT_MAX_MIN = 16.5`, `EOT_MIN_MIN = -14.2` minutes.
+- The solid band spans −14.2…+16.5. The unused **−14.2…−15** sliver (its arc,
+  the −15 tick, the −15 number, and the "−" symbol) is drawn at reduced alpha
+  (0.35), so the **left edge still reaches 9 o'clock** while the **right side
+  runs longer** to +16.5 — honestly reflecting that positive EOT exceeds +15
+  while negative EOT never reaches −15.
+- Ticks every minute (major at 0/±5/±10/±15), numbers `0/5/10/15`, bold `+`/`−`
+  symbols, "Equation of Time" title, center hub + vertical baseline.
+
+## Date Display
+
+`date-view.ts` renders the header date stack (port of the EOClock date labels,
+`EOClock.mm:525-570`): weekday, month + day, year, a "leap"/"not leap" indicator
+(Gregorian %4/%100/%400 rule), and the timezone abbreviation. All fields use
+`Intl.DateTimeFormat` in the **location's** timezone (not the browser's), so the
+display follows the selected location and the scrubbed time. Exact placement is
+rough pending Phase 8 ("Tune the layout").

@@ -18,6 +18,7 @@
  *   tp    - Time panel lower tab: 'd' = date (default), 'a' = astro events
  *   embed - Embed mode: 1 = Terra-only minimal embed (no chrome, transparent bg)
  *   fps   - FPS indicator: present (any/no value) = show the fps readout (Chronometer + Observatory + Inspector)
+ *   op    - Observatory selected planet for the alt/az dials (0=Sun..7=Saturn, skips 4=Earth)
  */
 
 export interface UrlState {
@@ -42,6 +43,8 @@ export interface UrlState {
     kyhand: string | null;
     /** Kyoto rate mode: '1' = constant rate, null/absent = variable rate. */
     kmode: string | null;
+    /** Observatory selected planet for the alt/az dials (0=Sun..7=Saturn, skips 4=Earth). */
+    op: number | null;
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -80,6 +83,7 @@ export function readUrlState(): UrlState {
         fps: params.has('fps'),
         kyhand: params.get('kyhand'),
         kmode: params.get('kmode'),
+        op: (() => { const s = params.get('op'); const n = s !== null ? parseInt(s, 10) : NaN; return Number.isFinite(n) ? n : null; })(),
     };
 }
 
@@ -172,6 +176,15 @@ export function writeUrlState(changes: Partial<UrlState>): void {
             params.set('tp', 'a');
         } else {
             params.delete('tp');  // 'd' is default, omit from URL
+        }
+    }
+
+    if ('op' in changes) {
+        // 0 (Sun) is the default — omit it from the URL to keep things clean.
+        if (changes.op !== null && changes.op !== undefined && changes.op !== 0) {
+            params.set('op', changes.op.toString());
+        } else {
+            params.delete('op');
         }
     }
 

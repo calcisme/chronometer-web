@@ -326,8 +326,11 @@ Visual verification will be done by the user after each phase.
 | 4 | UTC/Solar/Sidereal subdials (hands + constellation overlay) | Medium | ✅ Complete |
 | 5 | Earth map with terminator | Medium-High | ✅ Complete |
 | 6 | Moon phase display | Medium | ✅ Complete |
-| 7 | Peripheral dials (alt/az/eclipse/EOT) | High (eclipse is complex) | Not started |
-| 8 | Time controls + date display | Medium | Not started |
+| 7 | Peripheral dials (alt/az/EOT) + date display | Medium | ✅ Complete |
+| 7B | Eclipse simulator (disc, status, ring hands) | High | Next — own plan |
+| 8 | Tune the layout (responsive polish) | Medium | Not started |
+
+> **Phase scope changes (2026-06-05):** The time controller already exists, so old Phase 8 ("Time controls + date display") was reduced to just the date display, which moved into Phase 7. Phase 8 is repurposed to **layout tuning**. The **eclipse simulator** was split out of Phase 7 into its own **Phase 7B** (the immediate next task) with a dedicated plan; its layout slot (`eclipseCX/CY/R1/R2`) is left empty until then. See [planning/2026-06-05-observatory-phase-7-dials.md](2026-06-05-observatory-phase-7-dials.md).
 
 ---
 
@@ -361,6 +364,15 @@ Visual verification will be done by the user after each phase.
 - **Entry wiring** (`observatory-entry.ts`): `initMoonView()` + `drawMoonView()` replace the header `MOON` placeholder.
 - **Terminator coordinate fix**: the literal Y-up→Y-down port drew the unlit limb arc around the wrong side, making the dark area the complement of the true phase (>50% dark near full). Inverting the `anticlockwise` flag on the limb arc (`sin(pa) < 0`) makes the dark fraction match `(1 + cos pa)/2`.
 - **Verified** against Selene: phase shape correct at elongation ≈ 242° (thin waning-gibbous crescent), apparent size tracks geocentric distance, smooth 120fps animation.
+
+### Phase 7 — ✅ Complete
+
+- **Peripheral dials** (`peripheral-dials.ts`, static cache; `peripheral-hands.ts`, hands): Altitude (left half-gauge), Azimuth (full compass), and an **asymmetric** Equation-of-Time dial.
+- **Asymmetric EOT dial**: adopted the Mauna Kea / Vienna real-range design (`renderer.ts drawEotDial`) in the Observatory subdial style — solid band −14.2…+16.5, the unused −14.2…−15 sliver dimmed so the left edge still hits 9 o'clock while the right runs longer. Hand = `24 * EOTAngle()`.
+- **Planet selection**: alt/az dials share a selected body; clicking either cycles Sun→…→Saturn (skip Earth), persisted in URL `op`. All 7 bodies' alt/az registered up front (`DIAL_BODIES` in `obs-values.ts`).
+- **Date display** (`date-view.ts`): weekday/date/year/leap/tz via `Intl.DateTimeFormat` in the location timezone.
+- **Planet-switch animation**: alt/az hands track single `dialAlt`/`dialAz` values driven by a `dialPlanet` env variable; clicking a dial updates it and calls `updater.reset()` so the hands sweep to the new body (same path as a location change). Per iOS, the altitude dial cycles forward and the azimuth dial backward (`cycleSelectablePlanet`).
+- **Scope changes**: eclipse simulator split to its own **Phase 7B** (next task; slot left empty); Phase 8 repurposed to layout tuning. No astronomy-layer changes (`altitudeOfPlanet`/`azimuthOfPlanet`/`EOTAngle` already existed).
 
 ### Key Technical Lessons
 

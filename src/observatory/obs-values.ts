@@ -53,6 +53,22 @@ export type RingField = (typeof RING_FIELDS)[number];
 export type RingValueName = `${RingPlanetKey}${RingField}`;
 
 /**
+ * Bodies selectable on the altitude/azimuth peripheral dials, with their
+ * `ECPlanetNumber`. Earth (4) is intentionally excluded (matches iOS cycle).
+ * The cycle order (Sun→Moon→…→Saturn→Sun) is the click-to-advance order.
+ */
+export const DIAL_BODIES = [
+    { key: 'sun', pn: 0 },
+    { key: 'moon', pn: 1 },
+    { key: 'mercury', pn: 2 },
+    { key: 'venus', pn: 3 },
+    { key: 'mars', pn: 5 },
+    { key: 'jupiter', pn: 6 },
+    { key: 'saturn', pn: 7 },
+] as const;
+export type DialBodyKey = (typeof DIAL_BODIES)[number]['key'];
+
+/**
  * Sun-ring gradient stop names, in draw order (must stay aligned with
  * `SUN_RING_COLORS` in ring-view.ts). Morning side (night→day), then evening
  * side (day→night), then the noon/midnight anchors.
@@ -90,7 +106,9 @@ export type ObsValueName =
     // Earth view (sub-solar point)
     | 'earthSslat' | 'earthSslng'
     // Moon phase display
-    | 'moonPhase' | 'moonRotation' | 'moonDistAU';
+    | 'moonPhase' | 'moonRotation' | 'moonDistAU'
+    // Peripheral dials: selected-body altitude/azimuth + EOT hand
+    | 'dialAlt' | 'dialAz' | 'eotAngle';
 
 // ============================================================================
 // Expression definitions
@@ -246,9 +264,25 @@ function buildValueDefs(): ObsValueDef[] {
         { name: 'moonDistAU',   expr: `distanceFromEarthOfPlanet(${MOON})`, updateInterval: 3600, linear: true },
     ];
 
+    // Peripheral dials. The altitude/azimuth hands track a single selected body,
+    // chosen via the `dialPlanet` env variable (set by the entry point, like
+    // `noonOnTop`). Using one value per axis — rather than one per body — means a
+    // planet switch *moves the target*, so `updater.reset()` animates the hand to
+    // the new body (the same sweep used for a location change), instead of
+    // snapping by swapping which value is read.
+    const dials: ObsValueDef[] = [
+        // Altitude ∈ [−π/2, +π/2]; iOS maps EOAltitude → planetAltitude − π/2.
+        // `linear` so it isn't fmod-wrapped into [0, 2π).
+        { name: 'dialAlt', expr: 'altitudeOfPlanet(dialPlanet) - pi/2', updateInterval: 60, linear: true },
+        // Azimuth is angular (wraps at 2π → shortest-path animation).
+        { name: 'dialAz',  expr: 'azimuthOfPlanet(dialPlanet)',         updateInterval: 60 },
+        // EOT hand: 24·EOTAngle() matches the Mauna Kea/Vienna dial's π/30-per-minute scale.
+        { name: 'eotAngle', expr: '24 * EOTAngle()', updateInterval: 3600 },
+    ];
+
     return [
         ...clock, ...sunEvents, ...utc, ...solar, ...sidereal,
-        ...planets, ...rings, ...sunRing, ...earth, ...moon,
+        ...planets, ...rings, ...sunRing, ...earth, ...moon, ...dials,
     ];
 }
 
@@ -281,6 +315,7 @@ function expectedNames(): ObsValueName[] {
         ...SUN_RING_NAMES,
         'earthSslat', 'earthSslng',
         'moonPhase', 'moonRotation', 'moonDistAU',
+        'dialAlt', 'dialAz', 'eotAngle',
     ];
 }
 
