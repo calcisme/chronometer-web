@@ -13163,6 +13163,18 @@
       if (value > 0) value--;
       return value;
     });
+    functions.set("eclipseAngularSeparation", () => {
+      const di = dateToDateInterval(getNow());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).angularSeparation;
+    });
+    functions.set("eclipseShadowAngularSize", () => {
+      const di = dateToDateInterval(getNow());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).shadowAngularSize;
+    });
+    functions.set("eclipseKindRaw", () => {
+      const di = dateToDateInterval(getNow());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
+    });
     functions.set("year366IndicatorAngle", () => {
       return computeYear366IndicatorFraction(liveDate()) * 2 * Math.PI;
     });
@@ -13933,6 +13945,7 @@
   var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
   var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
   var EC_UPDATE_NEXT_SSLAT_CHANGE = -1018;
+  var EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION = -1019;
   var PLANET_SENTINEL_BASE = -2e3;
   function isPlanetRiseSetSentinel(sentinel) {
     return sentinel <= PLANET_SENTINEL_BASE;
@@ -14461,6 +14474,17 @@
     }
     return hiDI;
   }
+  var ECLIPSE_THRESHOLD = Math.PI / 18;
+  var ECLIPSE_MAX_CLOSING_RATE = Math.PI / 180 / 3600;
+  var ECLIPSE_MAX_INTERVAL = 3600;
+  function nextInterestingEclipseMotion(getNow, lat, lon, timeDirection) {
+    const nowDI = dateToDateInterval(getNow());
+    const sep = calculateEclipse(nowDI, lat, lon, null).angularSeparation;
+    let intervalSec = (sep - ECLIPSE_THRESHOLD) / ECLIPSE_MAX_CLOSING_RATE;
+    if (intervalSec < 1) intervalSec = 1;
+    if (intervalSec > ECLIPSE_MAX_INTERVAL) intervalSec = ECLIPSE_MAX_INTERVAL;
+    return nowDI + timeDirection * intervalSec;
+  }
   function resolveSentinel(sentinel, getNow, env, timeDirection) {
     const lat = env.observerLatRad ?? 0;
     const lon = env.observerLonRad ?? 0;
@@ -14518,6 +14542,10 @@
       // Adaptive sslat (sun declination) change sentinel for earth view
       case EC_UPDATE_NEXT_SSLAT_CHANGE:
         return nextSslatChange(getNow, timeDirection);
+      // Adaptive eclipse-simulator cadence: ~1 s while the disc is drawn,
+      // capped at 1 h while only the caption shows.
+      case EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION:
+        return nextInterestingEclipseMotion(getNow, lat, lon, timeDirection);
       // Environment change only — effectively never (only explicit reset)
       case 0:
       case EC_UPDATE_ENV_CHANGE_ONLY:

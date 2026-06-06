@@ -30,6 +30,7 @@ import { initMoonView, drawMoonView } from './moon-view.js';
 import { getPeripheralDialsCache, invalidatePeripheralDialsCache } from './peripheral-dials.js';
 import { drawPeripheralHands, cycleSelectablePlanet } from './peripheral-hands.js';
 import { drawDateView } from './date-view.js';
+import { initEclipseView, drawEclipseView } from './eclipse-view.js';
 
 import { type ObsValueName, buildObsValues } from './obs-values.js';
 import { Updater, makeOverridableGetNow, timingContextForFrame } from '../shared/updater.js';
@@ -258,11 +259,12 @@ function drawFrame(): void {
     }
 
     // ================================================================
-    // 4. Peripheral dial hands + labels (backgrounds are in the static cache;
-    //    the eclipse slot is intentionally empty, deferred to its own plan)
+    // 4. Peripheral dial hands + labels (backgrounds are in the static cache)
     // ================================================================
     if (updater) {
         drawPeripheralHands(ctx, L, updater, selectedPlanet);
+        // Eclipse simulator: disc geometry + status labels + ring hands (7B).
+        drawEclipseView(ctx, L, updater);
     }
 
     // ================================================================
@@ -522,6 +524,7 @@ function init(): void {
 
     // Initialize moon view (moon image)
     initMoonView();
+    initEclipseView();
 
     // --- Wire time controller UI ---
     // No transition callbacks: handing the Updater to the shared controls means

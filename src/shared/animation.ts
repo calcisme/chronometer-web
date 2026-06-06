@@ -27,6 +27,7 @@ import {
 } from '../astronomy/es-calendar.js';
 import { dateToDateInterval } from '../astronomy/es-time.js';
 import { sunRAandDecl } from '../astronomy/es-coordinates.js';
+import { calculateEclipse } from '../astronomy/es-astro.js';
 import { planetaryRiseSetTimeRefined } from '../astronomy/es-riseset.js';
 import { ECPlanetNumber, isNoRiseSet } from '../astronomy/astro-constants.js';
 import { AstroCachePool, initializeCachePool, releaseCachePool } from '../astronomy/astro-cache.js';
@@ -61,6 +62,7 @@ export const EC_UPDATE_ENV_CHANGE_ONLY           = -1013;
 export const EC_UPDATE_NEXT_SUNRISE_OR_SUNSET    = -1016;
 export const EC_UPDATE_NEXT_MOONRISE_OR_MOONSET  = -1017;
 export const EC_UPDATE_NEXT_SSLAT_CHANGE         = -1018;
+export const EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION = -1019;
 
 // --- Generic planet rise/set sentinels (Observatory) ---
 // Encoding: -2000 - planetNumber*2 - (set ? 1 : 0)
@@ -1076,6 +1078,45 @@ function nextSslatChange(
 }
 
 /**
+ * Adaptive update sentinel for the Observatory eclipse simulator
+ * (EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION).
+ *
+ * The eclipse disc is only drawn when Sun and Moon (or Earth-shadow and Moon)
+ * are within ECLIPSE_THRESHOLD (10°). We want a fast (~1 s) cadence while the
+ * disc is showing so the geometry animates smoothly, but a lazy cadence (capped
+ * at one hour) while only the "Eclipse Simulator" caption is up.
+ *
+ * Eclipse separation is non-monotonic over a synodic month, so a binary search
+ * (as in nextSslatChange, which relies on monotonic sun declination) is not
+ * robust here. Instead we use a conservative *closing-rate bound*: given a safe
+ * upper bound on |d(separation)/dt|, the soonest the separation could reach the
+ * threshold is (sep − threshold) / maxRate. Checking earlier than necessary is
+ * fine ("conservative, so checking more often is ok"), and we never skip the
+ * crossing. Inside the threshold the clamp floors the interval at 1 s.
+ *
+ * Returns a dateInterval (Apple epoch seconds), honoring timeDirection.
+ */
+const ECLIPSE_THRESHOLD = Math.PI / 18;   // 10° — matches EOEclipseView gate
+// Safe upper bound on |d(separation)/dt|: Moon moves ≈0.55°/h in ecliptic
+// longitude, Sun ≈0.04°/h; 1°/h is comfortably conservative.
+const ECLIPSE_MAX_CLOSING_RATE = (Math.PI / 180) / 3600;  // 1°/h in rad/s
+const ECLIPSE_MAX_INTERVAL = 3600;        // cap caption-mode cadence at 1 hour
+
+export function nextInterestingEclipseMotion(
+    getNow: () => Date,
+    lat: number,
+    lon: number,
+    timeDirection: 1 | -1,
+): number {
+    const nowDI = dateToDateInterval(getNow());
+    const sep = calculateEclipse(nowDI, lat, lon, null).angularSeparation;
+    let intervalSec = (sep - ECLIPSE_THRESHOLD) / ECLIPSE_MAX_CLOSING_RATE;
+    if (intervalSec < 1) intervalSec = 1;
+    if (intervalSec > ECLIPSE_MAX_INTERVAL) intervalSec = ECLIPSE_MAX_INTERVAL;
+    return nowDI + timeDirection * intervalSec;
+}
+
+/**
  * Resolve a sentinel constant to its next display-time event.
  * Returns a dateInterval (Apple epoch seconds), or Infinity for envChangeOnly.
  *
@@ -1139,6 +1180,11 @@ function resolveSentinel(
         // Adaptive sslat (sun declination) change sentinel for earth view
         case EC_UPDATE_NEXT_SSLAT_CHANGE:
             return nextSslatChange(getNow, timeDirection);
+
+        // Adaptive eclipse-simulator cadence: ~1 s while the disc is drawn,
+        // capped at 1 h while only the caption shows.
+        case EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION:
+            return nextInterestingEclipseMotion(getNow, lat, lon, timeDirection);
 
         // Environment change only — effectively never (only explicit reset)
         case 0:

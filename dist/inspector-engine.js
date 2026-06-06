@@ -10283,8 +10283,442 @@
     }
   }
 
-  // src/astronomy/es-riseset.ts
+  // src/astronomy/es-astro.ts
   var TWO_PI3 = Math.PI * 2;
+  function planetAltAz(planetNumber, calculationDateInterval, observerLatitude, observerLongitude, correctForParallax, altNotAz, cache) {
+    const altSlotBase = 381 /* planetAltitude */;
+    const azSlotBase = 391 /* planetAzimuth */;
+    const slotBase = altNotAz ? altSlotBase : azSlotBase;
+    if (cache && cache.isValid(slotBase + planetNumber)) {
+      return cache.get(slotBase + planetNumber);
+    }
+    if (observerLatitude > kECLimitingAzimuthLatitude) {
+      observerLatitude = kECLimitingAzimuthLatitude;
+    } else if (observerLatitude < -kECLimitingAzimuthLatitude) {
+      observerLatitude = -kECLimitingAzimuthLatitude;
+    }
+    let planetRightAscension;
+    let planetDeclination;
+    let planetGeocentricDistance2;
+    if (planetNumber === 0 /* Sun */) {
+      const sunResult = sunRAandDecl(calculationDateInterval, cache);
+      planetRightAscension = sunResult.rightAscension;
+      planetDeclination = sunResult.declination;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+      planetGeocentricDistance2 = distanceOfPlanetInAU(
+        0 /* Sun */,
+        julianCenturiesSince2000Epoch,
+        cache
+      );
+    } else if (planetNumber === 1 /* Moon */) {
+      const moonResult = moonRAAndDecl(calculationDateInterval, cache);
+      planetRightAscension = moonResult.rightAscension;
+      planetDeclination = moonResult.declination;
+      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+      planetGeocentricDistance2 = distanceOfPlanetInAU(
+        1 /* Moon */,
+        julianCenturiesSince2000Epoch,
+        cache
+      );
+    } else {
+      if (cache && cache.isValid(401 /* planetRA */ + planetNumber)) {
+        planetRightAscension = cache.get(401 /* planetRA */ + planetNumber);
+        planetDeclination = cache.get(411 /* planetDecl */ + planetNumber);
+        planetGeocentricDistance2 = cache.get(108 /* planetGeocentricDistance */ + planetNumber);
+      } else {
+        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
+        const U = julianCenturiesSince2000Epoch / 100;
+        const pos = WB_planetApparentPosition(planetNumber, U);
+        planetRightAscension = pos.apparentRightAscension;
+        planetDeclination = pos.apparentDeclination;
+        planetGeocentricDistance2 = distanceOfPlanetInAU(
+          planetNumber,
+          julianCenturiesSince2000Epoch,
+          cache
+        );
+        if (cache) {
+          cache.set(401 /* planetRA */ + planetNumber, planetRightAscension);
+          cache.set(411 /* planetDecl */ + planetNumber, planetDeclination);
+          cache.set(108 /* planetGeocentricDistance */ + planetNumber, planetGeocentricDistance2);
+        }
+      }
+    }
+    const gst = convertUTToGSTP03(calculationDateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    let planetHourAngle = lst - planetRightAscension;
+    if (correctForParallax) {
+      const { Hprime, declPrime } = topocentricParallax(
+        planetRightAscension,
+        planetDeclination,
+        planetHourAngle,
+        planetGeocentricDistance2,
+        observerLatitude,
+        0
+      );
+      planetDeclination = declPrime;
+      planetHourAngle = Hprime;
+    }
+    const sinAlt = Math.sin(planetDeclination) * Math.sin(observerLatitude) + Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.cos(planetHourAngle);
+    const planetAzimuth = Math.atan2(
+      -Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.sin(planetHourAngle),
+      Math.sin(planetDeclination) - Math.sin(observerLatitude) * sinAlt
+    );
+    const planetAltitude = Math.asin(sinAlt);
+    if (cache) {
+      cache.set(381 /* planetAltitude */ + planetNumber, planetAltitude);
+      cache.set(391 /* planetAzimuth */ + planetNumber, planetAzimuth);
+    }
+    return altNotAz ? planetAltitude : planetAzimuth;
+  }
+  function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
+  }
+  function sunAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, false, cache);
+  }
+  function moonAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+  }
+  function moonAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
+    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, false, cache);
+  }
+  function moonAge(dateInterval, cache) {
+    if (cache && cache.isValid(15 /* moonAge */)) {
+      return {
+        age: cache.get(15 /* moonAge */),
+        phase: cache.get(16 /* moonPhase */)
+      };
+    }
+    const { moonEclipticLongitude } = moonRAAndDecl(dateInterval, cache);
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const sunEclipticLong = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
+    let age = moonEclipticLongitude - sunEclipticLong;
+    if (age < 0) {
+      age += TWO_PI3;
+    }
+    const phase = (1 - Math.cos(age)) / 2;
+    if (cache) {
+      cache.set(15 /* moonAge */, age);
+      cache.set(16 /* moonPhase */, phase);
+    }
+    return { age, phase };
+  }
+  function EOTSeconds(dateInterval, cache) {
+    if (cache && cache.isValid(14 /* eotForDay */)) {
+      return cache.get(14 /* eotForDay */);
+    }
+    const noonD = Math.floor(dateInterval / 86400) * 86400 + 43200;
+    const noonUT = noonD - dateInterval > 43200 ? noonD - 86400 : noonD;
+    const secondsFromNoon = dateInterval - noonUT;
+    const longitudeOfMeanSun = -secondsFromNoon * Math.PI / (12 * 3600);
+    const { rightAscension: sunRA } = sunRAandDecl(dateInterval, cache);
+    const gast = sunRA - longitudeOfMeanSun;
+    const utDate = convertGSTtoUTclosest(gast, dateInterval, null);
+    const eotAsSeconds = dateInterval - utDate;
+    if (cache) {
+      cache.set(14 /* eotForDay */, eotAsSeconds);
+    }
+    return eotAsSeconds;
+  }
+  function localSiderealTime(dateInterval, observerLongitude, cache) {
+    if (cache && cache.isValid(166 /* lst */)) {
+      return cache.get(166 /* lst */);
+    }
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    if (cache) {
+      cache.set(166 /* lst */, lst);
+    }
+    return lst;
+  }
+  function positionAngle(sunRA, sunDecl, objRA, objDecl) {
+    return Math.atan2(
+      Math.cos(sunDecl) * Math.sin(sunRA - objRA),
+      Math.cos(objDecl) * Math.sin(sunDecl) - Math.sin(objDecl) * Math.cos(sunDecl) * Math.cos(sunRA - objRA)
+    );
+  }
+  function greatCircleCourse(lat1, lon1, lat2, lon2) {
+    return Math.atan2(
+      Math.sin(lon1 - lon2) * Math.cos(lat2),
+      Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2)
+    );
+  }
+  function northAngleForObject(altitude, azimuth, observerLatitude) {
+    return greatCircleCourse(altitude, azimuth, observerLatitude, 0);
+  }
+  function moonRelativePositionAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    let posAngle = positionAngle(sunRA, sunDecl, moonRA, moonDecl);
+    const { age: moonAgeAngle } = moonAge(dateInterval, cache);
+    if (moonAgeAngle > Math.PI) {
+      if (posAngle > Math.PI) {
+        posAngle -= Math.PI;
+      } else {
+        posAngle += Math.PI;
+      }
+    }
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const moonHourAngle = lst - moonRA;
+    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
+    const moonAz = Math.atan2(
+      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
+      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const moonAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
+    let angle = -northAngle - posAngle - Math.PI / 2;
+    if (angle < 0) {
+      angle += TWO_PI3;
+    } else if (angle > TWO_PI3) {
+      angle -= TWO_PI3;
+    }
+    return angle;
+  }
+  var kECsinMoonEquatorEclipticAngle = 0.026917056028711;
+  var kECcosMoonEquatorEclipticAngle = 0.999637670406006;
+  function moonRelativeAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const moonHourAngle = lst - moonRA;
+    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
+    const moonAz = Math.atan2(
+      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
+      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const moonAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
+    const apparentGeocentricLongitude = moonRA - gst;
+    const apparentGeocentricLatitude = moonDecl;
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const eclipticTrueObliquity = generalObliquity(julianCenturiesSince2000Epoch);
+    const longitudeOfAscendingNode = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch, cache ?? void 0);
+    const W = apparentGeocentricLongitude - longitudeOfAscendingNode;
+    const b = Math.asin(
+      -Math.sin(W) * Math.cos(apparentGeocentricLatitude) * kECsinMoonEquatorEclipticAngle - Math.sin(apparentGeocentricLatitude) * kECcosMoonEquatorEclipticAngle
+    );
+    const V = longitudeOfAscendingNode;
+    const X = kECsinMoonEquatorEclipticAngle * Math.sin(V);
+    const Y = kECsinMoonEquatorEclipticAngle * Math.cos(V) * Math.cos(eclipticTrueObliquity) - kECcosMoonEquatorEclipticAngle * Math.sin(eclipticTrueObliquity);
+    const omega = Math.atan2(X, Y);
+    const sinP = Math.sqrt(X * X + Y * Y) * Math.cos(moonRA - omega) / Math.cos(b);
+    const posAngle = Math.asin(sinP);
+    let angle = -northAngle - posAngle;
+    if (angle < 0) {
+      angle += TWO_PI3;
+    } else if (angle > TWO_PI3) {
+      angle -= TWO_PI3;
+    }
+    return angle;
+  }
+  function sunSkyOrientationAngle(dateInterval, observerLatitude, observerLongitude, cache) {
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const sunHourAngle = lst - sunRA;
+    const sinAlt = Math.sin(sunDecl) * Math.sin(observerLatitude) + Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.cos(sunHourAngle);
+    const sunAz = Math.atan2(
+      -Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.sin(sunHourAngle),
+      Math.sin(sunDecl) - Math.sin(observerLatitude) * sinAlt
+    );
+    const sunAlt = Math.asin(sinAlt);
+    const northAngle = northAngleForObject(sunAlt, sunAz, observerLatitude);
+    const kAnalemmaOrientationOffset = 0;
+    let angle = -northAngle + kAnalemmaOrientationOffset;
+    if (angle < 0) angle += TWO_PI3;
+    else if (angle > TWO_PI3) angle -= TWO_PI3;
+    return angle;
+  }
+  function angularSeparation(ra1, decl1, ra2, decl2) {
+    const sinDecl1 = Math.sin(decl1);
+    const cosDecl1 = Math.cos(decl1);
+    const sinDecl2 = Math.sin(decl2);
+    const cosDecl2 = Math.cos(decl2);
+    const sinRADelta = Math.sin(ra2 - ra1);
+    const cosRADelta = Math.cos(ra2 - ra1);
+    const x = cosDecl1 * sinDecl2 - sinDecl1 * cosDecl2 * cosRADelta;
+    const y = cosDecl2 * sinRADelta;
+    const z = sinDecl1 * sinDecl2 + cosDecl1 * cosDecl2 * cosRADelta;
+    return Math.atan2(Math.sqrt(x * x + y * y), z);
+  }
+  function umbralAngularRadius(moonParallax, sunAngularRadius, sunParallax) {
+    return 1.01 * moonParallax - sunAngularRadius + sunParallax;
+  }
+  function calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache) {
+    const gst = convertUTToGSTP03(dateInterval, cache);
+    const lst = convertGSTtoLST(gst, observerLongitude);
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const sunResult = sunRAandDecl(dateInterval, cache);
+    const sunRA = sunResult.rightAscension;
+    const sunDecl = sunResult.declination;
+    const sunDistAU = distanceOfPlanetInAU(0 /* Sun */, julianCenturiesSince2000Epoch, cache);
+    const sunSizeParallax = planetSizeAndParallax(0 /* Sun */, sunDistAU);
+    const sunAngularSize = sunSizeParallax.angularSize;
+    const sunParallax = sunSizeParallax.parallax;
+    const moonResult = moonRAAndDecl(dateInterval, cache);
+    const moonRA = moonResult.rightAscension;
+    const moonDecl = moonResult.declination;
+    const moonDistAU = distanceOfPlanetInAU(1 /* Moon */, julianCenturiesSince2000Epoch, cache);
+    const moonSizeParallax = planetSizeAndParallax(1 /* Moon */, moonDistAU);
+    const moonAngularSize = moonSizeParallax.angularSize;
+    const moonParallax = moonSizeParallax.parallax;
+    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI3);
+    let physicalSeparation;
+    let separationAtPartialEclipse;
+    let separationAtTotalEclipse;
+    let eclipseKind;
+    let solarNotLunar;
+    let shadowAngularSize = 0;
+    if (raDelta < Math.PI / 2) {
+      const sunH = lst - sunRA;
+      const sunTopo = topocentricParallax(sunRA, sunDecl, sunH, sunDistAU, observerLatitude, 0);
+      const sunTopoRA = lst - sunTopo.Hprime;
+      const moonH = lst - moonRA;
+      const moonTopo = topocentricParallax(moonRA, moonDecl, moonH, moonDistAU, observerLatitude, 0);
+      const moonTopoRA = lst - moonTopo.Hprime;
+      physicalSeparation = angularSeparation(sunTopoRA, sunTopo.declPrime, moonTopoRA, moonTopo.declPrime);
+      separationAtPartialEclipse = sunAngularSize / 2 + moonAngularSize / 2;
+      separationAtTotalEclipse = moonAngularSize / 2 - sunAngularSize / 2;
+      const separationAtAnnularEclipse = sunAngularSize / 2 - moonAngularSize / 2;
+      const sunAlt = planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 0 /* Sun */, false, cache);
+      if (sunAlt < altAtRS) {
+        eclipseKind = 2 /* SolarNotUp */;
+      } else if (physicalSeparation > separationAtPartialEclipse) {
+        eclipseKind = 0 /* NoneSolar */;
+      } else if (physicalSeparation < separationAtAnnularEclipse) {
+        eclipseKind = 4 /* AnnularSolar */;
+      } else if (physicalSeparation > separationAtTotalEclipse) {
+        eclipseKind = 3 /* PartialSolar */;
+      } else {
+        eclipseKind = 5 /* TotalSolar */;
+      }
+      solarNotLunar = true;
+    } else {
+      shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
+      let shadowRA = sunRA + Math.PI;
+      if (shadowRA > TWO_PI3) shadowRA -= TWO_PI3;
+      const shadowDecl = -sunDecl;
+      physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
+      separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
+      separationAtTotalEclipse = shadowAngularSize / 2 - moonAngularSize / 2;
+      const moonAlt = planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
+      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 1 /* Moon */, false, cache);
+      if (moonAlt < altAtRS) {
+        eclipseKind = 6 /* LunarNotUp */;
+      } else if (physicalSeparation > separationAtPartialEclipse) {
+        eclipseKind = 1 /* NoneLunar */;
+      } else if (physicalSeparation > separationAtTotalEclipse) {
+        eclipseKind = 7 /* PartialLunar */;
+      } else {
+        eclipseKind = 8 /* TotalLunar */;
+      }
+      solarNotLunar = false;
+    }
+    let abstractSeparation = 1 + (physicalSeparation - separationAtTotalEclipse) / (separationAtPartialEclipse - separationAtTotalEclipse);
+    if (abstractSeparation < 0) {
+      abstractSeparation = 0;
+    } else if (abstractSeparation > 3) {
+      abstractSeparation = 3;
+      eclipseKind = solarNotLunar ? 0 /* NoneSolar */ : 1 /* NoneLunar */;
+    }
+    return {
+      abstractSeparation,
+      angularSeparation: physicalSeparation,
+      shadowAngularSize,
+      eclipseKind
+    };
+  }
+  function eclipseKindIsMoreSolarThanLunar(kind) {
+    switch (kind) {
+      case 0 /* NoneSolar */:
+      case 2 /* SolarNotUp */:
+      case 3 /* PartialSolar */:
+      case 4 /* AnnularSolar */:
+      case 5 /* TotalSolar */:
+        return true;
+      default:
+        return false;
+    }
+  }
+  function moonElongation(dateInterval, observerLatitude, observerLongitude, cache) {
+    const eclipse = calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache);
+    if (eclipseKindIsMoreSolarThanLunar(eclipse.eclipseKind)) {
+      return eclipse.angularSeparation;
+    } else {
+      return Math.PI - eclipse.angularSeparation;
+    }
+  }
+  var LUNAR_CYCLE_SECONDS = 29.530589 * 86400;
+  function stepRefineMoonAgeTarget(dateInterval, targetAge, cache) {
+    const { age } = moonAge(dateInterval, cache);
+    let deltaAge = targetAge - age;
+    if (deltaAge > Math.PI) {
+      deltaAge -= TWO_PI3;
+    } else if (deltaAge < -Math.PI) {
+      deltaAge += TWO_PI3;
+    }
+    return dateInterval + deltaAge / TWO_PI3 * LUNAR_CYCLE_SECONDS;
+  }
+  function refineMoonAgeTargetForDate(dateInterval, targetAge) {
+    let tryDate = dateInterval;
+    for (let i = 0; i < 5; i++) {
+      const newDate = stepRefineMoonAgeTarget(tryDate, targetAge, null);
+      if (Math.abs(newDate - tryDate) < 0.1) {
+        return newDate;
+      }
+      tryDate = newDate;
+    }
+    return tryDate;
+  }
+  function closestQuarterPhaseTime(quarterAngle, dateInterval) {
+    const { age } = moonAge(dateInterval, null);
+    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI3);
+    const closestIsBack = ageSinceQuarter < Math.PI - 0.01;
+    const guessDate = closestIsBack ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI3 : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI3 - ageSinceQuarter) / TWO_PI3;
+    return refineMoonAgeTargetForDate(guessDate, quarterAngle);
+  }
+  function closestPhaseDayNumber(targetPhase, dateInterval) {
+    const phaseTime = closestQuarterPhaseTime(targetPhase, dateInterval);
+    const phaseDate = new Date((phaseTime + kECUnixToAppleEpochOffset) * 1e3);
+    return phaseDate.getDate();
+  }
+  function planetEclipticLongitude(planetNumber, dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
+    return pos.geocentricApparentLongitude;
+  }
+  function planetEclipticLatitude(planetNumber, dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
+    return pos.geocentricApparentLatitude;
+  }
+  function planetGeocentricDistance(planetNumber, dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const U = julianCenturiesSince2000Epoch / 100;
+    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
+    return pos.geocentricDistance;
+  }
+  function lunarAscendingNodeLongitude(dateInterval, cache) {
+    const { julianCenturiesSince2000Epoch: T } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
+    const omegaDeg = 125.0445479 - 1934.1362891 * T + 20754e-7 * T * T + T * T * T / 467441 - T * T * T * T / 60616e3;
+    return fmod(omegaDeg * Math.PI / 180, TWO_PI3);
+  }
+
+  // src/astronomy/es-riseset.ts
+  var TWO_PI4 = Math.PI * 2;
   function riseSetTime(riseNotSet, rightAscension, declination, observerLatitude, observerLongitude, altAtRiseSet, calculationDateInterval, cachePool) {
     const cosH = (Math.sin(altAtRiseSet) - Math.sin(observerLatitude) * Math.sin(declination)) / (Math.cos(observerLatitude) * Math.cos(declination));
     if (cosH < -1) {
@@ -10293,9 +10727,9 @@
       return ALWAYS_BELOW_HORIZON;
     }
     const H = Math.acos(cosH);
-    let LST_rs = rightAscension + (riseNotSet ? TWO_PI3 - H : H);
-    if (LST_rs > TWO_PI3) {
-      LST_rs -= TWO_PI3;
+    let LST_rs = rightAscension + (riseNotSet ? TWO_PI4 - H : H);
+    if (LST_rs > TWO_PI4) {
+      LST_rs -= TWO_PI4;
     }
     const { gst: GST_rs } = convertLSTtoGST(LST_rs, observerLongitude);
     const riseSetDate = convertGSTtoUTclosest(GST_rs, calculationDateInterval, cachePool);
@@ -10307,11 +10741,11 @@
     if (!wantHighTransit) {
       ra += Math.PI;
     }
-    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI3);
+    let hourAngle = fmod(gst + observerLongitude - ra, TWO_PI4);
     if (hourAngle > Math.PI) {
-      hourAngle -= TWO_PI3;
+      hourAngle -= TWO_PI4;
     } else if (hourAngle < -Math.PI) {
-      hourAngle += TWO_PI3;
+      hourAngle += TWO_PI4;
     }
     return dateInterval - hourAngle * (12 * 3600) / Math.PI;
   }
@@ -10735,6 +11169,7 @@
   var EC_UPDATE_NEXT_SUNRISE_OR_SUNSET = -1016;
   var EC_UPDATE_NEXT_MOONRISE_OR_MOONSET = -1017;
   var EC_UPDATE_NEXT_SSLAT_CHANGE = -1018;
+  var EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION = -1019;
   var PLANET_SENTINEL_BASE = -2e3;
   function isPlanetRiseSetSentinel(sentinel) {
     return sentinel <= PLANET_SENTINEL_BASE;
@@ -10954,6 +11389,17 @@
     }
     return hiDI;
   }
+  var ECLIPSE_THRESHOLD = Math.PI / 18;
+  var ECLIPSE_MAX_CLOSING_RATE = Math.PI / 180 / 3600;
+  var ECLIPSE_MAX_INTERVAL = 3600;
+  function nextInterestingEclipseMotion(getNow2, lat2, lon2, timeDirection) {
+    const nowDI = dateToDateInterval(getNow2());
+    const sep = calculateEclipse(nowDI, lat2, lon2, null).angularSeparation;
+    let intervalSec = (sep - ECLIPSE_THRESHOLD) / ECLIPSE_MAX_CLOSING_RATE;
+    if (intervalSec < 1) intervalSec = 1;
+    if (intervalSec > ECLIPSE_MAX_INTERVAL) intervalSec = ECLIPSE_MAX_INTERVAL;
+    return nowDI + timeDirection * intervalSec;
+  }
   function resolveSentinel(sentinel, getNow2, env2, timeDirection) {
     const lat2 = env2.observerLatRad ?? 0;
     const lon2 = env2.observerLonRad ?? 0;
@@ -11011,6 +11457,10 @@
       // Adaptive sslat (sun declination) change sentinel for earth view
       case EC_UPDATE_NEXT_SSLAT_CHANGE:
         return nextSslatChange(getNow2, timeDirection);
+      // Adaptive eclipse-simulator cadence: ~1 s while the disc is drawn,
+      // capped at 1 h while only the caption shows.
+      case EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION:
+        return nextInterestingEclipseMotion(getNow2, lat2, lon2, timeDirection);
       // Environment change only — effectively never (only explicit reset)
       case 0:
       case EC_UPDATE_ENV_CHANGE_ONLY:
@@ -11032,440 +11482,6 @@
   function fmod2(value, modulus) {
     const result = value % modulus;
     return result < 0 ? result + modulus : result;
-  }
-
-  // src/astronomy/es-astro.ts
-  var TWO_PI4 = Math.PI * 2;
-  function planetAltAz(planetNumber, calculationDateInterval, observerLatitude, observerLongitude, correctForParallax, altNotAz, cache) {
-    const altSlotBase = 381 /* planetAltitude */;
-    const azSlotBase = 391 /* planetAzimuth */;
-    const slotBase = altNotAz ? altSlotBase : azSlotBase;
-    if (cache && cache.isValid(slotBase + planetNumber)) {
-      return cache.get(slotBase + planetNumber);
-    }
-    if (observerLatitude > kECLimitingAzimuthLatitude) {
-      observerLatitude = kECLimitingAzimuthLatitude;
-    } else if (observerLatitude < -kECLimitingAzimuthLatitude) {
-      observerLatitude = -kECLimitingAzimuthLatitude;
-    }
-    let planetRightAscension;
-    let planetDeclination;
-    let planetGeocentricDistance2;
-    if (planetNumber === 0 /* Sun */) {
-      const sunResult = sunRAandDecl(calculationDateInterval, cache);
-      planetRightAscension = sunResult.rightAscension;
-      planetDeclination = sunResult.declination;
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
-      planetGeocentricDistance2 = distanceOfPlanetInAU(
-        0 /* Sun */,
-        julianCenturiesSince2000Epoch,
-        cache
-      );
-    } else if (planetNumber === 1 /* Moon */) {
-      const moonResult = moonRAAndDecl(calculationDateInterval, cache);
-      planetRightAscension = moonResult.rightAscension;
-      planetDeclination = moonResult.declination;
-      const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
-      planetGeocentricDistance2 = distanceOfPlanetInAU(
-        1 /* Moon */,
-        julianCenturiesSince2000Epoch,
-        cache
-      );
-    } else {
-      if (cache && cache.isValid(401 /* planetRA */ + planetNumber)) {
-        planetRightAscension = cache.get(401 /* planetRA */ + planetNumber);
-        planetDeclination = cache.get(411 /* planetDecl */ + planetNumber);
-        planetGeocentricDistance2 = cache.get(108 /* planetGeocentricDistance */ + planetNumber);
-      } else {
-        const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(calculationDateInterval, cache);
-        const U = julianCenturiesSince2000Epoch / 100;
-        const pos = WB_planetApparentPosition(planetNumber, U);
-        planetRightAscension = pos.apparentRightAscension;
-        planetDeclination = pos.apparentDeclination;
-        planetGeocentricDistance2 = distanceOfPlanetInAU(
-          planetNumber,
-          julianCenturiesSince2000Epoch,
-          cache
-        );
-        if (cache) {
-          cache.set(401 /* planetRA */ + planetNumber, planetRightAscension);
-          cache.set(411 /* planetDecl */ + planetNumber, planetDeclination);
-          cache.set(108 /* planetGeocentricDistance */ + planetNumber, planetGeocentricDistance2);
-        }
-      }
-    }
-    const gst = convertUTToGSTP03(calculationDateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    let planetHourAngle = lst - planetRightAscension;
-    if (correctForParallax) {
-      const { Hprime, declPrime } = topocentricParallax(
-        planetRightAscension,
-        planetDeclination,
-        planetHourAngle,
-        planetGeocentricDistance2,
-        observerLatitude,
-        0
-      );
-      planetDeclination = declPrime;
-      planetHourAngle = Hprime;
-    }
-    const sinAlt = Math.sin(planetDeclination) * Math.sin(observerLatitude) + Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.cos(planetHourAngle);
-    const planetAzimuth = Math.atan2(
-      -Math.cos(planetDeclination) * Math.cos(observerLatitude) * Math.sin(planetHourAngle),
-      Math.sin(planetDeclination) - Math.sin(observerLatitude) * sinAlt
-    );
-    const planetAltitude = Math.asin(sinAlt);
-    if (cache) {
-      cache.set(381 /* planetAltitude */ + planetNumber, planetAltitude);
-      cache.set(391 /* planetAzimuth */ + planetNumber, planetAzimuth);
-    }
-    return altNotAz ? planetAltitude : planetAzimuth;
-  }
-  function sunAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, true, cache);
-  }
-  function sunAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, false, false, cache);
-  }
-  function moonAltitude(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
-  }
-  function moonAzimuth(dateInterval, observerLatitude, observerLongitude, cache) {
-    return planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, false, cache);
-  }
-  function moonAge(dateInterval, cache) {
-    if (cache && cache.isValid(15 /* moonAge */)) {
-      return {
-        age: cache.get(15 /* moonAge */),
-        phase: cache.get(16 /* moonPhase */)
-      };
-    }
-    const { moonEclipticLongitude } = moonRAAndDecl(dateInterval, cache);
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const sunEclipticLong = WB_sunLongitudeApparent(julianCenturiesSince2000Epoch / 100, cache ?? void 0);
-    let age = moonEclipticLongitude - sunEclipticLong;
-    if (age < 0) {
-      age += TWO_PI4;
-    }
-    const phase = (1 - Math.cos(age)) / 2;
-    if (cache) {
-      cache.set(15 /* moonAge */, age);
-      cache.set(16 /* moonPhase */, phase);
-    }
-    return { age, phase };
-  }
-  function EOTSeconds(dateInterval, cache) {
-    if (cache && cache.isValid(14 /* eotForDay */)) {
-      return cache.get(14 /* eotForDay */);
-    }
-    const noonD = Math.floor(dateInterval / 86400) * 86400 + 43200;
-    const noonUT = noonD - dateInterval > 43200 ? noonD - 86400 : noonD;
-    const secondsFromNoon = dateInterval - noonUT;
-    const longitudeOfMeanSun = -secondsFromNoon * Math.PI / (12 * 3600);
-    const { rightAscension: sunRA } = sunRAandDecl(dateInterval, cache);
-    const gast = sunRA - longitudeOfMeanSun;
-    const utDate = convertGSTtoUTclosest(gast, dateInterval, null);
-    const eotAsSeconds = dateInterval - utDate;
-    if (cache) {
-      cache.set(14 /* eotForDay */, eotAsSeconds);
-    }
-    return eotAsSeconds;
-  }
-  function localSiderealTime(dateInterval, observerLongitude, cache) {
-    if (cache && cache.isValid(166 /* lst */)) {
-      return cache.get(166 /* lst */);
-    }
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    if (cache) {
-      cache.set(166 /* lst */, lst);
-    }
-    return lst;
-  }
-  function positionAngle(sunRA, sunDecl, objRA, objDecl) {
-    return Math.atan2(
-      Math.cos(sunDecl) * Math.sin(sunRA - objRA),
-      Math.cos(objDecl) * Math.sin(sunDecl) - Math.sin(objDecl) * Math.cos(sunDecl) * Math.cos(sunRA - objRA)
-    );
-  }
-  function greatCircleCourse(lat1, lon1, lat2, lon2) {
-    return Math.atan2(
-      Math.sin(lon1 - lon2) * Math.cos(lat2),
-      Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon1 - lon2)
-    );
-  }
-  function northAngleForObject(altitude, azimuth, observerLatitude) {
-    return greatCircleCourse(altitude, azimuth, observerLatitude, 0);
-  }
-  function moonRelativePositionAngle(dateInterval, observerLatitude, observerLongitude, cache) {
-    const sunResult = sunRAandDecl(dateInterval, cache);
-    const sunRA = sunResult.rightAscension;
-    const sunDecl = sunResult.declination;
-    const moonResult = moonRAAndDecl(dateInterval, cache);
-    const moonRA = moonResult.rightAscension;
-    const moonDecl = moonResult.declination;
-    let posAngle = positionAngle(sunRA, sunDecl, moonRA, moonDecl);
-    const { age: moonAgeAngle } = moonAge(dateInterval, cache);
-    if (moonAgeAngle > Math.PI) {
-      if (posAngle > Math.PI) {
-        posAngle -= Math.PI;
-      } else {
-        posAngle += Math.PI;
-      }
-    }
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const moonHourAngle = lst - moonRA;
-    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
-    const moonAz = Math.atan2(
-      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
-      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
-    );
-    const moonAlt = Math.asin(sinAlt);
-    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
-    let angle = -northAngle - posAngle - Math.PI / 2;
-    if (angle < 0) {
-      angle += TWO_PI4;
-    } else if (angle > TWO_PI4) {
-      angle -= TWO_PI4;
-    }
-    return angle;
-  }
-  var kECsinMoonEquatorEclipticAngle = 0.026917056028711;
-  var kECcosMoonEquatorEclipticAngle = 0.999637670406006;
-  function moonRelativeAngle(dateInterval, observerLatitude, observerLongitude, cache) {
-    const moonResult = moonRAAndDecl(dateInterval, cache);
-    const moonRA = moonResult.rightAscension;
-    const moonDecl = moonResult.declination;
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const moonHourAngle = lst - moonRA;
-    const sinAlt = Math.sin(moonDecl) * Math.sin(observerLatitude) + Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.cos(moonHourAngle);
-    const moonAz = Math.atan2(
-      -Math.cos(moonDecl) * Math.cos(observerLatitude) * Math.sin(moonHourAngle),
-      Math.sin(moonDecl) - Math.sin(observerLatitude) * sinAlt
-    );
-    const moonAlt = Math.asin(sinAlt);
-    const northAngle = northAngleForObject(moonAlt, moonAz, observerLatitude);
-    const apparentGeocentricLongitude = moonRA - gst;
-    const apparentGeocentricLatitude = moonDecl;
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const eclipticTrueObliquity = generalObliquity(julianCenturiesSince2000Epoch);
-    const longitudeOfAscendingNode = WB_MoonAscendingNodeLongitude(julianCenturiesSince2000Epoch, cache ?? void 0);
-    const W = apparentGeocentricLongitude - longitudeOfAscendingNode;
-    const b = Math.asin(
-      -Math.sin(W) * Math.cos(apparentGeocentricLatitude) * kECsinMoonEquatorEclipticAngle - Math.sin(apparentGeocentricLatitude) * kECcosMoonEquatorEclipticAngle
-    );
-    const V = longitudeOfAscendingNode;
-    const X = kECsinMoonEquatorEclipticAngle * Math.sin(V);
-    const Y = kECsinMoonEquatorEclipticAngle * Math.cos(V) * Math.cos(eclipticTrueObliquity) - kECcosMoonEquatorEclipticAngle * Math.sin(eclipticTrueObliquity);
-    const omega = Math.atan2(X, Y);
-    const sinP = Math.sqrt(X * X + Y * Y) * Math.cos(moonRA - omega) / Math.cos(b);
-    const posAngle = Math.asin(sinP);
-    let angle = -northAngle - posAngle;
-    if (angle < 0) {
-      angle += TWO_PI4;
-    } else if (angle > TWO_PI4) {
-      angle -= TWO_PI4;
-    }
-    return angle;
-  }
-  function sunSkyOrientationAngle(dateInterval, observerLatitude, observerLongitude, cache) {
-    const sunResult = sunRAandDecl(dateInterval, cache);
-    const sunRA = sunResult.rightAscension;
-    const sunDecl = sunResult.declination;
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const sunHourAngle = lst - sunRA;
-    const sinAlt = Math.sin(sunDecl) * Math.sin(observerLatitude) + Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.cos(sunHourAngle);
-    const sunAz = Math.atan2(
-      -Math.cos(sunDecl) * Math.cos(observerLatitude) * Math.sin(sunHourAngle),
-      Math.sin(sunDecl) - Math.sin(observerLatitude) * sinAlt
-    );
-    const sunAlt = Math.asin(sinAlt);
-    const northAngle = northAngleForObject(sunAlt, sunAz, observerLatitude);
-    const kAnalemmaOrientationOffset = 0;
-    let angle = -northAngle + kAnalemmaOrientationOffset;
-    if (angle < 0) angle += TWO_PI4;
-    else if (angle > TWO_PI4) angle -= TWO_PI4;
-    return angle;
-  }
-  function angularSeparation(ra1, decl1, ra2, decl2) {
-    const sinDecl1 = Math.sin(decl1);
-    const cosDecl1 = Math.cos(decl1);
-    const sinDecl2 = Math.sin(decl2);
-    const cosDecl2 = Math.cos(decl2);
-    const sinRADelta = Math.sin(ra2 - ra1);
-    const cosRADelta = Math.cos(ra2 - ra1);
-    const x = cosDecl1 * sinDecl2 - sinDecl1 * cosDecl2 * cosRADelta;
-    const y = cosDecl2 * sinRADelta;
-    const z = sinDecl1 * sinDecl2 + cosDecl1 * cosDecl2 * cosRADelta;
-    return Math.atan2(Math.sqrt(x * x + y * y), z);
-  }
-  function umbralAngularRadius(moonParallax, sunAngularRadius, sunParallax) {
-    return 1.01 * moonParallax - sunAngularRadius + sunParallax;
-  }
-  function calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache) {
-    const gst = convertUTToGSTP03(dateInterval, cache);
-    const lst = convertGSTtoLST(gst, observerLongitude);
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const sunResult = sunRAandDecl(dateInterval, cache);
-    const sunRA = sunResult.rightAscension;
-    const sunDecl = sunResult.declination;
-    const sunDistAU = distanceOfPlanetInAU(0 /* Sun */, julianCenturiesSince2000Epoch, cache);
-    const sunSizeParallax = planetSizeAndParallax(0 /* Sun */, sunDistAU);
-    const sunAngularSize = sunSizeParallax.angularSize;
-    const sunParallax = sunSizeParallax.parallax;
-    const moonResult = moonRAAndDecl(dateInterval, cache);
-    const moonRA = moonResult.rightAscension;
-    const moonDecl = moonResult.declination;
-    const moonDistAU = distanceOfPlanetInAU(1 /* Moon */, julianCenturiesSince2000Epoch, cache);
-    const moonSizeParallax = planetSizeAndParallax(1 /* Moon */, moonDistAU);
-    const moonAngularSize = moonSizeParallax.angularSize;
-    const moonParallax = moonSizeParallax.parallax;
-    const raDelta = fmod(Math.abs(moonRA - sunRA), TWO_PI4);
-    let physicalSeparation;
-    let separationAtPartialEclipse;
-    let separationAtTotalEclipse;
-    let eclipseKind;
-    let solarNotLunar;
-    let shadowAngularSize = 0;
-    if (raDelta < Math.PI / 2) {
-      const sunH = lst - sunRA;
-      const sunTopo = topocentricParallax(sunRA, sunDecl, sunH, sunDistAU, observerLatitude, 0);
-      const sunTopoRA = lst - sunTopo.Hprime;
-      const moonH = lst - moonRA;
-      const moonTopo = topocentricParallax(moonRA, moonDecl, moonH, moonDistAU, observerLatitude, 0);
-      const moonTopoRA = lst - moonTopo.Hprime;
-      physicalSeparation = angularSeparation(sunTopoRA, sunTopo.declPrime, moonTopoRA, moonTopo.declPrime);
-      separationAtPartialEclipse = sunAngularSize / 2 + moonAngularSize / 2;
-      separationAtTotalEclipse = moonAngularSize / 2 - sunAngularSize / 2;
-      const separationAtAnnularEclipse = sunAngularSize / 2 - moonAngularSize / 2;
-      const sunAlt = planetAltAz(0 /* Sun */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
-      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 0 /* Sun */, false, cache);
-      if (sunAlt < altAtRS) {
-        eclipseKind = 2 /* SolarNotUp */;
-      } else if (physicalSeparation > separationAtPartialEclipse) {
-        eclipseKind = 0 /* NoneSolar */;
-      } else if (physicalSeparation < separationAtAnnularEclipse) {
-        eclipseKind = 4 /* AnnularSolar */;
-      } else if (physicalSeparation > separationAtTotalEclipse) {
-        eclipseKind = 3 /* PartialSolar */;
-      } else {
-        eclipseKind = 5 /* TotalSolar */;
-      }
-      solarNotLunar = true;
-    } else {
-      shadowAngularSize = 2 * umbralAngularRadius(moonParallax, sunAngularSize / 2, sunParallax);
-      let shadowRA = sunRA + Math.PI;
-      if (shadowRA > TWO_PI4) shadowRA -= TWO_PI4;
-      const shadowDecl = -sunDecl;
-      physicalSeparation = angularSeparation(shadowRA, shadowDecl, moonRA, moonDecl);
-      separationAtPartialEclipse = moonAngularSize / 2 + shadowAngularSize / 2;
-      separationAtTotalEclipse = shadowAngularSize / 2 - moonAngularSize / 2;
-      const moonAlt = planetAltAz(1 /* Moon */, dateInterval, observerLatitude, observerLongitude, true, true, cache);
-      const altAtRS = altitudeAtRiseSet(julianCenturiesSince2000Epoch, 1 /* Moon */, false, cache);
-      if (moonAlt < altAtRS) {
-        eclipseKind = 6 /* LunarNotUp */;
-      } else if (physicalSeparation > separationAtPartialEclipse) {
-        eclipseKind = 1 /* NoneLunar */;
-      } else if (physicalSeparation > separationAtTotalEclipse) {
-        eclipseKind = 7 /* PartialLunar */;
-      } else {
-        eclipseKind = 8 /* TotalLunar */;
-      }
-      solarNotLunar = false;
-    }
-    let abstractSeparation = 1 + (physicalSeparation - separationAtTotalEclipse) / (separationAtPartialEclipse - separationAtTotalEclipse);
-    if (abstractSeparation < 0) {
-      abstractSeparation = 0;
-    } else if (abstractSeparation > 3) {
-      abstractSeparation = 3;
-      eclipseKind = solarNotLunar ? 0 /* NoneSolar */ : 1 /* NoneLunar */;
-    }
-    return {
-      abstractSeparation,
-      angularSeparation: physicalSeparation,
-      shadowAngularSize,
-      eclipseKind
-    };
-  }
-  function eclipseKindIsMoreSolarThanLunar(kind) {
-    switch (kind) {
-      case 0 /* NoneSolar */:
-      case 2 /* SolarNotUp */:
-      case 3 /* PartialSolar */:
-      case 4 /* AnnularSolar */:
-      case 5 /* TotalSolar */:
-        return true;
-      default:
-        return false;
-    }
-  }
-  function moonElongation(dateInterval, observerLatitude, observerLongitude, cache) {
-    const eclipse = calculateEclipse(dateInterval, observerLatitude, observerLongitude, cache);
-    if (eclipseKindIsMoreSolarThanLunar(eclipse.eclipseKind)) {
-      return eclipse.angularSeparation;
-    } else {
-      return Math.PI - eclipse.angularSeparation;
-    }
-  }
-  var LUNAR_CYCLE_SECONDS = 29.530589 * 86400;
-  function stepRefineMoonAgeTarget(dateInterval, targetAge, cache) {
-    const { age } = moonAge(dateInterval, cache);
-    let deltaAge = targetAge - age;
-    if (deltaAge > Math.PI) {
-      deltaAge -= TWO_PI4;
-    } else if (deltaAge < -Math.PI) {
-      deltaAge += TWO_PI4;
-    }
-    return dateInterval + deltaAge / TWO_PI4 * LUNAR_CYCLE_SECONDS;
-  }
-  function refineMoonAgeTargetForDate(dateInterval, targetAge) {
-    let tryDate = dateInterval;
-    for (let i = 0; i < 5; i++) {
-      const newDate = stepRefineMoonAgeTarget(tryDate, targetAge, null);
-      if (Math.abs(newDate - tryDate) < 0.1) {
-        return newDate;
-      }
-      tryDate = newDate;
-    }
-    return tryDate;
-  }
-  function closestQuarterPhaseTime(quarterAngle, dateInterval) {
-    const { age } = moonAge(dateInterval, null);
-    const ageSinceQuarter = fmod(age - quarterAngle, TWO_PI4);
-    const closestIsBack = ageSinceQuarter < Math.PI - 0.01;
-    const guessDate = closestIsBack ? dateInterval - LUNAR_CYCLE_SECONDS * ageSinceQuarter / TWO_PI4 : dateInterval + LUNAR_CYCLE_SECONDS * (TWO_PI4 - ageSinceQuarter) / TWO_PI4;
-    return refineMoonAgeTargetForDate(guessDate, quarterAngle);
-  }
-  function closestPhaseDayNumber(targetPhase, dateInterval) {
-    const phaseTime = closestQuarterPhaseTime(targetPhase, dateInterval);
-    const phaseDate = new Date((phaseTime + kECUnixToAppleEpochOffset) * 1e3);
-    return phaseDate.getDate();
-  }
-  function planetEclipticLongitude(planetNumber, dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const U = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
-    return pos.geocentricApparentLongitude;
-  }
-  function planetEclipticLatitude(planetNumber, dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const U = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
-    return pos.geocentricApparentLatitude;
-  }
-  function planetGeocentricDistance(planetNumber, dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const U = julianCenturiesSince2000Epoch / 100;
-    const pos = WB_planetApparentPosition(planetNumber, U, cache ?? void 0);
-    return pos.geocentricDistance;
-  }
-  function lunarAscendingNodeLongitude(dateInterval, cache) {
-    const { julianCenturiesSince2000Epoch: T } = julianCenturiesSince2000EpochForDateInterval(dateInterval, cache);
-    const omegaDeg = 125.0445479 - 1934.1362891 * T + 20754e-7 * T * T + T * T * T / 467441 - T * T * T * T / 60616e3;
-    return fmod(omegaDeg * Math.PI / 180, TWO_PI4);
   }
 
   // src/watch/terminator.ts
@@ -12726,6 +12742,18 @@
       let value = calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
       if (value > 0) value--;
       return value;
+    });
+    functions.set("eclipseAngularSeparation", () => {
+      const di = dateToDateInterval(getNow2());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).angularSeparation;
+    });
+    functions.set("eclipseShadowAngularSize", () => {
+      const di = dateToDateInterval(getNow2());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).shadowAngularSize;
+    });
+    functions.set("eclipseKindRaw", () => {
+      const di = dateToDateInterval(getNow2());
+      return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
     });
     functions.set("year366IndicatorAngle", () => {
       return computeYear366IndicatorFraction(liveDate()) * 2 * Math.PI;

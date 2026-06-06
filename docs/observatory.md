@@ -15,8 +15,9 @@ src/observatory/
 ├── ring-view.ts           Rise/set rings (sun altitude ring + planet arcs)
 ├── earth-view.ts          Earth map with day/night terminator
 ├── moon-view.ts           Moon phase display (apparent size, terminator)
-├── peripheral-dials.ts    Alt/Az/EOT dial backgrounds (static cache)
+├── peripheral-dials.ts    Alt/Az/EOT/Eclipse dial backgrounds (static cache)
 ├── peripheral-hands.ts    Alt/Az/EOT hands + selected-body labels
+├── eclipse-view.ts        Eclipse simulator disc + status labels + ring hands
 ├── date-view.ts           Header date display (weekday/date/year/leap/tz)
 ├── layout.ts              Layout calculations (radii, positions)
 └── draw-utils.ts          Shared drawing utilities (circular text, etc.)
@@ -112,6 +113,11 @@ Values use two scheduling mechanisms:
 - Value re-evaluates at astronomical events
 - Example: `EC_UPDATE_NEXT_SUNSET` → sunrise hand updates when time crosses sunset
 - Planet sentinels use encoding: `EC_UPDATE_NEXT_PLANET_RISE(planet)` / `EC_UPDATE_NEXT_PLANET_SET(planet)`
+- Two *adaptive* sentinels compute their next event from current geometry rather
+  than a rise/set: `EC_UPDATE_NEXT_SSLAT_CHANGE` (binary-search on sun
+  declination, for the earth map) and `EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION`
+  (closing-rate bound on eclipse separation, for the eclipse simulator — see the
+  Eclipse Simulator section)
 
 ### Animation Modes
 
@@ -159,6 +165,7 @@ compression logic mirrors the watch-face `tickAnimations`:
 | Earth map | earthSslat (linear), earthSslng | Sentinel / 60s | 0 |
 | Moon | moonPhase, moonRotation, moonDistAU (linear) | 60s / 60s / 3600s | 0 |
 | Dials | dialAlt (linear), dialAz, eotAngle | 60s / 60s / 3600s | 0 |
+| Eclipse | eclSeparation/eclShadowSize/eclSunDist/eclMoonDist (linear), eclKind (discrete), eclSunAlt/eclMoonAlt (linear), eclSunAz/eclMoonAz/eclMoonRelAngle, eclRingSunRA/eclRingMoonRA/eclRingNodeRA | `EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION` | 0 |
 
 ### Planet Ring Validity Flags
 
@@ -556,3 +563,89 @@ rendered in the Observatory subdial style:
 `Intl.DateTimeFormat` in the **location's** timezone (not the browser's), so the
 display follows the selected location and the scrubbed time. Exact placement is
 rough pending Phase 8 ("Tune the layout").
+
+## Eclipse Simulator
+
+`eclipse-view.ts` (port of `EOEclipseView.mm`, plus the ring hands from
+`EOHandView.mm:382-450`) fills the upper-right peripheral slot
+(`eclipseCX/CY`, inner radius `eclipseR1`, outer `eclipseR2`). The static ring
+annulus is drawn by `peripheral-dials.ts` (`drawEclipseDial`); the disc contents
+and the five ring markers are drawn each frame.
+
+### What it shows
+
+A small "telescope view" of the current geometry, only when Sun and Moon (or
+Earth-shadow and Moon) are within **10°** (`π/18`); otherwise an "Eclipse
+Simulator" caption:
+
+- **Solar side** (near new moon, `eclipseKindIsMoreSolarThanLunar`): the Sun
+  disc (`sunEclipse.png`) with the Moon silhouette over it, or the totality
+  image (`totalEclipse.png`) for a total solar eclipse.
+- **Lunar side** (near full moon): the Moon (`moon300.png`, rotated by its sky
+  orientation) with Earth's umbral shadow (`earthShadow.png`, *multiply* blend,
+  clipped to the Moon) drawn over it, plus the shadow outline.
+
+A translucent green overlay (`rgba(0,76,0,0.5)`) marks any below-horizon portion;
+when the event is mostly below the horizon a "Below horizon" label replaces the
+caption. Around the disc, five image markers ride the ring at RA-derived clock
+angles: Sun, Moon, Earth-shadow (anti-solar), and the ascending/descending lunar
+nodes. When the Sun and Moon markers coincide near a node, an eclipse is
+imminent.
+
+### Animation-friendly via shared-sentinel obs-values
+
+The disc is driven **entirely by obs-values** — one scalar per quantity (no
+monolithic snapshot) — so it inherits the standard animate/scrub machinery.
+Geometric consistency is guaranteed by every component sharing **one** update
+sentinel, `EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION`: all 13 values re-evaluate
+on the same tick, so the derived pixel geometry stays coherent between samples.
+`eclKind` is `discrete` (snaps; it's an enum read via `Math.round`); the rest are
+`linear` where they must not wrap (separation, sizes, distances, altitudes) and
+angular where they do (azimuths, RA markers, moon orientation).
+
+The 13 values: `eclSeparation`, `eclShadowSize`, `eclKind`, `eclSunAlt`,
+`eclSunAz`, `eclMoonAlt`, `eclMoonAz`, `eclSunDist`, `eclMoonDist`,
+`eclMoonRelAngle` (disc), plus `eclRingSunRA`, `eclRingMoonRA`, `eclRingNodeRA`
+(ring markers — the node marker reuses the existing `lunarAscendingNodeRA` expr).
+The four physical disc quantities come from new thin expr wrappers over
+`calculateEclipse`: `eclipseAngularSeparation`, `eclipseShadowAngularSize`,
+`eclipseKindRaw` (the existing `eclipseSeparation`/`eclipseKind` return the
+*abstract*/collapsed values the Basel wheel uses, not what the disc needs).
+
+### The eclipse sentinel
+
+`EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION` (`-1019`, resolver
+`nextInterestingEclipseMotion` in `animation.ts`) gives a fast cadence while the
+disc is drawn and a lazy one while only the caption shows:
+
+- **Graphical mode** (`separation < 10°`): ~**1 s** between updates, for smooth
+  animation while scrubbing.
+- **Caption mode** (`separation ≥ 10°`): the *soonest* the separation could reach
+  the threshold given a conservative upper bound on the closing rate
+  (`MAX_CLOSING_RATE = 1°/h`; Moon ≈0.55°/h + Sun ≈0.04°/h), **capped at 1 hour**.
+
+Implemented as a closing-rate bound — `clamp((sep − 10°) / maxRate, 1 s, 1 h)` —
+rather than a binary search: eclipse separation is non-monotonic over a synodic
+month (unlike sun declination, which `nextSslatChange` can bisect), so the
+conservative rate bound is the robust analog. It never skips the crossing
+(checking early is fine) and never waits more than an hour. The resolver honors
+`timeDirection`, so reverse scrubbing works too.
+
+### Pixel scale (port of EOEclipseView.mm:70-100)
+
+`moonRadiusAtPerigee = 20 px × (eclipseR1 / 49)` (iOS reference `eclipseR1 ≈ 49`),
+`ppar = moonRadiusAtPerigee / atan(lunarRadius/perigeeDistance)` (pixels per
+angular radian), and each body's pixel radius is `ppar · atan(bodyRadius / dist)`.
+The totality image is drawn at `moonPixelRadius / (68/316)` and the umbra image at
+`ppar·shadowRadius / (118/120)` (the image feature fractions from
+`EOClock.mm:2160-2161`).
+
+### Coordinate note (Y-up → Y-down)
+
+`EOEclipseView` is a plain (Y-down) `UIView`, so the iOS pixel formulas — which
+already carry their "change in sign from view coordinate system" adjustments —
+port literally into the Y-down canvas (unlike the main dial, which uses a flipped
+Y-up CTM). The ring markers replicate the iOS layer transform
+(`rotate(firstAngle) → translate(0, radius) → rotate(glyph)`) as
+`rotate(−firstAngle) → translate(0, −radius) → rotate(−glyph)`, placing each
+marker at `firstAngle` CCW from the top — the same screen position as iOS.

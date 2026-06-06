@@ -327,7 +327,7 @@ Visual verification will be done by the user after each phase.
 | 5 | Earth map with terminator | Medium-High | ✅ Complete |
 | 6 | Moon phase display | Medium | ✅ Complete |
 | 7 | Peripheral dials (alt/az/EOT) + date display | Medium | ✅ Complete |
-| 7B | Eclipse simulator (disc, status, ring hands) | High | Next — own plan |
+| 7B | Eclipse simulator (disc, status, ring hands) | High | ✅ Complete |
 | 8 | Tune the layout (responsive polish) | Medium | Not started |
 
 > **Phase scope changes (2026-06-05):** The time controller already exists, so old Phase 8 ("Time controls + date display") was reduced to just the date display, which moved into Phase 7. Phase 8 is repurposed to **layout tuning**. The **eclipse simulator** was split out of Phase 7 into its own **Phase 7B** (the immediate next task) with a dedicated plan; its layout slot (`eclipseCX/CY/R1/R2`) is left empty until then. See [planning/2026-06-05-observatory-phase-7-dials.md](2026-06-05-observatory-phase-7-dials.md).
@@ -373,6 +373,17 @@ Visual verification will be done by the user after each phase.
 - **Date display** (`date-view.ts`): weekday/date/year/leap/tz via `Intl.DateTimeFormat` in the location timezone.
 - **Planet-switch animation**: alt/az hands track single `dialAlt`/`dialAz` values driven by a `dialPlanet` env variable; clicking a dial updates it and calls `updater.reset()` so the hands sweep to the new body (same path as a location change). Per iOS, the altitude dial cycles forward and the azimuth dial backward (`cycleSelectablePlanet`).
 - **Scope changes**: eclipse simulator split to its own **Phase 7B** (next task; slot left empty); Phase 8 repurposed to layout tuning. No astronomy-layer changes (`altitudeOfPlanet`/`azimuthOfPlanet`/`EOTAngle` already existed).
+
+### Phase 7B — ✅ Complete
+
+- **Eclipse simulator** (`eclipse-view.ts`, port of `EOEclipseView.mm` + the ring hands from `EOHandView.mm`): the upper-right disc shows the live Sun↔Moon (solar) or Moon↔Earth-shadow (lunar) geometry at real apparent sizes/orientation when within 10°, else an "Eclipse Simulator" caption; a green overlay marks any below-horizon portion. Five image markers ride the ring at RA-derived angles (Sun, Moon, anti-solar shadow, asc/desc nodes). Background annulus added to `peripheral-dials.ts` (`drawEclipseDial`).
+- **Animation-friendly via obs-values**: the disc is driven by 13 per-element obs-values (no monolithic snapshot), all sharing **one** update sentinel so the geometry stays mutually consistent and inherits the standard scrub/animate machinery. `eclKind` is `discrete`; sizes/distances/altitudes are `linear`; azimuths/RA are angular.
+- **New adaptive sentinel** `EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION` (`-1019`, `nextInterestingEclipseMotion` in `animation.ts`): ~1 s cadence while the disc is drawn, capped ≤1 h while only the caption shows. Uses a conservative closing-rate bound (`clamp((sep−10°)/1°·h⁻¹, 1 s, 1 h)`) rather than a binary search, since eclipse separation is non-monotonic over a month; honors `timeDirection`.
+- **Astronomy**: three thin expr wrappers over `calculateEclipse` (`eclipseAngularSeparation`, `eclipseShadowAngularSize`, `eclipseKindRaw`) returning the *physical* quantities the disc needs (the existing `eclipseSeparation`/`eclipseKind` return the abstract/collapsed wheel values); the node marker reuses the existing `lunarAscendingNodeRA`.
+- **Coordinate note**: `EOEclipseView` is a Y-down `UIView`, so its pixel formulas port literally into the canvas (unlike the flipped main dial); ring markers replicate the iOS layer transform as `rotate(−firstAngle)→translate(0,−radius)→rotate(−glyph)`.
+- **Assets**: `sunEclipse.png`, `totalEclipse.png`, `earthShadow.png`, and 5 `eclipseRing*.png` copied into `src/shared/assets/`; the Moon disc reuses `moon300.png`.
+- **Tests**: `src/observatory/__tests__/eclipse.test.ts` — `calculateEclipse` at the 2026-08-12 total solar and 2026-03-03 total lunar eclipses (small separation, correct kind, shadow > 0) and at first quarter (no eclipse); plus the sentinel resolver (~1 s inside the threshold, capped ≤1 h outside, never overshooting the crossing, reverse-direction). All pass; `tsc`/`build` clean; `watch/` coupling unchanged.
+- **Pending**: user visual verification against iOS Observatory / Selene (orientation, the Y-sign reconciliation, ring `+π` offsets, and whether the caption should ever show over a visible eclipse).
 
 ### Key Technical Lessons
 

@@ -13,8 +13,10 @@
  *                 reworked into the asymmetric real-range design used by the
  *                 Mauna Kea / Vienna faces (renderer.ts drawEotDial).
  *
- * The eclipse simulator (slot eclipseCX/CY/R1/R2) is intentionally left empty —
- * it is deferred to its own future plan.
+ *   - Eclipse    : EOEclipseDialShuffleView (EOShuffleView.mm L373-401) —
+ *                 the static ring annulus (eclipseR1…eclipseR2). The eclipse
+ *                 disc contents and ring-indicator hands are drawn dynamically
+ *                 by `eclipse-view.ts`.
  */
 
 import type { LayoutParams } from './layout.js';
@@ -251,6 +253,23 @@ function drawEOTDial(ctx: Ctx2D, L: LayoutParams): void {
 }
 
 // ---------------------------------------------------------------------------
+// Eclipse dial — static ring annulus (the disc + hands are drawn elsewhere)
+// ---------------------------------------------------------------------------
+
+function drawEclipseDial(ctx: Ctx2D, L: LayoutParams): void {
+    const cx = L.eclipseCX, cy = L.eclipseCY;
+    const R1 = L.eclipseR1, R2 = L.eclipseR2;
+    const s = R1 / 49;             // iOS reference eclipseR1 ≈ 49
+    const lw = 0.3 * 2 * s;        // iOS lineWidth 0.3 (at reference scale)
+
+    // Translucent annulus between R1 and R2 (port EOEclipseDialShuffleView):
+    // fill the band even-odd, then stroke both rim circles.
+    drawArc(ctx, cx, cy, R2, R1, 0, TWO_PI, FILL_15);
+    strokeArc(ctx, cx, cy, R2, 0, TWO_PI, WHITE, lw);
+    strokeArc(ctx, cx, cy, R1, 0, TWO_PI, WHITE, lw);
+}
+
+// ---------------------------------------------------------------------------
 // Static cache (full-viewport OffscreenCanvas at DPR), mirroring main-dial.ts
 // ---------------------------------------------------------------------------
 
@@ -276,6 +295,7 @@ export function getPeripheralDialsCache(L: LayoutParams): OffscreenCanvas {
     drawAltitudeDial(ctx, L);
     drawAzimuthDial(ctx, L);
     drawEOTDial(ctx, L);
+    drawEclipseDial(ctx, L);
 
     return staticCache;
 }

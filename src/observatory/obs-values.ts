@@ -30,6 +30,7 @@ import {
     EC_UPDATE_NEXT_PLANET_RISE,
     EC_UPDATE_NEXT_PLANET_SET,
     EC_UPDATE_NEXT_SSLAT_CHANGE,
+    EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION,
 } from '../shared/animation.js';
 import { SunAltitudeKind } from '../shared/astro-env.js';
 import { type ObsValueDef, createObsValue } from '../shared/obs-value.js';
@@ -108,7 +109,12 @@ export type ObsValueName =
     // Moon phase display
     | 'moonPhase' | 'moonRotation' | 'moonDistAU'
     // Peripheral dials: selected-body altitude/azimuth + EOT hand
-    | 'dialAlt' | 'dialAz' | 'eotAngle';
+    | 'dialAlt' | 'dialAz' | 'eotAngle'
+    // Eclipse simulator: disc geometry (10) + ring-hand RA markers (3)
+    | 'eclSeparation' | 'eclShadowSize' | 'eclKind'
+    | 'eclSunAlt' | 'eclSunAz' | 'eclMoonAlt' | 'eclMoonAz'
+    | 'eclSunDist' | 'eclMoonDist' | 'eclMoonRelAngle'
+    | 'eclRingSunRA' | 'eclRingMoonRA' | 'eclRingNodeRA';
 
 // ============================================================================
 // Expression definitions
@@ -280,9 +286,33 @@ function buildValueDefs(): ObsValueDef[] {
         { name: 'eotAngle', expr: '24 * EOTAngle()', updateInterval: 3600 },
     ];
 
+    // Eclipse simulator (Phase 7B). Every value shares the eclipse sentinel so
+    // the whole disc re-evaluates on one tick → mutually consistent geometry.
+    // The sentinel yields ~1 s cadence while the disc is drawn (separation < 10°)
+    // and a capped (≤1 h) cadence while only the caption shows.
+    const SUN = 0;
+    const eclipse: ObsValueDef[] = [
+        // Disc geometry (10)
+        { name: 'eclSeparation',   expr: 'eclipseAngularSeparation()',          updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true },
+        { name: 'eclShadowSize',   expr: 'eclipseShadowAngularSize()',          updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true },
+        // Enum 0..8 — snap (discrete), read via Math.round.
+        { name: 'eclKind',         expr: 'eclipseKindRaw()',                    updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true, discrete: true },
+        { name: 'eclSunAlt',       expr: `altitudeOfPlanet(${SUN})`,            updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true },
+        { name: 'eclSunAz',        expr: `azimuthOfPlanet(${SUN})`,             updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION },
+        { name: 'eclMoonAlt',      expr: `altitudeOfPlanet(${MOON})`,           updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true },
+        { name: 'eclMoonAz',       expr: `azimuthOfPlanet(${MOON})`,            updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION },
+        { name: 'eclSunDist',      expr: `distanceFromEarthOfPlanet(${SUN})`,   updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true },
+        { name: 'eclMoonDist',     expr: `distanceFromEarthOfPlanet(${MOON})`,  updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION, linear: true },
+        { name: 'eclMoonRelAngle', expr: 'moonRelativeAngle()',                 updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION },
+        // Ring-hand RA markers (3) — angular (wrap at 2π)
+        { name: 'eclRingSunRA',    expr: `RAOfPlanet(${SUN})`,                  updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION },
+        { name: 'eclRingMoonRA',   expr: `RAOfPlanet(${MOON})`,                 updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION },
+        { name: 'eclRingNodeRA',   expr: 'lunarAscendingNodeRA()',             updateInterval: EC_UPDATE_NEXT_INTERESTING_ECLIPSE_MOTION },
+    ];
+
     return [
         ...clock, ...sunEvents, ...utc, ...solar, ...sidereal,
-        ...planets, ...rings, ...sunRing, ...earth, ...moon, ...dials,
+        ...planets, ...rings, ...sunRing, ...earth, ...moon, ...dials, ...eclipse,
     ];
 }
 
@@ -316,6 +346,10 @@ function expectedNames(): ObsValueName[] {
         'earthSslat', 'earthSslng',
         'moonPhase', 'moonRotation', 'moonDistAU',
         'dialAlt', 'dialAz', 'eotAngle',
+        'eclSeparation', 'eclShadowSize', 'eclKind',
+        'eclSunAlt', 'eclSunAz', 'eclMoonAlt', 'eclMoonAz',
+        'eclSunDist', 'eclMoonDist', 'eclMoonRelAngle',
+        'eclRingSunRA', 'eclRingMoonRA', 'eclRingNodeRA',
     ];
 }
 

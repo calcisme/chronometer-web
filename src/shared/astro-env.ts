@@ -1663,6 +1663,25 @@ export function registerAstroFunctions(
         return value;
     });
 
+    // --- Eclipse simulator disc geometry (Observatory Phase 7B) ---
+    // These return the *physical* eclipse quantities the disc needs (not the
+    // abstract/collapsed values the Basel wheel uses). iOS EOEclipseView.mm.
+    // eclipseAngularSeparation(): physical Sun↔Moon (or shadow↔Moon) separation (rad)
+    functions.set('eclipseAngularSeparation', () => {
+        const di = dateToDateInterval(getNow());
+        return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).angularSeparation;
+    });
+    // eclipseShadowAngularSize(): angular diameter of Earth's umbral shadow (rad, lunar)
+    functions.set('eclipseShadowAngularSize', () => {
+        const di = dateToDateInterval(getNow());
+        return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).shadowAngularSize;
+    });
+    // eclipseKindRaw(): raw ECEclipseKind enum value 0..8 (read via Math.round)
+    functions.set('eclipseKindRaw', () => {
+        const di = dateToDateInterval(getNow());
+        return calculateEclipse(di, OBSERVER_LAT, OBSERVER_LON, null).eclipseKind;
+    });
+
     // --- year366IndicatorAngle ---
     // iOS: year366IndicatorFractionUsingEnv * 2π
     // Fraction of 366-day year (non-leap years skip Feb 29 → offset after Feb)
