@@ -328,7 +328,7 @@ Visual verification will be done by the user after each phase.
 | 6 | Moon phase display | Medium | ✅ Complete |
 | 7 | Peripheral dials (alt/az/EOT) + date display | Medium | ✅ Complete |
 | 7B | Eclipse simulator (disc, status, ring hands) | High | ✅ Complete |
-| 8 | Tune the layout (responsive polish) | Medium | Not started |
+| 8 | Tune the layout (responsive polish) | Medium | 🚧 Implemented — visual tuning pending |
 
 > **Phase scope changes (2026-06-05):** The time controller already exists, so old Phase 8 ("Time controls + date display") was reduced to just the date display, which moved into Phase 7. Phase 8 is repurposed to **layout tuning**. The **eclipse simulator** was split out of Phase 7 into its own **Phase 7B** (the immediate next task) with a dedicated plan; its layout slot (`eclipseCX/CY/R1/R2`) is left empty until then. See [planning/2026-06-05-observatory-phase-7-dials.md](2026-06-05-observatory-phase-7-dials.md).
 

@@ -20,7 +20,7 @@
  */
 
 import type { LayoutParams } from './layout.js';
-import { drawArc, drawTicks, drawDialNumbersDemiRadial, drawDialNumbersUpright, drawText } from './draw-utils.js';
+import { drawArc, drawTicks, drawDialNumbersDemiRadial, drawDialNumbersUpright, drawText, textVisualCenterY } from './draw-utils.js';
 
 const TWO_PI = 2 * Math.PI;
 const HALF_PI = Math.PI / 2;
@@ -112,8 +112,10 @@ function drawAltitudeDial(ctx: Ctx2D, L: LayoutParams): void {
     const labels = '90,,,,,,-90,-60,-30,-,30,60'.split(',');
     drawDialNumbersDemiRadial(ctx, cx, cy, labels, `${f}px Arial, sans-serif`, WHITE, R - f, R - f + 1);
 
-    // "Altitude" title, centered in the upper area.
-    drawText(ctx, 'Altitude', cx, cy - R / 2, `${f}px Arial, sans-serif`, WHITE);
+    // "Altitude" title, centered in the lower radial gap (hub → −90), mirroring
+    // the body-name label drawn above by the hands layer.
+    const labelR = (R - f - 1) / 2;
+    drawText(ctx, 'Altitude', cx, cy + labelR, `${f}px Arial, sans-serif`, WHITE);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +149,8 @@ function drawAzimuthDial(ctx: Ctx2D, L: LayoutParams): void {
     drawTicks(ctx, cx, cy, 36, R - f + 4, R, 1 * s, LIGHT_GRAY);
     drawTicks(ctx, cx, cy, 72, R - f + 7, R, 1 * s, LIGHT_GRAY);
 
-    drawText(ctx, 'Azimuth', cx, cy - R / 2, `${f}px Arial, sans-serif`, WHITE);
+    const labelR = (R - f - 1) / 2;
+    drawText(ctx, 'Azimuth', cx, cy + labelR, `${f}px Arial, sans-serif`, WHITE);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,8 +162,7 @@ function drawEOTDial(ctx: Ctx2D, L: LayoutParams): void {
     const f = L.eotFontSize;
     const s = R / 60;
     const lw = 0.5 * s;
-    const bandWidth = f + 5 * s;
-    const innerR = R - bandWidth;
+    const innerR = R - 15 * s;       // iOS EOEOTDialShuffleView: EOTR-15
 
     // Faded alpha for the unused negative sliver (−14.2 … −15). White strokes →
     // use the light-stroke alpha (cf. renderer.ts:3844).
@@ -198,9 +200,10 @@ function drawEOTDial(ctx: Ctx2D, L: LayoutParams): void {
     ctx.restore();
 
     // ── Ticks: minor every minute, major at 0, ±5, ±10, ±15. ──
+    // iOS lengths: major (5-min) = EOTR-5, minor (1-min) = EOTR-3.
     // Negative side stops at −15 (faded); positive extends to +16.
-    const majorLen = R * 0.15;
-    const minorLen = R * 0.07;
+    const majorLen = 5 * s;
+    const minorLen = 3 * s;
     for (let min = -15; min <= 16; min++) {
         const clock = eotMinToClock(min);
         const ca = clock - HALF_PI;
@@ -211,7 +214,7 @@ function drawEOTDial(ctx: Ctx2D, L: LayoutParams): void {
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.strokeStyle = LIGHT_GRAY;
-        ctx.lineWidth = (isMajor ? 0.6 : 0.3) * 2 * s;
+        ctx.lineWidth = (isMajor ? 1.5 : 1.0) * s;
         ctx.beginPath();
         ctx.moveTo(cx + cosA * inner, cy + sinA * inner);
         ctx.lineTo(cx + cosA * R, cy + sinA * R);
@@ -219,37 +222,45 @@ function drawEOTDial(ctx: Ctx2D, L: LayoutParams): void {
         ctx.restore();
     }
 
-    // ── Numeric labels (0 at top; 5/10/15 each side) ──
-    const numR = R - majorLen - f * 0.55 - 1;
-    const numFont = `${f * 1.6}px Arial, sans-serif`;
-    const labelAt = (clock: number, text: string, alpha = 1) => {
-        const ca = clock - HALF_PI;
+    // ── Numeric labels (port of iOS EOEOTDialShuffleView) ──
+    // Upright numbers at font EOTFontSize, radius EOTR-5, with the +/− signs
+    // baked into the label string and drawn at the same size — all white. The
+    // inward-by-half-diagonal placement in drawDialNumbersUpright makes the
+    // wider labels graze the inner band border, matching iOS. The asymmetric
+    // range is signalled only by the faded band sliver and faded −15 tick above.
+    // The left "15 –" is drawn separately below so the "15" can be dimmed
+    // (we never reach −15) while the "−" stays full white (it labels the whole
+    // negative side). All other labels are full white.
+    const numFont = `${f}px Arial, sans-serif`;
+    const numR = R - 5 * s;
+    const eotLabels = ['0', '5', '10', '+ 15', '', '', '', '', '', '', '10', '5'];
+    drawDialNumbersUpright(ctx, cx, cy, eotLabels, numFont, WHITE, numR);
+
+    // Left "15 –" at 9 o'clock, replicating the drawDialNumbersUpright placement
+    // (outer edge at numR, offset inward by half the text diagonal).
+    {
         ctx.save();
-        ctx.globalAlpha = alpha;
-        drawText(ctx, text, cx + Math.cos(ca) * numR, cy + Math.sin(ca) * numR, numFont, WHITE);
+        ctx.font = numFont;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        const label = '15 –';
+        const fullW = ctx.measureText(label).width;
+        const numPartW = ctx.measureText('15 ').width;
+        const h = numR - Math.hypot(fullW, f) / 2;
+        const px = cx - h;          // angle π → 9 o'clock
+        const baseY = cy + textVisualCenterY(ctx, label);
+        ctx.fillStyle = WHITE;
+        ctx.globalAlpha = FADED;
+        ctx.fillText('15', px - fullW / 2, baseY);          // dimmed digits
+        ctx.globalAlpha = 1;
+        ctx.fillText('–', px - fullW / 2 + numPartW, baseY); // full-white sign
         ctx.restore();
-    };
-    labelAt(eotMinToClock(0), '0');
-    for (const min of [5, 10, 15]) {
-        labelAt(eotMinToClock(min), String(min));
-        labelAt(eotMinToClock(-min), String(min), min === 15 ? FADED : 1);
     }
 
-    // ── "+" / "−" symbols inward at the ±15 positions ──
-    const symR = numR - f * 1.0 - 2;
-    const symFont = `bold ${f * 1.7}px Arial, sans-serif`;
-    const symAt = (clock: number, text: string, alpha = 1) => {
-        const ca = clock - HALF_PI;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        drawText(ctx, text, cx + Math.cos(ca) * symR, cy + Math.sin(ca) * symR, symFont, WHITE);
-        ctx.restore();
-    };
-    symAt(eotMinToClock(15), '+');
-    symAt(eotMinToClock(-15), '−', FADED);
-
-    // ── Title ──
-    drawText(ctx, 'Equation of Time', cx, cy - R / 2.5, `${f}px Arial, sans-serif`, WHITE);
+    // ── Title (lower half, below center) ──
+    // iOS draws this at Arial 10 (= the other dials' title size, extFontSize),
+    // not at EOTFontSize (8) which is reserved for the numeric labels.
+    drawText(ctx, 'Equation of Time', cx, cy + R / 2.5, `${10 * s}px Arial, sans-serif`, WHITE);
 }
 
 // ---------------------------------------------------------------------------

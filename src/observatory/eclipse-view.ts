@@ -153,6 +153,9 @@ function drawRingMarker(
     ctx.rotate(-firstAngle);
     ctx.translate(0, -radius);
     ctx.rotate(-glyphAngle);
+    // The negated rotations + Y-down translate form F·T_iOS·F, which leaves the
+    // image vertically mirrored; scale(1,−1) restores the iOS orientation.
+    ctx.scale(1, -1);
     ctx.drawImage(marker.el, -size / 2, -size / 2, size, size);
     ctx.restore();
 }
@@ -326,8 +329,10 @@ export function drawEclipseView(
     if (drawingSomething && horizonPixelY > -viewR) {
         if (horizonPixelY > viewR) horizonPixelY = viewR;
         ctx.fillStyle = 'rgba(0,76,0,0.5)';   // (0, 0.3, 0, 0.5)
-        // Fill the below-horizon region: from y = horizonPixelY down to +viewR.
-        ctx.fillRect(-viewR, horizonPixelY, viewR * 2, viewR * 2);
+        // Fill the below-horizon region. iOS: CGRectMake(-w/2, -horizonPixelY, w, h)
+        // — the fill origin is −horizonPixelY (the height h = 2·viewR then covers
+        // the whole disc when the bodies are fully below the horizon).
+        ctx.fillRect(-viewR, -horizonPixelY, viewR * 2, viewR * 2);
         showHorizonLabel = horizonPixelY > 0;
     }
 

@@ -50,13 +50,21 @@ export function drawPeripheralHands(
     // Both hands track the selected body via the shared dialAlt/dialAz values,
     // which animate (rather than snap) when the selection changes — see
     // obs-values.ts and the dialPlanet env variable.
+    // Body name sits on top, centered in the radial gap between the top number
+    // (N / 90) and the central hub; the dial-type label ("Altitude"/"Azimuth")
+    // is the matching lower label, drawn in the static background
+    // (peripheral-dials.ts). Gap center = ((R−f) inner edge + hub edge) / 2.
+    const f = L.extFontSize;
+    const altLabelR = (L.altR - f - 1) / 2;
+    const azLabelR = (L.azR - f - 1) / 2;
+
     const altAngle = u.get('dialAlt').currentValue;
     drawTriangleHand(ctx, L.altCX, L.altCY, altAngle, L.altR * 0.90, width, HAND_STROKE, HAND_FILL);
-    drawText(ctx, name, L.altCX, L.altCY + L.altR * 0.45, labelFont, LABEL_COLOR);
+    drawText(ctx, name, L.altCX, L.altCY - altLabelR, labelFont, LABEL_COLOR);
 
     const azAngle = u.get('dialAz').currentValue;
     drawTriangleHand(ctx, L.azCX, L.azCY, azAngle, L.azR * 0.90, width, HAND_STROKE, HAND_FILL);
-    drawText(ctx, name, L.azCX, L.azCY + L.azR * 0.45, labelFont, LABEL_COLOR);
+    drawText(ctx, name, L.azCX, L.azCY - azLabelR, labelFont, LABEL_COLOR);
 
     // EOT hand.
     const eotAngle = u.get('eotAngle').currentValue;

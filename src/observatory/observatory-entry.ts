@@ -284,14 +284,7 @@ function drawFrame(): void {
     drawDateView(ctx, L, now, locationTimezone);
 
     // ================================================================
-    // 6. Logo
-    // ================================================================
-    ctx.font = '12px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fillText('EMERALD ✦ SEQUOIA', L.logoCX, L.logoCY);
-
-    // ================================================================
-    // 7. Debug status overlay (top-left)
+    // 6. Debug status overlay (top-left)
     // ================================================================
     ctx.font = '11px "JetBrains Mono", monospace';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
