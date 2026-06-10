@@ -383,6 +383,10 @@
       if (changes.bloc) params.set("bloc", "1");
       else params.delete("bloc");
     }
+    if ("tz" in changes) {
+      if (changes.tz) params.set("tz", changes.tz);
+      else params.delete("tz");
+    }
     params.delete("long");
     params.delete("loc");
     const qs = params.toString();
@@ -517,15 +521,27 @@
     }
     lpLocationName.innerHTML = buildLocationNameHTML();
   }
-  function applyLocation(newLat, newLon, source, fullLabel, sourceType, writeToUrl) {
+  // src/shared/tz-resolve.ts
+  function resolveTimezone(lat, lon, cityTz) {
+    if (cityTz) return cityTz;
+    const closest = findClosestCity(lat, lon);
+    if (closest?.timezone) return closest.timezone;
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return "Etc/UTC";
+    }
+  }
+  function applyLocation(newLat, newLon, source, fullLabel, sourceType, writeToUrl, cityTz = null) {
     hasLocation = true;
     currentLat = newLat;
     currentLon = newLon;
     locationSource = source;
     locationFullLabel = fullLabel;
     locationSourceType = sourceType;
+    const locationTimezone = resolveTimezone(newLat, newLon, cityTz);
     if (writeToUrl) {
-      writeUrlState({ lat: newLat, lon: newLon, city: source || null });
+      writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
     }
     updateLinks();
     updateMapPreview(newLat, newLon);
@@ -583,7 +599,7 @@
         div.textContent = r.label;
       }
       div.addEventListener("click", () => {
-        applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true);
+        applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
         lpCityInput.value = "";
         lpCityResults.innerHTML = "";
         lpLatInput.value = r.lat.toFixed(3);
