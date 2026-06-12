@@ -602,7 +602,11 @@ and animated popup height for the Privacy/Support/Disclaimer pages.
   the iOS app's help strings. Injected as `{{HELP_CONTENT}}` by `build.sh`.
 - **General Help Topics**: the iframe loads `help.html?embed=1&app=observatory`;
   the `app=observatory` param makes `help.html` drop the Chronometer-only
-  "Complications" and "The Physics of Emerald Chronometer" sections.
+  "Complications" and "The Physics of Emerald Chronometer" sections, swap
+  "Emerald Chronometer" → "Emerald Observatory" in the remaining text, and
+  resolve per-app passages: elements tagged `class="chrono-only"` /
+  `class="obs-only"` are removed in the flavor where they don't apply (e.g.
+  Basel's eclipse needle vs. Observatory's Eclipse Simulator animation).
 
 ## Date Display
 
