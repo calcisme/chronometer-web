@@ -118,6 +118,43 @@ export function computeTzDeltaMs(olsonTimezone: string | undefined, referenceDat
     }
     return (targetOffsetSec - browserOffsetSec) * 1000;
 }
+/**
+ * Compute the millisecond delta between a target IANA timezone and UTC
+ * This is used in DSTNumber to determine if there has been a DST transition in the target timezone.
+ *
+ * @param olsonTimezone  IANA timezone (e.g. "Pacific/Honolulu"). If undefined
+ *                       or empty, returns 0 (no shift).
+ * @param referenceDate  Date used to determine DST state.  Defaults to now.
+ * @returns              Milliseconds to add to shift from browser TZ to target TZ.
+ */
+  function computeTzDeltaFromUtcMs(olsonTimezone: string | undefined, referenceDate?: Date): number {
+    if (!olsonTimezone) return 0;
+    const ref = referenceDate || /* @__PURE__ */ new Date();
+    const browserOffsetSec = -ref.getTimezoneOffset() * 60;
+    let targetOffsetSec;
+    try {
+      const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: olsonTimezone,
+        timeZoneName: "longOffset"
+      });
+      const parts = fmt.formatToParts(ref);
+      const tzStr = parts.find((p) => p.type === "timeZoneName")?.value || "";
+      if (tzStr === "GMT" || tzStr === "UTC" || !tzStr) {
+        targetOffsetSec = 0;
+      } else {
+        const m = tzStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+        if (m) {
+          const sign = m[1] === "+" ? 1 : -1;
+          targetOffsetSec = sign * (parseInt(m[2], 10) * 3600 + (m[3] ? parseInt(m[3], 10) * 60 : 0));
+        } else {
+          targetOffsetSec = browserOffsetSec;
+        }
+      }
+    } catch {
+      targetOffsetSec = browserOffsetSec;
+    }
+    return (targetOffsetSec) * 1e3;
+  }
 
 /**
  * Evaluate a single attribute expression in the given env.
@@ -297,7 +334,9 @@ export function registerAstroFunctions(
         return { h, m, s, h24: t.getHours() };
     };
 
-    functions.set('hour12ValueAngle', () => liveTime().h * 2 * Math.PI / 12);
+    const browserOffsetLiveSec = -1*liveDate().getTimezoneOffset() * 60;
+    const browserDSTTranitionAdjustmentMs = (browserOffsetSec - browserOffsetLiveSec) * 1000;
+    functions.set("hour12ValueAngle", () => (liveTime().h + browserDSTTranitionAdjustmentMs/3600000) * 2 * Math.PI / 12);
     functions.set('minuteValueAngle', () => liveTime().m * 2 * Math.PI / 60);
     functions.set('secondValueAngle', () => liveTime().s * 2 * Math.PI / 60);
     functions.set('secondNumberAngle', () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
@@ -315,7 +354,7 @@ export function registerAstroFunctions(
     // hour24ValueAngle: 24-hour time as angle (2π/24 per hour)
     functions.set('hour24ValueAngle', () => {
         const t = liveTime();
-        return (t.h24 + t.m / 60) * 2 * Math.PI / 24;
+        return (t.h24 + t.m / 60 + browserDSTTranitionAdjustmentMs/3600000) * 2 * Math.PI / 24;
     });
     // tzOffsetAngle: local timezone UTC offset as angle on 24-hour dial
     functions.set('tzOffsetAngle', () => {
@@ -363,10 +402,11 @@ export function registerAstroFunctions(
             // points (Jan 1 and Jul 1) to determine if DST is active now.
             const now = getNow();
             const yr = liveDate().getFullYear();
-            const janDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 0, 1));
-            const julDelta = computeTzDeltaMs(olsonTimezone, new Date(yr, 6, 1));
+            const tzDeltaFromUtcMs = computeTzDeltaFromUtcMs(olsonTimezone, now);
+            const janDelta = computeTzDeltaFromUtcMs(olsonTimezone, new Date(yr, 0, 1));
+            const julDelta = computeTzDeltaFromUtcMs(olsonTimezone, new Date(yr, 6, 1));
             const stdDelta = Math.min(janDelta, julDelta);  // standard time has smaller UTC offset
-            return tzDeltaMs > stdDelta ? 1 : 0;
+            return tzDeltaFromUtcMs > stdDelta ? 1 : 0;
         }
         // Browser timezone: compare January offset to current offset
         const now = getNow();
@@ -519,14 +559,26 @@ export function registerAstroFunctions(
             && d1.getDate() === d2.getDate();
     }
 
+    /** Calculate the tzDeltaMs for localNoon. This is used to correct for a DST transition that occurs between liveDate and localNoon. */
+    const ld = liveDate();
+    const localNoon = new Date(
+      ld.getFullYear(),
+      ld.getMonth(),
+      ld.getDate(),
+      12,
+      0,
+      0
+    );
+    const tzDeltaLocalNoonMs = computeTzDeltaMs(olsonTimezone, localNoon);
+
     /** Convert a dateInterval rise/set result into hour12/minute/hour24 values (in target timezone) */
     function riseSetAngles(di: number): { hour12: number; minute: number; hour24: number } {
         // Shift to target timezone so getHours/getMinutes return local values
         const d = new Date((di + 978307200) * 1000 + tzDeltaMs);
         return {
-            hour12: (d.getHours() % 12) + d.getMinutes() / 60 + d.getSeconds() / 3600,
+            hour12: (d.getHours() + (tzDeltaLocalNoonMs - tzDeltaMs)/(1000 * 60 * 60)) % 12 + d.getMinutes() / 60 + d.getSeconds() / 3600,
             minute: d.getMinutes() + d.getSeconds() / 60,
-            hour24: d.getHours(),
+            hour24: (d.getHours() + (tzDeltaLocalNoonMs - tzDeltaMs)/(1000 * 60 * 60)) % 24,
         };
     }
 
@@ -689,14 +741,14 @@ export function registerAstroFunctions(
         const utcNowSec = di + 978307200;
         const localNowSec = utcNowSec + tzOffsetSeconds;
         const localDayStartSec = localNowSec - ((localNowSec % 86400) + 86400) % 86400;
-        const noonDI = localDayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200;
+        const noonDI = localDayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200 - (tzDeltaLocalNoonMs - tzDeltaMs)/1000;
 
         const result = planettransitTimeRefined(noonDI, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
-        if (isSameLocalDay(result, di)) return result;
+        if (isSameLocalDay(result + (tzDeltaLocalNoonMs - tzDeltaMs)/1000, di)) return result;
 
         // Try from noon the day before
         const result2 = planettransitTimeRefined(noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
-        if (isSameLocalDay(result2, di)) return result2;
+        if (isSameLocalDay(result2 + (tzDeltaLocalNoonMs - tzDeltaMs)/1000, di)) return result2;
 
         return NaN;
     }
