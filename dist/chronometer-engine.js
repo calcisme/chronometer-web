@@ -12088,7 +12088,7 @@
     } catch {
       targetOffsetSec = browserOffsetSec;
     }
-    return (targetOffsetSec) * 1e3;
+    return targetOffsetSec * 1e3;
   }
   function evalAttr(expr, env) {
     if (!expr) return 0;
@@ -12126,9 +12126,9 @@
       const h = t.getHours() % 12 + m / 60;
       return { h, m, s, h24: t.getHours() };
     };
-    const browserOffsetLiveSec = -1*liveDate().getTimezoneOffset() * 60;
-    const browserDSTTranitionAdjustmentMs = (browserOffsetSec - browserOffsetLiveSec) * 1000;
-    functions.set("hour12ValueAngle", () => (liveTime().h + browserDSTTranitionAdjustmentMs/3600000) * 2 * Math.PI / 12);
+    const browserOffsetLiveSec = -1 * liveDate().getTimezoneOffset() * 60;
+    const browserDSTTranitionAdjustmentMs = (browserOffsetSec - browserOffsetLiveSec) * 1e3;
+    functions.set("hour12ValueAngle", () => (liveTime().h + browserDSTTranitionAdjustmentMs / 36e5) * 2 * Math.PI / 12);
     functions.set("minuteValueAngle", () => liveTime().m * 2 * Math.PI / 60);
     functions.set("secondValueAngle", () => liveTime().s * 2 * Math.PI / 60);
     functions.set("secondNumberAngle", () => Math.floor(liveTime().s) * 2 * Math.PI / 60);
@@ -12141,7 +12141,7 @@
     });
     functions.set("hour24ValueAngle", () => {
       const t = liveTime();
-      return (t.h24 + t.m / 60 + browserDSTTranitionAdjustmentMs/3600000) * 2 * Math.PI / 24;
+      return (t.h24 + t.m / 60 + browserDSTTranitionAdjustmentMs / 36e5) * 2 * Math.PI / 24;
     });
     functions.set("tzOffsetAngle", () => {
       return tzOffsetSeconds * Math.PI / (3600 * 12);
@@ -12250,19 +12250,19 @@
       const di = dateToDateInterval(getNow());
       return sunSkyOrientationAngle(di, OBSERVER_LAT, OBSERVER_LON, null);
     });
-    const ld = liveDate();
-    const localNoon = new Date(
-      ld.getFullYear(),
-      ld.getMonth(),
-      ld.getDate(),
-      12,
-      0,
-      0
-    );
     function riseSetForDay(riseNotSet, planetNumber) {
       const now2 = getNow();
       const calcDate = dateToDateInterval(now2);
-      const noonDI = dateToDateInterval(new Date(localNoon.getTime() - tzDeltaMs));
+      const ld2 = liveDate();
+      const localNoon2 = new Date(
+        ld2.getFullYear(),
+        ld2.getMonth(),
+        ld2.getDate(),
+        12,
+        0,
+        0
+      );
+      const noonDI = dateToDateInterval(new Date(localNoon2.getTime() - tzDeltaMs));
       const fwdResult = planetaryRiseSetTimeRefined(
         noonDI,
         OBSERVER_LAT,
@@ -12294,13 +12294,22 @@
       const d2 = new Date((di2 + 978307200) * 1e3 + tzDeltaMs);
       return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
     }
+    const ld = liveDate();
+    const localNoon = new Date(
+      ld.getFullYear(),
+      ld.getMonth(),
+      ld.getDate(),
+      12,
+      0,
+      0
+    );
     const tzDeltaLocalNoonMs = computeTzDeltaMs(olsonTimezone, localNoon);
     function riseSetAngles(di) {
       const d = new Date((di + 978307200) * 1e3 + tzDeltaMs);
       return {
-        hour12: (d.getHours() + (tzDeltaLocalNoonMs - tzDeltaMs)/(1000 * 60 * 60)) % 12 + d.getMinutes() / 60 + d.getSeconds() / 3600,
+        hour12: (d.getHours() + (tzDeltaLocalNoonMs - tzDeltaMs) / (1e3 * 60 * 60)) % 12 + d.getMinutes() / 60 + d.getSeconds() / 3600,
         minute: d.getMinutes() + d.getSeconds() / 60,
-        hour24: d.getHours()
+        hour24: (d.getHours() + (tzDeltaLocalNoonMs - tzDeltaMs) / (1e3 * 60 * 60)) % 24
       };
     }
     functions.set("sunriseForDayValid", () => {
@@ -12431,11 +12440,11 @@
       const utcNowSec = di + 978307200;
       const localNowSec = utcNowSec + tzOffsetSeconds;
       const localDayStartSec = localNowSec - (localNowSec % 86400 + 86400) % 86400;
-      const noonDI = localDayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200 - (tzDeltaLocalNoonMs - tzDeltaMs)/(1000);
+      const noonDI = localDayStartSec + 12 * 3600 - tzOffsetSeconds - 978307200 - (tzDeltaLocalNoonMs - tzDeltaMs) / 1e3;
       const result = planettransitTimeRefined(noonDI, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
-      if (isSameLocalDay(result + (tzDeltaLocalNoonMs - tzDeltaMs)/(1000), di)) return result;
+      if (isSameLocalDay(result + (tzDeltaLocalNoonMs - tzDeltaMs) / 1e3, di)) return result;
       const result2 = planettransitTimeRefined(noonDI - 24 * 3600, OBSERVER_LAT, OBSERVER_LON, true, planetNumber, pool);
-      if (isSameLocalDay(result2 + (tzDeltaLocalNoonMs - tzDeltaMs)/(1000), di)) return result2;
+      if (isSameLocalDay(result2 + (tzDeltaLocalNoonMs - tzDeltaMs) / 1e3, di)) return result2;
       return NaN;
     }
     functions.set("riseOfPlanetForDayValid", (planetNumber) => {
@@ -18551,8 +18560,7 @@
         const s = params.get("op");
         const n = s !== null ? parseInt(s, 10) : NaN;
         return Number.isFinite(n) ? n : null;
-      })(),
-      onoon: params.get("onoon") === "1"
+      })()
     };
   }
   function writeUrlState(changes) {
@@ -18640,13 +18648,6 @@
         params.set("op", changes.op.toString());
       } else {
         params.delete("op");
-      }
-    }
-    if ("onoon" in changes) {
-      if (changes.onoon) {
-        params.set("onoon", "1");
-      } else {
-        params.delete("onoon");
       }
     }
     params.delete("long");
