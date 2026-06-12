@@ -111,14 +111,15 @@
           padding-left: 170px;
       }
 
-      /* Observatory shows only the Show/Hide button and the red offset label
-         in the time bar — NOT the running date/time, rate, or Now button (the
-         main dial already displays the time; the popover has Now▶).
-         Deliberate (re-)removal: this regressed once before when the shared
-         partial's defaults leaked back in, so keep these !important. */
+      /* Observatory shows only the Show/Hide button, the red offset label,
+         and the Now button (when time is overridden) in the time bar — NOT
+         the running date/time or rate (the main dial already displays the
+         time). The Now button follows the shared partial's behavior: hidden
+         at 1× real time, shown when overridden.
+         Deliberate (re-)removal of date/rate: this regressed once before when
+         the shared partial's defaults leaked back in, so keep these !important. */
       #time-bar-date,
-      #time-bar-rate,
-      #time-bar-now {
+      #time-bar-rate {
           display: none !important;
       }
 
