@@ -9,6 +9,8 @@ hands, rise/set rings, and a sun altitude ring.
 ```
 src/observatory/
 ├── observatory-entry.ts   Main tick loop, init, draw orchestration
+├── background.ts          Starfield background image (static cache)
+├── main-dial.ts           Central orrery dial background (static cache)
 ├── obs-values.ts          Observatory ObsValue catalog (ObsValueName, defs, buildObsValues)
 ├── hand-views.ts          Clock hands + sun event hands + subdial hands
 ├── planet-hands.ts        Planet hands on the orrery

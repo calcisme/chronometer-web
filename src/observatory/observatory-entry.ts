@@ -21,6 +21,7 @@ import { TimeController } from '../shared/time-controller.js';
 import { initTimeControls } from '../shared/time-controls-ui.js';
 import type { TimeControlsAPI } from '../shared/time-controls-ui.js';
 import { computeLayout, type ChromeParams, type LayoutParams } from './layout.js';
+import { getBackgroundCache, invalidateBackgroundCache, waitForBackgroundImage } from './background.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
@@ -195,6 +196,7 @@ function resizeCanvas(): void {
     layout = computeLayout(w, h, chromeParams());
 
     // Invalidate static caches so they rebuild at new size
+    invalidateBackgroundCache();
     invalidateMainDialCache();
     invalidateRingCache();
     invalidatePeripheralDialsCache();
@@ -229,6 +231,15 @@ function drawFrame(): void {
     ctx.fillRect(0, 0, w, h);
 
     const L = layout;
+
+    // ================================================================
+    // 0. Starfield background (static, full-viewport cache) — the iOS
+    //    EOBaseView base layer; everything else draws on top of it.
+    // ================================================================
+    const bgCache = getBackgroundCache(L);
+    if (bgCache) {
+        ctx.drawImage(bgCache, 0, 0);
+    }
 
     // ================================================================
     // 1. Draw static main dial cache (composited at native resolution)
@@ -581,7 +592,7 @@ function init(): void {
     fpsIndicator = createFpsIndicator(urlState.fps);
 
     // Wait for images to load, then invalidate cache so first real draw occurs
-    Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
+    Promise.all([waitForImages(), waitForPlanetImages(), waitForBackgroundImage()]).then(() => {
         invalidateMainDialCache();
         // Image load can complete after the loop has idled — kick it so the
         // first real frame draws.
