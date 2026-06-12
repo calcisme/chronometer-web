@@ -137,10 +137,20 @@ function drawCentered(
 /**
  * Place a ring-indicator image marker.
  *
- * iOS transform (Y-up): rotate(firstAngle) → translate(0, radius) → rotate(glyph).
- * In the Y-down canvas this is rotate(−firstAngle) → translate(0, −radius) →
- * rotate(−glyph), which puts the marker at `firstAngle` CCW from the top — the
- * same screen position as iOS.
+ * iOS layer transform (EOHandView.mm:463-465): rotate(firstAngle) →
+ * translate(0, radius) → rotate(glyph). UIKit layer coordinates are Y-down
+ * with positive rotation clockwise on screen — the same convention as the
+ * canvas — so the chain ports verbatim: the marker sits at `firstAngle`
+ * clockwise from the bottom (firstAngle includes a +π for most markers,
+ * putting RA = 0 at the top).
+ *
+ * The image itself is drawn with a Y flip: iOS renders the marker PNG through
+ * setupContextForZeroOffsetAndScale, whose CGContextScaleCTM(scale, −scale)
+ * flips the context, so UIImage drawInRect leaves the PNG vertically mirrored
+ * within the marker view. This matters radially: the star in
+ * eclipseRingSun.png sits ~4 px below the image center, and only the flipped
+ * orientation puts its visible center on the outer rim (R2) as on iOS,
+ * rather than 4 px outside it.
  */
 function drawRingMarker(
     ctx: CanvasRenderingContext2D, marker: Img,
@@ -150,11 +160,9 @@ function drawRingMarker(
     if (!marker.ready) return;
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(-firstAngle);
-    ctx.translate(0, -radius);
-    ctx.rotate(-glyphAngle);
-    // The negated rotations + Y-down translate form F·T_iOS·F, which leaves the
-    // image vertically mirrored; scale(1,−1) restores the iOS orientation.
+    ctx.rotate(firstAngle);
+    ctx.translate(0, radius);
+    ctx.rotate(glyphAngle);
     ctx.scale(1, -1);
     ctx.drawImage(marker.el, -size / 2, -size / 2, size, size);
     ctx.restore();
