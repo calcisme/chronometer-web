@@ -182,3 +182,12 @@ fi
 ```
 
 See [Build System — File Categories](build-system.md#file-categories-and-archival) for the full categorization system and archival workflow. The agent skill `audit-build-hygiene` can be used to scan the build process for violations of this rule.
+
+## 15. Observatory is a separate web app with its own doc
+
+Read [Observatory Documentation](observatory.md) for information on how to build and run Observatory.
+
+## 16. Never make unchecked changes to the iOS reference codebases.
+
+The scope of this project does not include modifying the iOS reference codebases. Never modify them; check with the user if you think it's necessary.
+
