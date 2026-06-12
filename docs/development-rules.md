@@ -10,7 +10,9 @@ When editing HTML files (especially the help files in `src/help/`), format them 
 
 ## 2. Never Simplify iOS Algorithms
 
-When porting logic from the iOS reference code (`.chronometer-ref/`, `.esastro-ref/`, `.estime-ref/`), **never simplify** the logic. Code that appears redundant or overly complex is almost always handling an edge case that is not immediately obvious.
+Refer to [iOS Reference Repositories](ios-reference.md) for details on the iOS implementation.
+
+When porting logic from the iOS reference code (`.chronometer-ref/`, `.esastro-ref/`, `.estime-ref/`, `.esobservatory-ref/`), **never simplify** the logic. Code that appears redundant or overly complex is almost always handling an edge case that is not immediately obvious.
 
 If you *cannot* implement the iOS algorithm directly for technical or structural reasons, **stop and ask the user** how to proceed. Do not attempt to design a novel approximation on your own.
 
