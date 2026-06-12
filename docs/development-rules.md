@@ -10,7 +10,9 @@ When editing HTML files (especially the help files in `src/help/`), format them 
 
 ## 2. Never Simplify iOS Algorithms
 
-When porting logic from the iOS reference code (`.chronometer-ref/`, `.esastro-ref/`, `.estime-ref/`), **never simplify** the logic. Code that appears redundant or overly complex is almost always handling an edge case that is not immediately obvious.
+Refer to [iOS Reference Repositories](ios-reference.md) for details on the iOS implementation.
+
+When porting logic from the iOS reference code (`.chronometer-ref/`, `.esastro-ref/`, `.estime-ref/`, `.esobservatory-ref/`), **never simplify** the logic. Code that appears redundant or overly complex is almost always handling an edge case that is not immediately obvious.
 
 If you *cannot* implement the iOS algorithm directly for technical or structural reasons, **stop and ask the user** how to proceed. Do not attempt to design a novel approximation on your own.
 
@@ -180,3 +182,12 @@ fi
 ```
 
 See [Build System — File Categories](build-system.md#file-categories-and-archival) for the full categorization system and archival workflow. The agent skill `audit-build-hygiene` can be used to scan the build process for violations of this rule.
+
+## 15. Observatory is a separate web app with its own doc
+
+Read [Observatory Documentation](observatory.md) for information on how to build and run Observatory.
+
+## 16. Never make unchecked changes to the iOS reference codebases.
+
+The scope of this project does not include modifying the iOS reference codebases. Never modify them; check with the user if you think it's necessary.
+

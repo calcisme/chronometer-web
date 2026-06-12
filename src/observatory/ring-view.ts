@@ -200,6 +200,8 @@ const SUN_RING_COLORS: (string | null)[] = [
  * @param ctx  Canvas 2D context
  * @param L    Layout parameters
  * @param u    Observatory value updater (sun ring stop angles)
+ * @param noonOnTop  Whether noon is at the top of the dial (the stop angles
+ *                   carry a +π offset that must be removed for anchor colors)
  * @param now  Current display time
  * @param lat  Observer latitude in degrees
  * @param lng  Observer longitude in degrees
@@ -209,6 +211,7 @@ function drawSunRingGradient(
     ctx: CanvasRenderingContext2D,
     L: LayoutParams,
     u: Updater<ObsValueName>,
+    noonOnTop: boolean,
     now: Date,
     lat: number,
     lng: number,
@@ -233,15 +236,15 @@ function drawSunRingGradient(
         if (color === null) {
             // Noon or midnight anchor — compute color from actual sun altitude.
             // Convert the ObsValue's dial angle back to a time, then compute altitude.
-            // The dial angle (without noonOnTop offset) maps to hours:
-            //   angle / (2π) * 24 = hours since midnight
-            // But val already includes noonOnTop offset from the expression.
-            // We can still use it: convert angle to fraction of day, then to epoch time.
+            // The time-of-day mapping is angle / (2π) * 24 = hours since midnight,
+            // but val includes the `+ pi * noonOnTop` dial offset from the
+            // expression — remove it first, or the altitude (and hence the
+            // anchor color) is computed 12 hours off.
             const latRad = lat * Math.PI / 180;
             const lngRad = lng * Math.PI / 180;
 
             // Convert dial angle to seconds since midnight (local time)
-            let angleNorm = val % TWO_PI;
+            let angleNorm = (val - (noonOnTop ? Math.PI : 0)) % TWO_PI;
             if (angleNorm < 0) angleNorm += TWO_PI;
             const secSinceMidnight = (angleNorm / TWO_PI) * 86400;
 
@@ -503,7 +506,7 @@ export function drawRiseSetRings(
     updateRingCache(env, u);
 
     // 1. Sun ring (conic gradient with animated color stop positions)
-    drawSunRingGradient(ctx, L, u, now, lat, lon, tzOffsetSeconds);
+    drawSunRingGradient(ctx, L, u, noonOnTop, now, lat, lon, tzOffsetSeconds);
 
     // 2. Planet rings (simple rise/set arcs)
     drawPlanetRing(ctx, L);

@@ -20,7 +20,8 @@ import { initLocationDialog, requestBrowserLocation } from '../shared/location-d
 import { TimeController } from '../shared/time-controller.js';
 import { initTimeControls } from '../shared/time-controls-ui.js';
 import type { TimeControlsAPI } from '../shared/time-controls-ui.js';
-import { computeLayout, type LayoutParams } from './layout.js';
+import { computeLayout, type ChromeParams, type LayoutParams } from './layout.js';
+import { getBackgroundCache, invalidateBackgroundCache, waitForBackgroundImage } from './background.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
@@ -40,7 +41,11 @@ import { createFpsIndicator, type FpsIndicator } from '../shared/fps-indicator.j
 // State
 // ============================================================================
 
-/** Noon-on-top toggle: when true, 12 is at top; when false, 24 is at top. */
+/**
+ * Noon-on-top toggle: when true, 12 is at top; when false, 24 is at top.
+ * Initialized from the URL `onoon` param once urlState is read (below);
+ * toggled at runtime by the footer pill control (setupNoonToggle).
+ */
 let noonOnTop = false;
 
 /** RAF id for the render loop; null means the loop is idle (stopped + settled). */
@@ -88,6 +93,9 @@ if (urlState.off !== null && !isNaN(urlState.off)) {
     else if (urlState.dir === -1) { timeController.setDirection(-1); timeController.setRate(null); }
     // dir === 0 stays stopped (setTime already stops)
 }
+
+// Restore the noon-on-top choice from the URL (?onoon=1).
+noonOnTop = urlState.onoon;
 
 // If no timezone in URL, resolve it from lat/lon (only if we have a location)
 if (!locationTimezone && hasUrlLocation) {
@@ -158,6 +166,70 @@ function onCanvasClick(ev: MouseEvent): void {
     }
 }
 
+/**
+ * Height of the bottom chrome row (time-controller button + location).
+ * Mirrored into the CSS variable --obs-footer-h at startup so the DOM row and
+ * the canvas layout reserve the same band.
+ */
+const FOOTER_H = 32;
+
+/**
+ * True when the noon-on-top toggle doesn't fit in the footer row and has
+ * wrapped onto a second row above it (CSS class `wrapped`). The canvas layout
+ * then reserves a two-row bottom band so the dial isn't occluded.
+ */
+let noonToggleWrapped = false;
+
+/** Minimum horizontal clearance between the noon toggle and its row neighbors. */
+const NOON_TOGGLE_GAP = 16;
+
+/**
+ * Decide whether the centered noon toggle fits in the footer row between the
+ * time-bar contents (left) and the location controls (right); wrap it onto a
+ * second row above the footer when it doesn't. Returns true when the wrap
+ * state changed — the caller must then re-solve the canvas layout, since
+ * chromeParams() reserves an extra footer row while wrapped.
+ */
+function updateNoonToggleWrap(): boolean {
+    const toggle = document.getElementById('noon-toggle');
+    if (!toggle) return false;
+    const w = window.innerWidth;
+    const toggleW = toggle.getBoundingClientRect().width;
+    // Rightmost extent of the time-bar's left-aligned contents (hidden
+    // elements — e.g. the Now button at 1× real time — report zero width).
+    let leftEdge = 0;
+    for (const id of ['time-bar-label', 'time-bar-info', 'time-bar-now']) {
+        const r = document.getElementById(id)?.getBoundingClientRect();
+        if (r && r.width > 0) leftEdge = Math.max(leftEdge, r.right);
+    }
+    const controls = document.getElementById('observatory-controls')?.getBoundingClientRect();
+    const rightEdge = controls && controls.width > 0 ? controls.left : w;
+    const fits = (w - toggleW) / 2 >= leftEdge + NOON_TOGGLE_GAP
+        && (w + toggleW) / 2 <= rightEdge - NOON_TOGGLE_GAP;
+    const shouldWrap = !fits;
+    if (shouldWrap === noonToggleWrapped) return false;
+    noonToggleWrapped = shouldWrap;
+    toggle.classList.toggle('wrapped', noonToggleWrapped);
+    return true;
+}
+
+/** Chrome insets for the layout: footer row(s) + popover arms when open. */
+function chromeParams(): ChromeParams {
+    let popover: ChromeParams['popover'] = null;
+    if (timeUI?.isPopoverOpen()) {
+        const upper = document.getElementById('tp-upper')?.getBoundingClientRect();
+        const lower = document.getElementById('tp-lower')?.getBoundingClientRect();
+        if (upper && lower && upper.width > 0) {
+            popover = {
+                upperW: upper.width, upperH: upper.height,
+                lowerW: lower.width, lowerH: lower.height,
+            };
+        }
+    }
+    // A wrapped noon toggle occupies a second row above the footer.
+    return { footerH: FOOTER_H * (noonToggleWrapped ? 2 : 1), popover };
+}
+
 function resizeCanvas(): void {
     const dpr = devicePixelRatio || 1;
     const w = window.innerWidth;
@@ -168,10 +240,15 @@ function resizeCanvas(): void {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
 
-    // Recompute layout
-    layout = computeLayout(w, h);
+    // Re-check whether the noon toggle still fits in the footer row at the new
+    // size (chromeParams reserves a second row while it's wrapped).
+    updateNoonToggleWrap();
+
+    // Recompute layout (accounting for the footer row(s) + open popover)
+    layout = computeLayout(w, h, chromeParams());
 
     // Invalidate static caches so they rebuild at new size
+    invalidateBackgroundCache();
     invalidateMainDialCache();
     invalidateRingCache();
     invalidatePeripheralDialsCache();
@@ -206,6 +283,15 @@ function drawFrame(): void {
     ctx.fillRect(0, 0, w, h);
 
     const L = layout;
+
+    // ================================================================
+    // 0. Starfield background (static, full-viewport cache) — the iOS
+    //    EOBaseView base layer; everything else draws on top of it.
+    // ================================================================
+    const bgCache = getBackgroundCache(L);
+    if (bgCache) {
+        ctx.drawImage(bgCache, 0, 0);
+    }
 
     // ================================================================
     // 1. Draw static main dial cache (composited at native resolution)
@@ -491,13 +577,74 @@ function setupLocationDialog(): void {
 }
 
 // ============================================================================
+// Noon-on-top toggle
+// ============================================================================
+
+/**
+ * Wire the footer noon-on-top pill control (Vienna-style, see
+ * face-template.html / engine-entry.ts for the Chronometer original).
+ *
+ * Toggling moves the `noonOnTop` env variable and resets the updater: every
+ * expression with a `+ pi * noonOnTop` term (24h hand, sun-event hands, planet
+ * rings, sun-ring gradient stops) re-evaluates against its new target, so all
+ * moving parts *animate* to the flipped positions — the same sweep as a
+ * location change. The main-dial static cache keys on noonOnTop and rebuilds
+ * on the next frame.
+ */
+function setupNoonToggle(): void {
+    const toggle = document.getElementById('noon-toggle');
+    if (!toggle) return;
+    const midnightPill = toggle.querySelector('[data-mode="midnight"]') as HTMLButtonElement;
+    const noonPill = toggle.querySelector('[data-mode="noon"]') as HTMLButtonElement;
+
+    const updateHighlight = () => {
+        midnightPill.classList.toggle('active', !noonOnTop);
+        noonPill.classList.toggle('active', noonOnTop);
+    };
+
+    const setNoonOnTop = (value: boolean) => {
+        if (value === noonOnTop) return;
+        noonOnTop = value;
+        env.variables.set('noonOnTop', noonOnTop ? 1 : 0);
+        writeUrlState({ onoon: noonOnTop });
+        updater?.reset();
+        updateHighlight();
+        // The loop may be idle (stopped); the toggle must trigger a redraw.
+        scheduleFrame();
+    };
+
+    midnightPill.addEventListener('click', () => setNoonOnTop(false));
+    noonPill.addEventListener('click', () => setNoonOnTop(true));
+    updateHighlight();
+
+    // The footer's neighbors change size at runtime (the red offset label and
+    // the Now button appear when time is overridden), which can change whether
+    // the centered toggle fits in the row. Watch them and re-solve the canvas
+    // layout when the wrap state flips. (Observing the toggle itself also
+    // catches the font-load width change.)
+    const footerRo = new ResizeObserver(() => {
+        if (updateNoonToggleWrap()) resizeCanvas();
+    });
+    footerRo.observe(toggle);
+    for (const id of ['time-bar-label', 'time-bar-info', 'time-bar-now', 'observatory-controls']) {
+        const el = document.getElementById(id);
+        if (el) footerRo.observe(el);
+    }
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
 function init(): void {
+    // Keep the DOM footer row and the canvas layout's reserved band in sync.
+    document.documentElement.style.setProperty('--obs-footer-h', `${FOOTER_H}px`);
+    if (urlState.fps) document.body.classList.add('has-fps');
+
     initCanvas();
     ro.observe(document.documentElement);
     setupLocationDialog();
+    setupNoonToggle();
     updateLocationDisplay();
 
     // Wire up time controller env rebuild on tick. The controller fires onTick on
@@ -536,6 +683,11 @@ function init(): void {
             // The loop idles when stopped + settled; restart it on transport changes.
             scheduleFrame();
         },
+        onPopoverToggle: () => {
+            // The open popover participates in the layout (its L-arms become
+            // exclusion zones) — re-solve so the whole display stays visible.
+            resizeCanvas();
+        },
     });
 
     // Show time controller if URL says so
@@ -549,7 +701,7 @@ function init(): void {
     fpsIndicator = createFpsIndicator(urlState.fps);
 
     // Wait for images to load, then invalidate cache so first real draw occurs
-    Promise.all([waitForImages(), waitForPlanetImages()]).then(() => {
+    Promise.all([waitForImages(), waitForPlanetImages(), waitForBackgroundImage()]).then(() => {
         invalidateMainDialCache();
         // Image load can complete after the loop has idled — kick it so the
         // first real frame draws.
