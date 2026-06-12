@@ -41,7 +41,7 @@ import month11 from '../shared/assets/blue-marble/11@2x.png';
 // @ts-ignore
 import month12 from '../shared/assets/blue-marble/12@2x.png';
 // @ts-ignore
-import nightDataUrl from '../shared/assets/blue-marble/night@2x.png';
+import nightDataUrl from '../shared/assets/blue-marble/night@4x.jpg';
 
 import type { LayoutParams } from './layout.js';
 import type { ObsValueName } from './obs-values.js';

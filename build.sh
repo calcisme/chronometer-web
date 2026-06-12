@@ -31,7 +31,7 @@ awk -v new_ver="$NEW_VERSION" '/^#/ || /^[ \t]*$/ {print} /^[^# \t]/ {print new_
 ESBUILD="npx --yes esbuild"
 DIST="dist"
 SRC="src"
-LOADER_FLAGS="--loader:.xml=text --loader:.png=dataurl --loader:.bin=dataurl"
+LOADER_FLAGS="--loader:.xml=text --loader:.png=dataurl --loader:.jpg=dataurl --loader:.bin=dataurl"
 COMMON_FLAGS="--format=iife --target=es2020"
 
 mkdir -p "$DIST"
