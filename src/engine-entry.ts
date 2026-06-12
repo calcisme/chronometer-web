@@ -44,6 +44,7 @@ import { TimeController, TICK_INTERVAL_MS, displaySecondsPerTick } from './share
 
 import { readUrlState, writeUrlState, initNavigationLinks, updateNavigationLinks } from './shared/url-state.js';
 import { createFpsIndicator } from './shared/fps-indicator.js';
+import { initHelpPopover } from './shared/help-popover.js';
 import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './shared/city-search.js';
 import type { CityResult } from './shared/city-search.js';
 import { renderGlobe, loadOSMTile } from './shared/mini-map.js';
@@ -2063,6 +2064,7 @@ async function main() {
         }
 
         // 3. Info overlay
+        const infoOverlay = document.getElementById('info-overlay');
         if (infoOverlay && infoOverlay.classList.contains('visible')) {
             infoOverlay.classList.remove('visible');
             return;
@@ -2322,136 +2324,45 @@ async function main() {
     });
 
 
-    // --- Info button & popup ---
-    const infoBtn = document.getElementById('info-btn');
-    const infoOverlay = document.getElementById('info-overlay');
-    const infoClose = document.getElementById('info-close');
-    const helpContent = document.getElementById('help-content');
-    const helpTemplate = document.getElementById('help-template') as HTMLTemplateElement | null;
-    let helpLoaded = false;
-    if (infoBtn && infoOverlay && infoClose) {
-        infoBtn.addEventListener('click', () => {
-            const slider = document.getElementById('info-slider');
-            const popup = document.getElementById('info-popup');
-            if (slider) slider.style.transform = 'translateX(0)';
-            if (popup) popup.style.height = 'auto';
-            infoOverlay.classList.add('visible');
-            // Clone help template into DOM on first open
-            // (images only start loading once cloned into the live DOM)
-            if (!helpLoaded && helpContent && helpTemplate?.content) {
-                helpLoaded = true;
-                helpContent.appendChild(helpTemplate.content.cloneNode(true));
-                // Open external links in a new tab so they don't navigate away from the face
-                helpContent.querySelectorAll('a[href^="http"]').forEach(a => {
-                    a.setAttribute('target', '_blank');
-                    a.setAttribute('rel', 'noopener');
-                });
-                // Add thumbnail images to per-face help section summaries
-                helpContent.querySelectorAll('.face-help-section[data-face]').forEach(el => {
-                    const face = (el as HTMLElement).dataset.face!;
-                    const summary = el.querySelector('summary');
-                    if (summary) {
-                        const img = document.createElement('img');
-                        img.src = `thumb-${face}.png`;
-                        img.alt = '';
-                        img.style.cssText = 'width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;';
-                        summary.prepend(img);
-                    }
-                });
-                // Reorder and filter per-face help sections to match display order
-                const faceHelpSections = helpContent.querySelectorAll('.face-help-section[data-face]');
-                if (faceHelpSections.length > 0) {
-                    // FaceData.name is a display name (e.g., "Mauna Kea"); data-face is a slug (e.g., "mauna-kea")
-                    const toSlug = (name: string) => name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-');
-                    const activeSlugs = faceDataArray.map(f => toSlug(f.name));
-                    const slugSet = new Set(activeSlugs);
-                    const bySlug = new Map<string, Element>();
-                    faceHelpSections.forEach(el => {
-                        const slug = (el as HTMLElement).dataset.face!;
-                        if (isSelectedPage && !slugSet.has(slug)) {
-                            (el as HTMLElement).style.display = 'none';
-                        } else {
-                            bySlug.set(slug, el);
-                        }
-                    });
-                    // Re-append in display order (moves existing nodes)
-                    for (const slug of activeSlugs) {
-                        const el = bySlug.get(slug);
-                        if (el) helpContent.appendChild(el);
-                    }
-                }
-            }
-        });
-        infoClose.addEventListener('click', () => {
-            infoOverlay.classList.remove('visible');
-        });
-        infoOverlay.addEventListener('click', (e) => {
-            if (e.target === infoOverlay) {
-                infoOverlay.classList.remove('visible');
-            }
-        });
-
-        // Sub-view navigation (Privacy/Support)
-        const mainView = document.getElementById('info-main-view');
-        const subView = document.getElementById('info-sub-view');
-        const subContent = document.getElementById('info-sub-content');
-        const backBtn = document.getElementById('info-back-btn');
-        const popup = document.getElementById('info-popup');
-        const slider = document.getElementById('info-slider');
-
-        function updatePopupHeight(targetView: HTMLElement | null) {
-            if (!popup || !targetView) return;
-            // Measure current
-            const currentHeight = popup.offsetHeight;
-            popup.style.height = currentHeight + 'px';
-            
-            // Measure target (padding is now inside targetView)
-            const targetHeight = targetView.scrollHeight;
-            popup.style.height = targetHeight + 'px';
-        }
-
-        document.querySelectorAll('.help-subpage-link').forEach(link => {
-            const el = link as HTMLElement;
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                const templateId = el.dataset.template;
-                const template = document.getElementById(templateId!) as HTMLTemplateElement | null;
-                if (template && mainView && subView && subContent && slider) {
-                    subContent.innerHTML = template.innerHTML;
-                    slider.style.transform = 'translateX(-50%)';
-                    updatePopupHeight(subView);
-                    if (helpContent) helpContent.scrollTop = 0;
+    // --- Info button & popup (shared wiring + face-specific fixups) ---
+    initHelpPopover({
+        onFirstOpen: (helpContent) => {
+            // Add thumbnail images to per-face help section summaries
+            helpContent.querySelectorAll('.face-help-section[data-face]').forEach(el => {
+                const face = (el as HTMLElement).dataset.face!;
+                const summary = el.querySelector('summary');
+                if (summary) {
+                    const img = document.createElement('img');
+                    img.src = `thumb-${face}.png`;
+                    img.alt = '';
+                    img.style.cssText = 'width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;';
+                    summary.prepend(img);
                 }
             });
-        });
-
-        if (backBtn) {
-            backBtn.addEventListener('click', () => {
-                if (mainView && subView && slider) {
-                    slider.style.transform = 'translateX(0)';
-                    updatePopupHeight(mainView);
-                    if (helpContent) helpContent.scrollTop = 0;
+            // Reorder and filter per-face help sections to match display order
+            const faceHelpSections = helpContent.querySelectorAll('.face-help-section[data-face]');
+            if (faceHelpSections.length > 0) {
+                // FaceData.name is a display name (e.g., "Mauna Kea"); data-face is a slug (e.g., "mauna-kea")
+                const toSlug = (name: string) => name.toLowerCase().replace(/[āä]/g, 'a').replace(/\s+/g, '-');
+                const activeSlugs = faceDataArray.map(f => toSlug(f.name));
+                const slugSet = new Set(activeSlugs);
+                const bySlug = new Map<string, Element>();
+                faceHelpSections.forEach(el => {
+                    const slug = (el as HTMLElement).dataset.face!;
+                    if (isSelectedPage && !slugSet.has(slug)) {
+                        (el as HTMLElement).style.display = 'none';
+                    } else {
+                        bySlug.set(slug, el);
+                    }
+                });
+                // Re-append in display order (moves existing nodes)
+                for (const slug of activeSlugs) {
+                    const el = bySlug.get(slug);
+                    if (el) helpContent.appendChild(el);
                 }
-            });
-        }
-    }
-
-    // --- General Help iframe lazy-loading ---
-    const generalHelpSection = document.getElementById('general-help-section') as HTMLDetailsElement | null;
-    const generalHelpIframe = document.getElementById('general-help-iframe') as HTMLIFrameElement | null;
-    if (generalHelpSection && generalHelpIframe) {
-        generalHelpSection.addEventListener('toggle', () => {
-            if (generalHelpSection.open && !generalHelpIframe.src) {
-                generalHelpIframe.src = 'help.html?embed=1';
             }
-        });
-        // Auto-resize iframe to match content height
-        window.addEventListener('message', (e) => {
-            if (e.data?.type === 'help-resize' && typeof e.data.height === 'number') {
-                generalHelpIframe.style.height = e.data.height + 'px';
-            }
-        });
-    }
+        },
+    });
 
     // --- Fullscreen toggle button ---
     const fullscreenBtn = document.getElementById('fullscreen-btn');

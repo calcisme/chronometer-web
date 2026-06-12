@@ -18733,6 +18733,94 @@
     };
   }
 
+  // src/shared/help-popover.ts
+  function initHelpPopover(options = {}) {
+    const generalHelpUrl = options.generalHelpUrl ?? "help.html?embed=1";
+    const infoBtn = document.getElementById("info-btn");
+    const infoOverlay = document.getElementById("info-overlay");
+    const infoClose = document.getElementById("info-close");
+    const helpContent = document.getElementById("help-content");
+    const helpTemplate = document.getElementById("help-template");
+    let helpLoaded = false;
+    if (infoBtn && infoOverlay && infoClose) {
+      let updatePopupHeight2 = function(targetView) {
+        if (!popup || !targetView) return;
+        const currentHeight = popup.offsetHeight;
+        popup.style.height = currentHeight + "px";
+        const targetHeight = targetView.scrollHeight;
+        popup.style.height = targetHeight + "px";
+      };
+      var updatePopupHeight = updatePopupHeight2;
+      infoBtn.addEventListener("click", () => {
+        const slider2 = document.getElementById("info-slider");
+        const popup2 = document.getElementById("info-popup");
+        if (slider2) slider2.style.transform = "translateX(0)";
+        if (popup2) popup2.style.height = "auto";
+        infoOverlay.classList.add("visible");
+        if (!helpLoaded && helpContent && helpTemplate?.content) {
+          helpLoaded = true;
+          helpContent.appendChild(helpTemplate.content.cloneNode(true));
+          helpContent.querySelectorAll('a[href^="http"]').forEach((a) => {
+            a.setAttribute("target", "_blank");
+            a.setAttribute("rel", "noopener");
+          });
+          options.onFirstOpen?.(helpContent);
+        }
+      });
+      infoClose.addEventListener("click", () => {
+        infoOverlay.classList.remove("visible");
+      });
+      infoOverlay.addEventListener("click", (e) => {
+        if (e.target === infoOverlay) {
+          infoOverlay.classList.remove("visible");
+        }
+      });
+      const mainView = document.getElementById("info-main-view");
+      const subView = document.getElementById("info-sub-view");
+      const subContent = document.getElementById("info-sub-content");
+      const backBtn = document.getElementById("info-back-btn");
+      const popup = document.getElementById("info-popup");
+      const slider = document.getElementById("info-slider");
+      document.querySelectorAll(".help-subpage-link").forEach((link) => {
+        const el = link;
+        el.addEventListener("click", (e) => {
+          e.preventDefault();
+          const templateId = el.dataset.template;
+          const template = document.getElementById(templateId);
+          if (template && mainView && subView && subContent && slider) {
+            subContent.innerHTML = template.innerHTML;
+            slider.style.transform = "translateX(-50%)";
+            updatePopupHeight2(subView);
+            if (helpContent) helpContent.scrollTop = 0;
+          }
+        });
+      });
+      if (backBtn) {
+        backBtn.addEventListener("click", () => {
+          if (mainView && subView && slider) {
+            slider.style.transform = "translateX(0)";
+            updatePopupHeight2(mainView);
+            if (helpContent) helpContent.scrollTop = 0;
+          }
+        });
+      }
+    }
+    const generalHelpSection = document.getElementById("general-help-section");
+    const generalHelpIframe = document.getElementById("general-help-iframe");
+    if (generalHelpSection && generalHelpIframe) {
+      generalHelpSection.addEventListener("toggle", () => {
+        if (generalHelpSection.open && !generalHelpIframe.src) {
+          generalHelpIframe.src = generalHelpUrl;
+        }
+      });
+      window.addEventListener("message", (e) => {
+        if (e.data?.type === "help-resize" && typeof e.data.height === "number") {
+          generalHelpIframe.style.height = e.data.height + "px";
+        }
+      });
+    }
+  }
+
   // src/shared/city-search.ts
   var TZ = [];
   var CC = [];
@@ -21491,6 +21579,7 @@
         grid.classList.remove("blurred");
         return;
       }
+      const infoOverlay = document.getElementById("info-overlay");
       if (infoOverlay && infoOverlay.classList.contains("visible")) {
         infoOverlay.classList.remove("visible");
         return;
@@ -21685,118 +21774,40 @@
         }
       }
     });
-    const infoBtn = document.getElementById("info-btn");
-    const infoOverlay = document.getElementById("info-overlay");
-    const infoClose = document.getElementById("info-close");
-    const helpContent = document.getElementById("help-content");
-    const helpTemplate = document.getElementById("help-template");
-    let helpLoaded = false;
-    if (infoBtn && infoOverlay && infoClose) {
-      let updatePopupHeight2 = function(targetView) {
-        if (!popup || !targetView) return;
-        const currentHeight = popup.offsetHeight;
-        popup.style.height = currentHeight + "px";
-        const targetHeight = targetView.scrollHeight;
-        popup.style.height = targetHeight + "px";
-      };
-      var updatePopupHeight = updatePopupHeight2;
-      infoBtn.addEventListener("click", () => {
-        const slider2 = document.getElementById("info-slider");
-        const popup2 = document.getElementById("info-popup");
-        if (slider2) slider2.style.transform = "translateX(0)";
-        if (popup2) popup2.style.height = "auto";
-        infoOverlay.classList.add("visible");
-        if (!helpLoaded && helpContent && helpTemplate?.content) {
-          helpLoaded = true;
-          helpContent.appendChild(helpTemplate.content.cloneNode(true));
-          helpContent.querySelectorAll('a[href^="http"]').forEach((a) => {
-            a.setAttribute("target", "_blank");
-            a.setAttribute("rel", "noopener");
-          });
-          helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
-            const face = el.dataset.face;
-            const summary = el.querySelector("summary");
-            if (summary) {
-              const img = document.createElement("img");
-              img.src = `thumb-${face}.png`;
-              img.alt = "";
-              img.style.cssText = "width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;";
-              summary.prepend(img);
-            }
-          });
-          const faceHelpSections = helpContent.querySelectorAll(".face-help-section[data-face]");
-          if (faceHelpSections.length > 0) {
-            const toSlug = (name) => name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-");
-            const activeSlugs = faceDataArray.map((f) => toSlug(f.name));
-            const slugSet = new Set(activeSlugs);
-            const bySlug = /* @__PURE__ */ new Map();
-            faceHelpSections.forEach((el) => {
-              const slug = el.dataset.face;
-              if (isSelectedPage && !slugSet.has(slug)) {
-                el.style.display = "none";
-              } else {
-                bySlug.set(slug, el);
-              }
-            });
-            for (const slug of activeSlugs) {
-              const el = bySlug.get(slug);
-              if (el) helpContent.appendChild(el);
-            }
-          }
-        }
-      });
-      infoClose.addEventListener("click", () => {
-        infoOverlay.classList.remove("visible");
-      });
-      infoOverlay.addEventListener("click", (e) => {
-        if (e.target === infoOverlay) {
-          infoOverlay.classList.remove("visible");
-        }
-      });
-      const mainView = document.getElementById("info-main-view");
-      const subView = document.getElementById("info-sub-view");
-      const subContent = document.getElementById("info-sub-content");
-      const backBtn = document.getElementById("info-back-btn");
-      const popup = document.getElementById("info-popup");
-      const slider = document.getElementById("info-slider");
-      document.querySelectorAll(".help-subpage-link").forEach((link) => {
-        const el = link;
-        el.addEventListener("click", (e) => {
-          e.preventDefault();
-          const templateId = el.dataset.template;
-          const template = document.getElementById(templateId);
-          if (template && mainView && subView && subContent && slider) {
-            subContent.innerHTML = template.innerHTML;
-            slider.style.transform = "translateX(-50%)";
-            updatePopupHeight2(subView);
-            if (helpContent) helpContent.scrollTop = 0;
+    initHelpPopover({
+      onFirstOpen: (helpContent) => {
+        helpContent.querySelectorAll(".face-help-section[data-face]").forEach((el) => {
+          const face = el.dataset.face;
+          const summary = el.querySelector("summary");
+          if (summary) {
+            const img = document.createElement("img");
+            img.src = `thumb-${face}.png`;
+            img.alt = "";
+            img.style.cssText = "width:28px;height:28px;border-radius:50%;vertical-align:middle;margin:0 8px 0 4px;";
+            summary.prepend(img);
           }
         });
-      });
-      if (backBtn) {
-        backBtn.addEventListener("click", () => {
-          if (mainView && subView && slider) {
-            slider.style.transform = "translateX(0)";
-            updatePopupHeight2(mainView);
-            if (helpContent) helpContent.scrollTop = 0;
+        const faceHelpSections = helpContent.querySelectorAll(".face-help-section[data-face]");
+        if (faceHelpSections.length > 0) {
+          const toSlug = (name) => name.toLowerCase().replace(/[āä]/g, "a").replace(/\s+/g, "-");
+          const activeSlugs = faceDataArray.map((f) => toSlug(f.name));
+          const slugSet = new Set(activeSlugs);
+          const bySlug = /* @__PURE__ */ new Map();
+          faceHelpSections.forEach((el) => {
+            const slug = el.dataset.face;
+            if (isSelectedPage && !slugSet.has(slug)) {
+              el.style.display = "none";
+            } else {
+              bySlug.set(slug, el);
+            }
+          });
+          for (const slug of activeSlugs) {
+            const el = bySlug.get(slug);
+            if (el) helpContent.appendChild(el);
           }
-        });
+        }
       }
-    }
-    const generalHelpSection = document.getElementById("general-help-section");
-    const generalHelpIframe = document.getElementById("general-help-iframe");
-    if (generalHelpSection && generalHelpIframe) {
-      generalHelpSection.addEventListener("toggle", () => {
-        if (generalHelpSection.open && !generalHelpIframe.src) {
-          generalHelpIframe.src = "help.html?embed=1";
-        }
-      });
-      window.addEventListener("message", (e) => {
-        if (e.data?.type === "help-resize" && typeof e.data.height === "number") {
-          generalHelpIframe.style.height = e.data.height + "px";
-        }
-      });
-    }
+    });
     const fullscreenBtn = document.getElementById("fullscreen-btn");
     if (fullscreenBtn) {
       const isFullscreenSupported = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.mozFullScreenEnabled || document.msFullscreenEnabled);

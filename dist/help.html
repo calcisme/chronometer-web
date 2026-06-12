@@ -1017,8 +1017,22 @@
           })
           .join(", ");
       });
+      // Observatory embed: drop the Chronometer-only topics (and their nav
+      // links) — complications and the watch-movement physics don't apply.
+      const params = new URLSearchParams(location.search);
+      if (params.get("app") === "observatory") {
+        for (const id of ["complications", "physics"]) {
+          document.getElementById(id)?.remove();
+          const navLink = document.querySelector(`.help-nav a[href="#${id}"]`);
+          if (navLink) {
+            const sep = navLink.previousElementSibling;
+            if (sep?.classList.contains("sep")) sep.remove();
+            navLink.remove();
+          }
+        }
+      }
       // Embed mode: hide nav/title, report height to parent
-      const isEmbed = new URLSearchParams(location.search).has("embed");
+      const isEmbed = params.has("embed");
       if (isEmbed) {
         document.querySelector(".help-nav")?.remove();
         document.querySelector("h1")?.remove();
@@ -1039,5 +1053,5 @@
           .forEach((d) => d.addEventListener("toggle", reportHeight));
       }
     </script>
-  <div style="text-align:center; margin-top: 24px; color: #667; font-size: 11px;">v1.4.238</div></body>
+  <div style="text-align:center; margin-top: 24px; color: #667; font-size: 11px;">v1.4.240</div></body>
 </html>

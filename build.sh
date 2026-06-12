@@ -320,8 +320,12 @@ echo "  → pick.html"
 inject_partials < "$SRC/inspector/inspector.html" > "$DIST/inspector.html"
 echo "  → inspector.html"
 
-# observatory.html — Observatory app page (with location dialog injection)
-inject_partials < "$SRC/observatory/observatory.html" > "$DIST/observatory.html"
+# observatory.html — Observatory app page (with location dialog + help injection)
+if [ ! -f "$SRC/help/observatory.html" ]; then
+  echo "ERROR: missing $SRC/help/observatory.html" >&2
+  exit 1
+fi
+inject_partials "$SRC/help/observatory.html" < "$SRC/observatory/observatory.html" > "$DIST/observatory.html"
 echo "  → observatory.html"
 
 # help.html — general help topics page (simple copy)
