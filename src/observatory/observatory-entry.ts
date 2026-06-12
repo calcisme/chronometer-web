@@ -20,7 +20,7 @@ import { initLocationDialog, requestBrowserLocation } from '../shared/location-d
 import { TimeController } from '../shared/time-controller.js';
 import { initTimeControls } from '../shared/time-controls-ui.js';
 import type { TimeControlsAPI } from '../shared/time-controls-ui.js';
-import { computeLayout, type LayoutParams } from './layout.js';
+import { computeLayout, type ChromeParams, type LayoutParams } from './layout.js';
 import { getMainDialCache, invalidateMainDialCache, waitForImages } from './main-dial.js';
 import { drawPlanetHands, waitForPlanetImages } from './planet-hands.js';
 import { drawRiseSetRings, invalidateRingCache } from './ring-view.js';
@@ -158,6 +158,29 @@ function onCanvasClick(ev: MouseEvent): void {
     }
 }
 
+/**
+ * Height of the bottom chrome row (time-controller button + location).
+ * Mirrored into the CSS variable --obs-footer-h at startup so the DOM row and
+ * the canvas layout reserve the same band.
+ */
+const FOOTER_H = 32;
+
+/** Chrome insets for the layout: footer row + popover arms when open. */
+function chromeParams(): ChromeParams {
+    let popover: ChromeParams['popover'] = null;
+    if (timeUI?.isPopoverOpen()) {
+        const upper = document.getElementById('tp-upper')?.getBoundingClientRect();
+        const lower = document.getElementById('tp-lower')?.getBoundingClientRect();
+        if (upper && lower && upper.width > 0) {
+            popover = {
+                upperW: upper.width, upperH: upper.height,
+                lowerW: lower.width, lowerH: lower.height,
+            };
+        }
+    }
+    return { footerH: FOOTER_H, popover };
+}
+
 function resizeCanvas(): void {
     const dpr = devicePixelRatio || 1;
     const w = window.innerWidth;
@@ -168,8 +191,8 @@ function resizeCanvas(): void {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
 
-    // Recompute layout
-    layout = computeLayout(w, h);
+    // Recompute layout (accounting for the footer row + open popover)
+    layout = computeLayout(w, h, chromeParams());
 
     // Invalidate static caches so they rebuild at new size
     invalidateMainDialCache();
@@ -495,6 +518,10 @@ function setupLocationDialog(): void {
 // ============================================================================
 
 function init(): void {
+    // Keep the DOM footer row and the canvas layout's reserved band in sync.
+    document.documentElement.style.setProperty('--obs-footer-h', `${FOOTER_H}px`);
+    if (urlState.fps) document.body.classList.add('has-fps');
+
     initCanvas();
     ro.observe(document.documentElement);
     setupLocationDialog();
@@ -535,6 +562,11 @@ function init(): void {
         ensureSchedulerRunning: () => {
             // The loop idles when stopped + settled; restart it on transport changes.
             scheduleFrame();
+        },
+        onPopoverToggle: () => {
+            // The open popover participates in the layout (its L-arms become
+            // exclusion zones) — re-solve so the whole display stays visible.
+            resizeCanvas();
         },
     });
 

@@ -1,8 +1,10 @@
 # Observatory Phase 8 — Layout (from scratch)
 
 **Date:** 2026-06-06
-**Status:** ✅ Implemented (Alternative B) — visual tuning of the two open knobs
-(§7) pending. Rewrote `src/observatory/layout.ts` from scratch; removed the logo
+**Status:** ✅ Implemented (Alternative B) — superseded in part by
+[2026-06-10-observatory-phase-8b-layout-refinement.md](2026-06-10-observatory-phase-8b-layout-refinement.md)
+(moon/date sizing, gap rule, footer-chrome integration, iPhone-portrait
+vertical fill). Rewrote `src/observatory/layout.ts` from scratch; removed the logo
 from `observatory-entry.ts`. `tsc`/`build`/tests all clean.
 **Revised:** 2026-06-06 (post-review) — §1, §6, §7 updated after feedback;
 dial sizing is now *adaptive* (slack-driven), not a fixed per-template constant.

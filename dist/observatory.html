@@ -36,12 +36,22 @@
           left: 0;
       }
 
-      /* Location button overlay — bottom-right corner */
+      /* ── Bottom chrome: ONE row shared by the time-controller button (left)
+         and the location controls (right). The canvas layout reserves exactly
+         var(--obs-footer-h) at the bottom for this row (see FOOTER_H in
+         observatory-entry.ts — keep the two in sync via the CSS variable,
+         which the entry sets on :root at startup). ─────────────────────── */
+      :root {
+          --obs-footer-h: 32px;
+      }
+
+      /* Location controls — right end of the footer row */
       #observatory-controls {
           position: fixed;
-          bottom: 12px;
+          bottom: 0;
           right: 12px;
-          z-index: 10;
+          height: var(--obs-footer-h);
+          z-index: 11;
           display: flex;
           gap: 8px;
           align-items: center;
@@ -944,20 +954,40 @@
 
 
 
-      /* Override time-bar styling for Observatory's dark overlay */
+      /* Override time-bar styling for Observatory: it forms the LEFT part of
+         the single bottom chrome row (location controls are the right part). */
       #time-bar {
           position: fixed;
-          bottom: 36px;
+          bottom: 0;
           left: 0;
           right: 0;
+          height: var(--obs-footer-h);
           z-index: 10;
+          padding: 0 12px;
+          justify-content: flex-start;
           background: rgba(0, 0, 0, 0.5);
           border-top: 1px solid rgba(255, 255, 255, 0.08);
       }
 
+      /* The ?fps overlay sits at the left end of the row — make room for it. */
+      body.has-fps #time-bar {
+          padding-left: 170px;
+      }
+
+      /* Observatory shows only the Show/Hide button and the red offset label
+         in the time bar — NOT the running date/time, rate, or Now button (the
+         main dial already displays the time; the popover has Now▶).
+         Deliberate (re-)removal: this regressed once before when the shared
+         partial's defaults leaked back in, so keep these !important. */
+      #time-bar-date,
+      #time-bar-rate,
+      #time-bar-now {
+          display: none !important;
+      }
+
       #time-popover {
           position: fixed;
-          bottom: 64px;
+          bottom: calc(var(--obs-footer-h) + 6px);
           right: 12px;
           z-index: 20;
       }
