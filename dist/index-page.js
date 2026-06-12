@@ -521,7 +521,6 @@
     }
     lpLocationName.innerHTML = buildLocationNameHTML();
   }
-  // src/shared/tz-resolve.ts
   function resolveTimezone(lat, lon, cityTz) {
     if (cityTz) return cityTz;
     const closest = findClosestCity(lat, lon);
