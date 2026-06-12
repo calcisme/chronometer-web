@@ -85,6 +85,62 @@
           color: rgba(255, 255, 255, 0.7);
       }
 
+      /* ── Noon-on-top toggle — centered in the footer row. When it doesn't
+         fit between the time-bar contents (left) and the location controls
+         (right), the entry adds .wrapped to lift it onto a second row above
+         the footer (and reserves the extra band in the canvas layout — see
+         updateNoonToggleWrap in observatory-entry.ts). Pill appearance
+         matches Chronometer's Vienna noon toggle (face-template.html). ── */
+      #noon-toggle {
+          position: fixed;
+          bottom: 0;
+          left: 50%;
+          transform: translateX(-50%);
+          height: var(--obs-footer-h);
+          z-index: 11;
+          display: flex;
+          align-items: center;
+          gap: 0;
+          user-select: none;
+          -webkit-user-select: none;
+      }
+
+      #noon-toggle.wrapped {
+          bottom: var(--obs-footer-h);
+      }
+
+      .noon-pill {
+          background: #2a2a3e;
+          border: 1px solid #3a3a5e;
+          color: #99b;
+          font-family: inherit;
+          font-size: 12px;
+          padding: 5px 14px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
+          white-space: nowrap;
+      }
+
+      .noon-pill:first-child {
+          border-radius: 12px 0 0 12px;
+          border-right: none;
+      }
+
+      .noon-pill:last-child {
+          border-radius: 0 12px 12px 0;
+      }
+
+      .noon-pill:hover {
+          background: #3a3a5e;
+          color: #ccf;
+      }
+
+      .noon-pill.active {
+          background: #445;
+          border-color: #8af;
+          color: #8af;
+      }
+
       /* ── Location dialog injection ─────────────────── */
               /* Location prompt overlay */
         #location-prompt {
@@ -1001,6 +1057,12 @@
     <div id="observatory-controls">
       <span id="location-name">Detecting…</span>
       <button id="set-location-btn">Set Location</button>
+    </div>
+
+    <!-- Noon-on-top toggle (Vienna-style pills) -->
+    <div id="noon-toggle">
+      <button class="noon-pill" data-mode="midnight">Midnight on top</button>
+      <button class="noon-pill" data-mode="noon">Noon on top</button>
     </div>
 
     <!-- Location prompt overlay (hidden by default) -->

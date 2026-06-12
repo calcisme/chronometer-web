@@ -557,6 +557,32 @@ rendered in the Observatory subdial style:
 - Ticks every minute (major at 0/±5/±10/±15), numbers `0/5/10/15`, bold `+`/`−`
   symbols, "Equation of Time" title, center hub + vertical baseline.
 
+## Noon-on-Top Toggle
+
+A Vienna-style pill control ("Midnight on top" / "Noon on top") sits centered in
+the bottom chrome row, sharing it with the time-bar button (left) and the
+location controls (right). The pill markup/CSS mirrors Chronometer's Vienna
+toggle (`face-template.html`); the wiring lives in `setupNoonToggle()` in
+`observatory-entry.ts`. The choice persists in the URL `onoon` param
+(midnight-on-top is the default, omitted from the URL).
+
+Toggling sets the `noonOnTop` env variable (0/1) and calls `updater.reset()`:
+every expression carrying a `+ pi * noonOnTop` term (24h hand, sun-event hands,
+planet rings, sun-ring gradient stops) re-evaluates against its moved target, so
+all moving parts **animate** half a turn to the flipped positions — the same
+sweep as a location change. The main-dial static cache keys on `noonOnTop`
+(`getMainDialCache(L, noonOnTop)`), so the dial numerals rebuild (snap) on the
+next frame.
+
+**Footer wrap:** when the centered toggle would collide with the time-bar
+contents or the location controls (narrow windows, or when the red offset label
++ Now button appear), `updateNoonToggleWrap()` adds the `wrapped` CSS class —
+lifting the toggle onto a second row above the footer — and `chromeParams()`
+reserves `2 × FOOTER_H` so the canvas layout keeps the dial clear of it. The
+check runs on every canvas resize, and a `ResizeObserver` on the footer
+neighbors (offset label, Now button, location controls) re-solves the layout
+when their sizes change at runtime.
+
 ## Date Display
 
 `date-view.ts` renders the header date stack (port of the EOClock date labels,

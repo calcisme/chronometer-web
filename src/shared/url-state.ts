@@ -19,6 +19,7 @@
  *   embed - Embed mode: 1 = Terra-only minimal embed (no chrome, transparent bg)
  *   fps   - FPS indicator: present (any/no value) = show the fps readout (Chronometer + Observatory + Inspector)
  *   op    - Observatory selected planet for the alt/az dials (0=Sun..7=Saturn, skips 4=Earth)
+ *   onoon - Observatory noon-on-top toggle: 1 = noon at top of the 24h dial (absent = midnight on top)
  */
 
 export interface UrlState {
@@ -45,6 +46,8 @@ export interface UrlState {
     kmode: string | null;
     /** Observatory selected planet for the alt/az dials (0=Sun..7=Saturn, skips 4=Earth). */
     op: number | null;
+    /** Observatory noon-on-top toggle: true = noon at top of the 24h dial (default midnight). */
+    onoon: boolean;
 }
 
 /** Parse URL query parameters into a typed state object. */
@@ -84,6 +87,7 @@ export function readUrlState(): UrlState {
         kyhand: params.get('kyhand'),
         kmode: params.get('kmode'),
         op: (() => { const s = params.get('op'); const n = s !== null ? parseInt(s, 10) : NaN; return Number.isFinite(n) ? n : null; })(),
+        onoon: params.get('onoon') === '1',
     };
 }
 
@@ -185,6 +189,15 @@ export function writeUrlState(changes: Partial<UrlState>): void {
             params.set('op', changes.op.toString());
         } else {
             params.delete('op');
+        }
+    }
+
+    if ('onoon' in changes) {
+        // Midnight-on-top is the default — omit it from the URL.
+        if (changes.onoon) {
+            params.set('onoon', '1');
+        } else {
+            params.delete('onoon');
         }
     }
 
