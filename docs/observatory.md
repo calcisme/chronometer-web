@@ -583,6 +583,31 @@ check runs on every canvas resize, and a `ResizeObserver` on the footer
 neighbors (offset label, Now button, location controls) re-solves the layout
 when their sizes change at runtime.
 
+## Help Popover
+
+The "ℹ" button (top right) opens the same info popover the Chronometer face
+pages use: header + links (GitHub / Credits / Privacy / Support / Disclaimer),
+the URL-state note, a lazy-loaded "General Help Topics" iframe, the
+app-specific help body, and the version number — with the sliding sub-view
+and animated popup height for the Privacy/Support/Disclaimer pages.
+
+- **Shared wiring**: `src/shared/help-popover.ts` (`initHelpPopover`), used by
+  both `engine-entry.ts` (which passes the face thumbnail/reorder pass as
+  `onFirstOpen`) and `observatory-entry.ts`. The markup and CSS live in each
+  page template (`face-template.html`, `observatory.html`); `index.html` keeps
+  its own inline-script copy.
+- **Help content**: `src/help/observatory.html` (images under
+  `src/help/images/observatory/`), adapted from the original
+  [emeraldsequoia.com/eo](https://emeraldsequoia.com/eo/index.html) help and
+  the iOS app's help strings. Injected as `{{HELP_CONTENT}}` by `build.sh`.
+- **General Help Topics**: the iframe loads `help.html?embed=1&app=observatory`;
+  the `app=observatory` param makes `help.html` drop the Chronometer-only
+  "Complications" and "The Physics of Emerald Chronometer" sections, swap
+  "Emerald Chronometer" → "Emerald Observatory" in the remaining text, and
+  resolve per-app passages: elements tagged `class="chrono-only"` /
+  `class="obs-only"` are removed in the flavor where they don't apply (e.g.
+  Basel's eclipse needle vs. Observatory's Eclipse Simulator animation).
+
 ## Date Display
 
 `date-view.ts` renders the header date stack (port of the EOClock date labels,

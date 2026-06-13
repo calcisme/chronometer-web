@@ -535,15 +535,24 @@
           As a general rule, you can assume that all of the astronomical
           displays within Emerald Chronometer are at least as accurate as the
           precision with which you can read the display, from about 4000 BCE to
-          about 2800 CE. For example, the azimuth displays on Haleakalā can be
-          read approximately to the nearest degree, and there is far more
-          accuracy in the data than that.
+          about 2800 CE. For example,
+          <span class="chrono-only">the azimuth displays on Haleakalā</span
+          ><span class="obs-only">the azimuth dial</span> can be read
+          approximately to the nearest degree, and there is far more accuracy in
+          the data than that.
           <p>
-            Similarly, the rise and set dials, which can be read to the nearest
-            minute, are at least that accurate. But note of course that they are
-            only valid if the rise or set point on the horizon is at exactly the
-            same level as you are; if the Sun is setting behind a hill above
-            you, for example, it will set much earlier than the time indicated.
+            Similarly,
+            <span class="chrono-only"
+              >the rise and set dials, which can be read to the nearest
+              minute,</span
+            ><span class="obs-only"
+              >the rise/set rings, which can be read against the 24-hour
+              markings to within a few minutes,</span
+            >
+            are at least that accurate. But note of course that they are only
+            valid if the rise or set point on the horizon is at exactly the same
+            level as you are; if the Sun is setting behind a hill above you, for
+            example, it will set much earlier than the time indicated.
           </p>
 
           <p>
@@ -591,14 +600,19 @@
           </p>
 
           <p>
-            Every time you move the Sun or Moon hand on Mauna Kea a little bit,
-            over a thousand double-precision sines and cosines are calculated,
-            whose arguments are themselves each polynomial expressions with
-            several terms, and it all gets done in much less than a tenth of a
-            second.
+            Every time you
+            <span class="chrono-only"
+              >move the Sun or Moon hand on Mauna Kea</span
+            ><span class="obs-only"
+              >step the time with the time controller</span
+            >
+            a little bit, over a thousand double-precision sines and cosines are
+            calculated, whose arguments are themselves each polynomial
+            expressions with several terms, and it all gets done in much less
+            than a tenth of a second.
           </p>
 
-          <p>
+          <p class="chrono-only">
             The RA display on Basel displays the RA "of date", meaning the RA
             applied from the equinox current on the given date. This means that
             the Local Sidereal Time (per its definition) also displays the
@@ -610,7 +624,7 @@
             formulae for general precession are used.
           </p>
 
-          <p>
+          <p class="chrono-only">
             In contrast, on Mauna Kea, the RA display is fixed in the zodiac
             dial to be the J2000 RA numbers of the constellations, and so on
             that dial may be read the J2000 RA of the Sun and Moon. The local
@@ -669,19 +683,31 @@
           <!-- ================================================================ -->
 
           <h3>Background</h3>
-          The lunar node hands (<font color="#B00000">&Omega;</font>) and the
-          "eclipse dial" on <a href="basel.html" target="_self">Basel</a> can be
-          used as a rough guide to predicting solar and lunar eclipses.
+          <span class="chrono-only"
+            >The lunar node hands (<font color="#B00000">&Omega;</font>) and the
+            "eclipse dial" on
+            <a href="basel.html" target="_self">Basel</a></span
+          ><span class="obs-only"
+            >The Eclipse Simulator dial &mdash; with its Sun, Moon, and
+            Earth-shadow icons and the two thin red lines marking the nodes of
+            the Moon's orbit &mdash;</span
+          >
+          can be used as a rough guide to predicting solar and lunar eclipses.
           <p>
-            The nodal hands indicate the right ascension of the ascending and
-            descending nodes of the Moon's orbit. These are the places at which
-            the Moon's orbit crosses the Sun's orbit as seen from the center of
-            Earth; there are always two such places, 180 degrees apart. When an
-            eclipse occurs, both the Sun and the Moon must always be fairly
-            close to one of the nodes.
+            <span class="chrono-only"
+              >The nodal hands indicate the right ascension of the ascending and
+              descending nodes of the Moon's orbit.</span
+            ><span class="obs-only"
+              >The red node lines indicate the positions of the ascending and
+              descending nodes of the Moon's orbit.</span
+            >
+            These are the places at which the Moon's orbit crosses the Sun's
+            orbit as seen from the center of Earth; there are always two such
+            places, 180 degrees apart. When an eclipse occurs, both the Sun and
+            the Moon must always be fairly close to one of the nodes.
           </p>
 
-          <p>
+          <p class="chrono-only">
             If the Sun and Moon are very close to one another, the "eclipse
             needle" in the dial will rotate from its far left position, and will
             indicate the degree of eclipse at your current location (or another
@@ -696,6 +722,17 @@
             purpose penumbral eclipses are ignored.
           </p>
 
+          <p class="obs-only">
+            If the Sun and Moon are very close to one another, an animation of
+            the eclipse as it appears from the current location (or another
+            location, if you've set a different one) will appear inside the
+            ring: for a solar eclipse, the Moon's silhouette crossing the Sun;
+            for a lunar eclipse, the Earth's shadow crossing the Moon. A green
+            overlay marks any portion below the horizon, and a "Below horizon"
+            label appears when the event is mostly below the horizon at your
+            location.
+          </p>
+
           <p>
             Note that the conditions for a solar eclipse are very sensitive to
             the location of the observer, and when there is a total solar
@@ -708,8 +745,17 @@
 
           <h3>Correlating with known dates</h3>
           You can use the time controller to set the date and time to any time
-          you wish. On Basel it is easiest to set the year with the date inputs,
+          you wish. It is easiest to set the year with the Date tab's inputs,
           then adjust the month, day, and time as needed.
+          <p>
+            Note that published eclipse times (including the examples below) are
+            usually given in UT, but the time controller's date and time inputs
+            use the local time of the currently-set location, so you'll need to
+            convert &mdash; and remember that the local date may differ from the
+            UT date. You can check the result against
+            <span class="chrono-only">the UT hand on Basel</span
+            ><span class="obs-only">the UTC subdial</span>.
+          </p>
           <p>
             For example, there was a
             <a
@@ -719,30 +765,51 @@
             on Nov 13 2012 at about 22:11:48 UT (it was centered in the
             southwestern Pacific; viewers in Australia and New Zealand saw a
             partial eclipse but totality was visible only in a narrow band
-            across the ocean). If you set that time on Basel (make sure to use
-            the UT hand to set the time),
-            <img
-              src="help/images/basel/EclipseNode2012Nov13.png"
-              align="right"
-            />
-            the display should look like this:
-            <br />The Sun and Moon hands are aligned (this always happens every
-            time there is a new moon), and they are both very close to the nodal
-            hand <font color="#B00000">&Omega;</font> (in this case it is the
-            ascending node, but either node could appear here).
+            across the ocean).
+            <span class="chrono-only">
+              If you set that time on Basel (remembering to convert from UT),
+              <img
+                src="help/images/basel/EclipseNode2012Nov13.png"
+                align="right"
+              />
+              the display should look like this:
+              <br />The Sun and Moon hands are aligned (this always happens
+              every time there is a new moon), and they are both very close to
+              the nodal hand <font color="#B00000">&Omega;</font> (in this case
+              it is the ascending node, but either node could appear here).
+            </span>
+            <span class="obs-only">
+              If you set that time (remembering to convert from UT), the Sun and
+              Moon icons on the Eclipse Simulator ring will be aligned (this
+              always happens every time there is a new moon), both very close to
+              one of the red node lines (in this case it is the ascending node,
+              but either node could appear here), and the eclipse animation will
+              appear inside the ring.
+            </span>
           </p>
 
           <p>
             As mentioned above, this eclipse wasn't at totality for most
-            locations. But you can temporarily set a different location and then
-            you can watch the eclipse needle move to "Total Eclipse". For this
-            eclipse, at the time mentioned above, set the latitude to -39.95 (S)
-            <img
-              src="help/images/basel/EclipseNeedle2012Nov13.png"
-              align="right"
-            />
-            and the longitude to -161.33 (W), and at the time given above the
-            eclipse needle will look like the image at the right.
+            locations.
+            <span class="chrono-only">
+              But you can temporarily set a different location and then you can
+              watch the eclipse needle move to "Total Eclipse". For this
+              eclipse, at the time mentioned above, set the latitude to -39.95
+              (S)
+              <img
+                src="help/images/basel/EclipseNeedle2012Nov13.png"
+                align="right"
+              />
+              and the longitude to -161.33 (W), and at the time given above the
+              eclipse needle will look like the image at the right.
+            </span>
+            <span class="obs-only">
+              But you can temporarily set a different location and watch the
+              simulator show totality. For this eclipse, at the time mentioned
+              above, set the latitude to -39.95 (S) and the longitude to -161.33
+              (W) in the location dialog, and at the time given above the
+              simulator will show the total eclipse.
+            </span>
           </p>
 
           <p>
@@ -755,24 +822,34 @@
                 src="help/images/extlink.png"
             /></a>
             on 2010 Dec 21 at about 08:16:57 UT and it was most visible in
-            longitudes aligned with the western United States. Setting that time
-            on Basel (again being careful to set the UT time and date properly)
-            should result in the display appearing
-            <img
-              src="help/images/basel/EclipseNodeMoon2010Dec21.png"
-              align="right"
-            />
-            <img
-              src="help/images/basel/EclipseNodeSun2010Dec21.png"
-              align="left"
-            />
-            as shown to the left and right. Note that neither the Sun nor the
-            Moon are exactly aligned with the nodal points, but they're close
-            and they <i>are</i> exactly 180 degrees apart (as they are on every
-            full moon).
+            longitudes aligned with the western United States.
+            <span class="chrono-only">
+              Setting that time on Basel (again being careful to convert the UT
+              time and date) should result in the display appearing
+              <img
+                src="help/images/basel/EclipseNodeMoon2010Dec21.png"
+                align="right"
+              />
+              <img
+                src="help/images/basel/EclipseNodeSun2010Dec21.png"
+                align="left"
+              />
+              as shown to the left and right. Note that neither the Sun nor the
+              Moon are exactly aligned with the nodal points, but they're close
+              and they <i>are</i> exactly 180 degrees apart (as they are on
+              every full moon).
+            </span>
+            <span class="obs-only">
+              Setting that time (again being careful to convert the UT time and
+              date), the Sun and Moon icons will appear on opposite sides of the
+              Eclipse Simulator ring &mdash; exactly 180 degrees apart (as they
+              are on every full moon) &mdash; each close to one of the node
+              lines, and the animation of the Earth's shadow crossing the Moon
+              will appear inside the ring.
+            </span>
           </p>
 
-          <p>
+          <p class="chrono-only">
             If the Moon is above the horizon at your location at this time, you
             can see the eclipse needle move
             <img
@@ -783,10 +860,19 @@
             the eclipse needle will look like the image on the right.
           </p>
 
+          <p class="obs-only">
+            If the Moon is above the horizon at your location at this time, you
+            can watch the eclipse animation without changing the location;
+            otherwise a "Below horizon" label will appear in the dial.
+          </p>
+
           <p>
-            You can use this same technique with historical eclipses, moving the
-            date and century on Basel to match the dates of known eclipses, such
-            as this
+            You can use this same technique with historical eclipses,
+            <span class="chrono-only">moving the date and century on Basel</span
+            ><span class="obs-only"
+              >moving the date with the time controller</span
+            >
+            to match the dates of known eclipses, such as this
             <a href="http://eclipse.gsfc.nasa.gov/SEhistory/SEhistory.html"
               >NASA list of historical solar eclipses<img
                 class="extlink"
@@ -807,35 +893,57 @@
           <h3>Discovering dates with no external knowledge</h3>
           You can use the opposite technique to discover times of eclipses in
           the past or future: Use the time controller to scrub the date until
-          the Sun hand on Basel is close to a nodal hand
-          <font color="#B00000">&Omega;</font>. Then adjust until the Moon is
-          either aligned with the Sun (indicating a possible solar eclipse) or
-          180 degrees opposite the Sun (indicating a possible lunar eclipse).
+          <span class="chrono-only"
+            >the Sun hand on Basel is close to a nodal hand
+            <font color="#B00000">&Omega;</font></span
+          ><span class="obs-only"
+            >the Sun icon on the Eclipse Simulator ring is close to one of the
+            red node lines</span
+          >. Then adjust until the Moon is either aligned with the Sun
+          (indicating a possible solar eclipse) or 180 degrees opposite the Sun
+          (indicating a possible lunar eclipse).
+          <span class="obs-only"
+            >(The Moon Phase steppers in the Astro tab make this easy.)</span
+          >
           <p>
             The new-moon and full-moon points aren't exactly the points of
             maximum eclipse, however; once you are at a phase point, you can
-            then move the time back and forth, watching the eclipse needle, to
-            see where the needle reaches its maximum. Then at that peak you can
-            read the eclipse window to see what kind of eclipse, if any, will be
-            visible at this location.
+            then move the time back and forth,
+            <span class="chrono-only"
+              >watching the eclipse needle, to see where the needle reaches its
+              maximum. Then at that peak you can read the eclipse window to see
+              what kind of eclipse, if any, will be visible at this
+              location.</span
+            ><span class="obs-only"
+              >watching the eclipse animation, to see where the eclipse reaches
+              its maximum at this location.</span
+            >
           </p>
 
           <p>
-            The Sun and Moon hands can be surprisingly far away from the nodal
-            hands and still have an eclipse be possible. The angle between the
-            Moon's orbit and the Sun's is quite small (about 5 degrees), so the
-            Moon can be a fair distance from the node in right ascension (RA)
-            (perhaps as much as 10 degrees) and still be sufficiently close in
-            ecliptic latitude to result in a partial eclipse.
+            <span class="chrono-only"
+              >The Sun and Moon hands can be surprisingly far away from the
+              nodal hands and still have an eclipse be possible.</span
+            ><span class="obs-only"
+              >The Sun and Moon icons can be surprisingly far away from the node
+              lines and still have an eclipse be possible.</span
+            >
+            The angle between the Moon's orbit and the Sun's is quite small
+            (about 5 degrees), so the Moon can be a fair distance from the node
+            <span class="chrono-only">in right ascension (RA) </span>(perhaps as
+            much as 10 degrees) and still be sufficiently close in ecliptic
+            latitude to result in a partial eclipse.
           </p>
 
           <p>
             On the other hand, just because the nodal point is close doesn't
             mean that an eclipse is guaranteed, as mentioned earlier. Use the
-            eclipse needle for more precise results, and please don't plan your
-            once-in-a-lifetime photograph solely on the data presented in
-            Emerald Chronometer; there are better tools for that on the web (you
-            can start at the NASA sites linked above).
+            <span class="chrono-only">eclipse needle</span
+            ><span class="obs-only">eclipse animation</span> for more precise
+            results, and please don't plan your once-in-a-lifetime photograph
+            solely on the data presented in Emerald Chronometer; there are
+            better tools for that on the web (you can start at the NASA sites
+            linked above).
           </p>
         </div>
       </details>
@@ -878,11 +986,13 @@
             <li>
               <b>Moon Transit</b> — Jump to the next or previous lunar transit
             </li>
-            <li><b>Planetary events</b> — (only on Venezia) see below</li>
+            <li class="chrono-only">
+              <b>Planetary events</b> — (only on Venezia) see below
+            </li>
           </ul>
 
-          <h3>Venezia body selection</h3>
-          <p>
+          <h3 class="chrono-only">Venezia body selection</h3>
+          <p class="chrono-only">
             When viewing the Venezia watch face in single-face mode, the
             Moonrise, Moonset, and Moon Transit rows are replaced with
             body-specific versions that follow the currently selected planet in
@@ -895,10 +1005,12 @@
           <h3>How it works</h3>
           <p>
             Each tap stops the clock (if running) and jumps directly to the
-            computed event time. The watch hands animate smoothly to their new
-            positions. You can tap repeatedly to step through successive events
-            — for example, tapping ▶ on Sunrise multiple times will step through
-            successive sunrises.
+            computed event time.
+            <span class="chrono-only">The watch hands</span
+            ><span class="obs-only">The hands and dials</span> animate smoothly
+            to their new positions. You can tap repeatedly to step through
+            successive events — for example, tapping ▶ on Sunrise multiple times
+            will step through successive sunrises.
           </p>
           <p>
             If no event can be found (for example, trying to find a sunrise at
@@ -906,8 +1018,10 @@
             briefly to indicate that no result was found.
           </p>
           <p>
-            The Astro tab selection is preserved in the URL, so it persists when
-            navigating between watch face pages.
+            The Astro tab selection is preserved in the URL<span
+              class="chrono-only"
+              >, so it persists when navigating between watch face pages</span
+            >.
           </p>
         </div>
       </details>
@@ -1017,8 +1131,42 @@
           })
           .join(", ");
       });
+      // Observatory flavor: drop the Chronometer-only topics (and their nav
+      // links) — complications and the watch-movement physics don't apply.
+      const params = new URLSearchParams(location.search);
+      const isObservatory = params.get("app") === "observatory";
+      if (isObservatory) {
+        for (const id of ["complications", "physics"]) {
+          document.getElementById(id)?.remove();
+          const navLink = document.querySelector(`.help-nav a[href="#${id}"]`);
+          if (navLink) {
+            const sep = navLink.previousElementSibling;
+            if (sep?.classList.contains("sep")) sep.remove();
+            navLink.remove();
+          }
+        }
+        // Swap the app name in the remaining text (incl. section titles)
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+        );
+        let textNode;
+        while ((textNode = walker.nextNode())) {
+          if (textNode.nodeValue.includes("Emerald Chronometer")) {
+            textNode.nodeValue = textNode.nodeValue.replaceAll(
+              "Emerald Chronometer",
+              "Emerald Observatory",
+            );
+          }
+        }
+      }
+      // Passages that apply to only one app are tagged .chrono-only /
+      // .obs-only — remove the flavor that doesn't apply here.
+      document
+        .querySelectorAll(isObservatory ? ".chrono-only" : ".obs-only")
+        .forEach((el) => el.remove());
       // Embed mode: hide nav/title, report height to parent
-      const isEmbed = new URLSearchParams(location.search).has("embed");
+      const isEmbed = params.has("embed");
       if (isEmbed) {
         document.querySelector(".help-nav")?.remove();
         document.querySelector("h1")?.remove();

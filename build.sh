@@ -31,7 +31,7 @@ awk -v new_ver="$NEW_VERSION" '/^#/ || /^[ \t]*$/ {print} /^[^# \t]/ {print new_
 ESBUILD="npx --yes esbuild"
 DIST="dist"
 SRC="src"
-LOADER_FLAGS="--loader:.xml=text --loader:.png=dataurl --loader:.bin=dataurl"
+LOADER_FLAGS="--loader:.xml=text --loader:.png=dataurl --loader:.jpg=dataurl --loader:.bin=dataurl"
 COMMON_FLAGS="--format=iife --target=es2020"
 
 mkdir -p "$DIST"
@@ -108,7 +108,8 @@ echo "=== Generating HTML files ==="
 # {{TIME_CSS}}, {{TIME_CONTROLLER}}, and terra city dialog placeholders.
 inject_partials() {
     local HELP_FILE="${1:-}"
-    awk -v P="$SRC/partials" -v H="$HELP_FILE" -v VERSION="$NEW_VERSION" '
+    local APP_NAME="${2:-Chronometer}"
+    awk -v P="$SRC/partials" -v H="$HELP_FILE" -v VERSION="$NEW_VERSION" -v APP="$APP_NAME" '
     /\{\{ *LOCATION_CSS *\}\}/ { 
         s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
         while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
@@ -148,17 +149,17 @@ inject_partials() {
     }
     /\{\{ *PRIVACY_CONTENT *\}\}/ { 
         s=$0; sub(/\{\{ *PRIVACY_CONTENT *\}\}.*/, "", s); printf "%s", s;
-        while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html");
+        while ((getline line < (P"/privacy-content.html")) > 0) { gsub(/\{\{ *APP_NAME *\}\}/, APP, line); print line }; close(P"/privacy-content.html");
         s=$0; sub(/.*\{\{ *PRIVACY_CONTENT *\}\}/, "", s); print s; next
     }
     /\{\{ *SUPPORT_CONTENT *\}\}/ { 
         s=$0; sub(/\{\{ *SUPPORT_CONTENT *\}\}.*/, "", s); printf "%s", s;
-        while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html");
+        while ((getline line < (P"/support-content.html")) > 0) { gsub(/\{\{ *APP_NAME *\}\}/, APP, line); print line }; close(P"/support-content.html");
         s=$0; sub(/.*\{\{ *SUPPORT_CONTENT *\}\}/, "", s); print s; next
     }
     /\{\{ *DISCLAIMER_CONTENT *\}\}/ { 
         s=$0; sub(/\{\{ *DISCLAIMER_CONTENT *\}\}.*/, "", s); printf "%s", s;
-        while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html");
+        while ((getline line < (P"/disclaimer-content.html")) > 0) { gsub(/\{\{ *APP_NAME *\}\}/, APP, line); print line }; close(P"/disclaimer-content.html");
         s=$0; sub(/.*\{\{ *DISCLAIMER_CONTENT *\}\}/, "", s); print s; next
     }
     /\{\{ *HELP_SUBVIEW_CSS *\}\}/ { 
@@ -176,7 +177,8 @@ inject_partials() {
 # Same as inject_partials but includes terra city dialog content.
 inject_partials_terra() {
     local HELP_FILE="${1:-}"
-    awk -v P="$SRC/partials" -v H="$HELP_FILE" -v VERSION="$NEW_VERSION" '
+    local APP_NAME="${2:-Chronometer}"
+    awk -v P="$SRC/partials" -v H="$HELP_FILE" -v VERSION="$NEW_VERSION" -v APP="$APP_NAME" '
     /\{\{ *LOCATION_CSS *\}\}/ { 
         s=$0; sub(/\{\{ *LOCATION_CSS *\}\}.*/, "", s); printf "%s", s;
         while ((getline line < (P"/location-dialog.css")) > 0) print line; close(P"/location-dialog.css");
@@ -214,17 +216,17 @@ inject_partials_terra() {
     }
     /\{\{ *PRIVACY_CONTENT *\}\}/ { 
         s=$0; sub(/\{\{ *PRIVACY_CONTENT *\}\}.*/, "", s); printf "%s", s;
-        while ((getline line < (P"/privacy-content.html")) > 0) print line; close(P"/privacy-content.html");
+        while ((getline line < (P"/privacy-content.html")) > 0) { gsub(/\{\{ *APP_NAME *\}\}/, APP, line); print line }; close(P"/privacy-content.html");
         s=$0; sub(/.*\{\{ *PRIVACY_CONTENT *\}\}/, "", s); print s; next
     }
     /\{\{ *SUPPORT_CONTENT *\}\}/ { 
         s=$0; sub(/\{\{ *SUPPORT_CONTENT *\}\}.*/, "", s); printf "%s", s;
-        while ((getline line < (P"/support-content.html")) > 0) print line; close(P"/support-content.html");
+        while ((getline line < (P"/support-content.html")) > 0) { gsub(/\{\{ *APP_NAME *\}\}/, APP, line); print line }; close(P"/support-content.html");
         s=$0; sub(/.*\{\{ *SUPPORT_CONTENT *\}\}/, "", s); print s; next
     }
     /\{\{ *DISCLAIMER_CONTENT *\}\}/ { 
         s=$0; sub(/\{\{ *DISCLAIMER_CONTENT *\}\}.*/, "", s); printf "%s", s;
-        while ((getline line < (P"/disclaimer-content.html")) > 0) print line; close(P"/disclaimer-content.html");
+        while ((getline line < (P"/disclaimer-content.html")) > 0) { gsub(/\{\{ *APP_NAME *\}\}/, APP, line); print line }; close(P"/disclaimer-content.html");
         s=$0; sub(/.*\{\{ *DISCLAIMER_CONTENT *\}\}/, "", s); print s; next
     }
     /\{\{ *HELP_SUBVIEW_CSS *\}\}/ { 
@@ -320,8 +322,12 @@ echo "  → pick.html"
 inject_partials < "$SRC/inspector/inspector.html" > "$DIST/inspector.html"
 echo "  → inspector.html"
 
-# observatory.html — Observatory app page (with location dialog injection)
-inject_partials < "$SRC/observatory/observatory.html" > "$DIST/observatory.html"
+# observatory.html — Observatory app page (with location dialog + help injection)
+if [ ! -f "$SRC/help/observatory.html" ]; then
+  echo "ERROR: missing $SRC/help/observatory.html" >&2
+  exit 1
+fi
+inject_partials "$SRC/help/observatory.html" "Observatory" < "$SRC/observatory/observatory.html" > "$DIST/observatory.html"
 echo "  → observatory.html"
 
 # help.html — general help topics page (simple copy)

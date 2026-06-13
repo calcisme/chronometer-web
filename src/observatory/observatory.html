@@ -141,6 +141,206 @@
           color: #8af;
       }
 
+      /* ── Info ("ℹ") button + help popover — mirrors the Chronometer face
+         pages (face-template.html); behavior is wired by the shared
+         src/shared/help-popover.ts module. ───────────────────────────── */
+      #info-btn {
+          position: fixed;
+          top: 16px;
+          right: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.08);
+          color: #889;
+          border: none;
+          cursor: pointer;
+          font-size: 18px;
+          font-family: serif;
+          font-style: italic;
+          font-weight: 700;
+          padding: 0;
+          z-index: 10;
+          transition: background 0.2s, color 0.2s;
+      }
+
+      #info-btn:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: #bbd;
+      }
+
+      /* Info popup overlay */
+      #info-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          align-items: center;
+          justify-content: center;
+      }
+
+      #info-overlay.visible {
+          display: flex;
+      }
+
+      #info-popup {
+          background: rgba(30, 30, 50, 0.98);
+          border: 1px solid #3a3a5e;
+          border-radius: 16px;
+          padding: 0;
+          max-width: 600px;
+          width: 90%;
+          max-height: 90vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          color: #bbc;
+          box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+          position: relative;
+          font-size: 14px;
+          line-height: 1.6;
+          transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          flex-direction: column;
+      }
+
+      #info-slider {
+          display: flex;
+          width: 200%;
+          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          align-items: flex-start;
+      }
+
+      #info-main-view,
+      #info-sub-view {
+          padding: 28px 32px;
+          width: 50%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+      }
+
+      #info-popup h2 {
+          margin: 0 0 12px;
+          font-size: 18px;
+          color: #dde;
+          font-weight: 600;
+      }
+
+      #info-popup a {
+          color: #8af;
+          text-decoration: none;
+      }
+
+      #info-popup a:hover {
+          text-decoration: underline;
+      }
+
+      #info-close {
+          position: absolute;
+          top: 10px;
+          right: 14px;
+          z-index: 10;
+          background: none;
+          border: none;
+          color: #667;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 2px 6px;
+          line-height: 1;
+          transition: color 0.15s;
+      }
+
+      #info-close:hover {
+          color: #ccf;
+      }
+
+      /* Help content styles */
+      .help-separator {
+          border: none;
+          border-top: 1px solid #3a3a5e;
+          margin: 16px 0;
+      }
+
+      #help-content img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 4px;
+          margin: 4px 0;
+      }
+
+      #help-content img[align="left"] {
+          max-width: 45%;
+          margin: 4px 12px 4px 0;
+          float: left;
+      }
+
+      #help-content img[align="right"] {
+          max-width: 45%;
+          margin: 4px 0 4px 12px;
+          float: right;
+      }
+
+      #help-content img[src*="extlink"] {
+          display: inline;
+          width: 12px;
+          height: 12px;
+          vertical-align: middle;
+          margin: 0 1px;
+          border-radius: 0;
+      }
+
+      #help-content p,
+      #help-content br[clear] {
+          clear: both;
+      }
+
+      #help-content center {
+          display: block;
+          text-align: center;
+      }
+
+      #help-content center img {
+          max-width: 60%;
+      }
+
+      #help-content h3 {
+          font-size: 16px;
+          color: #dde;
+          margin: 16px 0 8px;
+      }
+
+      /* General help iframe section */
+      #general-help-section {
+          margin: 0 0 4px;
+          border: 1px solid #3a3a5e;
+          border-radius: 8px;
+          padding: 8px 14px;
+      }
+
+      #general-help-section summary {
+          cursor: pointer;
+          color: #8af;
+          font-size: 14px;
+      }
+
+      #general-help-section summary:hover {
+          text-decoration: underline;
+      }
+
+      #general-help-iframe {
+          width: 100%;
+          border: none;
+          border-radius: 8px;
+          margin-top: 8px;
+      }
+
+      {{HELP_SUBVIEW_CSS}}
+
       /* ── Location dialog injection ─────────────────── */
       {{LOCATION_CSS}}
 
@@ -189,6 +389,103 @@
   </head>
   <body>
     <canvas id="observatory-canvas"></canvas>
+
+    <!-- Help button + popover (shared wiring in src/shared/help-popover.ts) -->
+    <button id="info-btn" title="About Observatory">ℹ&#xFE0E;</button>
+    <div id="info-overlay">
+      <div id="info-popup">
+        <button id="info-close">&times;</button>
+        <div id="info-slider">
+          <div id="info-main-view">
+            <h2>Observatory for the Web</h2>
+            <p>
+              A web port of
+              <a
+                href="https://emeraldsequoia.com/eo/index.html"
+                target="_blank"
+                rel="noopener"
+                >Emerald Observatory</a
+              >
+              (<a
+                href="https://github.com/EmeraldSequoia/Observatory"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >), an astronomical clock app originally built for iPad.
+            </p>
+            <p>
+              View the project on
+              <a
+                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >
+              ·
+              <a
+                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
+                target="_blank"
+                rel="noopener"
+                >Credits</a
+              >
+              ·
+              <a
+                href="privacy.html"
+                class="help-subpage-link"
+                data-template="privacy-template"
+                >Privacy</a
+              >
+              ·
+              <a
+                href="support.html"
+                class="help-subpage-link"
+                data-template="support-template"
+                >Support</a
+              >
+              ·
+              <a
+                href="disclaimer.html"
+                class="help-subpage-link"
+                data-template="disclaimer-template"
+                >Disclaimer</a
+              >
+            </p>
+            <hr class="help-separator" />
+            <p>
+              Session state is persisted via URL only -- bookmark or share the
+              URL to save your session. No cookies or local storage are used.
+              See
+              <a
+                href="privacy.html"
+                class="help-subpage-link"
+                data-template="privacy-template"
+                >Privacy</a
+              >
+              for more information.
+            </p>
+            <hr class="help-separator" />
+            <details id="general-help-section">
+              <summary>General Help Topics</summary>
+              <iframe id="general-help-iframe"></iframe>
+            </details>
+            <hr class="help-separator" />
+            <div id="help-content">
+              <!-- Populated from help-template on first info click -->
+            </div>
+            <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v{{VERSION}}</div>
+          </div>
+
+          <div id="info-sub-view">
+            <button id="info-back-btn">← Help</button>
+            <div id="info-sub-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template id="privacy-template"> {{PRIVACY_CONTENT}} </template>
+    <template id="support-template"> {{SUPPORT_CONTENT}} </template>
+    <template id="disclaimer-template"> {{DISCLAIMER_CONTENT}} </template>
+    <template id="help-template"> {{HELP_CONTENT}} </template>
 
     <!-- Minimal overlay controls -->
     <div id="observatory-controls">

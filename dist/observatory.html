@@ -141,6 +141,273 @@
           color: #8af;
       }
 
+      /* ── Info ("ℹ") button + help popover — mirrors the Chronometer face
+         pages (face-template.html); behavior is wired by the shared
+         src/shared/help-popover.ts module. ───────────────────────────── */
+      #info-btn {
+          position: fixed;
+          top: 16px;
+          right: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.08);
+          color: #889;
+          border: none;
+          cursor: pointer;
+          font-size: 18px;
+          font-family: serif;
+          font-style: italic;
+          font-weight: 700;
+          padding: 0;
+          z-index: 10;
+          transition: background 0.2s, color 0.2s;
+      }
+
+      #info-btn:hover {
+          background: rgba(255, 255, 255, 0.15);
+          color: #bbd;
+      }
+
+      /* Info popup overlay */
+      #info-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          z-index: 100;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          align-items: center;
+          justify-content: center;
+      }
+
+      #info-overlay.visible {
+          display: flex;
+      }
+
+      #info-popup {
+          background: rgba(30, 30, 50, 0.98);
+          border: 1px solid #3a3a5e;
+          border-radius: 16px;
+          padding: 0;
+          max-width: 600px;
+          width: 90%;
+          max-height: 90vh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          color: #bbc;
+          box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+          position: relative;
+          font-size: 14px;
+          line-height: 1.6;
+          transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          flex-direction: column;
+      }
+
+      #info-slider {
+          display: flex;
+          width: 200%;
+          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          align-items: flex-start;
+      }
+
+      #info-main-view,
+      #info-sub-view {
+          padding: 28px 32px;
+          width: 50%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+      }
+
+      #info-popup h2 {
+          margin: 0 0 12px;
+          font-size: 18px;
+          color: #dde;
+          font-weight: 600;
+      }
+
+      #info-popup a {
+          color: #8af;
+          text-decoration: none;
+      }
+
+      #info-popup a:hover {
+          text-decoration: underline;
+      }
+
+      #info-close {
+          position: absolute;
+          top: 10px;
+          right: 14px;
+          z-index: 10;
+          background: none;
+          border: none;
+          color: #667;
+          font-size: 20px;
+          cursor: pointer;
+          padding: 2px 6px;
+          line-height: 1;
+          transition: color 0.15s;
+      }
+
+      #info-close:hover {
+          color: #ccf;
+      }
+
+      /* Help content styles */
+      .help-separator {
+          border: none;
+          border-top: 1px solid #3a3a5e;
+          margin: 16px 0;
+      }
+
+      #help-content img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 4px;
+          margin: 4px 0;
+      }
+
+      #help-content img[align="left"] {
+          max-width: 45%;
+          margin: 4px 12px 4px 0;
+          float: left;
+      }
+
+      #help-content img[align="right"] {
+          max-width: 45%;
+          margin: 4px 0 4px 12px;
+          float: right;
+      }
+
+      #help-content img[src*="extlink"] {
+          display: inline;
+          width: 12px;
+          height: 12px;
+          vertical-align: middle;
+          margin: 0 1px;
+          border-radius: 0;
+      }
+
+      #help-content p,
+      #help-content br[clear] {
+          clear: both;
+      }
+
+      #help-content center {
+          display: block;
+          text-align: center;
+      }
+
+      #help-content center img {
+          max-width: 60%;
+      }
+
+      #help-content h3 {
+          font-size: 16px;
+          color: #dde;
+          margin: 16px 0 8px;
+      }
+
+      /* General help iframe section */
+      #general-help-section {
+          margin: 0 0 4px;
+          border: 1px solid #3a3a5e;
+          border-radius: 8px;
+          padding: 8px 14px;
+      }
+
+      #general-help-section summary {
+          cursor: pointer;
+          color: #8af;
+          font-size: 14px;
+      }
+
+      #general-help-section summary:hover {
+          text-decoration: underline;
+      }
+
+      #general-help-iframe {
+          width: 100%;
+          border: none;
+          border-radius: 8px;
+          margin-top: 8px;
+      }
+
+      /* Styles for privacy/support content when shown inside the info popup */
+
+#info-sub-view {
+    padding-top: 14px;
+}
+
+#info-back-btn {
+    background: none;
+    border: none;
+    color: #8af;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+}
+
+#info-back-btn:hover {
+    color: #ccf;
+    text-decoration: underline;
+}
+
+#info-sub-content h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    color: #dde;
+}
+
+#info-sub-content .subtitle {
+    font-size: 12px;
+    color: #776;
+    font-style: italic;
+    margin: 0 0 20px;
+}
+
+#info-sub-content h2 {
+    font-size: 15px;
+    color: #dde;
+    margin: 20px 0 8px;
+    font-weight: 600;
+}
+
+#info-sub-content p, 
+#info-sub-content li {
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 8px 0;
+    color: #bbc;
+}
+
+#info-sub-content ul {
+    padding-left: 20px;
+}
+
+#info-sub-content hr {
+    border: none;
+    border-top: 1px solid #3a3a5e;
+    margin: 20px 0;
+}
+
+#info-sub-content .last-updated {
+    font-size: 11px;
+    color: #556;
+}
+
+
       /* ── Location dialog injection ─────────────────── */
               /* Location prompt overlay */
         #location-prompt {
@@ -1052,6 +1319,624 @@
   </head>
   <body>
     <canvas id="observatory-canvas"></canvas>
+
+    <!-- Help button + popover (shared wiring in src/shared/help-popover.ts) -->
+    <button id="info-btn" title="About Observatory">ℹ&#xFE0E;</button>
+    <div id="info-overlay">
+      <div id="info-popup">
+        <button id="info-close">&times;</button>
+        <div id="info-slider">
+          <div id="info-main-view">
+            <h2>Observatory for the Web</h2>
+            <p>
+              A web port of
+              <a
+                href="https://emeraldsequoia.com/eo/index.html"
+                target="_blank"
+                rel="noopener"
+                >Emerald Observatory</a
+              >
+              (<a
+                href="https://github.com/EmeraldSequoia/Observatory"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >), an astronomical clock app originally built for iPad.
+            </p>
+            <p>
+              View the project on
+              <a
+                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >
+              ·
+              <a
+                href="https://github.com/EmeraldSequoia/chronometer-web/blob/main/README.md#credits"
+                target="_blank"
+                rel="noopener"
+                >Credits</a
+              >
+              ·
+              <a
+                href="privacy.html"
+                class="help-subpage-link"
+                data-template="privacy-template"
+                >Privacy</a
+              >
+              ·
+              <a
+                href="support.html"
+                class="help-subpage-link"
+                data-template="support-template"
+                >Support</a
+              >
+              ·
+              <a
+                href="disclaimer.html"
+                class="help-subpage-link"
+                data-template="disclaimer-template"
+                >Disclaimer</a
+              >
+            </p>
+            <hr class="help-separator" />
+            <p>
+              Session state is persisted via URL only -- bookmark or share the
+              URL to save your session. No cookies or local storage are used.
+              See
+              <a
+                href="privacy.html"
+                class="help-subpage-link"
+                data-template="privacy-template"
+                >Privacy</a
+              >
+              for more information.
+            </p>
+            <hr class="help-separator" />
+            <details id="general-help-section">
+              <summary>General Help Topics</summary>
+              <iframe id="general-help-iframe"></iframe>
+            </details>
+            <hr class="help-separator" />
+            <div id="help-content">
+              <!-- Populated from help-template on first info click -->
+            </div>
+            <div style="text-align: center; margin-top: 24px; font-size: 11px; color: #667;">v1.4.243</div>
+          </div>
+
+          <div id="info-sub-view">
+            <button id="info-back-btn">← Help</button>
+            <div id="info-sub-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template id="privacy-template"> <h1>Privacy</h1>
+<p class="subtitle">Emerald Observatory for the Web</p>
+
+<h2>Overview</h2>
+<p>
+  Emerald Observatory for the Web is a fully client-side application. It runs
+  entirely in your browser and does not communicate with any application server
+  for its core functionality.
+</p>
+
+<h2>Data Collection</h2>
+<p>
+  The app itself does not collect, store, or transmit any personal data to any
+  application server. There are no app-level analytics, tracking pixels,
+  cookies, or telemetry of any kind.
+</p>
+
+<h2>Web Server Logs</h2>
+<p>
+  When the app is served over HTTP or HTTPS, the hosting provider (SiteGround)
+  records standard web server access logs for each page and resource request.
+  These logs include:
+</p>
+<ul>
+  <li>Your <strong>IP address</strong></li>
+  <li>
+    The <strong>URL requested</strong>, including query-string parameters such
+    as latitude, longitude, city name, and timezone
+  </li>
+  <li>
+    <strong>Timestamp</strong>, HTTP status code, referrer, and browser
+    user-agent string
+  </li>
+</ul>
+<p>
+  These logs are retained by SiteGround for up to 30 days and are used solely
+  for security monitoring and troubleshooting. They are not analyzed for user
+  tracking purposes.
+</p>
+<p>
+  When running from <code>file://</code> URLs (a local copy of the app), no
+  server is involved and no logs are generated.
+</p>
+
+<h2>Map Tile Requests</h2>
+<p>
+  When you use the location dialog (on pages served via <code>http://</code> or
+  <code>https://</code>), the app fetches map tile images from
+  <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener"
+    >OpenStreetMap</a
+  >
+  to display a preview of the selected location.
+</p>
+<p>
+  These requests are standard image fetches and
+  <strong
+    >do not include any metadata identifying the tile coordinates as your
+    location</strong
+  >
+  — OpenStreetMap sees only which map tile was requested, the same as any map
+  browsing.
+</p>
+
+<h2>Browser Location (Geolocation API)</h2>
+<p>
+  If you tap "Use device location via browser", the app uses the browser's
+  Geolocation API to obtain your coordinates. This data is processed entirely
+  within the browser — the app never sends it to any application server.
+</p>
+<p>
+  The resolved coordinates are matched against a bundled database of
+  approximately 47,000 cities to display a human-readable location name. This
+  reverse-geolocation lookup happens entirely in the browser — no external
+  geocoding service is contacted.
+</p>
+
+<h2>URL Parameters</h2>
+<p>
+  The app stores your location settings (latitude, longitude, city name,
+  timezone) as URL query parameters. This is the only persistence mechanism — no
+  cookies or local storage are used.
+</p>
+<p>
+  <strong>Note:</strong> Because these parameters are part of the URL, they are
+  visible in your browser history and, when served over HTTP or HTTPS, in the
+  hosting provider's access logs.
+</p>
+
+<h2>Third-Party Services</h2>
+<ul>
+  <li>
+    <strong>OpenStreetMap</strong> (map tiles only, HTTP/HTTPS only) — governed
+    by
+    <a
+      href="https://wiki.osmfoundation.org/wiki/Privacy_Policy"
+      target="_blank"
+      rel="noopener"
+      >OSM's privacy policy</a
+    >.
+  </li>
+</ul>
+
+<h2>Contact</h2>
+<p>
+  For questions about this privacy policy, please visit the
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web"
+    target="_blank"
+    rel="noopener"
+    >project on GitHub</a
+  >.
+</p>
+
+<hr />
+<p class="last-updated">Last updated: May 2026</p>
+ </template>
+    <template id="support-template"> <h1>Support</h1>
+<p class="subtitle">Emerald Observatory for the Web</p>
+
+<p>
+  This free web app is served by a site run by volunteers and provides no
+  support. All the website does is serve, as a convenience, files available from
+  the
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web/releases"
+    target="_blank"
+    rel="noopener"
+    >GitHub releases page</a
+  >
+  (see instructions for running the app
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server"
+    target="_blank"
+    rel="noopener"
+    >here</a
+  >).
+</p>
+
+<p>
+  You are encouraged to report issues to the developers at the GitHub issues
+  page
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web/issues"
+    target="_blank"
+    rel="noopener"
+    >here</a
+  >, but as the developers are also volunteers you may not get a response in a
+  timely fashion.
+</p>
+
+<hr />
+ </template>
+    <template id="disclaimer-template"> <h1>Disclaimer</h1>
+<p class="subtitle">Emerald Observatory for the Web</p>
+
+<p>
+  THIS FREE WEB APP IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+</p>
+
+<p>
+  The pages served to your browser are available at the
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web/releases"
+    target="_blank"
+    rel="noopener"
+    >GitHub releases page</a
+  >
+  (see instructions for running the app
+  <a
+    href="https://github.com/EmeraldSequoia/chronometer-web#option-3-run-from-your-own-local-web-server"
+    target="_blank"
+    rel="noopener"
+    >here</a
+  >).
+</p>
+
+<hr />
+ </template>
+    <template id="help-template"> <b>Observatory</b> is an astronomical clock which displays a variety of
+astronomical information for your location. It is similar in that way to the
+<a href="index.html">Emerald Chronometer watch faces</a>, but was designed from
+the start to take advantage of a larger display. Much of the supporting
+technology, including the highly accurate astronomical algorithms, is shared
+with Chronometer.
+
+<h3>Displays</h3>
+
+<p><b>Clock</b></p>
+<p>
+  First of all, it's an ordinary clock. The main hands (gold colored) display
+  the hours, minutes and seconds in the usual 12-hour format. To read it more
+  precisely use the small numbers and tick marks on the inner edge of the rings.
+  The thin central hand with the large white arrow head and the large white
+  numbers and tick marks indicate the time in 24-hour format (with midnight on
+  top by default; see <a href="#noon-on-top">Noon on Top</a>, below).
+</p>
+<p>
+  It is also possible to change the clock's time and to animate it at very high
+  rates. See <a href="#setting-the-time">Setting the time</a>, below.
+</p>
+
+<p><b>Moon</b></p>
+<p>
+  In the upper left Observatory displays the Moon as it appears from the current
+  location at the clock's time. When the phase is a thin crescent Observatory
+  simulates the illumination of the dark side by reflected light from the Earth
+  (this is known as "Earthlight" or "<a
+    href="https://en.wikipedia.org/wiki/Earthshine"
+    >Earthshine<img src="help/images/extlink.png" /></a
+  >" or "the Moon's ashen glow"). In addition, the image rotates to match the
+  Moon's apparent orientation as it moves across the sky and changes size to
+  match the Moon's apparent size as its distance from the Earth changes around
+  its elliptical orbit. (Observatory does not show the Moon's libration.)
+</p>
+<p>
+  <a href="#setting-the-time">Animate</a> the clock at one day per step to see
+  the Moon go thru its phases and size changes. Use the Moon Phase steppers in
+  the time controller's Astro tab to jump to the times and dates of the quarters
+  (New, 1st Quarter, Full, 3rd Quarter).
+</p>
+
+<p><b>Earth</b></p>
+<p>
+  The map of the Earth (a
+  <a href="https://earthobservatory.nasa.gov/Features/BlueMarble/"
+    >NASA composite of thousands of images<img
+      src="help/images/extlink.png" /></a
+  >) at the top of the screen shows which parts of the Earth are facing the Sun
+  and which parts are in night. The image changes each month to reflect the
+  changing snow and vegetation cover. The lights of mankind's cities are shown
+  for the nighttime region. They roughly correspond to the human population
+  density and level of energy use at the present time. (The data was collected
+  by the US Air Force DMSP satellites in the mid 1990s.)
+</p>
+<p>
+  The small red dot on the Earth marks the current location being used by
+  Observatory for its astronomical calculations (usually your current location
+  but you can change it; see
+  <a href="#setting-the-location">Setting the location</a>, below). It is
+  important that this be the location for which you want the astronomical
+  information to be shown.
+</p>
+<p>
+  <a href="#setting-the-time">Animate</a> at one hour per step to see the
+  terminator (the "edge of night") move around the world. Animate at one month
+  per step to see the seasonal changes; note the changing shape and position of
+  the terminator.
+</p>
+
+<p><b>Day/date</b></p>
+<p>
+  The year, month, day and day of the week appear near the top of the screen.
+  The year is shown in red for BCE dates ("Before Common Era", a.k.a. "BC"). A
+  small indicator appears near the year in leap years.
+</p>
+
+<p><b>Main dial</b></p>
+<img
+  src="help/images/observatory/rings.png"
+  alt="rise/set rings"
+  align="right"
+/>
+<p><i>Rise/Set rings</i></p>
+<p>
+  There are 6 thin concentric partial rings, one for each of the classical
+  "planets". The innermost one is for the Moon, followed by Mercury, Venus,
+  Mars, Jupiter, and Saturn on the outside. The larger one behind the others is
+  for the Sun. The filled region of the ring represents the time (read against
+  the 24-hour markings) when the planet is above the horizon; it rises and sets
+  at the ends of the arc and transits at the midpoint. Thus if the thin white
+  arm of the 24-hour hand crosses the filled part of a planet's ring then that
+  planet is currently above the horizon.
+</p>
+<p>
+  The large ring for the Sun is colored according to the Sun's altitude above
+  the horizon at each time; sunrise and sunset are at the sharp boundary between
+  red and blue.
+</p>
+<p><i>Twilight hands</i></p>
+<p>
+  There are 12 colored hands on the 24-hour dial which mark special times
+  related to the altitude of the Sun. The light yellow one marks the time of
+  solar noon, when the Sun is at its highest point in the sky for the day; the
+  dark blue one is 12 hours later when the Sun is farthest below the horizon.
+  The orange ones mark the times of sunrise and sunset. The three blue ones mark
+  the times when the Sun is 6, 12, and 18 degrees below the horizon which define
+  the beginning and ending of civil, nautical and astronomical
+  <a href="https://en.wikipedia.org/wiki/Twilight"
+    >twilight<img src="help/images/extlink.png" /></a
+  >. The dark yellow ones mark the time when the Sun is 15 degrees above the
+  horizon, indicating the "golden hour" (which may be considerably longer than
+  an hour at high latitudes) when the light is usually best for outdoor
+  photography.
+</p>
+<p>
+  Note that at high latitudes when the sun's altitude changes slowly the golden
+  and blue regions will elongate. In extreme cases some of the twilight hands
+  will disappear altogether if the Sun never reaches their level. See this
+  effect by changing to a high latitude with
+  <a href="#setting-the-location">Set Location</a> and then
+  <a href="#setting-the-time">animating</a> by days or months.
+</p>
+<br clear="all" />
+<p><i>Timezone indicator</i></p>
+<p>
+  Between the center and the 6 o'clock position is a simple label showing the
+  abbreviation of the current timezone. It changes to reflect daylight time
+  (summer time) vs standard time for those timezones that observe DST.
+  Observatory's astronomical calculations depend on the timezone offset and
+  geographic location; the timezone is determined automatically from the
+  selected location.
+</p>
+<p><i>Orrery</i></p>
+<p>
+  Inside the main dial Observatory displays the orbital positions of the 6
+  innermost planets (Mercury, Venus, Earth, Mars, Jupiter, and Saturn) plus the
+  Earth's Moon from a perspective above the Sun's north pole with respect to the
+  present positions of constellations of the zodiac. The approximate positions
+  of constellations are marked by their traditional astrological symbols in
+  large gray type.
+</p>
+<center>
+  <img src="help/images/observatory/zodiacTable.png" alt="zodiac symbols" />
+  <img src="help/images/observatory/orrery.png" alt="orrery image" />
+</center>
+<blockquote>
+  <font size="-1">
+    Note that the constellation positions shown in Observatory are based on
+    their actual positions in the present-day sky and thus do not correspond to
+    the definitions used by western astrologers.
+  </font>
+</blockquote>
+<p>
+  The best rate for <a href="#setting-the-time">animating</a> this display
+  depends on which planet you're concerned with.
+  <a href="https://en.wikipedia.org/wiki/Kepler's_laws_of_planetary_motion"
+    >Kepler's third law<img src="help/images/extlink.png"
+  /></a>
+  shows that the inner planets orbit much faster than the outer ones. So
+  animating by days works best for Mercury or the Moon whereas years is best for
+  Saturn.
+</p>
+<p>
+  If you animate by years you'll notice that the Earth jitters a little. This is
+  not a bug. It's because we're advancing by exactly one calendar year but the
+  Earth's orbital period is about 365.25 days. So the Earth falls behind a
+  little for three years and then catches up on the leap year. Prior to 15
+  October 1582 Observatory uses the
+  <a href="https://en.wikipedia.org/wiki/Julian_calendar"
+    >Julian calendar<img src="help/images/extlink.png"
+  /></a>
+  rather than the
+  <a href="https://en.wikipedia.org/wiki/Gregorian_calendar"
+    >Gregorian<img src="help/images/extlink.png" /></a
+  >, so you'll see the Earth jump in 1582 and then it will gradually shift in
+  position from year to year back from that time (reflecting the error in the
+  Julian calendar).
+</p>
+
+<p><b>Inner subdials</b></p>
+<p><i>UTC</i></p>
+<p>
+  <a href="https://en.wikipedia.org/wiki/Coordinated_Universal_Time"
+    >UTC<img src="help/images/extlink.png"
+  /></a>
+  ("Coordinated Universal Time") is a worldwide time standard based on atomic
+  clocks that is adjusted (by the occasional addition of "<a
+    href="https://en.wikipedia.org/wiki/Leap_second"
+    >leap seconds<img src="help/images/extlink.png" /></a
+  >") to be very close to the mean solar time at the Royal Observatory at
+  Greenwich, England ("GMT"). Ordinary civil time in most locations is defined
+  by an offset from UTC.
+</p>
+<p><i>Solar</i></p>
+<p>
+  <a href="https://en.wikipedia.org/wiki/Solar_time"
+    >Solar time<img src="help/images/extlink.png"
+  /></a>
+  (technically: "apparent solar time") is what everyone used before the
+  invention of clocks and timezones; it will show 12 noon at exactly the time
+  when the Sun crosses the
+  <a href="https://en.wikipedia.org/wiki/Meridian_(astronomy)"
+    >meridian<img src="help/images/extlink.png"
+  /></a>
+  (of course, this is also when the 24-hour hand coincides with the solar noon
+  hand on the outer dial). Apparent solar time is what an ordinary sundial
+  shows.
+</p>
+<p><i>Sidereal</i></p>
+<p>
+  <a href="https://en.wikipedia.org/wiki/Sidereal_time"
+    >Sidereal time<img src="help/images/extlink.png"
+  /></a>
+  tracks the apparent motion of the stars around the Earth; the Earth rotates
+  exactly once in 24 sidereal hours as measured against the stars. That 24-hour
+  sidereal day is a few minutes shorter than a solar (or civil) day because of
+  the Earth's motion in its orbit around the Sun. A star that is overhead at a
+  given sidereal time during the day will always be overhead at that same
+  sidereal time, no matter what season it is.
+</p>
+<p>
+  The sidereal time dial is labeled with the abbreviations of the zodiac
+  constellations and the corresponding numbers. The hour hand points to the
+  constellation that is currently near the meridian.
+</p>
+<p>
+  UTC and sidereal time are shown in 24-hour format; solar time in 12-hour
+  format.
+</p>
+
+<p><b>Outer subdials</b></p>
+<p><i>Altitude and Azimuth</i></p>
+<p>
+  The two dials on the left side of the screen show the altitude (angle of the
+  object up from the horizon) and azimuth (angle of the object around the
+  horizon clockwise from North) of one of the planets at the clock's time. You
+  can cycle through the 7 "planets" (Sun, Moon, Mercury, Venus, Mars, Jupiter,
+  Saturn) by tapping either dial; the two dials cycle in opposite directions to
+  avoid the need to cycle all the way around again if you go one too far.
+</p>
+<p><i>Equation of Time</i></p>
+<p>
+  The "<a href="https://en.wikipedia.org/wiki/Equation_of_time"
+    >Equation of Time<img src="help/images/extlink.png" /></a
+  >" is the difference, due primarily to the ellipticity of the Earth's orbit,
+  between apparent solar time (see above) and mean solar time. Mean solar time
+  is apparent solar time averaged over a whole year. Ordinary civil time is very
+  close to mean solar time at the standard meridian of each timezone. So EOT is
+  the difference between your watch and a sundial on the standard meridian of
+  your timezone.
+</p>
+<p>
+  The dial is marked in minutes; positive means the sundial is ahead. In the
+  days of celestial navigation, the EOT for the day was an essential input to a
+  navigator's longitude calculation.
+</p>
+<p><i>Eclipse Simulator</i></p>
+<center>
+  <img src="help/images/observatory/5eclipses.png" alt="5 eclipses" />
+</center>
+<p>
+  The small dial labeled 'Eclipse Simulator' has three icons in the outer ring,
+  representing the Sun, Moon, and Earth's shadow and two thin red lines
+  indicating the nodes of the Moon's orbit (points where it intersects the plane
+  of the ecliptic). When both the Sun and Moon coincide with a node then an
+  eclipse is possible. The area inside the ring is normally empty but near the
+  time of a lunar or solar eclipse an animation of the eclipse will appear
+  there. Lunar eclipses are visible from an entire hemisphere of the Earth but
+  solar eclipses are visible only from a very small area. See
+  <a href="https://eclipse.gsfc.nasa.gov/eclipse.html"
+    >here<img src="help/images/extlink.png"
+  /></a>
+  for a list of times and locations of recent and upcoming eclipses (and much
+  more).
+</p>
+<p>
+  Since eclipses happen at (or very near) full moon and new moon, you can use
+  the Moon Phase steppers in the time controller's Astro tab to move forward to
+  new and full moon dates, and see if there is anything inside the Eclipse
+  Simulator subdial. Eclipses will only happen when the red lines indicating the
+  nodal points are close to the Sun and Moon. You may need to move forward or
+  backward by hours or minutes from the phase point to see the point of maximum
+  eclipse at your location for a given eclipse. Note that solar eclipses, which
+  are much rarer, typically are only visible on a portion of the Earth's
+  surface. But you can simulate those eclipses with Observatory too, by entering
+  the "location of maximum eclipse" as manual coordinates in the
+  <a href="#setting-the-location">location dialog</a>, and viewing the eclipse
+  as it will appear there.
+</p>
+<p>
+  Observatory's database of locations for the Sun and Moon extends back to 4000
+  BCE, but there is somewhat less precision for those early dates than there is
+  for modern times. Since the difference between total and partial eclipse can
+  be a small fraction of a degree, historical eclipses may not be shown with
+  100% fidelity. Modern events, however, are shown with very high precision.
+</p>
+
+<h3>Controls</h3>
+
+<a name="setting-the-time"></a>
+<p><b>Setting the time</b></p>
+<p>
+  Tap "⏱ Show time controller" at the lower left to open the time controller.
+  Transport buttons step the clock forward or backward by a year, month, day,
+  hour, or minute, or run it continuously at faster or slower rates (press and
+  hold a step button to animate). The Date tab lets you type in a date and time
+  directly (with a BCE toggle for ancient dates); the Astro tab steps to
+  astronomical events: sunrises, sunsets, moonrises, moonsets, transits, and the
+  quarter phases of the Moon.
+</p>
+<p>
+  When the displayed time is not the current time a red label appears in the
+  footer showing the offset from the current time, along with a "Now" button
+  that returns the clock to the present.
+</p>
+<p>Observatory can be set to any date from 4000 BCE through 2800 CE.</p>
+
+<a name="noon-on-top"></a>
+<p><b>Noon on Top</b></p>
+<p>
+  Most 24-hour clocks have midnight (0 or 24) at the top of the dial. But when
+  the clock also shows an indication of the day/night hours it is convenient to
+  have noon (12) on top. As there seems to be little consensus on this issue,
+  Observatory lets you choose for yourself with the pill toggle at the bottom of
+  the screen. Your choice is saved in the URL so it persists when you bookmark
+  the page.
+</p>
+
+<a name="setting-the-location"></a>
+<p><b>Setting the location</b></p>
+<p>
+  Tap "Set Location" at the lower right to choose the location used for the
+  astronomical calculations. You can search for a city or airport code, use your
+  device's location, or enter latitude and longitude manually (in decimal format
+  with negative numbers for west longitudes and south latitudes). Check the red
+  dot on the Earth map to ensure the values are correct. The timezone is set
+  automatically to match the selected location.
+</p>
+ </template>
 
     <!-- Minimal overlay controls -->
     <div id="observatory-controls">
