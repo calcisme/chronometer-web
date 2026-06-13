@@ -11,6 +11,7 @@
 import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './shared/city-search.js';
 import type { CityResult } from './shared/city-search.js';
 import { renderGlobe, loadOSMTile } from './shared/mini-map.js';
+import { resolveTimezone } from './shared/tz-resolve.js';
 
 // ============================================================================
 // Constants
@@ -42,7 +43,7 @@ function readUrlState(): { lat: number | null; lon: number | null; city: string 
     };
 }
 
-function writeUrlState(changes: { lat?: number | null; lon?: number | null; city?: string | null; bloc?: boolean }) {
+function writeUrlState(changes: { lat?: number | null; lon?: number | null; city?: string | null; bloc?: boolean ; tz?: string | null}) {
     const params = new URLSearchParams(window.location.search);
     if ('lat' in changes) {
         if (changes.lat != null) params.set('lat', changes.lat.toFixed(3));
@@ -59,6 +60,10 @@ function writeUrlState(changes: { lat?: number | null; lon?: number | null; city
     if ('bloc' in changes) {
         if (changes.bloc) params.set('bloc', '1');
         else params.delete('bloc');
+    }
+    if ("tz" in changes) {
+      if (changes.tz) params.set("tz", changes.tz);
+      else params.delete("tz");
     }
     params.delete('long'); params.delete('loc');
     const qs = params.toString();
@@ -226,7 +231,7 @@ function updateMapPreview(mapLat: number, mapLon: number) {
     lpLocationName.innerHTML = buildLocationNameHTML();
 }
 
-function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean) {
+function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean, cityTz: string | null = null) {
     hasLocation = true;
     currentLat = newLat;
     currentLon = newLon;
@@ -234,7 +239,8 @@ function applyLocation(newLat: number, newLon: number, source: string, fullLabel
     locationFullLabel = fullLabel;
     locationSourceType = sourceType;
     if (writeToUrl) {
-        writeUrlState({ lat: newLat, lon: newLon, city: source || null });
+        const locationTimezone = resolveTimezone(newLat, newLon, cityTz);
+        writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
     }
     updateLinks();
     updateMapPreview(newLat, newLon);
@@ -314,7 +320,11 @@ function renderCityResults(results: CityResult[]) {
             div.textContent = r.label;
         }
         div.addEventListener('click', () => {
-            applyLocation(r.lat, r.lon, r.shortLabel, r.label, 'url-city', true);
+            if (r.timezone) {
+                applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
+            } else {
+                applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true);
+            }
             lpCityInput.value = '';
             lpCityResults.innerHTML = '';
             lpLatInput.value = r.lat.toFixed(3);
