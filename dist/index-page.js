@@ -350,6 +350,18 @@
     return Promise.all(promises).then((results) => results.some((ok) => ok));
   }
 
+  // src/shared/tz-resolve.ts
+  function resolveTimezone(lat, lon, cityTz) {
+    if (cityTz) return cityTz;
+    const closest = findClosestCity(lat, lon);
+    if (closest?.timezone) return closest.timezone;
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return "Etc/UTC";
+    }
+  }
+
   // src/index-page.ts
   var isFileProtocol = window.location.protocol === "file:";
   loadCityData().catch(() => {
@@ -521,16 +533,6 @@
     }
     lpLocationName.innerHTML = buildLocationNameHTML();
   }
-  function resolveTimezone(lat, lon, cityTz) {
-    if (cityTz) return cityTz;
-    const closest = findClosestCity(lat, lon);
-    if (closest?.timezone) return closest.timezone;
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return "Etc/UTC";
-    }
-  }
   function applyLocation(newLat, newLon, source, fullLabel, sourceType, writeToUrl, cityTz = null) {
     hasLocation = true;
     currentLat = newLat;
@@ -538,8 +540,8 @@
     locationSource = source;
     locationFullLabel = fullLabel;
     locationSourceType = sourceType;
-    const locationTimezone = resolveTimezone(newLat, newLon, cityTz);
     if (writeToUrl) {
+      const locationTimezone = resolveTimezone(newLat, newLon, cityTz);
       writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
     }
     updateLinks();
@@ -598,7 +600,11 @@
         div.textContent = r.label;
       }
       div.addEventListener("click", () => {
-        applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
+        if (r.timezone) {
+          applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
+        } else {
+          applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true);
+        }
         lpCityInput.value = "";
         lpCityResults.innerHTML = "";
         lpLatInput.value = r.lat.toFixed(3);
