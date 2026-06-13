@@ -11,6 +11,7 @@
 import { loadCityData, searchCities, findClosestCity, isCityDataLoaded, loadError } from './shared/city-search.js';
 import type { CityResult } from './shared/city-search.js';
 import { renderGlobe, loadOSMTile } from './shared/mini-map.js';
+import { resolveTimezone } from './shared/tz-resolve.js';
 
 // ============================================================================
 // Constants
@@ -230,17 +231,6 @@ function updateMapPreview(mapLat: number, mapLon: number) {
     lpLocationName.innerHTML = buildLocationNameHTML();
 }
 
-// src/shared/tz-resolve.ts
-function resolveTimezone(lat: number, lon: number, cityTz: string | null): string {
-  if (cityTz) return cityTz;
-  const closest = findClosestCity(lat, lon);
-  if (closest?.timezone) return closest.timezone;
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
-  } catch {
-    return "Etc/UTC";
-  }
-}
 function applyLocation(newLat: number, newLon: number, source: string, fullLabel: string, sourceType: typeof locationSourceType, writeToUrl: boolean, cityTz: string | null = null) {
     hasLocation = true;
     currentLat = newLat;
@@ -248,8 +238,8 @@ function applyLocation(newLat: number, newLon: number, source: string, fullLabel
     locationSource = source;
     locationFullLabel = fullLabel;
     locationSourceType = sourceType;
-    const locationTimezone = resolveTimezone(newLat, newLon, cityTz);
     if (writeToUrl) {
+        const locationTimezone = resolveTimezone(newLat, newLon, cityTz);
         writeUrlState({ lat: newLat, lon: newLon, city: source || null, tz: locationTimezone || null });
     }
     updateLinks();
@@ -330,7 +320,11 @@ function renderCityResults(results: CityResult[]) {
             div.textContent = r.label;
         }
         div.addEventListener('click', () => {
-            applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
+            if (r.timezone) {
+                applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true, r.timezone);
+            } else {
+                applyLocation(r.lat, r.lon, r.shortLabel, r.label, "url-city", true);
+            }
             lpCityInput.value = '';
             lpCityResults.innerHTML = '';
             lpLatInput.value = r.lat.toFixed(3);
